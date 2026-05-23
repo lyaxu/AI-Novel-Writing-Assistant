@@ -7,6 +7,7 @@ export type {
   BaseCharacter,
   Character,
   CharacterCastApplyResult,
+  CharacterHardFacts,
   CharacterCastOption,
   CharacterCastOptionClearResult,
   CharacterCastOptionDeleteResult,
@@ -100,6 +101,7 @@ export type ChapterStatus =
   | "completed";
 
 export type PipelineRunMode = "fast" | "polish";
+export type ArtifactSyncMode = "adaptive" | "deferred" | "strict";
 export type PipelineRepairMode =
   | "detect_only"
   | "light_repair"
@@ -576,6 +578,7 @@ export interface PipelineJob {
   skipCompleted?: boolean | null;
   qualityThreshold?: number | null;
   repairMode?: PipelineRepairMode | null;
+  artifactSyncMode?: ArtifactSyncMode | null;
   status: PipelineJobStatus;
   progress: number;
   completedCount: number;

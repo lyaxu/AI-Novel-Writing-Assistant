@@ -17,9 +17,10 @@ const PIPELINE_STAGE_PROGRESS = {
 } as const;
 
 const PIPELINE_BACKGROUND_ACTIVITY_LABELS: Record<PipelineBackgroundSyncKind, string> = {
+  artifact_delta: "资产回灌中",
   character_dynamics: "角色成长中",
   state_snapshot: "状态同步中",
-  payoff_ledger: "伏笔账本同步中",
+  payoff_ledger: "账本校准中",
   character_resources: "资源账本同步中",
   canonical_state: "全局状态同步中",
 };
@@ -56,6 +57,12 @@ function normalizeStringList(value: unknown): string[] | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function normalizeArtifactSyncMode(value: unknown): PipelinePayload["artifactSyncMode"] | undefined {
+  return value === "strict" || value === "deferred" || value === "adaptive"
+    ? value
+    : undefined;
+}
+
 function normalizePipelineBackgroundActivity(value: unknown): PipelineBackgroundSyncActivity | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -66,6 +73,7 @@ function normalizePipelineBackgroundActivity(value: unknown): PipelineBackground
   if (
     (
       kind !== "character_dynamics"
+      && kind !== "artifact_delta"
       && kind !== "state_snapshot"
       && kind !== "payoff_ledger"
       && kind !== "character_resources"
@@ -233,6 +241,7 @@ export function parsePipelinePayload(payload: string | null | undefined): Pipeli
         || parsed.repairMode === "ending_only"
           ? parsed.repairMode
           : undefined,
+      artifactSyncMode: normalizeArtifactSyncMode(parsed.artifactSyncMode),
       controlPolicy: normalizeControlPolicy(parsed.controlPolicy),
       qualityAlertDetails: normalizeStringList(parsed.qualityAlertDetails ?? parsed.failedDetails),
       replanAlertDetails: normalizeStringList(parsed.replanAlertDetails),
@@ -262,6 +271,7 @@ export function stringifyPipelinePayload(input: PipelinePayload): string {
     skipCompleted: input.skipCompleted ?? true,
     qualityThreshold: input.qualityThreshold ?? null,
     repairMode: input.repairMode ?? "light_repair",
+    artifactSyncMode: input.artifactSyncMode ?? "adaptive",
     ...(input.controlPolicy ? { controlPolicy: normalizeControlPolicy(input.controlPolicy) ?? input.controlPolicy } : {}),
     ...(qualityAlertDetails.length > 0 ? { qualityAlertDetails } : {}),
     ...(replanAlertDetails.length > 0 ? { replanAlertDetails } : {}),
@@ -287,16 +297,30 @@ export function getPipelineQualityNotice(
     };
   }
   return {
-    displayStatus: "Completed with quality alerts",
+    displayStatus: "已记录质量债务",
     noticeCode: PIPELINE_QUALITY_NOTICE_CODE,
     noticeSummary: [
-      qualityAlertDetails.length > 0 ? `部分章节未通过质量阈值：${qualityAlertDetails.join("; ")}` : null,
-      recoverableRepairDetails.length > 0 ? `部分章节保留正文并记录待修复：${recoverableRepairDetails.join("; ")}` : null,
+      qualityAlertDetails.length > 0 ? `部分章节已记录质量债务，可继续后续章节：${qualityAlertDetails.join("; ")}` : null,
+      recoverableRepairDetails.length > 0 ? `部分章节保留正文并记录后续优化项：${recoverableRepairDetails.join("; ")}` : null,
     ].filter(Boolean).join("。"),
     qualityAlertDetails,
     recoverableRepairDetails,
     backgroundActivityLabels: [],
   };
+}
+
+function extractFirstReplanChapterOrder(details: string[]): number | null {
+  for (const detail of details) {
+    const match = /第\s*(\d+)\s*章/u.exec(detail);
+    if (!match) {
+      continue;
+    }
+    const order = Number.parseInt(match[1], 10);
+    if (Number.isFinite(order) && order > 0) {
+      return order;
+    }
+  }
+  return null;
 }
 
 export function getPipelineReplanNotice(details: string[] | undefined): PipelineJobDecorations {
@@ -311,10 +335,14 @@ export function getPipelineReplanNotice(details: string[] | undefined): Pipeline
       backgroundActivityLabels: [],
     };
   }
+  const firstReplanChapterOrder = extractFirstReplanChapterOrder(replanAlertDetails);
+  const summaryPrefix = firstReplanChapterOrder
+    ? `已执行至第 ${firstReplanChapterOrder} 章，后续需重规划`
+    : "后续章节需要先处理重规划";
   return {
-    displayStatus: "Completed with replan required",
+    displayStatus: "等待重规划处理",
     noticeCode: PIPELINE_REPLAN_NOTICE_CODE,
-    noticeSummary: `State-driven replan is required before continuing: ${replanAlertDetails.join("; ")}`,
+    noticeSummary: `${summaryPrefix}：${replanAlertDetails.join("; ")}`,
     qualityAlertDetails: [],
     recoverableRepairDetails: [],
     backgroundActivityLabels: [],

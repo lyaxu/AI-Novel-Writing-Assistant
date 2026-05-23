@@ -1,6 +1,7 @@
 ﻿import type { KeyboardEvent, MouseEvent } from "react";
 import { useMemo, useState } from "react";
 import type { ProjectProgressStatus } from "@ai-novel/shared/types/novel";
+import type { DirectorContinuationMode } from "@ai-novel/shared/types/novelDirector";
 import type {
   DirectorBookAutomationAction,
   DirectorBookAutomationProjection,
@@ -145,7 +146,7 @@ export default function NovelList() {
   const continueWorkflowMutation = useMutation({
     mutationFn: async (input: {
       taskId: string;
-      mode?: "resume" | "auto_execute_range";
+      mode?: DirectorContinuationMode;
     }) => continueNovelWorkflow(input.taskId, input.mode ? { continuationMode: input.mode } : undefined),
     onSuccess: async (response, input) => {
       const invalidations = [
@@ -518,13 +519,13 @@ export default function NovelList() {
                       </Button>
                     ) : workflowTask ? (
                       <Button asChild size="sm">
-                        <Link to={`/novels/${novel.id}/edit?taskId=${workflowTask.id}`} onClick={stopCardClick}>查看推进状态</Link>
+                        <Link to={`/novels/${novel.id}/edit?directorTaskId=${workflowTask.id}`} onClick={stopCardClick}>查看推进状态</Link>
                       </Button>
                     ) : null}
 
                     {workflowTask ? (
                       <Button asChild size="sm" variant="outline">
-                        <Link to={`/novels/${novel.id}/edit?taskId=${workflowTask.id}&taskPanel=1`} onClick={stopCardClick}>执行详情</Link>
+                        <Link to={`/novels/${novel.id}/edit?directorTaskId=${workflowTask.id}&taskPanel=1`} onClick={stopCardClick}>执行详情</Link>
                       </Button>
                     ) : null}
 

@@ -11,6 +11,7 @@ import {
 } from "./canonicalState";
 import { characterResourceContextSchema } from "./characterResource";
 import { storyWorldSliceSchema } from "./storyWorldSlice";
+import { timelineCheckResultSchema, timelineContextForChapterSchema } from "./timeline";
 import type { LLMProvider } from "./llm";
 
 const llmProviderSchema = z.custom<LLMProvider>((value) => typeof value === "string" && value.trim().length > 0);
@@ -93,6 +94,16 @@ export const runtimeCharacterSchema = z.object({
   name: z.string(),
   role: z.string(),
   personality: z.string().nullable().optional(),
+  background: z.string().nullable().optional(),
+  development: z.string().nullable().optional(),
+  identityLabel: z.string().nullable().optional(),
+  factionLabel: z.string().nullable().optional(),
+  stanceLabel: z.string().nullable().optional(),
+  powerLevel: z.string().nullable().optional(),
+  realm: z.string().nullable().optional(),
+  currentLocation: z.string().nullable().optional(),
+  availability: z.string().nullable().optional(),
+  prohibitions: z.array(z.string()).default([]),
   currentState: z.string().nullable().optional(),
   currentGoal: z.string().nullable().optional(),
   appearance: z.string().nullable().optional(),
@@ -529,6 +540,7 @@ export const chapterMissionContextSchema = z.object({
   title: z.string(),
   objective: z.string(),
   expectation: z.string(),
+  taskSheet: z.string().nullable().optional(),
   targetWordCount: z.number().int().nullable().optional(),
   planRole: storyPlanRoleSchema.nullable().optional(),
   hookTarget: z.string(),
@@ -545,6 +557,58 @@ export const chapterBoundaryContractSchema = z.object({
   doNotCross: z.array(z.string()).default([]),
   protectedReveals: z.array(z.string()).default([]),
   allowedRevealLevel: z.number().int().nullable().optional(),
+});
+
+export const chapterExecutionObligationContractSchema = z.object({
+  mustHitNow: z.array(z.string()).default([]),
+  mustPreserve: z.array(z.string()).default([]),
+  requiredPayoffTouches: z.array(z.string()).default([]),
+  requiredCharacterAppearances: z.array(z.string()).default([]),
+  requiredGoalChanges: z.array(z.string()).default([]),
+  canDefer: z.array(z.string()).default([]),
+  forbiddenCrossings: z.array(z.string()).default([]),
+});
+
+export const chapterExecutionObligationKindSchema = z.enum([
+  "must_hit_now",
+  "must_preserve",
+  "payoff_touch",
+  "character_appearance",
+  "goal_change",
+  "forbidden_crossing",
+]);
+
+export const chapterExecutionObligationCoverageStatusSchema = z.enum([
+  "satisfied",
+  "partial",
+  "unmet",
+]);
+
+export const chapterExecutionMissingObligationSchema = z.object({
+  kind: chapterExecutionObligationKindSchema,
+  summary: z.string(),
+  evidence: z.string().nullable().optional(),
+});
+
+export const chapterExecutionObligationCoverageSchema = z.object({
+  status: chapterExecutionObligationCoverageStatusSchema,
+  missing: z.array(chapterExecutionMissingObligationSchema).default([]),
+  summary: z.string(),
+});
+
+export const chapterFailureClassificationCodeSchema = z.enum([
+  "none",
+  "draft_generation_failed",
+  "draft_obligation_unmet",
+  "draft_repair_exhausted",
+  "replan_required",
+]);
+
+export const chapterFailureClassificationSchema = z.object({
+  code: chapterFailureClassificationCodeSchema,
+  summary: z.string(),
+  decisionReason: z.string().nullable().optional(),
+  blockingObligations: z.array(chapterExecutionMissingObligationSchema).default([]),
 });
 
 export const chapterCharacterBehaviorGuideSchema = z.object({
@@ -589,6 +653,22 @@ export const chapterCandidateGuardSchema = z.object({
   sourceChapterOrder: z.number().int().nullable().optional(),
 });
 
+export const chapterCharacterHardFactSchema = z.object({
+  characterId: z.string(),
+  name: z.string(),
+  role: z.string().nullable().optional(),
+  identityLabel: z.string().nullable().optional(),
+  factionLabel: z.string().nullable().optional(),
+  stanceLabel: z.string().nullable().optional(),
+  powerLevel: z.string().nullable().optional(),
+  realm: z.string().nullable().optional(),
+  currentLocation: z.string().nullable().optional(),
+  availability: z.string().nullable().optional(),
+  currentState: z.string().nullable().optional(),
+  currentGoal: z.string().nullable().optional(),
+  prohibitions: z.array(z.string()).default([]),
+});
+
 export const chapterWriteContextSchema = z.object({
   bookContract: bookContractContextSchema,
   macroConstraints: macroConstraintContextSchema.nullable(),
@@ -598,10 +678,20 @@ export const chapterWriteContextSchema = z.object({
   chapterStateGoal: chapterStateGoalSchema.nullable().optional(),
   protectedSecrets: z.array(z.string()).default([]),
   payoffDirectives: z.array(chapterPayoffDirectiveSchema).default([]),
+  obligationContract: chapterExecutionObligationContractSchema.default({
+    mustHitNow: [],
+    mustPreserve: [],
+    requiredPayoffTouches: [],
+    requiredCharacterAppearances: [],
+    requiredGoalChanges: [],
+    canDefer: [],
+    forbiddenCrossings: [],
+  }),
   chapterBoundary: chapterBoundaryContractSchema.nullable().optional(),
   lengthBudget: lengthBudgetContractSchema.nullable(),
   scenePlan: chapterScenePlanSchema.nullable().optional(),
   participants: z.array(runtimeCharacterSchema),
+  characterHardFacts: z.array(chapterCharacterHardFactSchema).default([]),
   characterBehaviorGuides: z.array(chapterCharacterBehaviorGuideSchema).default([]),
   activeRelationStages: z.array(chapterRelationStageGuideSchema).default([]),
   pendingCandidateGuards: z.array(chapterCandidateGuardSchema).default([]),
@@ -611,8 +701,10 @@ export const chapterWriteContextSchema = z.object({
   ledgerUrgentItems: z.array(runtimePayoffLedgerItemSchema).default([]),
   ledgerOverdueItems: z.array(runtimePayoffLedgerItemSchema).default([]),
   ledgerSummary: runtimePayoffLedgerSummarySchema.nullable().optional(),
+  timelineContext: timelineContextForChapterSchema.nullable().optional(),
   characterResourceContext: characterResourceContextSchema.nullable().optional(),
   recentChapterSummaries: z.array(z.string()).default([]),
+  previousChapterTail: z.string().nullable().optional(),
   openingAntiRepeatHint: z.string(),
   styleContract: runtimeStyleContractSchema.nullable().optional(),
   styleConstraints: z.array(z.string()).default([]),
@@ -654,9 +746,11 @@ export const generationContextPackageSchema = z.object({
   openConflicts: z.array(runtimeOpenConflictSchema),
   storyWorldSlice: storyWorldSliceSchema.nullable().optional(),
   characterRoster: z.array(runtimeCharacterSchema),
+  characterHardFacts: z.array(chapterCharacterHardFactSchema).default([]),
   creativeDecisions: z.array(runtimeCreativeDecisionSchema),
   openAuditIssues: z.array(runtimeAuditIssueSchema),
   previousChaptersSummary: z.array(z.string()),
+  previousChapterTail: z.string().nullable().optional(),
   openingHint: z.string(),
   continuation: runtimeContinuationSchema,
   styleContext: runtimeStyleContextSchema.nullable().optional(),
@@ -668,6 +762,7 @@ export const generationContextPackageSchema = z.object({
   ledgerUrgentItems: z.array(runtimePayoffLedgerItemSchema).default([]),
   ledgerOverdueItems: z.array(runtimePayoffLedgerItemSchema).default([]),
   ledgerSummary: runtimePayoffLedgerSummarySchema.nullable().optional(),
+  timelineContext: timelineContextForChapterSchema.nullable().optional(),
   characterResourceContext: characterResourceContextSchema.nullable().optional(),
   chapterMission: chapterMissionContextSchema.nullable().optional(),
   chapterWriteContext: chapterWriteContextSchema.nullable().optional(),
@@ -686,6 +781,25 @@ export const runtimeQualityScoreSchema = z.object({
   voice: z.number(),
   engagement: z.number(),
   overall: z.number(),
+});
+
+export const chapterAcceptanceStatusSchema = z.enum(["accepted", "repairable", "needs_manual_review", "continue_with_risk"]);
+export const chapterAcceptanceContinuePolicySchema = z.enum(["continue", "repair_once", "pause"]);
+export const chapterAcceptanceRepairDirectiveSchema = z.object({
+  mode: z.enum(["patch", "rewrite", "manual"]),
+  target: z.enum(["continuity", "character", "plot", "ending", "voice"]),
+  instruction: z.string(),
+});
+export const chapterAcceptanceRepairabilitySchema = z.enum([
+  "none",
+  "patchable_obligation_gap",
+  "rewrite_needed",
+  "plan_misalignment",
+]);
+export const chapterAcceptanceAssetSyncRecommendationSchema = z.object({
+  priority: z.enum(["normal", "high"]),
+  reason: z.string(),
+  requiresFullPayoffReconcile: z.boolean(),
 });
 
 export const runtimeAuditReportSchema = z.object({
@@ -791,6 +905,26 @@ export const chapterRuntimePackageSchema = z.object({
     openIssues: z.array(runtimeAuditIssueSchema),
     hasBlockingIssues: z.boolean(),
   }),
+  obligationContract: chapterExecutionObligationContractSchema.default({
+    mustHitNow: [],
+    mustPreserve: [],
+    requiredPayoffTouches: [],
+    requiredCharacterAppearances: [],
+    requiredGoalChanges: [],
+    canDefer: [],
+    forbiddenCrossings: [],
+  }),
+  obligationCoverage: chapterExecutionObligationCoverageSchema.default({
+    status: "satisfied",
+    missing: [],
+    summary: "旧运行记录未包含章节义务覆盖信息。",
+  }),
+  failureClassification: chapterFailureClassificationSchema.default({
+    code: "none",
+    summary: "旧运行记录未包含失败分类。",
+    decisionReason: null,
+    blockingObligations: [],
+  }),
   replanRecommendation: z.object({
     recommended: z.boolean(),
     reason: z.string(),
@@ -804,6 +938,7 @@ export const chapterRuntimePackageSchema = z.object({
   }),
   lengthControl: runtimeLengthControlSchema.optional(),
   styleReview: runtimeStyleReviewSchema.optional(),
+  timelineCheck: timelineCheckResultSchema.optional(),
   meta: z.object({
     provider: z.string().optional(),
     model: z.string().optional(),
@@ -813,6 +948,11 @@ export const chapterRuntimePackageSchema = z.object({
     nextAction: generationNextActionSchema.optional(),
     stateGoalSummary: z.string().optional(),
     pendingReviewProposalCount: z.number().int().nonnegative().optional(),
+    acceptanceStatus: chapterAcceptanceStatusSchema.optional(),
+    continuePolicy: chapterAcceptanceContinuePolicySchema.optional(),
+    riskTags: z.array(z.string()).optional(),
+    repairDirectives: z.array(chapterAcceptanceRepairDirectiveSchema).optional(),
+    assetSyncRecommendation: chapterAcceptanceAssetSyncRecommendationSchema.optional(),
   }),
 });
 
@@ -821,6 +961,7 @@ export type RuntimeChapter = z.infer<typeof runtimeChapterSchema>;
 export type RuntimePlanScene = z.infer<typeof runtimePlanSceneSchema>;
 export type RuntimePlan = z.infer<typeof runtimePlanSchema>;
 export type RuntimeCharacter = z.infer<typeof runtimeCharacterSchema>;
+export type ChapterCharacterHardFact = z.infer<typeof chapterCharacterHardFactSchema>;
 export type RuntimeCreativeDecision = z.infer<typeof runtimeCreativeDecisionSchema>;
 export type RuntimeAuditIssue = z.infer<typeof runtimeAuditIssueSchema>;
 export type RuntimeStateSnapshot = z.infer<typeof runtimeStateSnapshotSchema>;
@@ -855,6 +996,11 @@ export type MacroConstraintContext = z.infer<typeof macroConstraintContextSchema
 export type VolumeWindowContext = z.infer<typeof volumeWindowContextSchema>;
 export type ChapterMissionContext = z.infer<typeof chapterMissionContextSchema>;
 export type ChapterBoundaryContract = z.infer<typeof chapterBoundaryContractSchema>;
+export type ChapterExecutionObligationContract = z.infer<typeof chapterExecutionObligationContractSchema>;
+export type ChapterExecutionObligationKind = z.infer<typeof chapterExecutionObligationKindSchema>;
+export type ChapterExecutionMissingObligation = z.infer<typeof chapterExecutionMissingObligationSchema>;
+export type ChapterExecutionObligationCoverage = z.infer<typeof chapterExecutionObligationCoverageSchema>;
+export type ChapterFailureClassification = z.infer<typeof chapterFailureClassificationSchema>;
 export type ChapterCharacterBehaviorGuide = z.infer<typeof chapterCharacterBehaviorGuideSchema>;
 export type ChapterRelationStageGuide = z.infer<typeof chapterRelationStageGuideSchema>;
 export type ChapterCandidateGuard = z.infer<typeof chapterCandidateGuardSchema>;
@@ -864,6 +1010,11 @@ export type ChapterRepairIssue = z.infer<typeof chapterRepairIssueSchema>;
 export type ChapterRepairContext = z.infer<typeof chapterRepairContextSchema>;
 export type GenerationContextPackage = z.infer<typeof generationContextPackageSchema>;
 export type RuntimeQualityScore = z.infer<typeof runtimeQualityScoreSchema>;
+export type ChapterAcceptanceStatus = z.infer<typeof chapterAcceptanceStatusSchema>;
+export type ChapterAcceptanceContinuePolicy = z.infer<typeof chapterAcceptanceContinuePolicySchema>;
+export type ChapterAcceptanceRepairDirective = z.infer<typeof chapterAcceptanceRepairDirectiveSchema>;
+export type ChapterAcceptanceRepairability = z.infer<typeof chapterAcceptanceRepairabilitySchema>;
+export type ChapterAcceptanceAssetSyncRecommendation = z.infer<typeof chapterAcceptanceAssetSyncRecommendationSchema>;
 export type RuntimeAuditReport = z.infer<typeof runtimeAuditReportSchema>;
 export type ChapterRuntimePackage = z.infer<typeof chapterRuntimePackageSchema>;
 export type RuntimeStyleDetectionViolation = z.infer<typeof styleDetectionViolationSchema>;

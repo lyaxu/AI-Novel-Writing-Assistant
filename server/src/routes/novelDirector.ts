@@ -68,6 +68,7 @@ const autoExecutionPlanSchema = z.object({
   volumeOrder: z.number().int().min(1).optional(),
   autoReview: z.boolean().optional(),
   autoRepair: z.boolean().optional(),
+  artifactSyncMode: z.enum(["adaptive", "deferred", "strict"]).optional(),
 }).optional();
 
 const autoApprovalSchema = z.object({
@@ -235,12 +236,12 @@ const appendCommandSchema = z.discriminatedUnion("commandType", [
   z.object({ commandType: z.literal("refine_titles"), payload: refineTitleSchema }),
   z.object({ commandType: z.literal("confirm_candidate"), payload: confirmSchema }),
   z.object({ commandType: z.literal("continue"), payload: z.object({
-    continuationMode: z.enum(["resume", "auto_execute_range"]).optional(),
+    continuationMode: z.enum(["resume", "auto_execute_range", "skip_quality_repair"]).optional(),
     batchAlreadyStartedCount: z.number().int().min(0).optional(),
     forceResume: z.boolean().optional(),
   }).optional() }),
   z.object({ commandType: z.literal("resume_from_checkpoint"), payload: z.object({
-    continuationMode: z.enum(["resume", "auto_execute_range"]).optional(),
+    continuationMode: z.enum(["resume", "auto_execute_range", "skip_quality_repair"]).optional(),
     batchAlreadyStartedCount: z.number().int().min(0).optional(),
     forceResume: z.boolean().optional(),
   }).optional() }),

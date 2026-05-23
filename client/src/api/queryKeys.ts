@@ -7,6 +7,7 @@ export const queryKeys = {
     characters: (id: string) => ["novels", "characters", id] as const,
     characterResources: (id: string) => ["novels", "character-resources", id] as const,
     characterResourceContext: (id: string, chapterId: string) => ["novels", "character-resource-context", id, chapterId] as const,
+    chapterTimeline: (id: string, chapterId: string) => ["novels", "chapter-timeline", id, chapterId] as const,
     characterRelations: (id: string) => ["novels", "character-relations", id] as const,
     characterCastOptions: (id: string) => ["novels", "character-cast-options", id] as const,
     characterDynamicsOverview: (id: string, chapterOrder?: number) => ["novels", "character-dynamics-overview", id, chapterOrder ?? "latest"] as const,
@@ -86,21 +87,21 @@ export const queryKeys = {
   },
   images: {
     task: (taskId: string) => ["images", "task", taskId] as const,
-    assets: (sceneType: "character", sceneId: string) => ["images", "assets", sceneType, sceneId] as const,
+    assets: (sceneType: "character" | "novel_cover", sceneId: string) => ["images", "assets", sceneType, sceneId] as const,
   },
   tasks: {
     overview: ["tasks", "overview"] as const,
     list: (params: string) => ["tasks", "list", params] as const,
     detail: (kind: string, id: string) => ["tasks", "detail", kind, id] as const,
     recoveryCandidates: ["tasks", "recovery-candidates"] as const,
-    autoDirectorFollowUpDetail: (taskId: string) => ["tasks", "auto-director-follow-up", taskId] as const,
-    directorTaskSnapshot: (taskId: string) => ["tasks", "director-task-snapshot", taskId] as const,
-    directorRuntime: (taskId: string) => ["tasks", "director-runtime", taskId] as const,
+    autoDirectorFollowUpDetail: (directorTaskId: string) => ["tasks", "auto-director-follow-up", directorTaskId] as const,
+    directorTaskSnapshot: (directorTaskId: string) => ["tasks", "director-task-snapshot", directorTaskId] as const,
+    directorRuntime: (directorTaskId: string) => ["tasks", "director-runtime", directorTaskId] as const,
   },
   autoDirectorFollowUps: {
     overview: ["auto-director-follow-ups", "overview"] as const,
     list: (params: string) => ["auto-director-follow-ups", "list", params] as const,
-    detail: (taskId: string) => ["auto-director-follow-ups", "detail", taskId] as const,
+    detail: (directorTaskId: string) => ["auto-director-follow-ups", "detail", directorTaskId] as const,
   },
   agentRuns: {
     list: (params: string) => ["agent-runs", "list", params] as const,
@@ -120,6 +121,7 @@ export const queryKeys = {
   },
   settings: {
     apiKeys: ["settings", "api-keys"] as const,
+    llmSelection: ["settings", "llm-selection"] as const,
     apiKeyBalances: ["settings", "api-key-balances"] as const,
     rag: ["settings", "rag"] as const,
     ragEmbeddingModels: (provider: string) => ["settings", "rag", "embedding-models", provider] as const,

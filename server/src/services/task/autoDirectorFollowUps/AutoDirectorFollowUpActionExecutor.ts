@@ -74,6 +74,16 @@ function toCheckpointType(value: string | null | undefined): NovelWorkflowCheckp
   return typeof value === "string" && value.trim() ? value as NovelWorkflowCheckpoint : null;
 }
 
+function resolveContinueContinuationMode(
+  row: Pick<WorkflowTaskRow, "checkpointType" | "currentItemKey" | "currentStage">,
+): "auto_execute_range" | "skip_quality_repair" {
+  return row.checkpointType === "replan_required"
+    || row.currentItemKey === "quality_repair"
+    || Boolean(row.currentStage?.includes("质量"))
+    ? "skip_quality_repair"
+    : "auto_execute_range";
+}
+
 function buildExecutedCacheKey(input: {
   taskId: string;
   actionCode: AutoDirectorMutationActionCode;
@@ -87,6 +97,7 @@ function buildAlreadyProcessedResult(
   task: AutoDirectorActionExecutionResult["task"],
 ): AutoDirectorActionExecutionResult {
   return {
+    directorTaskId: input.taskId,
     taskId: input.taskId,
     actionCode: input.actionCode,
     code: "already_processed",
@@ -101,6 +112,7 @@ function buildFailedResult(
   task: AutoDirectorActionExecutionResult["task"] = null,
 ): AutoDirectorActionExecutionResult {
   return {
+    directorTaskId: input.taskId,
     taskId: input.taskId,
     actionCode: input.actionCode,
     code: "failed",
@@ -214,6 +226,7 @@ export class AutoDirectorFollowUpActionExecutor {
       const allowedBatchAction = getAllowedBatchActionForRow(row);
       if (allowedBatchAction !== input.actionCode) {
         const result: AutoDirectorActionExecutionResult = {
+          directorTaskId: input.taskId,
           taskId: input.taskId,
           actionCode: input.actionCode,
           code: "forbidden",
@@ -228,6 +241,7 @@ export class AutoDirectorFollowUpActionExecutor {
     const allowedActions = this.getAllowedMutationActions(row);
     if (!allowedActions) {
       const result: AutoDirectorActionExecutionResult = {
+        directorTaskId: input.taskId,
         taskId: input.taskId,
         actionCode: input.actionCode,
         code: "state_changed",
@@ -240,6 +254,7 @@ export class AutoDirectorFollowUpActionExecutor {
 
     if (!allowedActions.has(input.actionCode)) {
       const result: AutoDirectorActionExecutionResult = {
+        directorTaskId: input.taskId,
         taskId: input.taskId,
         actionCode: input.actionCode,
         code: "forbidden",
@@ -268,6 +283,7 @@ export class AutoDirectorFollowUpActionExecutor {
         ? validation.blockingReasons
         : [];
       const result: AutoDirectorActionExecutionResult = {
+        directorTaskId: input.taskId,
         taskId: input.taskId,
         actionCode: input.actionCode,
         code: "forbidden",
@@ -281,6 +297,7 @@ export class AutoDirectorFollowUpActionExecutor {
     try {
       const task = await this.executeMutationAction(row, input);
       const result: AutoDirectorActionExecutionResult = {
+        directorTaskId: input.taskId,
         taskId: input.taskId,
         actionCode: input.actionCode,
         code: "executed",
@@ -312,6 +329,7 @@ export class AutoDirectorFollowUpActionExecutor {
 
     for (const taskId of uniqueTaskIds) {
       const result = await this.execute({
+        directorTaskId: taskId,
         taskId,
         actionCode: input.actionCode,
         source: input.source,
@@ -402,6 +420,7 @@ export class AutoDirectorFollowUpActionExecutor {
         .map((action) => action.label || action.code)
         .filter(Boolean);
       const result: AutoDirectorActionExecutionResult = {
+        directorTaskId: input.taskId,
         taskId: input.taskId,
         actionCode: input.actionCode,
         code: "forbidden",
@@ -427,6 +446,7 @@ export class AutoDirectorFollowUpActionExecutor {
     });
     const task = await this.safeGetTaskDetail(input.taskId);
     const result: AutoDirectorActionExecutionResult = {
+      directorTaskId: input.taskId,
       taskId: input.taskId,
       actionCode: input.actionCode,
       code: "executed",
@@ -457,6 +477,7 @@ export class AutoDirectorFollowUpActionExecutor {
     ));
     if (!validationResult || !canBackfill) {
       const result: AutoDirectorActionExecutionResult = {
+        directorTaskId: input.taskId,
         taskId: input.taskId,
         actionCode: input.actionCode,
         code: "forbidden",
@@ -478,6 +499,7 @@ export class AutoDirectorFollowUpActionExecutor {
       forceResume: true,
     });
     const result: AutoDirectorActionExecutionResult = {
+      directorTaskId: input.taskId,
       taskId: input.taskId,
       actionCode: input.actionCode,
       code: "executed",
@@ -503,10 +525,10 @@ export class AutoDirectorFollowUpActionExecutor {
       : undefined;
     if (input.actionCode === "continue_auto_execution") {
       const continueInput: {
-        continuationMode: "auto_execute_range";
+        continuationMode: "auto_execute_range" | "skip_quality_repair";
         batchAlreadyStartedCount?: number;
       } = {
-        continuationMode: "auto_execute_range",
+        continuationMode: resolveContinueContinuationMode(row),
       };
       if (batchAlreadyStartedCount !== undefined) {
         continueInput.batchAlreadyStartedCount = batchAlreadyStartedCount;

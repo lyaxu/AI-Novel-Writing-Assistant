@@ -111,6 +111,13 @@ export interface StyleEngineRuntimeSettingsStatus {
   maxStyleExtractionTimeoutMs: number;
 }
 
+export interface LLMSelectionSettings {
+  provider: LLMProvider;
+  model: string;
+  temperature: number;
+  maxTokens?: number;
+}
+
 export interface ModelRoutesResponse {
   taskTypes: ModelRouteTaskType[];
   routes: Array<{
@@ -276,6 +283,16 @@ export async function getStyleEngineRuntimeSettings() {
   return data;
 }
 
+export async function getLLMSelectionSetting() {
+  const { data } = await apiClient.get<ApiResponse<LLMSelectionSettings | null>>("/settings/llm-selection");
+  return data;
+}
+
+export async function saveLLMSelectionSetting(payload: LLMSelectionSettings) {
+  const { data } = await apiClient.put<ApiResponse<LLMSelectionSettings>>("/settings/llm-selection", payload);
+  return data;
+}
+
 export async function saveStyleEngineRuntimeSettings(payload: {
   styleExtractionTimeoutMs: number;
 }) {
@@ -323,6 +340,7 @@ export async function createCustomProvider(payload: {
   name: string;
   key?: string;
   model?: string;
+  imageModel?: string;
   baseURL: string;
   isActive?: boolean;
   reasoningEnabled?: boolean;
@@ -334,12 +352,15 @@ export async function createCustomProvider(payload: {
       provider: string;
       displayName: string | null;
       model: string | null;
+      imageModel: string | null;
       baseURL: string | null;
       isActive: boolean;
       reasoningEnabled: boolean;
       concurrencyLimit: number;
       requestIntervalMs: number;
       models: string[];
+      imageModels: string[];
+      supportsImageGeneration: boolean;
     }>
   >("/settings/custom-providers", payload);
   return data;

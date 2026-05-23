@@ -31,7 +31,7 @@ import {
 } from "./novelDirectorTakeoverRuntime";
 import { getDirectorExecutionNodeAdapter } from "./novelDirectorExecutionNodeAdapters";
 import type { NovelDirectorCandidateRuntime } from "./novelDirectorCandidateRuntime";
-import type { NovelDirectorAutoExecutionRuntime } from "./novelDirectorAutoExecutionRuntime";
+import type { NovelDirectorAutoExecutionRuntime } from "./automation/novelDirectorAutoExecutionRuntime";
 import type { DirectorPipelineRunInput, NovelDirectorPipelineRuntime } from "./novelDirectorPipelineRuntime";
 import type { NovelDirectorRuntimeOrchestrator } from "./novelDirectorRuntimeOrchestrator";
 import type { DirectorRuntimeService } from "./runtime/DirectorRuntimeService";
@@ -106,6 +106,23 @@ function inferPhaseFromTaskState(input: {
     return "structured_outline";
   }
   return null;
+}
+
+function shouldSkipCurrentQualityRepair(input: {
+  continuationMode: DirectorContinuationMode | null;
+  checkpointType?: string | null;
+  currentItemKey?: string | null;
+  currentStage?: string | null;
+}): boolean {
+  if (input.continuationMode === "skip_quality_repair") {
+    return true;
+  }
+  if (input.continuationMode !== "auto_execute_range") {
+    return false;
+  }
+  return input.checkpointType === "replan_required"
+    || input.currentItemKey === "quality_repair"
+    || Boolean(input.currentStage?.includes("质量"));
 }
 
 export class NovelDirectorContinueRuntime {
@@ -271,7 +288,13 @@ export class NovelDirectorContinueRuntime {
       throw new Error("自动导演任务缺少恢复所需上下文。");
     }
 
-    const requestedAutoExecutionContinue = continuationMode === "auto_execute_range";
+    const requestedSkipQualityRepair = shouldSkipCurrentQualityRepair({
+      continuationMode,
+      checkpointType: row.checkpointType,
+      currentItemKey: row.currentItemKey,
+      currentStage: row.currentStage,
+    });
+    const requestedAutoExecutionContinue = continuationMode === "auto_execute_range" || requestedSkipQualityRepair;
     const baseRunMode = normalizeDirectorRunMode(directorInput.runMode ?? fallbackRunMode);
     const runMode = requestedAutoExecutionContinue && !isDirectorAutoExecutionRunMode(baseRunMode)
       ? "auto_to_execution"
@@ -356,6 +379,7 @@ export class NovelDirectorContinueRuntime {
           previousFailureMessage: row.lastError ?? null,
           allowSkipReviewBlockedChapter: canSkipReviewBlockedChapter,
           approveAutoExecutionScope: requestedAutoExecutionContinue || isFullBookAutopilot,
+          skipCurrentQualityRepair: requestedSkipQualityRepair,
         });
       });
       return;
@@ -425,7 +449,7 @@ export class NovelDirectorContinueRuntime {
         }),
         batchAlreadyStartedCount: input?.batchAlreadyStartedCount,
         approveCurrentGate,
-        approveAutoExecutionScope: isFullBookAutopilot,
+        approveAutoExecutionScope: requestedAutoExecutionContinue || isFullBookAutopilot,
       });
     });
   }

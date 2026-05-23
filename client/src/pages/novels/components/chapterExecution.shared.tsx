@@ -6,6 +6,10 @@ import type {
 } from "@ai-novel/shared/types/novel";
 import type { ChapterRuntimePackage } from "@ai-novel/shared/types/chapterRuntime";
 import { parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
+import {
+  classifyChapterQualityLoopRisk,
+  hasContinuableChapterQualityLoopRiskFlags,
+} from "@ai-novel/shared/types/chapterQualityLoop";
 import { Link } from "react-router-dom";
 import AiButton from "@/components/common/AiButton";
 import AiActionLabel from "@/components/common/AiActionLabel";
@@ -143,12 +147,12 @@ function buildCurrentStageNote(stage: ChapterExecutionFlowStage): string {
         : "如果审核发现问题，这里会进入修复阶段。";
     case "state_sync":
       return stage.status === "in_progress"
-        ? "系统正在同步本章状态快照、角色变化和关键资源。"
-        : "正文处理完成后，系统会同步本章状态和关键资源。";
+        ? "正文可读，系统正在回灌本章状态、角色变化和关键资源。"
+        : "正文可读后，系统会回灌本章状态和关键资源。";
     case "payoff_sync":
       return stage.status === "in_progress"
-        ? "系统正在回填本章涉及的伏笔状态。"
-        : "状态同步完成后，系统会继续更新伏笔账本。";
+        ? "系统正在校准本章涉及的伏笔账本。"
+        : "资产回灌后，系统会按风险和节奏校准伏笔账本。";
     case "ready":
     default:
       return stage.status === "done"
@@ -437,15 +441,7 @@ function parseStructuredRiskFlagsObject(input: string): Record<string, unknown> 
 }
 
 export function chapterHasContinuableQualityLoop(chapter: Pick<Chapter, "riskFlags">): boolean {
-  const parsed = chapter.riskFlags?.trim()
-    ? parseStructuredRiskFlagsObject(chapter.riskFlags.trim())
-    : null;
-  const qualityLoop = parsed?.qualityLoop;
-  return Boolean(
-    isRecord(qualityLoop)
-      && qualityLoop.overallStatus === "valid"
-      && qualityLoop.recommendedAction === "continue",
-  );
+  return hasContinuableChapterQualityLoopRiskFlags(chapter.riskFlags);
 }
 
 function parseStructuredRiskFlags(input: string): string[] | null {
@@ -454,10 +450,15 @@ function parseStructuredRiskFlags(input: string): string[] | null {
   const labels: string[] = [];
   const qualityLoop = parsed.qualityLoop;
   if (isRecord(qualityLoop)) {
-    const actionLabel = qualityLoopActionLabel(qualityLoop.recommendedAction);
-    const statusLabel = qualityLoopStatusLabel(qualityLoop.overallStatus);
-    if (actionLabel) labels.push(actionLabel);
-    if (statusLabel) labels.push(statusLabel);
+    const qualityLoopRisk = classifyChapterQualityLoopRisk(qualityLoop);
+    if (qualityLoopRisk === "non_blocking_quality_debt") {
+      labels.push("已记录质量债务");
+    } else {
+      const actionLabel = qualityLoopActionLabel(qualityLoop.recommendedAction);
+      const statusLabel = qualityLoopStatusLabel(qualityLoop.overallStatus);
+      if (actionLabel) labels.push(actionLabel);
+      if (statusLabel) labels.push(statusLabel);
+    }
     const signals = Array.isArray(qualityLoop.signals) ? qualityLoop.signals : [];
     signals.forEach((signal) => {
       if (!isRecord(signal) || signal.status === "valid") {

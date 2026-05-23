@@ -51,6 +51,121 @@
 - Preferred threshold: keep a single source file around 600 lines.
 - Floating range: 500-700 lines is acceptable when module cohesion is still clear and the file is not becoming hard to maintain.
 - Hard threshold: when a source file exceeds 700 lines, refactoring and modularization are mandatory before continuing feature expansion.
+- Long-file splitting must improve module boundaries, not merely reduce line count.
+- Before splitting a long file, list its responsibilities and separate business rules, application orchestration, persistence/external adapters, and HTTP/API mapping.
+- Do not split an oversized file by adding loose same-level files such as generic `helper`, `utils`, `shared`, or `runtime` files without clear module ownership.
+- Extracted files must move into an explicit responsibility folder such as `domain/`, `application/`, `infrastructure/`, or `http/`, or into an existing business-stage folder with the same clarity of ownership.
+- If a directory contains more than 12 `.ts` files, create or use a lower-level module directory before adding more peer files.
+- If more than 4 files share the same feature prefix, for example `novelDirector*`, converge them into a dedicated feature directory instead of continuing the prefix-based flat layout.
+- A `utils`, `helpers`, or `shared` file that grows beyond 300 lines or is depended on by more than 3 modules must be promoted into an owned service, policy, adapter, or domain module.
+- After a split, outside modules should consume the capability through the module facade or `index.ts`; avoid deep imports into another module's internal files.
+- If a split affects workflows, prompt/runtime contracts, automatic director chains, chapter execution chains, or other major novel-production links, add or update the module README or boundary notes before continuing feature expansion.
+- For server-side architecture convergence, keep the current `server/src` structure runnable while gradually moving toward clear top-level ownership: `app/` for startup and route mounting, `platform/` for db/llm/events/runtime/config infrastructure, and `modules/` for product capabilities.
+- Server business modules should be organized around the novel completion workflow when applicable: `setup`, `planning`, `production`, `director`, `characters`, `state`, and `export`.
+- High-density server directories should be reduced incrementally. `routes` should converge into module-owned `http/` entrypoints, `services/novel` should keep only facades and stable shared entrypoints at its root, and `services/novel/director` should converge into owned submodules such as `commands`, `runtime`, `state`, `automation`, `projections`, `recovery`, and `phases`.
+- Each architecture cleanup phase should move only one coherent subsystem, preserve compatibility exports where needed, check dependency direction, and run targeted TypeScript or service-level verification before the phase is considered complete.
+
+## Project Development Wiki Rules
+
+This project must continuously maintain a development wiki for architecture decisions, workflow rules, module boundaries, runtime contracts, debugging lessons, and product design rationale.
+
+The wiki is not a record of "what changed". It should help future developers and AI agents understand why the system is designed this way and how it should be maintained.
+
+### What Should Be Documented
+
+Document stable knowledge such as:
+
+- Design boundaries for core modules such as auto-director, chapter production, Creative Hub, task center, RAG, and Prompt Registry.
+- Important architecture decisions and their reasons.
+- Runtime state contracts, stage transition rules, recovery rules, retry rules, and failure-handling rules.
+- AI invocation conventions such as Prompt Schema, structured output, JSON repair, and context assembly.
+- Module ownership, dependency direction, and boundaries that forbid cross-layer calls.
+- Repeated failure modes, debugging conclusions, and recommended diagnosis paths.
+- Product principles and UX decisions that help beginners complete a full novel.
+
+### What Should Not Be Documented
+
+Do not add wiki entries for:
+
+- Tiny changes with no long-term value.
+- Per-commit file modification lists.
+- Temporary TODOs.
+- Pure release-note content.
+- Implementation details that are likely to be discarded soon.
+- Narration that only says what changed in the current task.
+
+### Wiki Writing Rules
+
+- Use Chinese by default unless the surrounding document is clearly English-only.
+- Write for future developers and future AI agents.
+- Explain the reason behind a decision, not just the decision itself.
+- Prefer sections such as `Background / Decision / Current Rule / Examples / Failure Modes / Related Modules / Source Documents`.
+- Keep entries stable, clear, and actionable.
+- Avoid vague wording such as "optimize later", "handle properly", or "improve this".
+- If a rule affects auto-director, chapter production, Prompt, RAG, task state, or frontend projection, state the affected scope explicitly.
+
+### Recommended Locations
+
+- `docs/wiki/architecture/`: architecture design, module boundaries, dependency direction.
+- `docs/wiki/workflows/`: auto-director, chapter production, recovery chain, task center, and other workflows.
+- `docs/wiki/prompts/`: Prompt Registry, structured output, JSON repair, schema conventions.
+- `docs/wiki/rag/`: embedding, vector retrieval, context assembly, knowledge-base rules.
+- `docs/wiki/debugging/`: recurring failures, diagnosis paths, recovery methods.
+- `docs/wiki/product/`: beginner-first decisions, full-novel completion, UX rationale.
+
+### When To Update The Wiki
+
+Before completing any of the following, check whether the work produced stable wiki-worthy knowledge:
+
+- A development phase.
+- A significant bug fix.
+- An architecture adjustment.
+- A core workflow change.
+- A change to Prompt Schema, runtime state, task recovery, or the chapter production chain.
+- A commit, push, or PR.
+
+If stable knowledge was introduced or clarified, update the relevant wiki page before the phase is considered complete.
+
+If no wiki update is needed, explicitly state that the change has no long-term wiki value and should remain only in code or release notes.
+
+### Wiki And Release Notes Boundary
+
+- Wiki records durable project knowledge.
+- Release Notes record user-visible product changes.
+- README latest update only shows the latest public-facing summary.
+- Do not write the wiki as a changelog.
+- Do not copy release notes into the wiki.
+- If a change affects both user behavior and long-term architecture, update both release notes and the relevant wiki page.
+
+### Novel Production Wiki Priority
+
+These areas have the highest priority for wiki accumulation:
+
+1. Auto-director runtime, recovery, checkpoints, and resume behavior.
+2. Chapter production chain, including draft generation, review, repair, save, and retry rules.
+3. Runtime state contracts between backend, task center, and frontend projections.
+4. Prompt Registry rules, structured output schemas, and JSON repair boundaries.
+5. Creative Hub boundaries: what it can create, when it should hand off to auto-director, and when it should avoid becoming general chat.
+6. RAG and context assembly rules for worldbuilding, characters, chapters, style, and continuity.
+7. Beginner-first product decisions that reduce cognitive load and help users complete a full novel.
+
+## Agent Collaboration Rules
+
+- The project allows subagents to assist with development, investigation, verification, and documentation work when the active tool environment and higher-priority instructions permit it.
+- Use subagents for well-scoped parallel work such as independent codebase exploration, focused implementation slices, documentation audits, or non-blocking verification.
+- When delegating implementation, assign clear ownership of files or modules. Subagents must not revert or overwrite changes made by others.
+- Do not use subagents to bypass project safety rules, data protection rules, branch workflow, prompt governance, or release-note / wiki requirements.
+- Do not delegate destructive operations, database resets, migrations with data-loss risk, public release uploads, or branch promotion decisions.
+- Integrate subagent output through normal review: inspect the diff, confirm it matches the current product and architecture rules, run or reuse appropriate verification, and document residual risk.
+
+## Verification Reuse Rules
+
+- Prefer targeted verification that matches the actual change scope.
+- If a recent build, typecheck, packaging check, or test run already covers the same code paths after the relevant files last changed, do not repeat the same expensive verification by default.
+- Before reusing recent verification, confirm the evidence is recent, tied to the same branch or commit range, and not invalidated by subsequent changes.
+- Build commands can take significant time. Avoid repeated `pnpm build`, `pnpm typecheck`, desktop packaging, or full test-suite runs when the current diff is documentation-only or already covered by a recent successful run.
+- If verification is reused instead of rerun, state exactly what prior check is being trusted and why it still applies.
+- If no suitable recent verification exists, or the change touches runtime contracts, prompt schemas, task recovery, database behavior, packaging, or cross-module product flow, run the narrowest sufficient check and document any skipped broader checks.
 
 ## Development Branch Workflow
 
@@ -96,6 +211,9 @@
 - Do not use `desktop-vX.Y.Z-rN`, `desktop-v*`, branch names, workflow dispatch on `main`, or any other non-matching ref as the identifier for a public desktop GitHub Release upload.
 - If a build is triggered manually or from a non-matching tag, treat it as verification or packaging only. It must not be treated as a valid public release upload.
 - If the required `vX.Y.Z` tag and `desktop/package.json` version are not aligned, stop before upload, fix the version/tag pair first, and then rerun the release flow.
+- When packaging is requested and there is no explicit, current, repo-specific knowledge that local packaging is required, prefer triggering the GitHub-side packaging workflow rather than inventing local packaging steps.
+- Do not run local desktop packaging just to guess the release process. Local packaging is appropriate only when the user explicitly asks for local artifacts, the task is packaging verification, or the relevant docs/scripts clearly require local staging.
+- GitHub-side packaging still must obey the version/tag rules above. If the correct workflow, tag, branch, or version is unclear, stop and verify the release identifier before triggering packaging.
 
 ## Prompt Governance
 
@@ -138,6 +256,14 @@
 - `docs/releases/release-notes.md`, `README.md` `## 最新更新`, release summaries, and other user-facing update records should continue to use the existing date-first format, for example: `### 2026-04-07`.
 - Keep the date as the primary update identifier until the product workflow, information architecture, and release cadence are stable enough to justify a formal versioning system.
 - If multiple user-visible updates are recorded on the same date, keep them under the same date heading in `docs/releases/release-notes.md` and distinguish them by clear summary text instead of inventing temporary version numbers.
+
+## Current Product Priorities
+
+1. Stabilize auto-director recovery and chapter production chain.
+2. Keep beginner-first full-novel completion as the main product goal.
+3. Avoid introducing new workflow branches unless they simplify the main production path.
+4. Prefer fixing runtime contracts, prompt schemas, and state projections before adding UI-only patches.
+5. Do not expand Creative Hub into a general chat tool unless it directly supports novel completion.
 
 ### Future Versioning Transition
 
