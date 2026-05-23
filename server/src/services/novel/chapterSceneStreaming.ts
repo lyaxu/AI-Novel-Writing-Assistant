@@ -23,6 +23,7 @@ import {
 import {
   buildSceneRoundPlan,
   flushSceneStreamingBufferWithLimit,
+  resolveSceneWordControlMode,
   type SceneRoundPlan,
   type SceneWordControlMode,
 } from "./runtime/sceneBudgetRuntime";
@@ -143,12 +144,6 @@ function createAsyncChunkQueue() {
     end,
     fail,
   };
-}
-
-function resolveSceneWordControlMode(_sceneRange: {
-  targetWordCount: number;
-}): SceneWordControlMode {
-  return "prompt_only";
 }
 
 function buildRoundInstruction(roundPlan: SceneRoundPlan): string {
@@ -291,7 +286,9 @@ async function streamSceneRound(input: {
 
 async function runSceneStreaming(input: ChapterSceneStreamInput, emitChunk: (chunk: BaseMessageChunk) => void): Promise<SceneStreamResult> {
   const sceneRange = resolveSceneWordRange(input.scene.targetWordCount);
-  const wordControlMode = resolveSceneWordControlMode(sceneRange);
+  const wordControlMode = resolveSceneWordControlMode({
+    sceneTargetWordCount: sceneRange.targetWordCount,
+  });
   let currentSceneContent = "";
   let sceneStatus = "empty";
   let closingPhaseTriggered = false;

@@ -43,7 +43,25 @@ test("scene budget runtime falls back to prompt_only for short scenes", () => {
   assert.equal(plan.mode, "prompt_only");
   assert.equal(plan.maxRounds, 1);
   assert.equal(plan.isFinalRound, true);
-  assert.equal(plan.hardRoundWordLimit, null);
+  assert.equal(plan.hardRoundWordLimit, 575);
+});
+
+test("scene budget runtime caps final balanced rounds", () => {
+  const plan = buildSceneRoundPlan({
+    sceneTargetWordCount: 1400,
+    sceneMinWordCount: 1190,
+    sceneMaxWordCount: 1610,
+    chapterTargetWordCount: 3500,
+    currentSceneWordCount: 1320,
+    currentChapterWordCount: 3200,
+    remainingChapterWordCount: 300,
+    roundIndex: 3,
+    mode: resolveSceneWordControlMode({ sceneTargetWordCount: 1400 }),
+  });
+
+  assert.equal(plan.mode, "balanced");
+  assert.equal(plan.isFinalRound, true);
+  assert.equal(plan.hardRoundWordLimit, 140);
 });
 
 test("scene budget runtime flushes to sentence boundary before hitting hard limit", () => {

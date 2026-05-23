@@ -10,6 +10,7 @@ import type {
 import { createNovelSnapshot, previewChapterAiRevision, updateNovelChapter } from "@/api/novel";
 import { queryKeys } from "@/api/queryKeys";
 import { toast } from "@/components/ui/toast";
+import { useLocalDB } from "@/hooks/useLocalDB";
 import { useLLMStore } from "@/store/llmStore";
 import ChapterEditorDirectorPanel from "./ChapterEditorDirectorPanel";
 import ChapterEditorSidebar from "./ChapterEditorSidebar";
@@ -44,6 +45,15 @@ const EMPTY_SESSION: ChapterEditorSessionState = {
   viewMode: "block",
 };
 
+const CHAPTER_DRAFT_STORAGE_PREFIX = "chapter-editor-draft";
+
+interface ChapterEditorLocalDraft {
+  content: string;
+  savedContent: string;
+  serverUpdatedAt?: string | null;
+  updatedAt: number;
+}
+
 function toSelectionFromRange(
   content: string,
   range?: Pick<ChapterEditorTargetRange, "from" | "to"> | null,
@@ -76,11 +86,21 @@ export default function ChapterEditorShell(props: ChapterEditorShellProps) {
   } = props;
   const llm = useLLMStore();
   const queryClient = useQueryClient();
+  const { getItem, setItem, removeItem } = useLocalDB();
   const lastPreviewRequestRef = useRef<ReturnType<typeof buildAiRevisionRequest> | null>(null);
+  const activeChapterIdRef = useRef<string | null>(chapter?.id ?? null);
+  const latestDraftRef = useRef("");
+  const latestSavedContentRef = useRef("");
+  const latestServerContentRef = useRef("");
   const normalizedChapterContent = useMemo(() => normalizeChapterContent(chapter?.content ?? ""), [chapter?.content]);
+  const draftStorageKey = useMemo(
+    () => (chapter?.id ? `${CHAPTER_DRAFT_STORAGE_PREFIX}:${novelId}:${chapter.id}` : ""),
+    [chapter?.id, novelId],
+  );
 
   const [contentDraft, setContentDraft] = useState(normalizedChapterContent);
   const [savedContent, setSavedContent] = useState(normalizedChapterContent);
+  const [isDraftReady, setIsDraftReady] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [selection, setSelection] = useState<ChapterEditorSelectionRange | null>(null);
   const [selectionToolbarPosition, setSelectionToolbarPosition] = useState<SelectionToolbarPosition | null>(null);
@@ -90,9 +110,30 @@ export default function ChapterEditorShell(props: ChapterEditorShellProps) {
   const [selectedDiagnosticId, setSelectedDiagnosticId] = useState<string | null>(null);
 
   useEffect(() => {
-    const nextContent = normalizedChapterContent;
-    setContentDraft(nextContent);
-    setSavedContent(nextContent);
+    latestDraftRef.current = contentDraft;
+  }, [contentDraft]);
+
+  useEffect(() => {
+    latestSavedContentRef.current = savedContent;
+  }, [savedContent]);
+
+  useEffect(() => {
+    if (!chapter?.id || !draftStorageKey) {
+      setIsDraftReady(false);
+      return;
+    }
+
+    let isCancelled = false;
+    const activeChapterId = chapter.id;
+    const serverContent = normalizedChapterContent;
+
+    activeChapterIdRef.current = activeChapterId;
+    latestServerContentRef.current = serverContent;
+    latestDraftRef.current = serverContent;
+    latestSavedContentRef.current = serverContent;
+    setIsDraftReady(false);
+    setContentDraft(serverContent);
+    setSavedContent(serverContent);
     setSaveStatus("idle");
     setSelection(null);
     setSelectionToolbarPosition(null);
@@ -100,6 +141,59 @@ export default function ChapterEditorShell(props: ChapterEditorShellProps) {
     setRevisionInstruction("");
     setRevisionScope("selection");
     lastPreviewRequestRef.current = null;
+
+    void getItem<ChapterEditorLocalDraft>(draftStorageKey)
+      .then((storedDraft) => {
+        if (isCancelled || activeChapterIdRef.current !== activeChapterId) {
+          return;
+        }
+        const hasCurrentLocalEdits = latestDraftRef.current !== latestSavedContentRef.current;
+        if (!hasCurrentLocalEdits && typeof storedDraft?.content === "string" && storedDraft.content !== serverContent) {
+          latestDraftRef.current = storedDraft.content;
+          setContentDraft(storedDraft.content);
+          setSaveStatus("idle");
+          toast.info("已恢复本地未保存草稿。");
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          toast.error("本地草稿读取失败，当前显示服务端已保存正文。");
+        }
+      })
+      .finally(() => {
+        if (!isCancelled && activeChapterIdRef.current === activeChapterId) {
+          setIsDraftReady(true);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [chapter?.id, draftStorageKey, getItem]);
+
+  useEffect(() => {
+    if (!chapter?.id || activeChapterIdRef.current !== chapter.id) {
+      return;
+    }
+
+    const nextServerContent = normalizedChapterContent;
+    if (latestServerContentRef.current === nextServerContent) {
+      return;
+    }
+
+    latestServerContentRef.current = nextServerContent;
+    const hasLocalChanges = latestDraftRef.current !== latestSavedContentRef.current;
+    latestSavedContentRef.current = nextServerContent;
+    setSavedContent(nextServerContent);
+
+    if (!hasLocalChanges) {
+      latestDraftRef.current = nextServerContent;
+      setContentDraft(nextServerContent);
+      setSaveStatus("idle");
+      return;
+    }
+
+    toast.warning("服务端章节已刷新，已保留你的本地未保存草稿。");
   }, [chapter?.id, normalizedChapterContent]);
 
   useEffect(() => {
@@ -114,6 +208,48 @@ export default function ChapterEditorShell(props: ChapterEditorShellProps) {
 
   const isDirty = contentDraft !== savedContent;
   const wordCount = useMemo(() => countEditorWords(contentDraft), [contentDraft]);
+
+  useEffect(() => {
+    if (!draftStorageKey || !isDraftReady) {
+      return;
+    }
+
+    if (!isDirty) {
+      void removeItem(draftStorageKey);
+      return;
+    }
+
+    const draft: ChapterEditorLocalDraft = {
+      content: contentDraft,
+      savedContent,
+      serverUpdatedAt: chapter?.updatedAt ?? null,
+      updatedAt: Date.now(),
+    };
+    const timerId = window.setTimeout(() => {
+      void setItem(draftStorageKey, draft);
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [chapter?.updatedAt, contentDraft, draftStorageKey, isDirty, isDraftReady, removeItem, savedContent, setItem]);
+
+  useEffect(() => {
+    if (!isDirty) {
+      return;
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isDirty]);
+
   const activeCandidate = useMemo(
     () => session.candidates?.find((candidate) => candidate.id === session.activeCandidateId) ?? null,
     [session.activeCandidateId, session.candidates],
@@ -159,6 +295,9 @@ export default function ChapterEditorShell(props: ChapterEditorShellProps) {
     onSuccess: async (_response, nextContent) => {
       setSavedContent(nextContent);
       setSaveStatus("saved");
+      if (draftStorageKey) {
+        await removeItem(draftStorageKey);
+      }
       await invalidateChapterQueries();
       toast.success("章节正文已保存。");
     },
@@ -249,6 +388,9 @@ export default function ChapterEditorShell(props: ChapterEditorShellProps) {
       setSaveStatus("saved");
       setSession(EMPTY_SESSION);
       setRevisionInstruction("");
+      if (draftStorageKey) {
+        await removeItem(draftStorageKey);
+      }
       await invalidateChapterQueries();
       toast.success("已应用候选版本，并创建 AI 修改前快照。");
     },
@@ -402,6 +544,23 @@ export default function ChapterEditorShell(props: ChapterEditorShellProps) {
   const canRunSelectionRevision = Boolean(getSelectionTarget());
   const headerSaveLabel = getSaveStatusLabel(saveStatus, isDirty);
   const gridClassName = "xl:grid-cols-[320px_minmax(0,1fr)_400px]";
+  const confirmLeaveWithUnsavedChanges = () => (
+    !isDirty || window.confirm("当前章节有未保存修改，确定离开吗？")
+  );
+  const handleBack = onBack
+    ? () => {
+      if (confirmLeaveWithUnsavedChanges()) {
+        onBack();
+      }
+    }
+    : undefined;
+  const handleOpenVersionHistory = onOpenVersionHistory
+    ? () => {
+      if (confirmLeaveWithUnsavedChanges()) {
+        onOpenVersionHistory();
+      }
+    }
+    : undefined;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -415,8 +574,8 @@ export default function ChapterEditorShell(props: ChapterEditorShellProps) {
           isDirty={isDirty}
           isSaving={saveMutation.isPending}
           selectedDiagnosticId={selectedDiagnosticId}
-          onBack={onBack}
-          onOpenVersionHistory={onOpenVersionHistory}
+          onBack={handleBack}
+          onOpenVersionHistory={handleOpenVersionHistory}
           onSave={() => saveMutation.mutate(contentDraft)}
           onFocusDiagnostic={handleFocusDiagnostic}
           onRunDiagnostic={handleRunDiagnostic}

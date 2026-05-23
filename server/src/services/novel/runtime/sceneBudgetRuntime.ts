@@ -88,6 +88,8 @@ export function buildSceneRoundPlan(input: SceneRoundPlanInput): SceneRoundPlan 
   const remainingSceneWordCount = Math.max(sceneTargetWordCount - currentSceneWordCount, 0);
 
   if (mode === "prompt_only") {
+    const sceneRemainingCap = Math.max(1, sceneMaxWordCount - currentSceneWordCount);
+    const chapterRemainingCap = remainingChapterWordCount > 0 ? remainingChapterWordCount : sceneRemainingCap;
     return {
       mode,
       roundIndex: 1,
@@ -101,7 +103,7 @@ export function buildSceneRoundPlan(input: SceneRoundPlanInput): SceneRoundPlan 
       remainingSceneWordCount,
       remainingChapterWordCount,
       suggestedRoundWordCount: remainingSceneWordCount > 0 ? remainingSceneWordCount : null,
-      hardRoundWordLimit: null,
+      hardRoundWordLimit: Math.min(sceneRemainingCap, chapterRemainingCap),
       isFinalRound: true,
       closingPhase: true,
     };
@@ -134,7 +136,7 @@ export function buildSceneRoundPlan(input: SceneRoundPlanInput): SceneRoundPlan 
   }
 
   let hardRoundWordLimit: number | null = null;
-  if (!isFinalRound && suggestedRoundWordCount && suggestedRoundWordCount > 0) {
+  if (suggestedRoundWordCount && suggestedRoundWordCount > 0) {
     const reserveForLaterRounds = roundsLeft > 1 ? Math.max(80, (roundsLeft - 1) * 60) : 0;
     const chapterRemainingCap = Math.max(0, remainingChapterWordCount - reserveForLaterRounds);
     const sceneRemainingCap = Math.max(0, sceneMaxWordCount - currentSceneWordCount);
