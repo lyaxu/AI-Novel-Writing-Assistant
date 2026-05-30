@@ -50,6 +50,50 @@ function buildDeferredQualityDebtReason(input: {
   return `${affectedSummary}${remainingSummary}。`;
 }
 
+function buildSoftReplanReason(input: {
+  affectedChapterCount: number;
+  remainingChapterCount: number;
+}): string {
+  const affectedSummary = input.affectedChapterCount > 0
+    ? `本次已记录 ${input.affectedChapterCount} 条重规划提醒`
+    : "本次已记录重规划提醒";
+  const remainingSummary = input.remainingChapterCount > 0
+    ? `，正文可继续推进，仍有 ${input.remainingChapterCount} 章待继续`
+    : "，正文可继续推进";
+  return `${affectedSummary}${remainingSummary}。`;
+}
+
+function isSoftReplanNotice(input: {
+  noticeSummary?: string | null;
+  replanAlertDetails?: string[] | null;
+}): boolean {
+  const text = [
+    input.noticeSummary,
+    ...(Array.isArray(input.replanAlertDetails) ? input.replanAlertDetails : []),
+  ]
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .join("\n");
+  if (!text.trim()) {
+    return false;
+  }
+
+  const softHints = [
+    "计划义务配置风险",
+    "任务合同中混入后续阶段目标",
+    "与本章禁止提前展开的边界冲突",
+    "正文不宜为此改写",
+    "不构成暂停人工确认的必要条件",
+    "非正文必须返工",
+    "正文叙事任务和角色状态基本达成",
+    "正文已完成本章核心剧情",
+    "正文对本章核心剧情和收尾钩子兑现充分",
+    "没有严重连续性断裂",
+    "没有严重越界",
+  ];
+
+  return softHints.some((hint) => text.includes(hint));
+}
+
 export function buildDirectorQualityRepairRisk(
   input: DirectorQualityRepairRiskInput,
 ): DirectorQualityRepairRisk {
@@ -70,15 +114,24 @@ export function buildDirectorQualityRepairRisk(
     || recoverableRepairCount > 0;
 
   if (noticeCode === PIPELINE_REPLAN_NOTICE_CODE || replanCount > 0) {
+    const softReplan = isSoftReplanNotice({
+      noticeSummary: input.noticeSummary,
+      replanAlertDetails: payload.replanAlertDetails,
+    });
     return {
       riskLevel: "replan",
-      autoContinuable: false,
-      reason: buildReason({
-        noticeCode: PIPELINE_REPLAN_NOTICE_CODE,
-        repairMode,
-        affectedChapterCount: replanCount,
-        remainingChapterCount,
-      }),
+      autoContinuable: softReplan,
+      reason: softReplan
+        ? buildSoftReplanReason({
+          affectedChapterCount: replanCount,
+          remainingChapterCount,
+        })
+        : buildReason({
+          noticeCode: PIPELINE_REPLAN_NOTICE_CODE,
+          repairMode,
+          affectedChapterCount: replanCount,
+          remainingChapterCount,
+        }),
       noticeCode: PIPELINE_REPLAN_NOTICE_CODE,
       repairMode,
       affectedChapterCount: replanCount,

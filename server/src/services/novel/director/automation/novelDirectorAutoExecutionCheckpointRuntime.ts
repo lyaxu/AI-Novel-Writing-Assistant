@@ -242,17 +242,32 @@ export async function resolveQualityRepairNoticeAction(
     && remainingChapterCount > 0
     && isAiDriverExecution,
   );
-  const canAutoContinueByPolicy = checkpointType === "chapter_batch_ready"
-    && remainingChapterCount > 0
-    && (
-      isFullBookAutopilot
-      || shouldNotifyAndContinueAiDriverQualityNotice
-      || await deps.shouldAutoContinueQualityRepair?.({
+  let shouldAutoContinueQualityRepairByPreference: boolean | null = null;
+  const resolveShouldAutoContinueQualityRepairByPreference = async () => {
+    if (shouldAutoContinueQualityRepairByPreference === null) {
+      shouldAutoContinueQualityRepairByPreference = await deps.shouldAutoContinueQualityRepair?.({
         request: input.request,
         qualityRepairRisk,
         remainingChapterCount,
-      })
-    );
+      }) ?? false;
+    }
+    return shouldAutoContinueQualityRepairByPreference;
+  };
+  let canAutoContinueByPolicy = false;
+  if (!canContinueAfterExplicitApproval && remainingChapterCount > 0) {
+    if (checkpointType === "chapter_batch_ready") {
+      canAutoContinueByPolicy = Boolean(
+        isFullBookAutopilot
+        || shouldNotifyAndContinueAiDriverQualityNotice
+        || await resolveShouldAutoContinueQualityRepairByPreference()
+      );
+    } else if (checkpointType === "replan_required" && qualityRepairRisk.autoContinuable && isAiDriverExecution) {
+      canAutoContinueByPolicy = Boolean(
+        isFullBookAutopilot
+        || await resolveShouldAutoContinueQualityRepairByPreference()
+      );
+    }
+  }
 
   if (canAutoContinueByPolicy || shouldNotifyAndContinueAiDriverQualityNotice) {
     await deps.recordAutoApproval?.({
