@@ -220,6 +220,9 @@ export class ChapterWritingGraph {
         minWordCount: lengthGoal.minWordCount,
         maxWordCount: lengthGoal.maxWordCount,
         missingWordGap,
+        conflictLevel: input.contextPackage.chapter.conflictLevel ?? null,
+        revealLevel: input.contextPackage.chapter.revealLevel ?? null,
+        pacePreference: writeContext.bookContract.pacePreference ?? null,
       },
       contextBlocks: resolvedContext.blocks,
       options: {
@@ -297,6 +300,9 @@ export class ChapterWritingGraph {
         targetWordCount: chapterWriteContext.chapterMission.targetWordCount ?? null,
         minWordCount: targetRange.minWordCount,
         maxWordCount: targetRange.maxWordCount,
+        conflictLevel: contextPackage.chapter.conflictLevel ?? null,
+        revealLevel: contextPackage.chapter.revealLevel ?? null,
+        pacePreference: chapterWriteContext.bookContract.pacePreference ?? null,
       },
       contextBlocks: resolvedContext.blocks,
       options: {
