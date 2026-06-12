@@ -4,6 +4,149 @@
 
 ## 更新历史
 
+### 2026-06-09（跨章设定漂移修复 + 测试重置工具 + 质量守卫补录）
+
+本次更新彻底修复了正文即兴硬事实无法跨章保持一致的问题，新增便于反复测试的章节重置工具，并补录早期的小说生成质量守卫。
+
+**正文即兴事实桥接（跨章设定漂移修复）**
+
+- 事实账本此前只从规划层字段（`obligationContract.mustHitNow` / `payoffDirectives`）提取事实，记不住正文 LLM 即兴写出的硬设定（如某次交易是私活、具体金额、具体次数、票号、斤数等），导致后续章节凭空改写成矛盾版本（例如把"私下放映收辛苦费"改写成"厂里正式外派、没收钱"）。
+- 章节摘要输出新增 `concreteFacts[]`：章节定稿时一次 LLM 调用同时生成摘要并抽取正文硬事实（主角承诺/交易条款、事件性质、关键数字日期），桥接写入事实账本。
+- 章节摘要服务此前只在前端 HTTP 触发、自动执行全程不跑；现已接入定稿流程，自动执行每章定稿即抽取并落账，下一章 JIT task sheet 能读到真实前文事实，从源头消除跨章设定矛盾。
+- 实测：粮票票号、斤数、事件性质等关键事实在多章中保持完全一致，此前的"私活→公务"类跨章矛盾不再出现。
+
+**章节正文一键重置（开发测试工具）**
+
+- 项目工具新增"重置所有章节正文"，可快速清空正文与相关派生状态，便于反复重新生成测试，无需从零重建小说。
+
+**JIT 模式结构化大纲误报修复**
+
+- 全书自动执行（懒规划）模式下 `chapter_detail_bundle` 步骤被主动跳过，但 `validateOutput` 仍按 `chapterDetailReady` 校验，导致误报"未产出结构化大纲事实"；现按 JIT 模式判定 `effectiveDetailReady`，主动跳过的步骤不再误报。
+
+**小说生成质量守卫（补录）**
+
+- `storyWorldSlice` 提示词增加世界观污染词防护，并新增 `rebuild_story_world_slice` 工具用于重建被污染的世界观切片。
+- 分卷窗口增加关键节点守卫与场景模式黑名单，缓解里程碑重复与节奏失衡。
+- 新增 `audit_chapter_continuity` 章节连续性诊断工具。
+
+### 2026-06-08（日志清理与轮转）
+
+桌面端和开发日志会自动控制保留周期与单文件体积，减少长期运行后日志文件持续堆积的问题，同时保留最近排障所需的日志。
+
+- 桌面主日志超过体积上限后会自动轮转，新日志继续写入当前日志文件，不需要用户手动清空。
+- 开发会话日志、LLM 调试日志和结构化修复日志会按默认保留策略清理旧文件，最近 24 小时内的日志会保留，便于继续排查。
+- 日志清理只处理已知日志文件，不会清理数据库事件、小说数据、图片、备份或其他业务文件。
+
+### 2026-06-08（生成链路四阶段优化全量落地）
+
+生成链路优化（1.D + Phase 2 + Phase 3）：修复质量债务高发根因、消除每章重复全量查询、实现 N+1 章节执行预取，全书自动执行效率和质量双提升。
+
+**1.D 质量修复闭环子项**
+- **根因A（修复器结构化义务）**：`prepareChapterRepairExecution` 改为传入结构化 `issuesJson`，包含 `missingObligations`（kind/summary/evidence）和 `blockingIssueCodes`，修复器不再只看压扁文本猜问题类型，可定向补写未兑现义务。
+- **根因B（宽松锚点重试）**：`ChapterPatchRepairService` 锚点失配后，先用 `continuity_only` 宽松模式重试一次，再升级 `heavy_repair`；同步将 `patchRepair` 预算从 1 提升到 2，减少过早升级。
+- **根因E（issueSignature 拆分）**：`buildDirectorQualityLoopIssueSignature` 在签名头加 `length|` / `content|` 前缀，长度类与内容类问题获得独立预算计数器，避免补丁修好长度后浮出内容问题时触发误升级。
+
+**Phase 2 上下文分层缓存**
+- 新增 `BatchContextCache`：将 novel 全量查询（world/characters/storyMacroPlan/volumePlans，共 10+ 子查询）缓存为进程内稳定层，按 `novelId` 命中；订阅 `character:changed` / `volume:updated` / `outline:revised` / `pipeline:completed` 自动失效。
+- `GenerationContextAssembler` 稳定层走缓存，每章仅重查动态字段（canonicalState/payoffLedger/factLedger/recentChapters/RAG 等）。
+- 移除 `timelineContextService.buildForChapter` 调用（PR-B 后写作路径已不消费 timelineContext），`contextPackage.timelineContext = null`。
+- 合并 `baseContextPackage` + `contextPackage` 双重构建为单一 `sharedFields` 展开，消除 ~30 个字段两遍手抄。
+
+**Phase 3 N+1 执行预取**
+- `novelCorePipelineService` 在每章 `runPipelineChapter` 完成后（factLedger 已写入），非阻塞（fire-and-forget）触发下一章的 JIT task sheet 预取。
+- 仅在 `full_book_autopilot` 模式启用；预取失败不影响流水线，下一章组装时自动重试。
+- 结合 `BatchContextCache`，N+1 章正式组装时 novel 稳定层已命中缓存、task sheet 已就绪，组装延迟大幅降低。
+
+### 2026-06-08（懒规划 JIT task sheet 重构）
+
+懒规划（Phase 1）：把 task sheet 从"规划阶段全量预生成"改为"执行前即时生成（Just-In-Time）"，消除全量拆章门控并解决 task sheet 与实际前文脱节问题。
+
+- **全量拆章门控已消除**：全书自动执行（`full_book_autopilot`）模式下，`structured_outline` 阶段跳过 `chapter_detail_bundle` 步骤，只生成章节标题和节奏锚点（`chapter_list`），即可进入章节执行阶段，不再等待所有 N 章 task sheet 预生成完毕。
+- **新增 `ChapterPlanJITService`**：在每章执行前（`GenerationContextAssembler.assemble`）自动生成 task sheet。生成时将已写章节的事实账本（`NovelFactService.listForChapter`）注入提示词，task sheet 义务不再与实际前文矛盾，从根本上缓解根因 D（义务不可达）。
+- **兼容性保障**：旧小说若 task sheet 已存在且事实账本条目 < 3 条（前文未写 / 首章），跳过 JIT 直接复用，不破坏存量数据。手动单章模式不受影响。
+
+### 2026-06-08（质量债务根因诊断埋点）
+
+质量债务根因归因（Phase 0）：在章节 defer_and_continue 路径埋入结构化归因数据，支撑后续优化方向决策。
+
+- `chapterRuntimePipeline` 新增 `QualityDebtAttribution` 接口，收集首次/二次失败 issue code、`failureClassification.code`、patch 锚点失配标记、缺失义务种类，并自动推断根因 A/B/D/E 标签（A=开环修复、B=patch 失配、D=义务不可达、E=签名漂移）。
+- `ChapterQualityLoopService.recordAssessment` 接受 `qualityDebtAttribution` 并将其写入 `chapter.riskFlags` JSON 的 `qualityLoop` 节点，落库后可被聚合工具读取。
+- 新增 Agent 工具 `analyze_quality_debt_attribution`：确定性扫描（无 LLM），读取所有 defer_and_continue 章节的归因数据，输出根因 A/B/D/E 占比、Top 失败 issue code（TOP5）、Top 缺失义务种类（TOP3）及决策建议，帮助确定阶段一/阶段二的优化侧重。
+
+### 2026-06-08（事实账本 + 写章路径瘦身）
+
+事实账本（Novel Fact Ledger）：用一张极简的 `NovelFactEntry` 表替代 timeline 对写章上下文的介入，
+让 `completedMilestones` 字段得到真实填充，防止 LLM 在后续章节重复写出已发生的事件；
+同时彻底移除 timeline finalization 在写章路径中的所有干预点（PR-B）。
+
+- 新增 `NovelFactEntry` 数据表，记录已发生的不可逆事实（completed/revealed/state_changed 三类）。
+- 章节接收通过后，系统自动从 `obligationContract.mustHitNow` 和 `payoffDirectives(payoff/partial_reveal)` 提取已完成条目写入事实账本，无额外 LLM 调用。
+- `GenerationContextAssembler` 在组装写章上下文时读取事实账本，填充 `ChapterWriteContext.completedMilestones`，让写章 LLM 知晓"哪些事情已经发生，不要再重复"。
+- 事实账本读取策略：completed/revealed 类全量返回（不限章节距离），state_changed 类只取最近 15 章，控制上下文长度。
+- PR-B：从 `chapterWriter.prompts.ts` requiredGroups 移除 `timeline_context`；从 `ChapterContentFinalizationService`、`ChapterStreamGenerationOrchestrator`、`ChapterPipelineRuntimeAdapter`、`ChapterRuntimeCoordinator`、`ChapterRepairStreamRuntime`、`chapterRuntimePipeline` 移除全部 `timelineFinalizer` 依赖和调用点。`ChapterTimelineFinalizationService` 本身及前端时间轴展示不受影响。
+
+### 2026-06-08（质量守卫）
+
+小说生成质量守卫：针对世界设定污染、已完成事件反复重写、场景模式重复和卷节奏失控四类系统性问题，在上下文层、共享类型层和 Agent 工具层分别新增守卫机制。
+
+- 世界切片提示词新增防污染约束：切片自由文本字段禁止直接引用世界资产专有名词，世界来源与故事背景时代/地域明显不匹配时必须写出映射说明和禁用词，解决"高密东北乡"等历史世界专有词汇污染现代故事章节生成的问题。
+- 新增 `rebuild_story_world_slice` Agent 工具，强制重建已污染的世界切片，适用于发现世界来源与小说故事背景严重错配的场景。
+- `ChapterWriteContext` 新增 `completedMilestones` 字段，在 `chapter_mission` 上下文块中以"Already completed — do NOT re-pursue"标签展示已完成的过程性事件（如已办好的执照、已签的协议），配套写作约束禁止 AI 在后续章节重新追求这些目标。
+- `VolumeWindowContext` 新增 `keyMilestoneGuards` 字段，在 `volume_window` 上下文块中展示卷级关键节点守卫（目标章节范围 + 事件 + 节奏说明），防止 LLM 提前写出计划在后续章节才发生的高潮事件。
+- `ChapterWriteContext` 新增 `recentScenePatterns` 字段，在 `opening_constraints` 上下文块中展示场景模式黑名单，配套写作约束禁止重复使用相同"时间+地点+动作"组合的场景。
+- 新增 `audit_chapter_continuity` Agent 工具，对已生成章节正文进行确定性关键词组扫描，检测重复场景模式和开头段落重复，输出诊断报告和修复建议，无需 LLM 调用。
+
+### 2026-06-05
+
+自动导演连续执行更稳，章节生成上下文更聚焦：系统会减少无明确目标窗口的伏笔逾期误判，避免批量写章被重复账本错误打断，并让章节检索更贴合当前章节任务。
+
+- 节奏拆章中的章节列表聚焦查看、生成和删改既有章节，不再提供容易绕开自动规划链路的手动新增章节入口。
+- 伏笔账本同步会识别同义标题并复用已有未完成账本，减少 AI 把同一 payoff 新建成重复逾期项。
+- 缺少明确目标章节窗口的逾期 payoff 会降级为待跟进风险，不再直接触发整窗重规划或停止后续章节执行。
+- 章节写作会用当前章节目标、必须推进事项、冲突和出场角色组装知识库检索问题，让 RAG 上下文更贴近本章写作任务。
+- 章节生成上下文会减少未被正文写作实际消费的旧式大块背景拼接，把相关信息放入结构化运行时上下文，降低无效上下文膨胀。
+- Windows 桌面版更新到 `0.3.17`，用于打包包含本次自动导演、世界观和章节生产稳定性改进的新安装包。
+- Windows 桌面版打包流程切换到 Node 24 验证路径，并准备 `0.3.18` 安装包，用于提前验证 GitHub Actions 的 Node 24 运行时兼容性。
+
+### 2026-06-04
+
+自动导演连续写章更省资源、更少重复等待：系统会复用同一章节同一正文的质量门控结果，并收敛时间线上下文，减少任务重启后重复审校、重复抽取和重复细化章节合同。
+
+- 章节质量门控会复用已成功的接收判断和时间线检测，同一正文在任务取消、失败或重启后不再默认重新消耗一次 AI 调用。
+- 时间线抽取只携带近期关键事件和必要钩子，让后续章节不会因为整本历史持续增长而越来越慢。
+- 章节接收判断会区分硬阻断和可继续跟进的质量债务，轻量义务风险会保留提示并继续推进，减少不必要的自动补写。
+- 已经准备好任务单和场景预算的章节不会在恢复流程里重复生成章节执行合同，带有新指令的重生成仍可正常覆盖。
+- 自动导演会监控每章 AI 用量，单章消耗异常时自动暂停后续执行，避免上下文膨胀或质量循环继续扩大成本。
+- 时间线抽取不再阻塞章节接收，正文通过接收后会继续完成时间线定稿；下一章开始前仍会自动补齐必要的时间线 checkpoint。
+- 自动导演的用量暂停会聚焦仍在推进的章节范围，已经完成的章节不会因为历史累计用量偏高而反复拦住后续章节。
+- 章节批次会按当前执行范围统一判断审校、修复和状态提交；已经登记为可继续质量债的局部问题不会再把自动导演卡在章节状态提交，减少反复恢复和异常 Token 消耗。
+- 时间线定稿和章节资产回灌会在调用 AI 前先抢占同步记录，减少同一章节同一正文被并发后台入口重复抽取的情况。
+
+### 2026-06-03
+
+章节批量生成更不容易被重复质量债务打断：系统会区分“继续但提示”“局部修复计划”和“必须停止重规划”，避免同一批逾期伏笔在连续章节里反复触发整窗重规划。
+
+- 短窗口、未直接影响当前章的逾期伏笔会作为提示保留，不再默认停止后续章节流水线。
+- 只有明确需要整窗调整的重规划建议才会暂停后续章节；局部计划问题会进入修复和质量提示，不再直接升级成整本流程阻塞。
+- 章节任务里的“必须推进”会过滤接收闸门不可用、结构化缺口等系统审计标签，避免 AI 把系统问题当成剧情义务去写。
+- 章节质量闭环会按新的重规划动作判断风险，减少把可继续的质量债务显示成必须重规划。
+
+### 2026-06-02
+
+重大更新：世界观从“字段表单”升级为更适合新手理解和直接开书的世界手册与世界骨架流程，同时自动导演可以在宏观规划后自动准备本书世界，让角色、地点、势力和章节上下文更容易保持一致。
+
+- 世界生成默认走“世界意图 -> 世界规模 -> 骨架预览 -> 保存世界”的流程，用户可以选择轻量舞台、标准长篇或复杂群像，并调整规则、势力、地点、冲突和故事入口数量。
+- 世界库和世界工作台会以世界卡片、世界手册、核心规则、主要势力、关键地点、关系网络和完整度诊断来展示结果，减少直接面对 `background / geography / factions` 这类字段名的负担。
+- 世界地图和势力图谱拥有更完整的数据支撑：地点包含相对坐标、方位、风险、控制势力和连接关系，势力包含目标、资源、控制地点、关系类型和紧张度。
+- 小说内新增本书世界管理能力：可以从世界库导入为本书副本，也可以根据本书主题生成专属世界，并由用户决定是否保存回世界库或手动同步差异。
+- 自动导演在宏观规划和书级约定之后新增本书世界准备步骤；没有选择参考世界时，系统会默认生成本书世界并在角色准备前构建可用的世界上下文。
+- 角色生成可以选择是否基于当前世界观，并能结合势力倾向、世界规则和身份边界生成更贴合本书舞台的人物。
+- 世界生成的参考资料检索更收敛，默认只使用当前世界、模板和用户明确选择的参考内容，减少无关知识库文档混入新世界生成。
+- 接收闸门会更稳定地识别“本章必须完成但正文缺失”的义务，减少把缺失义务输出成散乱文本而触发修复器的情况。
+- 时间线抽取会更稳定地记录事件、状态变化和后续钩子，中文类型名或简写钩子会被归一到可保存的结构化格式。
+- 章节资产抽取会更稳地处理资源状态，自动导演的高创造温度不会再传染到事实抽取类任务。
+- JSON 修复日志可以按 Prompt 和失败字段聚合，方便定位到底是示例、枚举、上下文还是模型输出导致的结构化失败。
+
 ### 2026-05-29
 
 重大更新：本次把 2026-05-24 之后在预发布分支验证过的自动导演、章节生产、角色阵容、模型选择、灵感辅助和运行态治理合并进主线，并同步准备 Windows 桌面版 `0.3.16`。

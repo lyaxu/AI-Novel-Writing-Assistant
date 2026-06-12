@@ -2,6 +2,8 @@ import type { ReviewIssue } from "@ai-novel/shared/types/novel";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma";
 import { novelEventBus } from "../../events";
+import { ChapterPlanJITService } from "./planning/ChapterPlanJITService";
+import { NovelVolumeService } from "./volume/NovelVolumeService";
 import { runWithLlmUsageTracking } from "../../llm/usageTracking";
 import { ChapterRuntimeCoordinator } from "./runtime/ChapterRuntimeCoordinator";
 import { isChapterEmptyContentError } from "./runtime/chapterEmptyContentError";
@@ -592,6 +594,18 @@ export class NovelCorePipelineService {
       repairMode: persistedPayload.repairMode ?? options.repairMode ?? "light_repair",
       artifactSyncMode: persistedPayload.artifactSyncMode ?? options.artifactSyncMode ?? "adaptive",
     };
+    const directorTelemetryTask = runtimePayload.workflowTaskId
+      ? await prisma.novelWorkflowTask.findUnique({
+        where: { id: runtimePayload.workflowTaskId },
+        select: {
+          lane: true,
+          directorRun: {
+            select: { id: true },
+          },
+        },
+      }).catch(() => null)
+      : null;
+    const shouldRecordDirectorTelemetry = directorTelemetryTask?.lane === "auto_director";
     let totalRetryCount = Math.max(existingJob?.retryCount ?? 0, 0);
     const qualityAlertDetails = [...(persistedPayload.qualityAlertDetails ?? [])];
     const replanAlertDetails = [...(persistedPayload.replanAlertDetails ?? [])];
@@ -601,6 +615,11 @@ export class NovelCorePipelineService {
       await runWithLlmUsageTracking({
         generationJobId: jobId,
         workflowTaskId: runtimePayload.workflowTaskId,
+        directorTelemetry: shouldRecordDirectorTelemetry,
+        novelId: shouldRecordDirectorTelemetry ? novelId : null,
+        directorRunId: shouldRecordDirectorTelemetry
+          ? directorTelemetryTask?.directorRun?.id ?? runtimePayload.workflowTaskId ?? null
+          : null,
       }, async () => {
         await this.updateJobSafe(jobId, {
           status: "running",
@@ -652,7 +671,16 @@ export class NovelCorePipelineService {
         let completed = storedCompleted;
         const chaptersToProcess = chapters.slice(remainingStartIndex);
 
-        for (const chapter of chaptersToProcess) {
+        // Phase 3：JIT 预取服务（N+1 章执行预取）
+        const prefetchVolumeService = new NovelVolumeService();
+        const prefetchJITService = new ChapterPlanJITService({
+          ensureChapterExecutionContract: (nId, cId, opts) =>
+            prefetchVolumeService.ensureChapterExecutionContract(nId, cId, opts),
+        });
+        const isAutopilotMode = runtimePayload.controlPolicy?.advanceMode === "full_book_autopilot";
+
+        for (let chapterIndex = 0; chapterIndex < chaptersToProcess.length; chapterIndex++) {
+          const chapter = chaptersToProcess[chapterIndex];
           await this.ensurePipelineNotCancelled(jobId);
 
           let final = { score: normalizeScore({}), issues: [] as ReviewIssue[] };
@@ -779,6 +807,7 @@ export class NovelCorePipelineService {
               source: chapterResult.retryCountUsed > 0 ? "repair_recheck" : "pipeline_review",
               terminalAction: chapterResult.pass ? null : "defer_and_continue",
               taskId: runtimePayload.workflowTaskId,
+              qualityDebtAttribution: chapterResult.qualityDebtAttribution ?? null,
             }).catch((error) => {
               logPipelineError("记录章节质量闭环状态失败", {
                 jobId,
@@ -805,10 +834,28 @@ export class NovelCorePipelineService {
             const impactedOrders = replanRecommendation.affectedChapterOrders?.length
               ? `影响章节=${replanRecommendation.affectedChapterOrders.join(",")}`
               : `锚点章节=${replanRecommendation.anchorChapterOrder ?? chapter.order}`;
-            replanAlertDetails.push(
-              `第${chapter.order}章需要重规划（${impactedOrders}；原因=${replanRecommendation.triggerReason ?? replanRecommendation.reason}）`,
-            );
-            shouldStopAfterCurrentChapter = true;
+            const detail = `第${chapter.order}章${replanRecommendation.action === "stop_for_replan" ? "需要重规划" : "建议局部处理"}（${impactedOrders}；原因=${replanRecommendation.triggerReason ?? replanRecommendation.reason}）`;
+            if (replanRecommendation.action === "stop_for_replan") {
+              replanAlertDetails.push(detail);
+              shouldStopAfterCurrentChapter = true;
+            } else if (!qualityAlertDetails.includes(detail)) {
+              qualityAlertDetails.push(detail);
+            }
+          }
+
+          // Phase 3：N+1 章 JIT 预取
+          // 当前章 finalize 完成后（factLedger 已写入），后台触发下一章的 task sheet 生成。
+          // fire-and-forget：预取失败不影响当前流水线，下一章正式组装时会重试。
+          const nextChapter = chaptersToProcess[chapterIndex + 1];
+          if (nextChapter && isAutopilotMode) {
+            void prefetchJITService.ensureExecutionReady(novelId, nextChapter.id).catch((error) => {
+              logPipelineInfo("N+1 JIT 预取失败（非阻断，下一章将在组装时重试）", {
+                jobId,
+                nextChapterId: nextChapter.id,
+                nextChapterOrder: nextChapter.order,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            });
           }
 
           completed += 1;

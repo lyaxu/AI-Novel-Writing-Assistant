@@ -524,6 +524,13 @@ export const macroConstraintContextSchema = z.object({
   hardConstraints: z.array(z.string()).default([]),
 });
 
+export const volumeKeyMilestoneGuardSchema = z.object({
+  targetChapterRange: z.string(),
+  event: z.string(),
+  status: z.enum(["not_yet", "in_progress", "done"]).default("not_yet"),
+  note: z.string(),
+});
+
 export const volumeWindowContextSchema = z.object({
   volumeId: z.string().nullable().optional(),
   sortOrder: z.number().int().nullable().optional(),
@@ -532,6 +539,7 @@ export const volumeWindowContextSchema = z.object({
   adjacentSummary: z.string(),
   pendingPayoffs: z.array(z.string()).default([]),
   softFutureSummary: z.string(),
+  keyMilestoneGuards: z.array(volumeKeyMilestoneGuardSchema).default([]),
 });
 
 export const chapterMissionContextSchema = z.object({
@@ -710,6 +718,8 @@ export const chapterWriteContextSchema = z.object({
   styleConstraints: z.array(z.string()).default([]),
   continuationConstraints: z.array(z.string()).default([]),
   ragFacts: z.array(z.string()).default([]),
+  completedMilestones: z.array(z.string()).default([]),
+  recentScenePatterns: z.array(z.string()).default([]),
 });
 
 export const chapterReviewContextSchema = chapterWriteContextSchema.extend({
@@ -764,6 +774,7 @@ export const generationContextPackageSchema = z.object({
   ledgerSummary: runtimePayoffLedgerSummarySchema.nullable().optional(),
   timelineContext: timelineContextForChapterSchema.nullable().optional(),
   characterResourceContext: characterResourceContextSchema.nullable().optional(),
+  ragContext: z.string().default(""),
   chapterMission: chapterMissionContextSchema.nullable().optional(),
   chapterWriteContext: chapterWriteContextSchema.nullable().optional(),
   chapterReviewContext: chapterReviewContextSchema.nullable().optional(),
@@ -927,6 +938,7 @@ export const chapterRuntimePackageSchema = z.object({
   }),
   replanRecommendation: z.object({
     recommended: z.boolean(),
+    action: z.enum(["continue_with_warning", "local_patch_plan", "stop_for_replan"]).optional(),
     reason: z.string(),
     blockingIssueIds: z.array(z.string()),
     blockingLedgerKeys: z.array(z.string()).default([]),

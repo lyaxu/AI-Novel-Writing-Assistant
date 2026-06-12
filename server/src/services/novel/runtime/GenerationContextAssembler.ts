@@ -2,41 +2,24 @@ import type { GenerationContextPackage } from "@ai-novel/shared/types/chapterRun
 import { prisma } from "../../../db/prisma";
 import { ragServices } from "../../rag";
 import { plannerService } from "../../planner/PlannerService";
-import { getRagQueryForChapter, novelReferenceService } from "../NovelReferenceService";
+import { buildChapterRagQuery } from "../NovelReferenceService";
 import { NovelContinuationService } from "../NovelContinuationService";
 import { parseJsonStringArray } from "../novelP0Utils";
 import { StyleBindingService } from "../../styleEngine/StyleBindingService";
-import { NovelWorldSliceService } from "../storyWorldSlice/NovelWorldSliceService";
+import { WorldContextGateway } from "../worldContext/WorldContextGateway";
 import { characterDynamicsQueryService } from "../dynamics/CharacterDynamicsQueryService";
 import { characterResourceLedgerService } from "../characterResource/CharacterResourceLedgerService";
 import { payoffLedgerSyncService } from "../../payoff/PayoffLedgerSyncService";
 import { buildSyntheticPayoffIssues } from "../../payoff/payoffLedgerShared";
-import { buildStoryModePromptBlock, normalizeStoryModeOutput } from "../../storyMode/storyModeProfile";
 import {
   buildRuntimeLedgerFromCanonical,
   buildRuntimeOpenConflictsFromCanonical,
   buildRuntimeStateSnapshotFromCanonical,
-  buildStateContextBlockFromCanonical,
 } from "../state/CanonicalStateService";
 import { contextAssemblyService } from "../production/ContextAssemblyService";
-import {
-  buildLegacyWorldContextFromWorld,
-  formatStoryWorldSlicePromptBlock,
-} from "../storyWorldSlice/storyWorldSliceFormatting";
 import type { ChapterRuntimeRequestInput } from "./chapterRuntimeSchema";
 import {
-  buildBibleText,
-  buildCharactersContextText,
-  buildDecisionsBlock,
-  buildFactText,
-  buildOpenConflictBlock,
-  buildOutlineText,
   buildPreviousChaptersSummary,
-  buildRecentChapterContentText,
-  buildStyleBlock,
-  buildStyleEngineBlock,
-  buildSummaryText,
-  buildSupportingContextText,
   parseJsonStringArraySafe,
 } from "./runtimeContextBlocks";
 import { mapRowToPlan } from "../storyMacro/storyMacroPlanPersistence";
@@ -49,11 +32,14 @@ import {
   buildVolumeWindowContext,
   getRuntimePromptBudgetProfiles,
 } from "../../../prompting/prompts/novel/chapterLayeredContext";
-import { timelineContextService } from "../../../modules/timeline";
+import { novelFactService } from "../fact/NovelFactService";
+import { batchContextCache } from "./BatchContextCache";
 import {
   buildRuntimeCharacterHardFactsList,
   parseCharacterProhibitionsJson,
 } from "../characters/characterHardFacts";
+import { NovelVolumeService } from "../volume/NovelVolumeService";
+import { ChapterPlanJITService } from "../planning/ChapterPlanJITService";
 
 const OPENING_COMPARE_LIMIT = 3;
 const OPENING_SLICE_LENGTH = 220;
@@ -94,30 +80,6 @@ function extractChapterTail(content: string | null | undefined, maxLength = 520)
     return "";
   }
   return normalized.slice(Math.max(0, normalized.length - maxLength));
-}
-
-function buildWorldContextFromNovel(
-  novel: {
-    world?: {
-      name: string;
-      worldType?: string | null;
-      description?: string | null;
-      axioms?: string | null;
-      background?: string | null;
-      geography?: string | null;
-      magicSystem?: string | null;
-      politics?: string | null;
-      races?: string | null;
-      religions?: string | null;
-      technology?: string | null;
-      conflicts?: string | null;
-      history?: string | null;
-      economy?: string | null;
-      factions?: string | null;
-    } | null;
-  } | null,
-): string {
-  return buildLegacyWorldContextFromWorld(novel?.world ?? null);
 }
 
 function buildSyntheticCharacterResourceIssues(
@@ -263,8 +225,14 @@ function findVolumeWindowSeed(
 
 export class GenerationContextAssembler {
   private readonly continuationService = new NovelContinuationService();
-  private readonly worldSliceService = new NovelWorldSliceService();
+  private readonly worldContextGateway = new WorldContextGateway();
   private readonly styleBindingService = new StyleBindingService();
+  private readonly volumeService = new NovelVolumeService();
+  private readonly chapterPlanJITService = new ChapterPlanJITService({
+    ensureChapterExecutionContract: (novelId, chapterId, options) => (
+      this.volumeService.ensureChapterExecutionContract(novelId, chapterId, options)
+    ),
+  });
 
   async assemble(
     novelId: string,
@@ -288,51 +256,9 @@ export class GenerationContextAssembler {
     };
     contextPackage: GenerationContextPackage;
   }> {
+    // Phase 2：novel 稳定层从缓存获取，避免每章重复全量查询
     let [novel, chapter] = await Promise.all([
-      prisma.novel.findUnique({
-        where: { id: novelId },
-        include: {
-          world: true,
-          genre: {
-            select: { name: true },
-          },
-          characters: true,
-          storyMacroPlan: true,
-          volumePlans: {
-            orderBy: { sortOrder: "asc" },
-            include: {
-              chapters: {
-                orderBy: { chapterOrder: "asc" },
-                select: { chapterOrder: true },
-              },
-            },
-          },
-          primaryStoryMode: {
-            select: {
-              id: true,
-              name: true,
-              description: true,
-              template: true,
-              parentId: true,
-              profileJson: true,
-              createdAt: true,
-              updatedAt: true,
-            },
-          },
-          secondaryStoryMode: {
-            select: {
-              id: true,
-              name: true,
-              description: true,
-              template: true,
-              parentId: true,
-              profileJson: true,
-              createdAt: true,
-              updatedAt: true,
-            },
-          },
-        },
-      }),
+      batchContextCache.getNovelRow(novelId),
       prisma.chapter.findFirst({
         where: { id: chapterId, novelId },
         select: runtimeChapterSelect,
@@ -343,6 +269,11 @@ export class GenerationContextAssembler {
       throw new Error("Novel or chapter not found.");
     }
 
+    // 懒规划 JIT：全书 autopilot 路径在 ensureChapterPlan 之前确保 task sheet 就绪。
+    // JIT 生成时会注入已发生事实（factLedger），解决 task sheet 与实际前文脱节问题。
+    if (request.controlPolicy?.advanceMode === "full_book_autopilot") {
+      await this.chapterPlanJITService.ensureExecutionReady(novelId, chapterId);
+    }
     const ensuredPlan = await plannerService.ensureChapterPlan(novelId, chapterId, request);
     const refreshedChapter = await prisma.chapter.findFirst({
       where: { id: chapterId, novelId },
@@ -356,14 +287,10 @@ export class GenerationContextAssembler {
       where: buildBlockingPendingReviewProposalWhere(novelId, chapterId),
     });
     const [
-      storyWorldSlice,
-      planPromptBlock,
+      worldContextBlock,
       pendingReviewProposalCount,
       openAuditIssues,
-      bible,
       summaries,
-      facts,
-      styleReference,
       recentChapters,
       decisions,
       characterDynamics,
@@ -372,8 +299,7 @@ export class GenerationContextAssembler {
       payoffLedger,
       characterResourceContext,
     ] = await Promise.all([
-      this.worldSliceService.ensureStoryWorldSlice(novelId, { builderMode: "runtime" }),
-      plannerService.buildPlanPromptBlock(novelId, chapterId),
+      this.worldContextGateway.getWorldContextBlock(novelId, { purpose: "chapter" }),
       pendingReviewProposalCountPromise,
       prisma.auditIssue.findMany({
         where: {
@@ -387,7 +313,6 @@ export class GenerationContextAssembler {
         },
         orderBy: [{ createdAt: "desc" }],
       }),
-      prisma.novelBible.findUnique({ where: { novelId } }),
       prisma.chapterSummary.findMany({
         where: {
           novelId,
@@ -397,12 +322,6 @@ export class GenerationContextAssembler {
         orderBy: { chapter: { order: "desc" } },
         take: 3,
       }),
-      prisma.consistencyFact.findMany({
-        where: { novelId },
-        orderBy: { createdAt: "desc" },
-        take: 8,
-      }),
-      novelReferenceService.buildReferenceForStage(novelId, "chapter"),
       prisma.chapter.findMany({
         where: {
           novelId,
@@ -448,11 +367,9 @@ export class GenerationContextAssembler {
       openAuditIssueCount: openAuditIssues.length,
       hasRepairableDraft: Boolean(chapter.content?.trim()),
     });
-    const timelineContext = await timelineContextService.buildForChapter({
-      novelId,
-      chapterId,
-      chapterIndex: chapter.order,
-    });
+    // Phase 2 缺陷5：timelineContext 在写作路径已不消费（PR-B 已移除），
+    // 停止每章构建，将 timelineContext 置 null。ChapterQualityGateService
+    // 对 null 有防御处理（直接跳过 timeline 检查）。
     const canonicalState = resolvedStateDrivenContext.snapshot;
 
     const canonicalLedger = buildRuntimeLedgerFromCanonical(canonicalState);
@@ -586,61 +503,14 @@ export class GenerationContextAssembler {
       antiCopyCorpus: continuationPack.antiCopyCorpus,
     } satisfies GenerationContextPackage["continuation"];
 
-    const summaryText = buildSummaryText(previousChaptersSummary);
-    const factText = buildFactText(facts);
-    const recentChapterContentText = buildRecentChapterContentText(recentChapters);
     const previousChapterTail = extractChapterTail(recentChapters[0]?.content);
-    const charactersContextText = buildCharactersContextText(
-      novel.characters.map((item) => ({
-        name: item.name,
-        role: item.role,
-        personality: item.personality ?? null,
-        appearance: item.appearance ?? null,
-        physique: item.physique ?? null,
-        signatureDetail: item.signatureDetail ?? null,
-        voiceTexture: item.voiceTexture ?? null,
-      })),
-    );
-    const characterDynamicsText = characterDynamics
-      ? characterDynamicsQueryService.formatContextDigest(characterDynamics)
-      : "";
-    const combinedCharacterContextText = [charactersContextText, characterDynamicsText].filter(Boolean).join("\n\n");
-    const bibleText = buildBibleText(bible
-      ? {
-          mainPromise: bible.mainPromise ?? null,
-          coreSetting: bible.coreSetting ?? null,
-          forbiddenRules: bible.forbiddenRules ?? null,
-          characterArcs: bible.characterArcs ?? null,
-          worldRules: bible.worldRules ?? null,
-        }
-      : null);
-    const outlineText = buildOutlineText(novel.outline ?? null);
-    const styleBlock = buildStyleBlock(styleReference);
-    const decisionsBlock = buildDecisionsBlock(decisions);
-    const styleEngineBlock = buildStyleEngineBlock(styleContext);
-    const openConflictBlock = buildOpenConflictBlock(mappedOpenConflicts);
-    const stateContextBlock = buildStateContextBlockFromCanonical(canonicalState);
 
-    const ragQuery = getRagQueryForChapter(chapter.order, novel.title, novel.structuredOutline ?? null);
-    let ragText = "";
-    try {
-      ragText = await ragServices.hybridRetrievalService.buildContextBlock(ragQuery, {
-        novelId,
-        currentChapterOrder: chapter.order,
-      });
-    } catch {
-      ragText = "";
-    }
-
-    const worldBlock = storyWorldSlice
-      ? formatStoryWorldSlicePromptBlock(storyWorldSlice)
-      : buildWorldContextFromNovel(novel);
-    const storyModeBlock = buildStoryModePromptBlock({
-      primary: novel.primaryStoryMode ? normalizeStoryModeOutput(novel.primaryStoryMode) : null,
-      secondary: novel.secondaryStoryMode ? normalizeStoryModeOutput(novel.secondaryStoryMode) : null,
-    });
+    const storyWorldSlice = worldContextBlock?.rawSlice ?? null;
     const openingHint = await this.buildOpeningConstraintHint(novelId, chapter.order);
-    const baseContextPackage: GenerationContextPackage = {
+
+    // Phase 2 缺陷6：合并 baseContextPackage 与 contextPackage 为单一构建。
+    // 先用占位值构建 chapterWriteContext，再后置填充派生字段，消除字段手抄两遍。
+    const sharedFields = {
       chapter: {
         id: chapter.id,
         title: chapter.title,
@@ -682,13 +552,10 @@ export class GenerationContextAssembler {
       ledgerUrgentItems: canonicalLedger.ledgerUrgentItems,
       ledgerOverdueItems: canonicalLedger.ledgerOverdueItems,
       ledgerSummary: canonicalLedger.ledgerSummary,
-      timelineContext,
+      // Phase 2 缺陷5：timelineContext 停止构建，写作路径已不消费
+      timelineContext: null,
       characterResourceContext,
-      chapterMission: null,
-      chapterWriteContext: null,
-      chapterReviewContext: null,
-      chapterRepairContext: null,
-      contextGatingDecisions: [],
+      contextGatingDecisions: [] as GenerationContextPackage["contextGatingDecisions"],
       chapterChangeFlags: {
         introducedPayoff: false,
         payoffResolutionSignal: false,
@@ -696,7 +563,7 @@ export class GenerationContextAssembler {
         majorStateShiftSignal: false,
       },
       tokenBudgetPolicy: {
-        chapterBudgetProfile: "balanced",
+        chapterBudgetProfile: "balanced" as const,
         stageTokenCap: {
           writer: 2600,
           light_audit: 900,
@@ -707,110 +574,90 @@ export class GenerationContextAssembler {
           full_audit: 1,
           repair: 1,
         },
-        auditMode: "light",
+        auditMode: "light" as const,
       },
       promptBudgetProfiles: getRuntimePromptBudgetProfiles(),
     };
+
+    // buildChapterWriteContext 仅需稳定字段，用 sharedFields + 占位派生字段构建
     const chapterWriteContext = buildChapterWriteContext({
       bookContract,
       macroConstraints,
       volumeWindow,
-      contextPackage: baseContextPackage,
+      contextPackage: {
+        ...sharedFields,
+        ragContext: "",
+        chapterMission: null,
+        chapterWriteContext: null,
+        chapterReviewContext: null,
+        chapterRepairContext: null,
+      },
     });
-    const chapterReviewContext = buildChapterReviewContext(chapterWriteContext, baseContextPackage);
-    const chapterRepairContext = buildChapterRepairContextFromPackage({
-      ...baseContextPackage,
+
+    // 填充事实账本：读取已发生不可逆事实，注入 completedMilestones
+    try {
+      const factEntries = await novelFactService.listForChapter({
+        novelId,
+        beforeChapterOrder: chapter.order,
+      });
+      if (factEntries.length > 0) {
+        chapterWriteContext.completedMilestones = factEntries.map((entry) => entry.text);
+      }
+    } catch (error) {
+      console.warn("[context-assembler] fact ledger read failed, completedMilestones will be empty", {
+        novelId,
+        chapterOrder: chapter.order,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const partialPackageForReview = {
+      ...sharedFields,
+      ragContext: "",
       chapterMission: chapterWriteContext.chapterMission,
       chapterWriteContext,
-      chapterReviewContext,
+      chapterReviewContext: null,
       chapterRepairContext: null,
+    };
+    const chapterReviewContext = buildChapterReviewContext(chapterWriteContext, partialPackageForReview);
+    const chapterRepairContext = buildChapterRepairContextFromPackage({
+      ...partialPackageForReview,
+      chapterReviewContext,
     }, []);
+
+    // Retrieve knowledge-base context using a mission-aware query so the recall
+    // matches what this chapter is actually trying to do. Built after the
+    // chapter write context so the query can fold in the chapter mission and
+    // the participating characters rather than only the outline title/summary.
+    const ragQuery = buildChapterRagQuery({
+      chapterOrder: chapter.order,
+      novelTitle: novel.title,
+      chapterTitle: chapterWriteContext.chapterMission.title,
+      objective: chapterWriteContext.chapterMission.objective,
+      expectation: chapterWriteContext.chapterMission.expectation,
+      mustAdvance: chapterWriteContext.chapterMission.mustAdvance,
+      targetConflicts: chapterWriteContext.chapterStateGoal?.targetConflicts ?? [],
+      participantNames: chapterWriteContext.participants.map((participant) => participant.name),
+      structuredOutline: novel.structuredOutline ?? null,
+    });
+    let ragText = "";
+    try {
+      ragText = await ragServices.hybridRetrievalService.buildContextBlock(ragQuery, {
+        novelId,
+        currentChapterOrder: chapter.order,
+      });
+    } catch {
+      ragText = "";
+    }
+
+    // Phase 2 缺陷6：用 sharedFields 展开，只补充派生字段，消除两遍手抄
     const contextPackage: GenerationContextPackage = {
-      chapter: {
-        id: chapter.id,
-        title: chapter.title,
-        order: chapter.order,
-        content: chapter.content ?? null,
-        expectation: chapter.expectation ?? null,
-        targetWordCount: chapter.targetWordCount ?? null,
-        conflictLevel: chapter.conflictLevel ?? null,
-        revealLevel: chapter.revealLevel ?? null,
-        mustAvoid: chapter.mustAvoid ?? null,
-        taskSheet: chapter.taskSheet ?? null,
-        sceneCards: chapter.sceneCards ?? null,
-        hook: chapter.hook ?? null,
-        supportingContextText: buildSupportingContextText({
-          worldBlock,
-          storyModeBlock,
-          planPromptBlock,
-          stateContextBlock,
-          openConflictBlock,
-          decisionsBlock,
-          summaryText,
-          recentChapterContentText,
-          factText,
-          ragText,
-          bibleText,
-          outlineText,
-          charactersContextText: combinedCharacterContextText,
-          styleBlock,
-          styleEngineBlock,
-        }),
-      },
-      plan: mappedPlan,
-      canonicalState,
-      nextAction: resolvedStateDrivenContext.nextAction,
-      chapterStateGoal: resolvedStateDrivenContext.chapterStateGoal,
-      protectedSecrets: resolvedStateDrivenContext.protectedSecrets,
-      pendingReviewProposalCount,
-      stateSnapshot: mappedStateSnapshot,
-      openConflicts: mappedOpenConflicts,
-      storyWorldSlice,
-      characterDynamics,
-      characterRoster: mappedCharacterRoster,
-      characterHardFacts: mappedCharacterHardFacts,
-      creativeDecisions: mappedCreativeDecisions,
-      openAuditIssues: mappedOpenAuditIssues,
-      previousChaptersSummary,
-      previousChapterTail,
-      openingHint,
-      continuation: runtimeContinuation,
-      styleContext,
-      bookContract,
-      macroConstraints,
-      volumeWindow,
-      ledgerPendingItems: canonicalLedger.ledgerPendingItems,
-      ledgerUrgentItems: canonicalLedger.ledgerUrgentItems,
-      ledgerOverdueItems: canonicalLedger.ledgerOverdueItems,
-      ledgerSummary: canonicalLedger.ledgerSummary,
-      timelineContext,
-      characterResourceContext,
+      ...sharedFields,
+      ragContext: ragText,
       chapterMission: chapterWriteContext.chapterMission,
       chapterWriteContext,
       chapterReviewContext,
       chapterRepairContext,
-      contextGatingDecisions: [],
-      chapterChangeFlags: {
-        introducedPayoff: false,
-        payoffResolutionSignal: false,
-        relationshipShiftSignal: false,
-        majorStateShiftSignal: false,
-      },
-      tokenBudgetPolicy: {
-        chapterBudgetProfile: "balanced",
-        stageTokenCap: {
-          writer: 2600,
-          light_audit: 900,
-          full_audit: 2600,
-          repair: 2200,
-        },
-        retryCap: {
-          full_audit: 1,
-          repair: 1,
-        },
-        auditMode: "light",
-      },
-      promptBudgetProfiles: getRuntimePromptBudgetProfiles(),
     };
 
     return {
