@@ -338,8 +338,45 @@ function normalizeChapterWriteContext(writeContext: ChapterWriteContext): Chapte
     obligationContract?: Partial<ChapterExecutionObligationContract> | null;
   };
   const obligationContract = legacyContext.obligationContract ?? {};
+  const characterResourceContext = writeContext.characterResourceContext
+    ? {
+      ...writeContext.characterResourceContext,
+      availableItems: (writeContext.characterResourceContext.availableItems ?? []).map((item) => ({
+        ...item,
+        constraints: item.constraints ?? [],
+      })),
+      setupNeededItems: (writeContext.characterResourceContext.setupNeededItems ?? []).map((item) => ({
+        ...item,
+        constraints: item.constraints ?? [],
+      })),
+      blockedItems: (writeContext.characterResourceContext.blockedItems ?? []).map((item) => ({
+        ...item,
+        constraints: item.constraints ?? [],
+      })),
+      pendingReviewItems: (writeContext.characterResourceContext.pendingReviewItems ?? []).map((item) => ({
+        ...item,
+        constraints: item.constraints ?? [],
+      })),
+      riskSignals: writeContext.characterResourceContext.riskSignals ?? [],
+    }
+    : null;
   return {
     ...writeContext,
+    volumeWindow: writeContext.volumeWindow
+      ? {
+        ...writeContext.volumeWindow,
+        pendingPayoffs: writeContext.volumeWindow.pendingPayoffs ?? [],
+        keyMilestoneGuards: writeContext.volumeWindow.keyMilestoneGuards ?? [],
+      }
+      : null,
+    chapterMission: {
+      ...writeContext.chapterMission,
+      mustAdvance: writeContext.chapterMission.mustAdvance ?? [],
+      mustPreserve: writeContext.chapterMission.mustPreserve ?? [],
+      riskNotes: writeContext.chapterMission.riskNotes ?? [],
+    },
+    protectedSecrets: writeContext.protectedSecrets ?? [],
+    payoffDirectives: writeContext.payoffDirectives ?? [],
     obligationContract: {
       mustHitNow: obligationContract.mustHitNow ?? EMPTY_OBLIGATION_CONTRACT.mustHitNow,
       mustPreserve: obligationContract.mustPreserve ?? EMPTY_OBLIGATION_CONTRACT.mustPreserve,
@@ -349,8 +386,23 @@ function normalizeChapterWriteContext(writeContext: ChapterWriteContext): Chapte
       canDefer: obligationContract.canDefer ?? EMPTY_OBLIGATION_CONTRACT.canDefer,
       forbiddenCrossings: obligationContract.forbiddenCrossings ?? EMPTY_OBLIGATION_CONTRACT.forbiddenCrossings,
     },
+    participants: writeContext.participants ?? [],
     characterHardFacts: writeContext.characterHardFacts ?? [],
+    characterBehaviorGuides: writeContext.characterBehaviorGuides ?? [],
+    activeRelationStages: writeContext.activeRelationStages ?? [],
+    pendingCandidateGuards: writeContext.pendingCandidateGuards ?? [],
+    openConflictSummaries: writeContext.openConflictSummaries ?? [],
+    ledgerPendingItems: writeContext.ledgerPendingItems ?? [],
+    ledgerUrgentItems: writeContext.ledgerUrgentItems ?? [],
+    ledgerOverdueItems: writeContext.ledgerOverdueItems ?? [],
+    characterResourceContext,
+    recentChapterSummaries: writeContext.recentChapterSummaries ?? [],
     previousChapterTail: writeContext.previousChapterTail ?? null,
+    styleConstraints: writeContext.styleConstraints ?? [],
+    continuationConstraints: writeContext.continuationConstraints ?? [],
+    ragFacts: writeContext.ragFacts ?? [],
+    completedMilestones: writeContext.completedMilestones ?? [],
+    recentScenePatterns: writeContext.recentScenePatterns ?? [],
   };
 }
 

@@ -75,6 +75,18 @@ export interface FinalizedRuntimeResult {
   runtimePackage: ChapterRuntimePackage;
 }
 
+export interface PipelineTimelineFinalizationInput {
+  novelId: string;
+  chapterId: string;
+  content: string;
+  contextPackage: GenerationContextPackage;
+  request: ChapterRuntimeRequestInput;
+  mode: "stable" | "degraded";
+  reason: string;
+  qualityDebt?: boolean;
+  runtimePackage?: ChapterRuntimePackage | null;
+}
+
 export interface PipelineRecoverableRepairFailure {
   chapterId: string;
   message: string;
@@ -126,6 +138,7 @@ interface RunPipelineChapterDeps {
     runId: string | null;
     startMs: number | null;
   }) => Promise<FinalizedRuntimeResult>;
+  finalizeChapterTimeline?: (input: PipelineTimelineFinalizationInput) => Promise<void>;
   markChapterGenerationState: (
     chapterId: string,
     generationState: "reviewed" | "approved",
@@ -204,6 +217,16 @@ export async function runPipelineChapterWithRuntime(
 
     if (!autoReview) {
       await syncFinalRetainedChapterArtifacts(deps, novelId, chapterId, content, artifactSyncMode);
+      await finalizeRetainedChapterTimeline(deps, {
+        novelId,
+        chapterId,
+        content,
+        contextPackage: assembled.contextPackage,
+        request,
+        mode: "stable",
+        reason: "auto_review_disabled_final_content",
+        qualityDebt: false,
+      });
       await deps.markChapterGenerationState(chapterId, "approved");
       return {
         reviewExecuted: false,
@@ -311,6 +334,23 @@ export async function runPipelineChapterWithRuntime(
   }
 
   await syncFinalRetainedChapterArtifacts(deps, novelId, chapterId, latestResult.finalContent, artifactSyncMode);
+  if (!pass) {
+    await finalizeRetainedChapterTimeline(deps, {
+      novelId,
+      chapterId,
+      content: latestResult.finalContent,
+      contextPackage: assembled.contextPackage,
+      request,
+      mode: "degraded",
+      reason: recoverableRepairFailure
+        ? "recoverable_repair_failure"
+        : retryCountUsed >= effectiveMaxRetries
+          ? "max_repair_attempts_exhausted"
+          : "chapter_quality_not_approved",
+      qualityDebt: true,
+      runtimePackage: latestResult.runtimePackage,
+    });
+  }
 
   // 章节未通过时构建归因对象
   const qualityDebtAttribution: QualityDebtAttribution | null = (!pass && firstFailureIssueCodes.length > 0)
@@ -402,6 +442,13 @@ async function syncFinalRetainedChapterArtifacts(
     return;
   }
   await deps.syncFinalChapterArtifacts(novelId, chapterId, content, { artifactSyncMode });
+}
+
+async function finalizeRetainedChapterTimeline(
+  deps: RunPipelineChapterDeps,
+  input: PipelineTimelineFinalizationInput,
+): Promise<void> {
+  await deps.finalizeChapterTimeline?.(input);
 }
 
 function isQualityPass(score: QualityScore, qualityThreshold: number): boolean {

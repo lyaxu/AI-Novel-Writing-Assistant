@@ -11,6 +11,10 @@ import {
   isChapterEmptyContentError,
 } from "./chapterEmptyContentError";
 import type { ChapterContentFinalizationService } from "./ChapterContentFinalizationService";
+import {
+  chapterTimelineFinalizationService,
+  type ChapterTimelineFinalizationService,
+} from "./ChapterTimelineFinalizationService";
 import type { ChapterStreamGenerationOrchestrator } from "./ChapterStreamGenerationOrchestrator";
 
 export interface ChapterPipelineRuntimeAdapterDeps {
@@ -20,14 +24,17 @@ export interface ChapterPipelineRuntimeAdapterDeps {
   >;
   artifactSyncService: Pick<ChapterArtifactSyncService, "saveDraftAndArtifacts" | "syncChapterArtifacts">;
   contentFinalizationService: Pick<ChapterContentFinalizationService, "finalizeChapterContent">;
+  timelineFinalizer?: Pick<ChapterTimelineFinalizationService, "finalizeCurrentContent">;
   ensureNovelCharacters: (novelId: string, actionName: string, minCount?: number) => Promise<void>;
 }
 
 export class ChapterPipelineRuntimeAdapter {
   private readonly deps: ChapterPipelineRuntimeAdapterDeps;
+  private readonly timelineFinalizer: Pick<ChapterTimelineFinalizationService, "finalizeCurrentContent">;
 
   constructor(deps: ChapterPipelineRuntimeAdapterDeps) {
     this.deps = deps;
+    this.timelineFinalizer = deps.timelineFinalizer ?? chapterTimelineFinalizationService;
   }
 
   async runPipelineChapter(
@@ -73,6 +80,19 @@ export class ChapterPipelineRuntimeAdapter {
               finalContent: finalized.finalContent,
               runtimePackage: finalized.runtimePackage,
             };
+          },
+          finalizeChapterTimeline: async (input) => {
+            await this.timelineFinalizer.finalizeCurrentContent({
+              novelId: input.novelId,
+              chapterId: input.chapterId,
+              content: input.content,
+              contextPackage: input.contextPackage,
+              request: input.request,
+              mode: input.mode,
+              reason: input.reason,
+              sourceStage: "pipeline_finalization",
+              qualityDebt: input.qualityDebt,
+            });
           },
           markChapterGenerationState: (targetChapterId, generationState) =>
             this.markChapterGenerationState(targetChapterId, generationState),

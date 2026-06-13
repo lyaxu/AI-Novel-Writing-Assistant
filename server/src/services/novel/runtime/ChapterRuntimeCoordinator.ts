@@ -19,6 +19,7 @@ import type { RepairOptions, ReviewOptions } from "../novelCoreShared";
 import { ChapterRepairStreamRuntime } from "./repair/ChapterRepairStreamRuntime";
 import { ChapterQualityGateService } from "./ChapterQualityGateService";
 import { ChapterContentFinalizationService } from "./ChapterContentFinalizationService";
+import type { ChapterTimelineFinalizationService } from "./ChapterTimelineFinalizationService";
 import { ChapterStreamGenerationOrchestrator } from "./ChapterStreamGenerationOrchestrator";
 import { ChapterPipelineRuntimeAdapter } from "./ChapterPipelineRuntimeAdapter";
 import {
@@ -34,6 +35,7 @@ interface ChapterRuntimeCoordinatorDeps {
   auditService?: Pick<typeof auditService, "auditChapter" | "assessChapterAuditNeed">;
   plannerService?: Pick<typeof plannerService, "buildReplanRecommendation" | "shouldTriggerReplanFromAudit">;
   acceptanceAssessmentService?: Pick<ChapterAcceptanceAssessmentService, "assess">;
+  timelineFinalizer?: Pick<ChapterTimelineFinalizationService, "finalizeCurrentContent" | "ensurePreviousChapterFinalized">;
   readinessService?: Pick<ChapterRuntimeReadinessService, "assertReady">;
   agentRuntime?: ChapterRuntimeAgentPort;
   ensureNovelCharacters?: (novelId: string, actionName: string, minCount?: number) => Promise<void>;
@@ -76,6 +78,7 @@ export class ChapterRuntimeCoordinator {
     this.contentFinalizationService = new ChapterContentFinalizationService({
       qualityGateService: this.qualityGateService,
       artifactSyncService,
+      timelineFinalizer: deps.timelineFinalizer,
       plannerService: plannerRuntime,
       agentRuntime,
     });
@@ -92,6 +95,7 @@ export class ChapterRuntimeCoordinator {
       streamOrchestrator: this.streamOrchestrator,
       artifactSyncService,
       contentFinalizationService: this.contentFinalizationService,
+      timelineFinalizer: deps.timelineFinalizer,
       ensureNovelCharacters,
     });
     this.repairStreamRuntime = new ChapterRepairStreamRuntime({

@@ -8,6 +8,10 @@ import type { ChapterRuntimeRequestInput } from "./chapterRuntimeSchema";
 import type { StyleReviewResult } from "./PostGenerationStyleReviewRunner";
 import { ChapterQualityGateService } from "./ChapterQualityGateService";
 import {
+  chapterTimelineFinalizationService,
+  type ChapterTimelineFinalizationService,
+} from "./ChapterTimelineFinalizationService";
+import {
   buildRuntimePackage,
   type ChapterRuntimePlannerPort,
 } from "./chapterRuntimePackageBuilders";
@@ -17,8 +21,9 @@ export interface ChapterContentFinalizationAgentRuntime {
 }
 
 export interface ChapterContentFinalizationServiceDeps {
-  qualityGateService: Pick<ChapterQualityGateService, "runAcceptanceGateOnly">;
+  qualityGateService: Pick<ChapterQualityGateService, "runGates">;
   artifactSyncService: Pick<ChapterArtifactSyncService, "syncChapterArtifacts">;
+  timelineFinalizer?: Pick<ChapterTimelineFinalizationService, "finalizeCurrentContent">;
   plannerService: ChapterRuntimePlannerPort;
   agentRuntime: ChapterContentFinalizationAgentRuntime;
 }
@@ -43,21 +48,23 @@ export interface FinalizeChapterContentResult {
 }
 
 export class ChapterContentFinalizationService {
-  private readonly qualityGateService: Pick<ChapterQualityGateService, "runAcceptanceGateOnly">;
+  private readonly qualityGateService: Pick<ChapterQualityGateService, "runGates">;
   private readonly artifactSyncService: Pick<ChapterArtifactSyncService, "syncChapterArtifacts">;
+  private readonly timelineFinalizer: Pick<ChapterTimelineFinalizationService, "finalizeCurrentContent">;
   private readonly plannerService: ChapterRuntimePlannerPort;
   private readonly agentRuntime: ChapterContentFinalizationAgentRuntime;
 
   constructor(deps: ChapterContentFinalizationServiceDeps) {
     this.qualityGateService = deps.qualityGateService;
     this.artifactSyncService = deps.artifactSyncService;
+    this.timelineFinalizer = deps.timelineFinalizer ?? chapterTimelineFinalizationService;
     this.plannerService = deps.plannerService;
     this.agentRuntime = deps.agentRuntime;
   }
 
   async finalizeChapterContent(input: FinalizeChapterContentInput): Promise<FinalizeChapterContentResult> {
     const finalContent = input.content;
-    const { acceptance, timelineGate } = await this.qualityGateService.runAcceptanceGateOnly({
+    const { acceptance, timelineGate } = await this.qualityGateService.runGates({
       novelId: input.novelId,
       chapterId: input.chapterId,
       contextPackage: input.contextPackage,
@@ -114,7 +121,7 @@ export class ChapterContentFinalizationService {
       // 桥接进 Fact Ledger。await 以保证下一章 JIT 组装前账本已就绪（时序正确性）。
       // 同时补齐 autopilot 模式下缺失的章节摘要。失败不阻断定稿返回。
       try {
-        await novelChapterSummaryService.generateChapterSummary(
+        void novelChapterSummaryService.generateChapterSummary(
           input.novelId,
           input.chapterId,
           {
@@ -123,7 +130,13 @@ export class ChapterContentFinalizationService {
             // 不透传写作温度：摘要/事实抽取使用服务默认低温，保证抽取稳定。
             contentOverride: finalContent,
           },
-        );
+        ).catch((error) => {
+          console.warn("[chapter-runtime] chapter summary + concreteFacts extraction failed", {
+            novelId: input.novelId,
+            chapterId: input.chapterId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
       } catch (error) {
         console.warn("[chapter-runtime] chapter summary + concreteFacts extraction failed", {
           novelId: input.novelId,
@@ -131,6 +144,17 @@ export class ChapterContentFinalizationService {
           error: error instanceof Error ? error.message : String(error),
         });
       }
+      await this.timelineFinalizer.finalizeCurrentContent({
+        novelId: input.novelId,
+        chapterId: input.chapterId,
+        content: finalContent,
+        contextPackage: input.contextPackage,
+        request: input.request,
+        timelineGate,
+        sourceStage: "draft_accepted",
+        reason: "chapter_draft_accepted",
+        qualityDebt: acceptance.assessment.status === "continue_with_risk",
+      });
     }
 
     if (!needsRepair && input.deferArtifactBackgroundSync && input.scheduleDeferredArtifactBackgroundSync !== false) {
