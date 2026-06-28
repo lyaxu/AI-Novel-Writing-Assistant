@@ -562,15 +562,11 @@ export function resolveDirectorAutoExecutionRepairMode(
     .filter((entry) => qualityLoopEntryMatchesCurrentChapter(entry, state))
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   const latestEntry = entries[0];
-  const nextAction = resolveDirectorQualityLoopBudgetNextAction(latestEntry);
-  if (
-    nextAction === "auto_rewrite_chapter"
-    || (latestEntry?.patchRepairCount ?? 0) > 0
-    || latestEntry?.lastAction === "patch_repair"
-  ) {
+  if ((latestEntry?.patchRepairCount ?? 0) > 0 || latestEntry?.lastAction === "patch_repair") {
     return "heavy_repair";
   }
-  return "light_repair";
+  const nextAction = resolveDirectorQualityLoopBudgetNextAction(latestEntry);
+  return nextAction === "auto_rewrite_chapter" ? "heavy_repair" : "light_repair";
 }
 
 export function resolveDirectorAutoExecutionWorkflowState(
