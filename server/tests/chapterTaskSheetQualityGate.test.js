@@ -3,11 +3,18 @@ const assert = require("node:assert/strict");
 
 const {
   assessChapterExecutionContractShape,
+  aiChapterTaskSheetQualityAssessmentSchema,
   formatChapterTaskSheetQualityFailure,
 } = require("../../shared/dist/types/chapterTaskSheetQuality.js");
 const {
   ChapterTaskSheetQualityGateService,
 } = require("../dist/services/novel/volume/ChapterTaskSheetQualityGateService.js");
+const {
+  chapterTaskSheetQualityPrompt,
+} = require("../dist/prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts.js");
+const {
+  getRegisteredPromptAsset,
+} = require("../dist/prompting/registry.js");
 
 function buildSceneCards() {
   return JSON.stringify({
@@ -119,6 +126,45 @@ test("chapter task sheet quality service lets full book mode auto-repair semanti
   assert.equal(result.issues[0].id, "semantic_boundary_leak");
 });
 
+test("chapter task sheet quality schema normalizes common assessment enum drift", () => {
+  const parsed = aiChapterTaskSheetQualityAssessmentSchema.parse({
+    verdict: "pass",
+    safeToSync: true,
+    loadRisk: "normal",
+    recommendedHandling: "use_as_is",
+    summary: "任务单可进入正文生成。",
+    issues: [{
+      id: "pacing_issue",
+      severity: "medium",
+      target: "pacing",
+      summary: "节奏段缺少阶段性转向。",
+      repairHint: "把一章改成主动反击或阶段兑现。",
+    }],
+    repairGuidance: [],
+    confidence: 85,
+  });
+
+  assert.equal(parsed.verdict, "usable");
+  assert.equal(parsed.issues[0].target, "semantic");
+  assert.equal(parsed.confidence, 0.85);
+});
+
+test("chapter task sheet quality prompt declares strict JSON contract", () => {
+  const messages = chapterTaskSheetQualityPrompt.render({
+    candidate: buildCandidate(),
+    mode: "full_book_autopilot",
+  });
+  const systemText = String(messages[0].content);
+
+  assert.match(systemText, /verdict 只能使用 usable、repairable、unusable/);
+  assert.match(systemText, /issues\.target 只能使用 purpose、boundary、task_sheet、scene_cards、semantic/);
+  assert.match(systemText, /readerExperience\.rewardLevel 表示本章计划提供的可见回报强度/);
+  assert.match(systemText, /只能使用 setup、partial、major/);
+  assert.match(systemText, /完整兑现了 promisedReward，也不要建议把 rewardLevel 改为 full/);
+  assert.match(systemText, /confidence 必须是 0 到 1 之间的小数/);
+  assert.match(systemText, /"verdict": "repairable"/);
+});
+
 test("chapter task sheet quality service marks overloaded contracts for window replan", async () => {
   const service = new ChapterTaskSheetQualityGateService(async () => ({
     verdict: "repairable",
@@ -160,9 +206,6 @@ test("chapter task sheet quality service passes usable semantic assessments", as
 });
 
 test("chapter task sheet quality prompt is registered as a product prompt asset", () => {
-  const registrySource = require("node:fs").readFileSync(
-    require("node:path").join(__dirname, "..", "src", "prompting", "registry.ts"),
-    "utf8",
-  );
-  assert.match(registrySource, /novel\.volume\.chapter_task_sheet_quality@v1/);
+  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v2");
+  assert.equal(registered, chapterTaskSheetQualityPrompt);
 });

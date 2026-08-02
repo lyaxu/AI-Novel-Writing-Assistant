@@ -16,6 +16,8 @@ import autoDirectorChannelCallbacksRouter from "./routes/autoDirectorChannelCall
 import autoDirectorFollowUpsRouter from "./routes/autoDirectorFollowUps";
 import bookAnalysisRouter from "./routes/bookAnalysis";
 import characterRouter from "./routes/character";
+import characterConversationRouter from "./modules/characterConversation/http/characterConversationRoutes";
+import visualAssetRouter from "./modules/visualAssets/http/visualAssetRoutes";
 import chatRouter from "./routes/chat";
 import creativeHubRouter from "./routes/creativeHub";
 import genreRouter from "./routes/genre";
@@ -23,6 +25,7 @@ import healthRouter from "./routes/health";
 import imagesRouter from "./routes/images";
 import knowledgeRouter from "./routes/knowledge";
 import llmRouter from "./routes/llm";
+import llmLiveRouter from "./platform/llm/live/http/llmLiveRoutes";
 import novelRouter from "./modules/novel/http/novel";
 import dramaRouter from "./modules/drama/http/dramaRoutes";
 import comicRouter from "./modules/comic/http/comicRoutes";
@@ -52,6 +55,8 @@ import {
   hasSystemResourceBootstrapChanges,
 } from "./services/bootstrap/SystemResourceBootstrapService";
 import { initializeRagSettingsCompatibility } from "./services/settings/RagCompatibilityBootstrapService";
+import onboardingRoutes from "./modules/setup/onboarding/http/onboardingRoutes";
+import { qualityDebtSettingsService } from "./services/settings/QualityDebtSettingsService";
 import { DirectorWorker } from "./workers/directorWorker";
 import { cleanupLogDirectory, resolveLogRetentionConfig } from "./platform/logging/logRetention";
 import { resolveLogsRoot } from "./runtime/appPaths";
@@ -124,6 +129,7 @@ export function createApp() {
   app.use("/api/story-modes", storyModeRouter);
   app.use("/api/knowledge", knowledgeRouter);
   app.use("/api/llm", llmRouter);
+  app.use("/api/llm-live", llmLiveRouter);
   app.use("/api/title-library", titleLibraryRouter);
   app.use("/api", styleEngineRouter);
   app.use("/api", styleEngineExtractionRouter);
@@ -136,16 +142,19 @@ export function createApp() {
   app.use("/api/worlds", worldRouter);
   app.use("/api/rag", ragRouter);
   app.use("/api/base-characters", characterRouter);
+  app.use("/api/character-conversations", characterConversationRouter);
   app.use("/api/writing-formula", writingFormulaRouter);
   app.use("/api/chat", chatRouter);
   app.use("/api/creative-hub", creativeHubRouter);
   app.use("/api/prompt-workbench", promptWorkbenchRouter);
   app.use("/api/images", imagesRouter);
+  app.use("/api/visual-assets", visualAssetRouter);
   app.use("/api/tasks", tasksRouter);
   app.use("/api/auto-director/follow-ups", autoDirectorFollowUpsRouter);
   app.use("/api/settings/auto-director", settingsAutoDirectorRouter);
   app.use("/api/auto-director/channel-callbacks", autoDirectorChannelCallbacksRouter);
   app.use("/api/settings", settingsRouter);
+  app.use("/api", onboardingRoutes);
   app.use("/api/astrology", astrologyRouter);
 
   app.use((_req, res) => {
@@ -246,6 +255,7 @@ function scheduleLogRetentionCleanup(): void {
 
 function initializeBackgroundServices(): BackgroundServicesHandle {
   ragServices.ragWorker.start();
+  ragServices.ragRetrievalTraceRetention.start();
   novelSideEffectWorker.start();
   const directorWorker = new DirectorWorker();
   void directorWorker.start().catch((error) => {
@@ -283,6 +293,7 @@ function initializeBackgroundServices(): BackgroundServicesHandle {
       directorWorker.stop();
       novelSideEffectWorker.stop();
       ragServices.ragWorker.stop();
+      ragServices.ragRetrievalTraceRetention.stop();
       bookAnalysisService.stopWatchdog();
       novelPipelineRuntimeService.stopWatchdog();
     },
@@ -300,6 +311,9 @@ export async function startServer(options?: ServerStartOptions): Promise<Started
   ) {
     console.log("[server] imported legacy RAG env settings.", ragCompatibilityReport);
   }
+  await qualityDebtSettingsService.warnIfAutoPromotionEnabled().catch((error) => {
+    console.warn("[server] failed to inspect pending review auto-promotion settings.", error);
+  });
 
   const app = createApp();
   const { host, port, allowLan } = resolveServerStartOptions(options);

@@ -1,5 +1,6 @@
 import type { ApiResponse } from "@ai-novel/shared/types/api";
 import type { BookAnalysisSectionKey } from "@ai-novel/shared/types/bookAnalysis";
+import type { KnowledgeDocumentDetail } from "@ai-novel/shared/types/knowledge";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import type { NovelExportFormat, NovelExportScope } from "@ai-novel/shared/types/novelExport";
 import type { TitleFactorySuggestion } from "@ai-novel/shared/types/title";
@@ -8,12 +9,14 @@ import type {
   AIFreedom,
   Chapter,
   ChapterSummary,
+  CreationExperience,
   EmotionIntensity,
   NarrativePov,
   Novel,
   PacePreference,
   ProjectMode,
   ProjectProgressStatus,
+  SimpleCreationShelfProjection,
 } from "@ai-novel/shared/types/novel";
 import { apiClient } from "../client";
 import {
@@ -53,6 +56,7 @@ export async function createNovel(payload: {
   worldId?: string;
   writingMode?: "original" | "continuation";
   projectMode?: ProjectMode;
+  creationExperience?: CreationExperience;
   narrativePov?: NarrativePov;
   pacePreference?: PacePreference;
   styleTone?: string;
@@ -71,6 +75,16 @@ export async function createNovel(payload: {
   continuationBookAnalysisSections?: BookAnalysisSectionKey[];
 }) {
   const { data } = await apiClient.post<ApiResponse<Novel>>("/novels", payload);
+  return data;
+}
+
+export async function convertNovelToProfessional(id: string) {
+  const { data } = await apiClient.post<ApiResponse<Novel>>(`/novels/${id}/creation-experience/professional`);
+  return data;
+}
+
+export async function getSimpleCreationShelf(id: string) {
+  const { data } = await apiClient.get<ApiResponse<SimpleCreationShelfProjection>>(`/novels/${id}/simple-shelf`);
   return data;
 }
 
@@ -191,4 +205,9 @@ export async function downloadNovelExport(
     blob: response.data,
     fileName: extractFileName(response.headers["content-disposition"], fallback),
   };
+}
+
+export async function exportNovelAsKnowledgeDocument(id: string) {
+  const { data } = await apiClient.post<ApiResponse<KnowledgeDocumentDetail>>(`/novels/${id}/export-as-document`, {});
+  return data;
 }

@@ -21,7 +21,6 @@ import { contextAssemblyService } from "../production/ContextAssemblyService";
 import type { ChapterRuntimeRequestInput } from "./chapterRuntimeSchema";
 import {
   buildPreviousChaptersSummary,
-  parseJsonStringArraySafe,
 } from "./runtimeContextBlocks";
 import { mapRowToPlan } from "../storyMacro/storyMacroPlanPersistence";
 import {
@@ -43,103 +42,27 @@ import {
 } from "../characters/characterHardFacts";
 import { NovelVolumeService } from "../volume/NovelVolumeService";
 import { ChapterPlanJITService } from "../planning/ChapterPlanJITService";
+import {
+  buildBlockingPendingReviewProposalWhere,
+  loadPendingCharacterHardFactReviews,
+} from "./context/pendingReviewContext";
+import { buildSyntheticCharacterResourceIssues } from "./context/syntheticCharacterResourceIssues";
+import {
+  buildRuntimeVolumeWindowSeed,
+  resolveActiveMilestonePayoffs,
+} from "./context/bookAndVolumeRewardContext";
+import {
+  extractChapterOpening,
+  extractChapterTail,
+  runtimeChapterSelect,
+} from "./context/chapterSourceText";
+import { resolveChapterResourceCharacterIds } from "./context/chapterParticipantSelection";
+
+export { buildBlockingPendingReviewProposalWhere } from "./context/pendingReviewContext";
+export { resolveChapterResourceCharacterIds } from "./context/chapterParticipantSelection";
 
 const OPENING_COMPARE_LIMIT = 3;
 const OPENING_SLICE_LENGTH = 220;
-
-const runtimeChapterSelect = {
-  id: true,
-  title: true,
-  order: true,
-  content: true,
-  expectation: true,
-  targetWordCount: true,
-  conflictLevel: true,
-  revealLevel: true,
-  mustAvoid: true,
-  taskSheet: true,
-  sceneCards: true,
-  hook: true,
-} as const;
-
-export function buildBlockingPendingReviewProposalWhere(novelId: string, chapterId: string) {
-  return {
-    novelId,
-    status: "pending_review" as const,
-    OR: [
-      { chapterId },
-      { chapterId: null },
-    ],
-  };
-}
-
-function extractOpening(content: string, maxLength = OPENING_SLICE_LENGTH): string {
-  return content.replace(/\s+/g, " ").trim().slice(0, maxLength);
-}
-
-function extractChapterTail(content: string | null | undefined, maxLength = 520): string {
-  const normalized = (content ?? "").replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    return "";
-  }
-  return normalized.slice(Math.max(0, normalized.length - maxLength));
-}
-
-function buildSyntheticCharacterResourceIssues(
-  context: GenerationContextPackage["characterResourceContext"],
-  input: {
-    novelId: string;
-    chapterId: string;
-  },
-): GenerationContextPackage["openAuditIssues"] {
-  if (!context) {
-    return [];
-  }
-  const now = new Date().toISOString();
-  const blockedIssues = context.blockedItems.slice(0, 4).map((item) => ({
-    id: `character-resource:${item.id}:blocked`,
-    reportId: `character-resource:${input.novelId}:${input.chapterId}`,
-    auditType: "continuity" as const,
-    severity: item.status === "destroyed" || item.status === "lost" ? "high" as const : "medium" as const,
-    code: "character_resource_unavailable",
-    description: `${item.name} 当前为 ${item.status}，本章不能直接当作可用资源使用。`,
-    evidence: item.evidence[0]?.summary ?? item.summary,
-    fixSuggestion: `优先做局部修复：补出重新获得、替代资源或不能使用的行动限制，避免无铺垫复用 ${item.name}。`,
-    status: "open" as const,
-    createdAt: now,
-    updatedAt: now,
-  }));
-  const reviewIssues = context.pendingReviewItems.slice(0, 3).map((item) => ({
-    id: `character-resource:${item.id}:pending-review`,
-    reportId: `character-resource:${input.novelId}:${input.chapterId}`,
-    auditType: "continuity" as const,
-    severity: "medium" as const,
-    code: "character_resource_pending_review",
-    description: `${item.name} 的持有、可见性或消耗状态需要确认，确认前不要写成不可逆事实。`,
-    evidence: item.evidence[0]?.summary ?? item.summary,
-    fixSuggestion: `将 ${item.name} 的使用写成可回收的小修补，或先在任务中心确认资源变更。`,
-    status: "open" as const,
-    createdAt: now,
-    updatedAt: now,
-  }));
-  const signalIssues = context.riskSignals
-    .filter((signal) => signal.severity === "high" || signal.severity === "critical")
-    .slice(0, 3)
-    .map((signal, index) => ({
-      id: `character-resource:signal:${index}:${signal.code}`,
-      reportId: `character-resource:${input.novelId}:${input.chapterId}`,
-      auditType: "continuity" as const,
-      severity: signal.severity,
-      code: signal.code || "character_resource_risk",
-      description: signal.summary,
-      evidence: signal.summary,
-      fixSuggestion: "优先采用 patch_first：只修补当前章节的资源归属、消耗或知情关系，不重写整段剧情。",
-      status: "open" as const,
-      createdAt: now,
-      updatedAt: now,
-    }));
-  return [...blockedIssues, ...reviewIssues, ...signalIssues];
-}
 
 function mapPlan(plan: Awaited<ReturnType<typeof plannerService.getChapterPlan>>): GenerationContextPackage["plan"] {
   if (!plan) {
@@ -172,57 +95,6 @@ function mapPlan(plan: Awaited<ReturnType<typeof plannerService.getChapterPlan>>
     })),
     createdAt: plan.createdAt.toISOString(),
     updatedAt: plan.updatedAt.toISOString(),
-  };
-}
-
-function findVolumeWindowSeed(
-  volumeRows: Array<{
-    id: string;
-    sortOrder: number;
-    title: string;
-    summary: string | null;
-    mainPromise: string | null;
-    openPayoffsJson: string | null;
-    chapters: Array<{ chapterOrder: number }>;
-  }>,
-  chapterOrder: number,
-) {
-  const currentIndex = volumeRows.findIndex((volume) => (
-    volume.chapters.some((chapter) => chapter.chapterOrder === chapterOrder)
-  ));
-  if (currentIndex < 0) {
-    return {
-      currentVolume: null,
-      previousVolume: null,
-      nextVolume: null,
-      softFutureSummary: "",
-    };
-  }
-
-  const currentVolume = volumeRows[currentIndex];
-  const previousVolume = currentIndex > 0 ? volumeRows[currentIndex - 1] : null;
-  const nextVolume = currentIndex < volumeRows.length - 1 ? volumeRows[currentIndex + 1] : null;
-  const futureVolumes = volumeRows.slice(currentIndex + 1, currentIndex + 4);
-  return {
-    currentVolume: {
-      id: currentVolume.id,
-      sortOrder: currentVolume.sortOrder,
-      title: currentVolume.title,
-      summary: currentVolume.summary,
-      mainPromise: currentVolume.mainPromise,
-      openPayoffs: parseJsonStringArraySafe(currentVolume.openPayoffsJson),
-    },
-    previousVolume: previousVolume
-      ? { title: previousVolume.title, summary: previousVolume.summary }
-      : null,
-    nextVolume: nextVolume
-      ? { title: nextVolume.title, summary: nextVolume.summary }
-      : null,
-    softFutureSummary: futureVolumes.length > 0
-      ? futureVolumes
-        .map((volume) => `Volume ${volume.sortOrder} ${volume.title}: ${volume.mainPromise ?? volume.summary ?? "pending"}`)
-        .join("\n")
-      : "",
   };
 }
 
@@ -286,17 +158,25 @@ export class GenerationContextAssembler {
       throw new Error("Novel or chapter not found.");
     }
     chapter = refreshedChapter;
+    const resourceCharacterIds = resolveChapterResourceCharacterIds({
+      plan: ensuredPlan,
+      characters: novel.characters,
+    });
     const pendingReviewProposalCountPromise = prisma.stateChangeProposal.count({
       where: buildBlockingPendingReviewProposalWhere(novelId, chapterId),
     });
+    const pendingCharacterHardFactReviewsPromise = loadPendingCharacterHardFactReviews(novelId, chapterId);
     const [
       worldContextBlock,
       pendingReviewProposalCount,
+      pendingCharacterHardFactReviews,
       openAuditIssues,
       summaries,
       recentChapters,
       decisions,
       characterDynamics,
+      characterMindRows,
+      characterDialogueRows,
       continuationPack,
       styleContext,
       payoffLedger,
@@ -304,6 +184,7 @@ export class GenerationContextAssembler {
     ] = await Promise.all([
       this.worldContextGateway.getWorldContextBlock(novelId, { purpose: "chapter" }),
       pendingReviewProposalCountPromise,
+      pendingCharacterHardFactReviewsPromise,
       prisma.auditIssue.findMany({
         where: {
           status: "open",
@@ -346,6 +227,37 @@ export class GenerationContextAssembler {
       characterDynamicsQueryService.getOverview(novelId, {
         chapterOrder: chapter.order,
       }).catch(() => null),
+      prisma.characterMindSnapshot.findMany({
+        where: { novelId, isCurrent: true },
+        select: {
+          characterId: true, currentInterpretation: true, privateIntent: true, activePlan: true,
+          emotionalStance: true, actionTendency: true, decisionTrigger: true, beliefsJson: true,
+          misbeliefsJson: true, evidenceJson: true, confidence: true, sourceChapterId: true,
+        },
+        orderBy: { updatedAt: "desc" },
+      }),
+      prisma.characterDialogueInfluence.findMany({
+        where: {
+          novelId,
+          // 对话影响只为章节计划中真实参与的角色装配；缺少参与者时宁可不注入。
+          characterId: { in: resourceCharacterIds },
+          status: "active",
+          targetStartChapterOrder: { lte: chapter.order },
+          targetEndChapterOrder: { gte: chapter.order },
+        },
+        select: {
+          id: true,
+          characterId: true,
+          summary: true,
+          behaviorGuidance: true,
+          emotionalGuidance: true,
+          relationTension: true,
+          targetStartChapterOrder: true,
+          targetEndChapterOrder: true,
+        },
+        orderBy: [{ activatedAt: "desc" }, { updatedAt: "desc" }],
+        take: 12,
+      }).catch(() => []),
       this.continuationService.buildChapterContextPack(novelId),
       this.styleBindingService.resolveForGeneration({
         novelId,
@@ -356,7 +268,9 @@ export class GenerationContextAssembler {
         chapterOrder: chapter.order,
       }),
       characterResourceLedgerService.buildContext(novelId, {
+        chapterId,
         chapterOrder: chapter.order,
+        ...(resourceCharacterIds.length > 0 ? { characterIds: resourceCharacterIds } : {}),
       }).catch(() => null),
     ]);
 
@@ -379,7 +293,7 @@ export class GenerationContextAssembler {
     const previousChaptersSummary = buildPreviousChaptersSummary(request.previousChaptersSummary, summaries);
     const mappedOpenConflicts = buildRuntimeOpenConflictsFromCanonical(canonicalState);
     const storyMacroPlan = novel.storyMacroPlan ? mapRowToPlan(novel.storyMacroPlan) : null;
-    const volumeWindow = buildVolumeWindowContext(findVolumeWindowSeed(
+    const volumeWindow = buildVolumeWindowContext(buildRuntimeVolumeWindowSeed(
       novel.volumePlans.map((volume) => ({
         id: volume.id,
         sortOrder: volume.sortOrder,
@@ -387,6 +301,7 @@ export class GenerationContextAssembler {
         summary: volume.summary,
         mainPromise: volume.mainPromise,
         openPayoffsJson: volume.openPayoffsJson,
+        sourceVersion: volume.sourceVersion,
         chapters: volume.chapters,
       })),
       chapter.order,
@@ -421,6 +336,20 @@ export class GenerationContextAssembler {
       hardConstraints: canonicalState.bookContract.hardConstraints.length > 0
         ? canonicalState.bookContract.hardConstraints
         : storyMacroPlan?.constraints ?? [],
+      readingPromise: novel.bookContract?.readingPromise,
+      protagonistFantasy: novel.bookContract?.protagonistFantasy,
+      coreSellingPoint: novel.bookContract?.coreSellingPoint,
+      chapter3Payoff: novel.bookContract?.chapter3Payoff,
+      chapter10Payoff: novel.bookContract?.chapter10Payoff,
+      chapter30Payoff: novel.bookContract?.chapter30Payoff,
+      escalationLadder: novel.bookContract?.escalationLadder,
+      relationshipMainline: novel.bookContract?.relationshipMainline,
+      activeMilestonePayoffs: resolveActiveMilestonePayoffs({
+        chapterOrder: chapter.order,
+        chapter3Payoff: novel.bookContract?.chapter3Payoff,
+        chapter10Payoff: novel.bookContract?.chapter10Payoff,
+        chapter30Payoff: novel.bookContract?.chapter30Payoff,
+      }),
     });
     const macroConstraints = buildMacroConstraintContext(storyMacroPlan);
     const mappedPlan = mapPlan(ensuredPlan);
@@ -455,7 +384,42 @@ export class GenerationContextAssembler {
         presenceImpression: item.presenceImpression ?? null,
       };
     });
-    const mappedCharacterHardFacts = buildRuntimeCharacterHardFactsList(mappedCharacterRoster);
+    const mappedCharacterHardFacts = buildRuntimeCharacterHardFactsList(
+      mappedCharacterRoster,
+      pendingCharacterHardFactReviews,
+    );
+    const parseMindItems = (raw: string) => {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.map((item) => String(item).trim()).filter(Boolean).slice(0, 4) : [];
+      } catch {
+        return [];
+      }
+    };
+    const characterMindStates = characterMindRows.map((item) => ({
+      characterId: item.characterId,
+      currentInterpretation: item.currentInterpretation,
+      privateIntent: item.privateIntent,
+      activePlan: item.activePlan,
+      emotionalStance: item.emotionalStance,
+      actionTendency: item.actionTendency,
+      decisionTrigger: item.decisionTrigger,
+      beliefs: parseMindItems(item.beliefsJson),
+      misbeliefs: parseMindItems(item.misbeliefsJson),
+      evidence: parseMindItems(item.evidenceJson),
+      confidence: item.confidence,
+      sourceChapterId: item.sourceChapterId,
+    }));
+    const characterDialogueGuidances = characterDialogueRows.map((item) => ({
+      influenceId: item.id,
+      characterId: item.characterId,
+      summary: item.summary,
+      behaviorGuidance: item.behaviorGuidance,
+      emotionalGuidance: item.emotionalGuidance,
+      relationTension: item.relationTension,
+      targetStartChapterOrder: item.targetStartChapterOrder,
+      targetEndChapterOrder: item.targetEndChapterOrder,
+    }));
     const mappedCreativeDecisions = decisions.map((item) => ({
       id: item.id,
       chapterId: item.chapterId ?? null,
@@ -544,6 +508,8 @@ export class GenerationContextAssembler {
       openConflicts: mappedOpenConflicts,
       storyWorldSlice,
       characterDynamics,
+      characterMindStates,
+      characterDialogueGuidances,
       characterRoster: mappedCharacterRoster,
       characterHardFacts: mappedCharacterHardFacts,
       creativeDecisions: mappedCreativeDecisions,
@@ -709,7 +675,7 @@ export class GenerationContextAssembler {
       .map((item) => ({
         order: item.order,
         title: item.title,
-        opening: extractOpening(item.content ?? ""),
+        opening: extractChapterOpening(item.content ?? "", OPENING_SLICE_LENGTH),
       }))
       .filter((item) => item.opening.length > 0);
 

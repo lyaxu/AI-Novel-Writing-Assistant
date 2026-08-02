@@ -13,6 +13,8 @@ export function formatStatus(status: BookAnalysisStatus | BookAnalysisSection["s
       return "成功";
     case "failed":
       return "失败";
+    case "cancelled":
+      return "已取消";
     case "archived":
       return "已归档";
     case "idle":
@@ -25,14 +27,22 @@ export function formatStatus(status: BookAnalysisStatus | BookAnalysisSection["s
 export function formatStage(stage?: string | null): string {
   switch (stage) {
     case "loading_cache":
-      return "查缓存";
+      return "查找可复用结果";
     case "preparing_notes":
-      return "准备 notes";
+      return "准备分析资料";
+    case "generating_overview":
+      return "生成总览";
     case "generating_sections":
-      return "生成章节";
+      return "生成拆书小节";
     default:
       return stage?.trim() || "暂无";
   }
+}
+
+export const BOOK_ANALYSIS_BUDGET_EXCEEDED_CODE = "budget_exceeded";
+
+export function isBookAnalysisBudgetExceeded(lastError?: string | null): boolean {
+  return lastError?.includes(BOOK_ANALYSIS_BUDGET_EXCEEDED_CODE) ?? false;
 }
 
 export function formatDate(value?: string | null): string {
@@ -49,6 +59,7 @@ export function syncDrafts(detail: BookAnalysisDetail): Record<string, SectionDr
       {
         editedContent: section.editedContent ?? section.aiContent ?? "",
         notes: section.notes ?? "",
+        focusInstruction: section.focusInstruction ?? "",
         frozen: section.frozen,
         optimizeInstruction: "",
         optimizePreview: "",
@@ -72,6 +83,7 @@ export function buildSectionDraft(section: BookAnalysisSection): SectionDraft {
   return {
     editedContent: section.editedContent ?? section.aiContent ?? "",
     notes: section.notes ?? "",
+    focusInstruction: section.focusInstruction ?? "",
     frozen: section.frozen,
     optimizeInstruction: "",
     optimizePreview: "",

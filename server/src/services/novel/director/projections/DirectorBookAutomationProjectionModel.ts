@@ -289,9 +289,8 @@ function buildNovelHref(
 
 function buildCandidateSelectionHref(taskId: string): string {
   const params = new URLSearchParams();
-  params.set("workflowTaskId", taskId);
-  params.set("mode", "director");
-  return `/novels/create?${params.toString()}`;
+  params.set("taskId", taskId);
+  return `/novels/auto-director?${params.toString()}`;
 }
 
 export function buildFocusNovel(input: { id: string; title?: string | null }): DirectorBookAutomationFocusNovel {
@@ -437,6 +436,18 @@ export function buildPrimaryAction(input: {
         type: "confirm_candidate",
         label: "确认书级方向",
         target: { novelId: input.novelId, taskId, href: buildCandidateSelectionHref(taskId) },
+        emphasis: "primary",
+      });
+    }
+    if (input.task?.checkpointType === "production_experience_required") {
+      return action({
+        type: "open_novel",
+        label: "选择正文生产方式",
+        target: {
+          novelId: input.novelId,
+          taskId,
+          href: buildNovelHref(input.novelId, { taskId }),
+        },
         emphasis: "primary",
       });
     }

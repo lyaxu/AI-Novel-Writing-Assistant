@@ -48,6 +48,7 @@ import TakeoverContextSummaryPanel from "./takeover/TakeoverContextSummaryPanel"
 import TakeoverDiagnosisPanel from "./takeover/TakeoverDiagnosisPanel";
 import { useDirectorAutoApprovalDraft } from "./useDirectorAutoApprovalDraft";
 import { AUTO_DIRECTOR_MOBILE_CLASSES } from "@/mobile/autoDirector";
+import SelectControl from "@/components/common/SelectControl";
 
 interface NovelExistingProjectTakeoverDialogProps {
   novelId: string;
@@ -62,19 +63,9 @@ interface NovelExistingProjectTakeoverDialogProps {
 
 const RUN_MODE_OPTIONS: Array<{ value: DirectorRunMode; label: string; description: string }> = [
   {
-    value: "full_book_autopilot",
-    label: "全书自动接管",
-    description: "AI 会按整本书目标补齐规划、继续写作、审校和修复。",
-  },
-  {
     value: "auto_to_ready",
     label: "推进到可开写",
-    description: "AI 会持续推进到章节执行资源准备好后再交接。",
-  },
-  {
-    value: "auto_to_execution",
-    label: "按范围执行",
-    description: "按全书、章节范围或卷范围接管，并继续准备目标范围的章节执行。",
+    description: "AI 会补齐正文生产前需要的资源，再让你选择简易生产或专业生产。",
   },
 ];
 
@@ -496,7 +487,7 @@ export default function NovelExistingProjectTakeoverDialog({
                   绑定书级默认写法后，接管时建议沿用它。前半段导演只读取轻量摘要，避免干扰结构规划。
                 </div>
                 <div className="mt-3 space-y-3">
-                  <select
+                  <SelectControl
                     className="w-full rounded-md border bg-background p-2 text-sm"
                     value={selectedStyleProfileId}
                     onChange={(event) => setSelectedStyleProfileId(event.target.value)}
@@ -505,7 +496,7 @@ export default function NovelExistingProjectTakeoverDialog({
                     {styleProfiles.map((profile) => (
                       <option key={profile.id} value={profile.id}>{profile.name}</option>
                     ))}
-                  </select>
+                  </SelectControl>
                   {currentNovelStyleBindings.length > 0 ? (
                     <div className={`rounded-lg border bg-muted/15 p-3 text-xs leading-6 text-muted-foreground ${AUTO_DIRECTOR_MOBILE_CLASSES.wrapText}`}>
                       当前书级默认写法：{currentNovelStyleBindings

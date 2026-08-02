@@ -1,6 +1,8 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import type { PromptAsset } from "../../core/promptTypes";
+import { characterMindDeltaSchema } from "./characterMind.promptSchemas";
+import { characterDialogueInfluenceResolutionSchema } from "@ai-novel/shared/types/characterDialogue";
 import { chapterConcreteFactSchema } from "../../../services/novel/chapterSummarySchemas";
 import { characterResourceExtractionUpdateSchema } from "./characterResource.promptSchemas";
 import { NOVEL_PROMPT_BUDGETS } from "./promptBudgetProfiles";
@@ -385,12 +387,14 @@ export const chapterArtifactDeltaOutputSchema = z.object({
   summary: z.string().trim().min(1),
   concreteFacts: z.array(chapterConcreteFactSchema).max(12).default([]),
   stateDeltas: chapterArtifactDeltaStateSchema,
-  characterResourceDeltas: z.array(z.preprocess(normalizeCharacterResourceDelta, characterResourceExtractionUpdateSchema)).default([]),
+  characterResourceDeltas: z.array(z.preprocess(normalizeCharacterResourceDelta, characterResourceExtractionUpdateSchema)).max(8).default([]),
   payoffDeltas: z.array(z.preprocess(normalizePayoffDelta, payoffLedgerSyncItemSchema)).default([]),
   relationDynamics: z.array(chapterArtifactRelationDynamicSchema).default([]),
   factionUpdates: z.array(chapterArtifactFactionUpdateSchema).default([]),
   characterCandidates: z.array(chapterArtifactCharacterCandidateSchema).default([]),
   characterKnowledgeStates: z.array(chapterArtifactCharacterKnowledgeStateSchema).default([]),
+  characterMindDeltas: z.array(characterMindDeltaSchema).max(4).default([]),
+  characterDialogueInfluenceResolutions: z.array(characterDialogueInfluenceResolutionSchema).max(4).default([]),
   syncPlan: chapterArtifactDeltaSyncPlanSchema,
   confidence: z.number().min(0).max(1),
   requiresFullReconcile: z.boolean().default(false),
@@ -407,6 +411,7 @@ export interface ChapterArtifactDeltaPromptInput {
   previousStateText: string;
   existingResourceText: string;
   existingPayoffText: string;
+  activeCharacterDialogueInfluenceText: string;
   chapterContent: string;
 }
 
@@ -502,6 +507,22 @@ const CHAPTER_ARTIFACT_DELTA_EXAMPLE: ChapterArtifactDeltaOutput = {
       hiddenFacts: ["库房内的守卫布置"],
     },
   ],
+  characterMindDeltas: [
+    {
+      characterName: "程秩",
+      currentInterpretation: "他认为后门钥匙让潜入成为可行方案，但仍低估库房守卫的准备程度。",
+      privateIntent: "抢在赵管事察觉前独自验证后门。",
+      activePlan: "先摸清换岗时间，再利用钥匙进入库房。",
+      emotionalStance: "紧张中带着主动争取的笃定。",
+      actionTendency: "会先隐瞒线索、独自试探，再决定是否求助。",
+      decisionTrigger: "若守卫异常增多，会转而寻找同盟。",
+      beliefs: ["钥匙能提供一次隐蔽进入机会"],
+      misbeliefs: ["他以为赵管事尚未察觉钥匙失踪"],
+      evidence: ["程秩把后门铜钥匙收进袖中，并决定先观察换岗。"],
+      confidence: 0.78,
+    },
+  ],
+  characterDialogueInfluenceResolutions: [],
   syncPlan: {
     stateSnapshot: "write",
     characterResources: "write",
@@ -556,6 +577,8 @@ export const chapterArtifactDeltaPrompt: PromptAsset<
       "9. concreteFacts 只记录本章正文即兴产生且后续必须保持一致的硬事实，每条不超过 40 字；包括承诺、交易条款、事件性质、关键数字日期地点、身份与状态变化。",
       "10. concreteFacts.category 只能使用 completed、revealed、state_changed；无明确硬事实时输出 []，不得把抽象目标或氛围描述写入 concreteFacts。",
       "11. characterKnowledgeStates 只在本章存在显著信息差时填写；knownFacts 写该角色本章后明确知道的事实，hiddenFacts 写该角色仍不知道、后续不能让其超前知情的事实，每组最多 5 条；无信息差输出 []。",
+      "11a. characterMindDeltas 只在正文明确改变角色对局势的理解、情绪、意图、计划、误判或行动选择时填写，最多 4 条；它是可追溯的角色主观推断，不是客观事实，不得凭空补秘密。每条必须给 evidence；没有明显变化输出 []。",
+      "11b. characterDialogueInfluenceResolutions 只评估下面提供的“当前有效角色对话影响”。它们是作者与角色对话后确认的软性行为倾向，不是客观事实或强制剧情。只有正文已经明确承接某个影响的行动、情绪或关系张力时，才输出 { influenceId, status: \"applied\", evidence, confidence }；尚未承接、仅有模糊铺垫或正文相反时可输出 defer，也可不输出。它不创造事实，不能凭计划或旁白推测标记 applied。applied 必须给正文证据。",
       "12. payoffDeltas.currentStatus 只能使用 setup、hinted、pending_payoff、paid_off、failed、overdue；不要输出 active，已推进但未兑现统一用 pending_payoff。",
       "13. payoffDeltas.riskSignals 必须是对象数组，形如 { code, severity, summary }；没有风险就输出 []，不要输出字符串数组。",
       "14. relationDynamics 必须使用 sourceCharacterName、targetCharacterName、stageLabel、stageSummary；characterCandidates 必须使用 proposedName、proposedRole、summary。",
@@ -563,9 +586,10 @@ export const chapterArtifactDeltaPrompt: PromptAsset<
       "16. characterResourceDeltas.resourceType 只能使用 physical_item、clue、credential、ability_resource、relationship_token、consumable、hidden_card、world_resource；材料、丹药、一次性药草用 consumable，积分/货币/宗门资源用 world_resource。",
       "17. characterResourceDeltas.narrativeFunction 只能使用 tool、clue、weapon、proof、key、cost、promise、hidden_card、constraint；修炼增益通常用 tool，消耗材料/积分用 cost，凭据/借据用 proof 或 constraint。",
       "18. characterResourceDeltas.statusAfter 只能使用 available、hidden、borrowed、transferred、lost、consumed、damaged、destroyed、stale；不要输出 active、owned、usable、used、broken 等自定义状态。",
-      "19. payoffDeltas.scopeType 只能使用 book、volume、chapter；全书/故事级伏笔统一用 book，不要输出 story、novel 或 global。",
-      "20. stateDeltas.foreshadowStates 的 setupChapterId/payoffChapterId 只有在能确认真实 chapterId 时才填写；如果只能确认第几章，宁可省略或写入章节序号字符串，不要输出数字。",
-      "21. syncPlan.stateSnapshot、characterResources、characterDynamics 只能是 skip 或 write；只有 payoffLedger 可以是 skip、delta 或 full_reconcile。",
+      "19. characterResourceDeltas 最多输出 8 条；优先保留会跨章影响行动边界、伏笔兑现或资源归属的变化。",
+      "20. payoffDeltas.scopeType 只能使用 book、volume、chapter；全书/故事级伏笔统一用 book，不要输出 story、novel 或 global。",
+      "21. stateDeltas.foreshadowStates 的 setupChapterId/payoffChapterId 只有在能确认真实 chapterId 时才填写；如果只能确认第几章，宁可省略或写入章节序号字符串，不要输出数字。",
+      "22. syncPlan.stateSnapshot、characterResources、characterDynamics 只能是 skip 或 write；只有 payoffLedger 可以是 skip、delta 或 full_reconcile。",
     ].join("\n")),
     new HumanMessage([
       `小说：${input.novelTitle}`,
@@ -584,6 +608,9 @@ export const chapterArtifactDeltaPrompt: PromptAsset<
       "已有伏笔账本：",
       input.existingPayoffText || "暂无已有伏笔账本",
       "",
+      "当前有效角色对话影响（仅供核对正文是否承接；是软性行为倾向，不是客观事实或强制剧情）：",
+      input.activeCharacterDialogueInfluenceText || "无",
+      "",
       "章节正文：",
       input.chapterContent,
     ].join("\n")),
@@ -592,6 +619,11 @@ export const chapterArtifactDeltaPrompt: PromptAsset<
     for (const update of output.characterResourceDeltas) {
       if (update.evidence.length === 0) {
         throw new Error(`资源变化缺少证据：${update.resourceName}`);
+      }
+    }
+    for (const resolution of output.characterDialogueInfluenceResolutions) {
+      if (resolution.status === "applied" && resolution.evidence.length === 0) {
+        throw new Error(`角色对话影响承接缺少证据：${resolution.influenceId}`);
       }
     }
     if (output.syncPlan.payoffLedger === "skip" && output.payoffDeltas.length > 0) {

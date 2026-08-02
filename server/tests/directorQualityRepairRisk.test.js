@@ -46,25 +46,6 @@ test("buildDirectorQualityRepairRisk keeps replan notices blocking", () => {
   assert.equal(risk.affectedChapterCount, 1);
 });
 
-test("buildDirectorQualityRepairRisk treats plan-obligation replan notices as continuable", () => {
-  const risk = buildDirectorQualityRepairRisk({
-    noticeCode: "PIPELINE_REPLAN_REQUIRED",
-    noticeSummary: "第9章需要重规划，但正文叙事任务和角色状态基本达成",
-    payload: JSON.stringify({
-      replanAlertDetails: [
-        "第9章需要重规划（原因=唯一硬合同缺口是元审校类 payoff，与本章现场移交剧情不兼容，属于计划义务配置风险而非正文必须返工问题。）",
-      ],
-    }),
-    remainingChapterCount: 71,
-    totalChapterCount: 80,
-  });
-
-  assert.equal(risk.riskLevel, "replan");
-  assert.equal(risk.autoContinuable, true);
-  assert.equal(risk.affectedChapterCount, 1);
-  assert.match(risk.reason, /正文可继续推进/);
-});
-
 test("buildDirectorQualityRepairRisk keeps unclassified heavy repair notices manual", () => {
   const risk = buildDirectorQualityRepairRisk({
     noticeSummary: "大范围修复需要确认",

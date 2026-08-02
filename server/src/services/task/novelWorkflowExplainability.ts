@@ -53,7 +53,9 @@ const CHECKPOINT_DISPLAY_STATUS: Record<NovelWorkflowCheckpoint, string> = {
   book_contract_ready: "Book Contract 已就绪",
   character_setup_required: "角色准备待审核",
   volume_strategy_ready: "卷战略待审核",
+  production_experience_required: "已可开写，等待选择生产方式",
   chapter_batch_ready: "已准备章节可进入执行",
+  step_review_required: "当前步骤待检查",
   replan_required: "等待处理重规划",
   workflow_completed: "自动导演已完成",
 };
@@ -63,7 +65,9 @@ const CHECKPOINT_BLOCKING_REASON: Record<NovelWorkflowCheckpoint, string> = {
   book_contract_ready: "Book Contract 已生成，需先确认核心承诺后再继续后续规划。",
   character_setup_required: "角色准备已生成，需先审核角色阵容后再继续推进。",
   volume_strategy_ready: "卷战略与卷骨架已就绪，需先确认卷级推进方案后再继续。",
+  production_experience_required: "自动导演已完成正文生产前的准备，需要选择简易创作或专业创作。",
   chapter_batch_ready: "章节范围的拆章与执行资源已经准备好，可以进入章节执行或继续自动执行当前范围。",
+  step_review_required: "当前导演步骤已生成，检查或确认后才能继续下一个步骤。",
   replan_required: "审计结果要求先处理重规划，后续章节才能继续推进。",
   workflow_completed: "默认主流程已跑通，你可以直接进入章节执行继续写作。",
 };
@@ -73,7 +77,9 @@ const CHECKPOINT_LAST_HEALTHY_STAGE: Record<NovelWorkflowCheckpoint, NovelWorkfl
   book_contract_ready: "story_macro",
   character_setup_required: "character_setup",
   volume_strategy_ready: "volume_strategy",
+  production_experience_required: "structured_outline",
   chapter_batch_ready: "structured_outline",
+  step_review_required: "auto_director",
   replan_required: "quality_repair",
   workflow_completed: "quality_repair",
 };

@@ -39,7 +39,7 @@ interface TakeoverExecutionWorkflowPort {
     forceNew?: true;
     seedPayload: Record<string, unknown>;
     initialState?: {
-      stage: "story_macro" | "character_setup" | "volume_strategy" | "structured_outline" | "chapter_execution" | "quality_repair";
+      stage: "story_macro" | "world_setup" | "character_setup" | "volume_strategy" | "structured_outline" | "chapter_execution" | "quality_repair";
       itemKey?: string | null;
       itemLabel: string;
       progress?: number;
@@ -48,13 +48,23 @@ interface TakeoverExecutionWorkflowPort {
     };
   }): Promise<TakeoverBootstrapTaskResult>;
   markTaskRunning(taskId: string, input: {
-    stage: "story_macro" | "character_setup" | "volume_strategy" | "structured_outline" | "chapter_execution" | "quality_repair";
+    stage: "story_macro" | "world_setup" | "character_setup" | "volume_strategy" | "structured_outline" | "chapter_execution" | "quality_repair";
     itemLabel: string;
     itemKey?: string | null;
     progress?: number;
     clearCheckpoint?: boolean;
   }): Promise<unknown>;
   markTaskFailed?(taskId: string, message: string): Promise<unknown>;
+  recordCheckpoint(taskId: string, input: {
+    stage: "chapter_execution";
+    checkpointType: "production_experience_required";
+    checkpointSummary: string;
+    itemLabel: string;
+    chapterId?: string | null;
+    volumeId?: string | null;
+    progress?: number;
+    seedPayload?: Record<string, unknown>;
+  }): Promise<unknown>;
 }
 
 interface TakeoverExecutionAutoRuntimePort {
@@ -94,7 +104,7 @@ interface StartDirectorTakeoverExecutionInput {
     taskId: string;
     novelId: string;
     input: DirectorConfirmRequest;
-    startPhase: "story_macro" | "character_setup" | "volume_strategy" | "structured_outline";
+    startPhase: "story_macro" | "world_setup" | "character_setup" | "volume_strategy" | "structured_outline";
     approveCurrentGate?: boolean;
     approveAutoExecutionScope?: boolean;
   }) => Promise<void>;
@@ -140,6 +150,7 @@ interface StartDirectorTakeoverExecutionInput {
 
 function startPhaseToEntryStep(startPhase: NonNullable<DirectorTakeoverRequest["startPhase"]>): DirectorTakeoverEntryStep {
   if (startPhase === "story_macro") return "story_macro";
+  if (startPhase === "world_setup") return "world";
   if (startPhase === "character_setup") return "character";
   if (startPhase === "volume_strategy") return "outline";
   return "structured";
@@ -329,12 +340,11 @@ export async function startDirectorTakeoverExecution(
       ...input.request,
       autoExecutionPlan: normalizedAutoExecutionPlan,
     };
-  const directorInput = normalizedAutoExecutionPlan === input.directorInput.autoExecutionPlan
-    ? input.directorInput
-    : {
-      ...input.directorInput,
-      autoExecutionPlan: normalizedAutoExecutionPlan,
-    };
+  const directorInput: DirectorConfirmRequest = {
+    ...input.directorInput,
+    runMode: "auto_to_ready",
+    autoExecutionPlan: undefined,
+  };
   const selection = normalizeTakeoverSelection(request);
   const plan = resolveDirectorTakeoverPlan({
     entryStep: selection.entryStep,
@@ -450,25 +460,22 @@ export async function startDirectorTakeoverExecution(
         });
       });
     } else {
-      await input.autoExecutionRuntime.prepareRequestedAutoExecution({
-        novelId: request.novelId,
-        request: directorInput,
-        existingPipelineJobId: plan.usesCurrentBatch ? (input.takeoverState.activePipelineJob?.id ?? null) : null,
-        existingState: plan.usesCurrentBatch ? (input.takeoverState.latestAutoExecutionState ?? null) : null,
-      });
-      await input.workflowService.markTaskRunning(workflowTask.id, buildAutoExecutionRunningState(plan));
-      input.scheduleBackgroundRun(workflowTask.id, async () => {
-        await input.autoExecutionRuntime.runFromReady({
-          taskId: workflowTask.id,
-          novelId: request.novelId,
-          request: directorInput,
-          existingPipelineJobId: plan.usesCurrentBatch ? (input.takeoverState.activePipelineJob?.id ?? null) : null,
-          existingState: plan.usesCurrentBatch ? (input.takeoverState.latestAutoExecutionState ?? null) : null,
-          resumeCheckpointType: plan.usesCurrentBatch ? (plan.resumeCheckpointType ?? null) : null,
-          resumeStage: plan.resumeStage === "pipeline" ? "pipeline" : "chapter",
-          approveCurrentGate: isFullBookAutopilot,
-          approveAutoExecutionScope: isFullBookAutopilot,
-        });
+      await input.workflowService.recordCheckpoint(workflowTask.id, {
+        stage: "chapter_execution",
+        checkpointType: "production_experience_required",
+        checkpointSummary: "自动导演已确认现有章节执行资源可用，请选择正文生产方式。",
+        itemLabel: "项目已可开写，等待选择生产方式",
+        chapterId: input.takeoverState.latestCheckpoint?.chapterId ?? null,
+        volumeId: input.takeoverState.latestCheckpoint?.volumeId ?? input.takeoverState.snapshot.firstVolumeId ?? null,
+        progress: 0.9,
+        seedPayload: input.buildDirectorSeedPayload(directorInput, request.novelId, {
+          directorSession: buildDirectorSessionState({
+            runMode: "auto_to_ready",
+            phase: "chapter_execution",
+            isBackgroundRunning: false,
+          }),
+          resumeTarget,
+        }),
       });
     }
 

@@ -1,5 +1,9 @@
 import type { DirectorChapterExecutionProgressSummary, DirectorArtifactRef, DirectorArtifactType } from "@ai-novel/shared/types/directorRuntime";
-import type { DirectorAutoExecutionState, DirectorConfirmRequest } from "@ai-novel/shared/types/novelDirector";
+import {
+  isDirectorAutoExecutionRunMode,
+  type DirectorAutoExecutionState,
+  type DirectorConfirmRequest,
+} from "@ai-novel/shared/types/novelDirector";
 import type { VolumePlanDocument } from "@ai-novel/shared/types/novel";
 import { BookContractService } from "../../BookContractService";
 import { CharacterPreparationService } from "../../characterPrep/CharacterPreparationService";
@@ -21,6 +25,8 @@ import { ChapterExecutionProgressInspector } from "../runtime/ChapterExecutionPr
 import type { DirectorCharacterSetupPhaseResult } from "../phases/novelDirectorPipelinePhases";
 import { normalizeDirectorAutoExecutionPlan } from "../automation/novelDirectorAutoExecution";
 import { assertHighMemoryDirectorStartAllowed } from "../runtime/autoDirectorMemorySafety";
+import { qualityDebtSettingsService } from "../../../settings/QualityDebtSettingsService";
+import { pendingReviewAutoPromotionService } from "../../state/PendingReviewAutoPromotionService";
 import {
   resolveStructuredOutlineRecoveryCursor,
   type StructuredOutlineRecoveryCursor,
@@ -67,6 +73,19 @@ export function buildDefaultDirectorCoreStepModuleRuntimeDeps(): DirectorCoreSte
       novelId: string,
       extra?: Record<string, unknown>,
     ) => buildDirectorWorkflowSeedPayload(input, novelId, extra),
+    autoConfirmPendingCandidates: (novelId: string) => characterDynamicsService.autoConfirmPendingCandidates(novelId),
+    isPendingReviewAutoPromotionEnabled: () => qualityDebtSettingsService.isAutoPromotionEnabled(),
+    autoPromotePendingReviewProposals: async (input) => {
+      const settings = await qualityDebtSettingsService.getAutoPromotionSettings();
+      if (!settings.enabled || !settings.baselineAt) {
+        return;
+      }
+      await pendingReviewAutoPromotionService.apply(input.novelId, {
+        since: settings.baselineAt,
+        dryRun: false,
+        taskId: input.taskId,
+      });
+    },
   });
   const runtimeOrchestrator = new NovelDirectorRuntimeOrchestrator({
     directorRuntime,
@@ -186,6 +205,7 @@ export class DirectorCoreStepModuleRuntime {
     return resolveStructuredOutlineRecoveryCursor({
       workspace,
       plan: request ? normalizeDirectorAutoExecutionPlan(request.autoExecutionPlan) : undefined,
+      allowPartialChapterListReady: isDirectorAutoExecutionRunMode(request?.runMode),
     });
   }
 

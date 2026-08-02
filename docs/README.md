@@ -34,11 +34,15 @@
 - [Prompt Workbench, Context and Step Runtime Plan](./plans/prompt-workbench-context-and-step-runtime-plan.md)
 - [Auto Director Execution Plane Isolation Plan](./plans/auto-director-execution-plane-isolation-plan.md)
 - [Director Mode Module and State Refactor Checklist](./plans/director-mode-module-state-refactor-checklist.md)
+- [读者体验合同闭环：第一阶段实施方案](./plans/reader-experience-contract-phase-one.md)
+- [Payoff Ledger 基础加固：第二阶段实施方案](./plans/payoff-ledger-foundation-phase-two.md)
+- [P0 基础安全闭环：幽灵承诺与重规划闸门](./plans/payoff-ledger-safety-phase-three.md)
 
 ### `docs/design`
 
 用于放系统设计、模块接口、产品机制和领域建模说明。
 
+- [产品 UI 总体设计系统](./design/product-ui-design-system.md)
 - [Style Engine v1](./design/style-engine-v1.md)
 - [Style Engine Prompt Compiler v1](./design/style-engine-prompt-compiler-v1.md)
 - [Style Engine Boundary and PRD v2](./design/style-engine-boundary-prd-v2.md)

@@ -26,6 +26,22 @@ Web API 只接收命令和返回轻量投影；Worker 负责执行重型生产�
 
 ## 当前规则
 
+### 逐步协作与自动模式兼容
+
+`stage_review` 是现有自动导演链上的显式逐步协作策略，不是另一套生成管线。它复用相同的 StepModule、PolicyEngine、Artifact Ledger 和 asset-first recovery，但每次只执行一个可恢复步骤，随后写入 `step_review_required` 检查点。检查点 seed 必须保留当前 `stepId`、`nodeKey`、目标范围和完成时间，继续操作才允许进入下一个未完成步骤。
+
+逐步协作的三个动作边界如下：
+
+- `validate` 只读取当前步骤的 readiness、completion、progress 和 recovery facts，不写规划资产。
+- `improve` 复用当前步骤模块重新执行，并把用户校准要求加入本次步骤输入；`regenerate` 在此基础上先创建快照。
+- `accept_manual_changes_and_continue` 复用原导演任务，不新建 takeover，不重新生成候选，也不把一次校准要求带入后续步骤。继续时由资产事实重新找到第一个未完成步骤。
+
+人工保存的规划资产必须登记为 `user_edited`、`protectedUserContent=true`，更新内容 hash 和版本。上游规划变化只让依赖它的下游规划 artifact 变为 `stale`；`chapter_draft` 不因规划重算被清空或标记为可覆盖。`volume_beat_sheet` 和 `volume_chapter_list` 是独立 artifact 类型，用于区分节奏板、拆章列表和章节正文。
+
+新书与已有项目接管的前期导演任务统一使用 `auto_to_ready`。`auto_to_execution` 和 `full_book_autopilot` 只允许在 `production_experience_required` 交接后，由生产方式命令写入原任务；它们不能作为启动参数绕过正文生产交接。只有用户显式选择 `stage_review`，或在任务检查点点击确认并继续，才使用单步骤暂停策略。
+
+`auto_to_ready` 的目标是连续抵达生产方式交接。角色准备、分卷策略、卷骨架、节奏拆章和章节执行资源同步中的普通系统规划重算，应以安全范围策略自动通过；这些步骤不能写入无 checkpoint 的 `waiting_approval` 抢占最终交接。若步骤会覆盖 `protectedUserContent`，或命中数据完整性、正文保护、模型服务和运行时安全风险，仍必须暂停。
+
 - API route 不直接 `await` 自动导演长任务、章节生成、卷拆章、质量修复或 LLM 生产链路。
 - 高优先级硬约束：自动导演不是第二套章节生成系统。控制面可以有导演专属 command、projection 和审批策略，但正文生成与正文修复的业务执行链必须与手动单章和批量执行共用同一套 runtime。
 - 继续、恢复、重试、接管、审批、取消等用户动作先转为 command，不各自维护独立业务流程。
@@ -41,6 +57,7 @@ Web API 只接收命令和返回轻量投影；Worker 负责执行重型生产�
 - 自动导演 UI 主状态必须由 `DirectorDashboardView` 统一裁决。`DirectorRuntimeProjection`、事实体检、章节进度和工作区摘要都是材料层；它们可以提供诊断、风险和最近事件，但不能在前端各自决定主 badge、主进度、主按钮或是否等待确认。
 - `DirectorDashboardView` 必须携带 `sourceTrace` 和 `progressSource`，让调试者能看到主状态和主进度来自 task、worker、checkpoint、chapter facts 还是 runtime projection。当前端需要显示驾驶舱、进度弹窗、任务中心、任务抽屉或小说页接管提示时，应优先读取这个最终展示模型。书级自动化投影可以继续暴露旧字段做兼容，但这些字段应由 `DirectorDashboardView` 派生，而不是重新裁决主状态。
 - 工作流提醒、章节标题提醒、缺资源风险和 stale artifact 只能作为诊断或辅助操作展示；当 `DirectorDashboardView.mode` 是 `running` 或 `queued` 时，这些提醒不得把主容器、主 badge 或主按钮改成等待确认。
+- 浏览器桌面提醒只消费“导演跟进”投影中的可处理分组：`needs_validation`、`exception`、`pending`。`auto_progress` 和 `replaced` 仍可显示在跟进中心，但不触发系统级通知。提醒开关属于当前浏览器本地偏好，并且必须受浏览器通知权限约束；前端不得为了弹窗重新推断 task status 或绕过跟进投影。
 - 服务重启后不静默续跑长任务，应从真实产物断点判断可恢复范围，再由用户或策略确认继续。
 - 自动导演驱动章节生产时，只能通过 `novelService.startPipelineJob(...)` 或 `resumePipelineJob(...)` 进入统一章节执行主链；导演侧不得直接调用 writer、patch repair、heavy repair 或旧手动修文 service。
 - 自动导演遇到章节质量失败时，只能复用统一质量修复规则：patch first，失败后最多一次 `heavy_repair`，再失败则登记质量债务或 recoverable failure 并继续后续章节。导演 runtime 不得再发明独立的“导演专用修文分支”。
@@ -52,7 +69,10 @@ Web API 只接收命令和返回轻量投影；Worker 负责执行重型生产�
 - 自动导演执行面只能把明确的 `stop_for_replan` / `replan_required` 接入重规划检查点。章节审核返回 `local_patch_plan`、`continue_with_warning`、`patchable_obligation_gap` 或修复后仍有可记录义务缺口时，应登记为质量债务或局部修复建议并继续剩余章节，不能因为 `recommended=true` 就写入 `replanAlertDetails`。
 - `replan_required` 即使出现在全书自动成书或 AI 主驾自动执行中，也仍是阻塞检查点。运行时应停止在实际触发章节，并把摘要写成“已执行至第 N 章，后续需重规划”，不能把目标范围直接显示为已完成。
 - `auto_execute_range` 是用户对当前章节执行范围的显式继续授权。恢复链路即使先回到结构化大纲或执行合同同步，也必须把该授权传入后续 Pipeline 的 `approveAutoExecutionScope`，并在结构化同步后主动进入章节执行节点；不能只依赖自动审批偏好，否则命令会成功结束但章节执行节点仍停在审批门。
-- 现有项目接管没有显式 `autoExecutionPlan` 时，默认范围是“全书前置规划接管”，不是章节范围。`auto_to_ready` 从故事宏观规划或项目设定开始时应先补齐 Story Macro / Book Contract / 角色 / 卷战略 / 拆章，直到 `chapter_batch_ready` 再交接；只有用户显式选择章节范围或卷范围时，才应用章节范围 / 卷范围的入口限制。
+- 用户确认书级方向后，自动导演先完成角色、卷战略、节奏拆章与章节执行资源准备，并在正文启动前写入 `production_experience_required`。驾驶舱、任务抽屉、创建进度页和项目工作台必须把它投影为同一个生产方式选择。选择简易创作后，原任务切换到全书自动成书并继续章节执行；选择专业创作后，前期任务完成且正文保持未启动。
+- 新书自动导演创建的恢复入口是独立页面 `/novels/auto-director?taskId=<workflowTaskId>`。`taskId` 是前端 URL 的主参数；旧的 `/novels/create?mode=director&workflowTaskId=<id>` 只作为兼容输入，进入后应规范化到新页面。任务中心、恢复入口、候选确认链接和服务端 `sourceRoute` 都应指向新页面，保证刷新、桌面重启或崩溃恢复后回到同一个候选/进度现场。
+- `/novels/create` 只承担手动创建表单和旧链接跳转，不再挂载自动导演弹窗。自动导演候选批次、定向修订、标题重做、候选确认和执行进度都属于独立创建页主区，不能再通过候选弹窗套在创建弹窗里展示。
+- 现有项目接管的默认范围是“全书前置规划接管”，不是章节范围。接管可以选择资产起点，但导演必须先补齐 Story Macro / Book Contract / 角色 / 卷战略 / 拆章，随后停在 `production_experience_required`；接管入口携带的旧章节范围或全书自动参数不得提前启动正文。
 - 现有项目接管的用户入口应优先呈现“系统推荐接续位置 + 资产保护说明 + 一键继续”。阶段选择、重跑当前步、范围执行、自动审批等属于高级控制，默认折叠。只有会覆盖或重建已有资产的动作才需要显式确认；普通 `continue_existing` 不应让用户先理解内部阶段卡片才能启动。
 - 接管入口的进度体检应把“系统看到的资产”直接展示给用户，至少包含卷规划、拆章同步、章节细化、正文书写和质量进度。若 URL 或上下文携带 `workspaceTaskId` / `directorTaskId`，前端应并行读取该任务快照，并优先用任务真实阶段、当前章节和任务状态解释主按钮；任务快照读取失败时再退回小说资产体检，不能让慢体检阻塞弹窗打开。
 - 接管入口只能把 `directorTaskId`、当前 active auto-director task 或 live auto-director projection 作为“当前导演任务”上下文。`workspaceTaskId` 属于普通编辑工作流 lane，不能传入接管弹窗参与“进入当前任务”判断；否则被本地收起但仍处于 `waiting_approval` 的手动流程会误导接管入口，以为存在可继续的自动导演任务。
@@ -102,8 +122,11 @@ Web API 只接收命令和返回轻量投影；Worker 负责执行重型生产�
 - 执行详情显示 `character.cast.prepare 未满足其完成标准`：先检查任务是否已有 `character_setup_required` 检查点和 `CharacterCastOption` 候选。如果候选存在，应修复 acceptable pause 或任务投影，而不是要求重新生成整条主链；如果候选不存在，再检查角色生成 Prompt、结构化输出和持久化路径。
 - UI 显示失败但任务已重新排队：检查 projection 是否仍把旧 task status 当事实源。
 - 小说实际存在失败导演任务但 AI 驾驶舱显示空闲：先检查当前 URL 是否只有 `workspaceTaskId` 而没有 `directorTaskId`，再查 `book-automation` 投影是否已经返回 `projection.status=failed` 和 `latestTask.id`。如果投影有失败任务但侧栏仍隐藏，说明前端把未钉住的失败投影当成历史终态过滤了；正确行为是显示失败投影，并让“查看失败原因”跳转到带 `directorTaskId` 的任务详情。
+- 候选确认或恢复入口回到 `/novels/create`：检查 `resumeTargetToRoute`、书级自动化投影、任务 UI helper 和移动端入口是否仍在生成旧的 `workflowTaskId + mode=director` 链接。正确链接应使用 `/novels/auto-director?taskId=...`，旧链接只应由前端兼容跳转处理。
 - 服务重启后假 running：检查租约过期、active step、command 状态和产物断点是否统一投影。
 - 重复点击继续产生多条执行链：检查 command 幂等键和 active command 复用。
+- 到达可开写后直接进入工作台或开始生成正文：检查最终规划阶段是否仍写 `chapter_batch_ready`，或新书 / 接管启动参数是否保留了旧自动执行模式。正确状态必须先停在 `production_experience_required`。
+- `auto_to_ready` 停在“等待确认分卷策略”且没有 checkpoint：检查运行策略是否把普通 `downstream_recompute` 当成人工审批。前期规划门应自动使用安全范围授权，用户保护内容仍由 policy gate 拦截。
 
 不能用前端禁用按钮或降低轮询频率掩盖执行面阻塞。
 
@@ -118,6 +141,8 @@ Web API 只接收命令和返回轻量投影；Worker 负责执行重型生产�
 - `server/src/workers/`
 - `client/src/pages/novels/components/NovelAutoDirectorProgressPanel.tsx`
 - `client/src/pages/tasks/TaskCenterPage.tsx`
+- `client/src/components/autoDirector/AutoDirectorPauseNotificationWatcher.tsx`
+- `client/src/pages/settings/AutoDirectorBrowserNotificationSettingsCard.tsx`
 
 ## 来源文档
 

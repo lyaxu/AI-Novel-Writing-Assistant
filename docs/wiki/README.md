@@ -17,12 +17,19 @@ Wiki 不记录单次提交改了什么，也不替代 release notes。它只记�
 
 - [模块边界与文档治理](./architecture/module-boundaries.md)
 - [当前模型选择与厂商默认模型边界](./architecture/model-selection.md)
+- [配置项归属与可见性规范](./architecture/configuration-conventions.md)
 
 ### Workflows
 
 - [自动导演 Runtime 与恢复边界](./workflows/auto-director-runtime.md)
+- [简易创作模式](./product/simple-creation-mode.md)
 - [章节生产链路](./workflows/chapter-production-chain.md)
+- [读者体验合同](./workflows/reader-experience-contract.md)
+- [Payoff Ledger 来源与同步合同](./workflows/payoff-ledger-contract.md)
+- [角色资源账本工作流](./workflows/character-resource-ledger.md)
+- [通用角色主体与跨来源角色对话](./workflows/universal-character-conversation.md)
 - [拆书工作流](./workflows/book-analysis-workflow.md)
+- [图片生成确认与统一运行时](./workflows/image-generation-confirmation-runtime.md)
 - [Creative Hub 边界](./workflows/creative-hub-boundary.md)
 
 ### Prompts
@@ -40,6 +47,7 @@ Wiki 不记录单次提交改了什么，也不替代 release notes。它只记�
 ### Product
 
 - [新手优先与整本小说完成原则](./product/beginner-first-novel-completion.md)
+- [工作台状态表达与下一步合同](./product/workspace-status-expression.md)
 
 ## 写作边界
 

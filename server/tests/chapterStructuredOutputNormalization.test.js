@@ -3,13 +3,128 @@ const assert = require("node:assert/strict");
 
 const {
   chapterAcceptanceAssessmentSchema,
+  chapterAcceptanceAssessmentPrompt,
 } = require("../dist/prompting/prompts/novel/chapterAcceptance.prompts.js");
 const {
   chapterArtifactDeltaOutputSchema,
 } = require("../dist/prompting/prompts/novel/chapterArtifactDelta.prompts.js");
 const {
+  characterResourceExtractionOutputSchema,
+} = require("../dist/prompting/prompts/novel/characterResource.promptSchemas.js");
+const {
   timelineExtractorOutputSchema,
 } = require("../dist/prompting/prompts/novel/timelineExtractor.prompts.js");
+const {
+  createChapterExecutionContractSchema,
+} = require("../dist/services/novel/volume/volumeGenerationSchemas.js");
+
+test("chapter execution contract requires reader experience and scene experience fields", () => {
+  const schema = createChapterExecutionContractSchema();
+  const scene = (index) => ({
+    key: `scene_${index}`,
+    title: `场景${index}`,
+    purpose: "推进本章任务。",
+    mustAdvance: ["形成可见推进"],
+    mustPreserve: ["保持主线连续"],
+    entryState: `入口${index}`,
+    exitState: `出口${index}`,
+    forbiddenExpansion: ["不要越过下一章"],
+    targetWordCount: 1000,
+    resistance: "敌方施加具体阻力。",
+    turn: "主角改变策略并夺回一步主动。",
+    emotionalShift: "压迫转为反击期待。",
+    readerValue: "读者获得推进和局部回报。",
+  });
+  const base = {
+    purpose: "完成第一次反压。",
+    exclusiveEvent: "主角第一次迫使敌方后退。",
+    endingState: "主角获得局部主动。",
+    nextChapterEntryState: "敌方准备升级反扑。",
+    conflictLevel: 70,
+    revealLevel: 40,
+    targetWordCount: 3000,
+    mustAvoid: "不要提前揭露幕后黑手。",
+    payoffRefs: [],
+    taskSheet: "让主角主动试探并拿到可见收益。",
+    sceneCards: [scene(1), scene(2), scene(3)],
+  };
+  assert.equal(schema.safeParse(base).success, false);
+  assert.equal(schema.safeParse({
+    ...base,
+    readerExperience: {
+      readerQuestion: "主角能否完成第一次反压？",
+      promisedReward: "主角拿到第一次可见主动权。",
+      rewardLevel: "partial",
+      protagonistWant: "迫使敌方后退。",
+      primaryResistance: "敌方掌握资源优势。",
+      keyTurn: "主角识破并利用敌方漏洞。",
+      emotionalShift: "受压转为反击快感。",
+      informationReveal: "敌方封锁存在漏洞。",
+      netChange: "主角从被动转为局部主动。",
+      inheritedHookResponsibilities: ["回应上一章留下的钥匙"],
+      endingHook: "敌方启动更强反扑。",
+    },
+  }).success, true);
+});
+
+function makeResourceDelta(index = 1) {
+  return {
+    resourceName: `关键资源${index}`,
+    resourceType: "credential",
+    updateType: "introduced",
+    holderCharacterName: "主角",
+    ownerType: "character",
+    ownerName: "主角",
+    statusAfter: "available",
+    readerKnows: true,
+    holderKnows: true,
+    knownByCharacterNames: ["主角"],
+    narrativeFunction: "key",
+    summary: `主角获得关键资源${index}。`,
+    narrativeImpact: "影响后续行动边界。",
+    evidence: [`主角收起关键资源${index}。`],
+    confidence: 0.9,
+    riskLevel: "low",
+  };
+}
+
+test("character resource extraction schemas cap resource deltas at eight items", () => {
+  const nineDeltas = Array.from({ length: 9 }, (_, index) => makeResourceDelta(index + 1));
+
+  assert.throws(() => {
+    characterResourceExtractionOutputSchema.parse({
+      updates: nineDeltas,
+      continuityRisks: [],
+    });
+  });
+
+  assert.throws(() => {
+    chapterArtifactDeltaOutputSchema.parse({
+      summary: "本章产生过多资源变化。",
+      stateDeltas: {
+        summary: "状态无变化。",
+        characterStates: [],
+        relationStates: [],
+        informationStates: [],
+        foreshadowStates: [],
+      },
+      characterResourceDeltas: nineDeltas,
+      payoffDeltas: [],
+      relationDynamics: [],
+      factionUpdates: [],
+      characterCandidates: [],
+      syncPlan: {
+        stateSnapshot: "skip",
+        characterResources: "write",
+        payoffLedger: "skip",
+        characterDynamics: "skip",
+        reason: "只测试资源上限。",
+      },
+      confidence: 0.9,
+      requiresFullReconcile: false,
+    });
+  });
+});
 
 test("chapter acceptance schema normalizes common review category and repair target aliases", () => {
   const parsed = chapterAcceptanceAssessmentSchema.parse({
@@ -53,6 +168,67 @@ test("chapter acceptance schema normalizes common review category and repair tar
   assert.equal(parsed.repairDirectives[1].target, "voice");
   assert.deepEqual(parsed.missingObligations, []);
   assert.equal(parsed.repairability, "none");
+});
+
+test("chapter acceptance schema normalizes common status aliases", () => {
+  const base = {
+    score: {
+      coherence: 85,
+      pacing: 80,
+      repetition: 88,
+      engagement: 82,
+      voice: 83,
+      overall: 84,
+    },
+    summary: "本章可以继续。",
+    blockingIssues: [],
+    repairDirectives: [],
+    missingObligations: [],
+    riskTags: [],
+    assetSyncRecommendation: {
+      priority: "normal",
+      reason: "普通同步即可。",
+      requiresFullPayoffReconcile: false,
+    },
+    continuePolicy: "continue",
+  };
+
+  assert.equal(chapterAcceptanceAssessmentSchema.parse({
+    ...base,
+    status: "acceptable",
+  }).status, "accepted");
+  assert.equal(chapterAcceptanceAssessmentSchema.parse({
+    ...base,
+    status: "repair",
+  }).status, "repairable");
+  assert.equal(chapterAcceptanceAssessmentSchema.parse({
+    ...base,
+    status: "manual",
+  }).status, "needs_manual_review");
+  assert.equal(chapterAcceptanceAssessmentSchema.parse({
+    ...base,
+    status: "proceed",
+  }).status, "continue_with_risk");
+});
+
+test("chapter acceptance prompt forbids status alias values", () => {
+  const messages = chapterAcceptanceAssessmentPrompt.render({
+    novelTitle: "测试小说",
+    chapterOrder: 1,
+    chapterTitle: "测试章节",
+    targetWordCount: 3000,
+    content: "主角完成本章任务。",
+  }, {
+    blocks: [],
+    selectedBlockIds: [],
+    droppedBlockIds: [],
+    summarizedBlockIds: [],
+    estimatedInputTokens: 0,
+  });
+  const systemText = String(messages[0].content);
+
+  assert.match(systemText, /status 只能使用 accepted、repairable、needs_manual_review、continue_with_risk/);
+  assert.match(systemText, /不得输出 acceptable、pass、passed、ok、approved/);
 });
 
 test("chapter acceptance schema accepts obligation diagnostics", () => {

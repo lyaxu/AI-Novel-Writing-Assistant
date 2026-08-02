@@ -112,8 +112,13 @@ export function useNovelVolumePlanning({
     [normalizedSavedVolumes, normalizedVolumeDraft],
   );
   const readiness = useMemo(
-    () => buildVolumePlanningReadiness({ volumes: normalizedVolumeDraft, strategyPlan, beatSheets }),
-    [beatSheets, normalizedVolumeDraft, strategyPlan],
+    () => buildVolumePlanningReadiness({
+      volumes: normalizedVolumeDraft,
+      strategyPlan,
+      critiqueReport,
+      beatSheets,
+    }),
+    [beatSheets, critiqueReport, normalizedVolumeDraft, strategyPlan],
   );
   const currentChapterCount = useMemo(
     () => normalizedVolumeDraft.reduce((sum, volume) => sum + volume.chapters.length, 0),
@@ -387,8 +392,11 @@ export function useNovelVolumePlanning({
     chapterId: string,
     field: keyof Pick<VolumePlan["chapters"][number], "conflictLevel" | "revealLevel" | "targetWordCount">,
     value: number | null,
+    options: {
+      conflictLevelSource?: VolumePlan["chapters"][number]["conflictLevelSource"];
+    } = {},
   ) => {
-    updateVolumeDraft((prev) => updateChapterNumberFieldDraft(prev, volumeId, chapterId, field, value), {
+    updateVolumeDraft((prev) => updateChapterNumberFieldDraft(prev, volumeId, chapterId, field, value, options), {
       clearRebalanceDecisions: true,
     });
   };

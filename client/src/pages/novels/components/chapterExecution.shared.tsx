@@ -56,6 +56,21 @@ export type QueueFilterOption = {
   count: number;
 };
 
+/**
+ * 手动新建的空白章节尚未进入任何生产步骤时，才允许从章节执行队列移除。
+ * 这里刻意不按标题判断，避免用户改名后失去操作能力，也避免误删 AI 已规划的章节。
+ */
+export function canRemoveEmptyManualChapter(chapter: Chapter): boolean {
+  return chapter.generationState === "planned"
+    && (chapter.chapterStatus ?? "unplanned") === "unplanned"
+    && !chapter.content?.trim()
+    && !chapter.expectation?.trim()
+    && !chapter.taskSheet?.trim()
+    && !chapter.sceneCards?.trim()
+    && !chapter.repairHistory?.trim()
+    && !chapter.riskFlags?.trim();
+}
+
 export interface ChapterExecutionFlowStage {
   key: ChapterExecutionFlowStageKey;
   label: string;
@@ -121,7 +136,8 @@ function hasRuntimeResourceData(runtimePackage: ChapterRuntimePackage | null | u
       context.availableItems.length > 0
       || context.setupNeededItems.length > 0
       || context.blockedItems.length > 0
-      || context.pendingReviewItems.length > 0
+      || context.highRiskCommittedItems.length > 0
+      || context.pendingProposalItems.length > 0
       || context.riskSignals.length > 0
     ),
   );
@@ -425,6 +441,8 @@ function qualityLoopArtifactLabel(value: unknown): string | null {
       return "连贯性风险";
     case "rolling_window_review":
       return "章节衔接风险";
+    case "prose_quality":
+      return "正文自然度/退化检测";
     default:
       return null;
   }

@@ -242,7 +242,11 @@ export function buildStrategyContext(strategyPlan: VolumeStrategyPlan | null): s
 
 export function buildStoryMacroContext(storyMacroPlan: StoryMacroPlan | null): string {
   if (!storyMacroPlan) {
-    return "none";
+    return [
+      "none",
+      "degradation rule: story macro is missing, so volume strategy must stay conservative.",
+      "uncertainty rule: add uncertainty markers for macro-level selling point, conflict escalation, progression loop, and payoff mapping.",
+    ].join("\n");
   }
   return [
     storyMacroPlan.decomposition?.selling_point ? `selling point: ${storyMacroPlan.decomposition.selling_point}` : "",
@@ -260,6 +264,9 @@ export function buildVolumeCountGuidanceContext(volumeCountGuidance: VolumeCount
     `chapter budget: ${volumeCountGuidance.chapterBudget}`,
     `target chapter range per volume: ${volumeCountGuidance.targetChapterRange.min}-${volumeCountGuidance.targetChapterRange.max} chapters (ideal ${volumeCountGuidance.targetChapterRange.ideal})`,
     `allowed volume count range: ${volumeCountGuidance.allowedVolumeCountRange.min}-${volumeCountGuidance.allowedVolumeCountRange.max}`,
+    `decision volume count range: ${volumeCountGuidance.decisionVolumeCountRange.min}-${volumeCountGuidance.decisionVolumeCountRange.max}`,
+    `volume scale profile: ${volumeCountGuidance.volumeScaleProfile}`,
+    `volume count rationale: ${volumeCountGuidance.volumeCountRationale}`,
     `system recommended volume count: ${volumeCountGuidance.systemRecommendedVolumeCount}`,
     `active recommended volume count: ${volumeCountGuidance.recommendedVolumeCount}`,
     `hard planned volume range: ${volumeCountGuidance.hardPlannedVolumeRange.min}-${volumeCountGuidance.hardPlannedVolumeRange.max}`,
@@ -323,6 +330,53 @@ export function buildBeatChapterRangeContext(input: {
 export function buildBeatChapterSummary(summary: string | null | undefined): string {
   const normalized = summary?.trim();
   return normalized ? normalized : "none";
+}
+
+function formatConflictLevel(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? String(Math.round(value)) : "none";
+}
+
+function describeConflictStep(
+  previous: number | null | undefined,
+  current: number | null | undefined,
+): string {
+  if (typeof previous !== "number" || typeof current !== "number") {
+    return "unknown";
+  }
+  if (current > previous) {
+    return "rise";
+  }
+  if (current < previous) {
+    return "fall";
+  }
+  return "flat";
+}
+
+export function buildConflictLevelCurveContext(
+  volume: VolumePlan,
+  targetChapterId?: string,
+): string {
+  const sortedChapters = volume.chapters
+    .slice()
+    .sort((left, right) => left.chapterOrder - right.chapterOrder);
+  if (sortedChapters.length === 0) {
+    return "none";
+  }
+
+  return sortedChapters.map((chapter, index) => {
+    const previous = index > 0 ? sortedChapters[index - 1] : null;
+    const next = index < sortedChapters.length - 1 ? sortedChapters[index + 1] : null;
+    const isTarget = targetChapterId ? chapter.id === targetChapterId : false;
+    const isUserAnchored = chapter.conflictLevelSource === "user" && typeof chapter.conflictLevel === "number";
+    return [
+      `${isTarget ? "target " : ""}chapter ${chapter.chapterOrder}: ${chapter.title}`,
+      `conflictLevel=${formatConflictLevel(chapter.conflictLevel)}`,
+      `source=${chapter.conflictLevelSource ?? "ai"}`,
+      `fromPrevious=${describeConflictStep(previous?.conflictLevel, chapter.conflictLevel)}`,
+      `toNext=${describeConflictStep(chapter.conflictLevel, next?.conflictLevel)}`,
+      isUserAnchored ? "constraint=用户锚定，不可更改" : "",
+    ].filter(Boolean).join(" | ");
+  }).join("\n");
 }
 
 export function buildChapterNeighborContext(volume: VolumePlan, chapterId: string): string {

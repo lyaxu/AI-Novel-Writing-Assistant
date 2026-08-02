@@ -23,6 +23,7 @@ const WORKFLOW_STAGE_TO_DISPLAY_STAGE: Partial<Record<NovelWorkflowStage | strin
   project_setup: "project_setup",
   auto_director: "project_setup",
   story_macro: "story_planning",
+  world_setup: "world_setup",
   character_setup: "character_setup",
   volume_strategy: "volume_strategy",
   structured_outline: "structured_outline",
@@ -55,6 +56,23 @@ export function getWorkflowStepCatalogEntry(stepId: string): WorkflowStepCatalog
     throw new Error(`Unknown workflow step catalog entry: ${stepId}`);
   }
   return entry;
+}
+
+export function getOrderedWorkflowStepCatalogEntriesByStage(
+  stage: string,
+): WorkflowStepCatalogEntry[] {
+  return WORKFLOW_STEP_CATALOG
+    .filter((entry) => entry.stage === stage)
+    .slice()
+    .sort((a, b) => {
+      const orderDiff = (a.orchestrationOrder ?? Number.MAX_SAFE_INTEGER)
+        - (b.orchestrationOrder ?? Number.MAX_SAFE_INTEGER);
+      return orderDiff !== 0 ? orderDiff : a.id.localeCompare(b.id);
+    });
+}
+
+export function getWorkflowStepPrerequisiteIds(stepId: string): string[] {
+  return [...(getWorkflowStepCatalogEntry(stepId).prerequisiteStepIds ?? [])];
 }
 
 export function findWorkflowStepCatalogEntryByNodeKey(

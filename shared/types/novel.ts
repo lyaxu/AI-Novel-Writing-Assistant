@@ -47,6 +47,7 @@ export type {
 export type NovelStatus = "draft" | "published";
 export type NovelWritingMode = "original" | "continuation";
 export type ProjectMode = "ai_led" | "co_pilot" | "draft_mode" | "auto_pipeline";
+export type CreationExperience = "simple" | "professional";
 export type NarrativePov = "first_person" | "third_person" | "mixed";
 export type PacePreference = "slow" | "balanced" | "fast";
 export type EmotionIntensity = "low" | "medium" | "high";
@@ -101,6 +102,74 @@ export type ChapterStatus =
   | "needs_repair"
   | "completed";
 
+export type SimpleCreationShelfChapterStatus =
+  | "waiting_planning"
+  | "waiting_writing"
+  | "generating"
+  | "reviewing"
+  | "completed"
+  | "error";
+
+export interface SimpleCreationShelfProjection {
+  novel: {
+    id: string;
+    title: string;
+    creationExperience: CreationExperience;
+    estimatedChapterCount: number | null;
+  };
+  progress: {
+    directorTaskId: string | null;
+    percent: number;
+    completedChapters: number;
+    totalChapters: number;
+    currentAction: string;
+    status: "queued" | "running" | "paused" | "failed" | "completed";
+    canRetry: boolean;
+    safetyMessage?: string | null;
+  };
+  chapters: Array<{
+    id: string;
+    order: number;
+    title: string;
+    status: SimpleCreationShelfChapterStatus;
+    wordCount: number;
+    content: string | null;
+    updatedAt: string;
+  }>;
+  materials: {
+    description: string | null;
+    characterCount: number;
+    volumeCount: number;
+    openQualityDebtCount: number;
+    story: {
+      coreSellingPoint: string | null;
+      readingPromise: string | null;
+      first30ChapterPromise: string | null;
+      protagonistFantasy: string | null;
+    };
+    world: {
+      name: string;
+      summary: string | null;
+    } | null;
+    characters: Array<{
+      id: string;
+      name: string;
+      role: string;
+      storyFunction: string | null;
+      currentGoal: string | null;
+      personality: string | null;
+    }>;
+    volumes: Array<{
+      id: string;
+      order: number;
+      title: string;
+      summary: string | null;
+      mainPromise: string | null;
+      chapterCount: number;
+    }>;
+  };
+}
+
 export type PipelineRunMode = "fast" | "polish";
 export type ArtifactSyncMode = "adaptive" | "deferred" | "strict";
 export type PipelineRepairMode =
@@ -154,6 +223,7 @@ export interface Novel {
   status: NovelStatus;
   writingMode: NovelWritingMode;
   projectMode?: ProjectMode | null;
+  creationExperience: CreationExperience;
   narrativePov?: NarrativePov | null;
   pacePreference?: PacePreference | null;
   styleTone?: string | null;
@@ -725,6 +795,7 @@ export interface VolumeChapterPlan {
   endingState?: string | null;
   nextChapterEntryState?: string | null;
   conflictLevel?: number | null;
+  conflictLevelSource?: "ai" | "user" | null;
   revealLevel?: number | null;
   targetWordCount?: number | null;
   mustAvoid?: string | null;
@@ -760,10 +831,15 @@ export interface VolumeChapterTargetRange {
   max: number;
 }
 
+export type VolumeScaleProfile = "short" | "compact" | "standard" | "long" | "epic" | "mega";
+
 export interface VolumeCountGuidance {
   chapterBudget: number;
   targetChapterRange: VolumeChapterTargetRange;
   allowedVolumeCountRange: VolumeCountRange;
+  decisionVolumeCountRange: VolumeCountRange;
+  volumeScaleProfile: VolumeScaleProfile;
+  volumeCountRationale: string;
   recommendedVolumeCount: number;
   systemRecommendedVolumeCount: number;
   hardPlannedVolumeRange: VolumeCountRange;
@@ -800,7 +876,10 @@ export interface VolumeStrategyPlan {
 
 export interface VolumeBeat {
   key: string;
+  /** 稳定职能名，例如「开卷抓手」。 */
   label: string;
+  /** 本卷定制短标题，例如「夜市夺印」。 */
+  title?: string | null;
   summary: string;
   chapterSpanHint: string;
   mustDeliver: string[];
@@ -918,6 +997,24 @@ export interface VolumePlanDiff {
   affectedChapterOrders: number[];
 }
 
+export type VolumeBeatImpactStatus =
+  | "pending"
+  | "stale"
+  | "locked_with_draft";
+
+export interface VolumeBeatImpactItem {
+  volumeId: string;
+  volumeOrder: number;
+  volumeTitle: string;
+  beatKey: string;
+  beatLabel: string;
+  beatTitle?: string | null;
+  chapterOrders: number[];
+  status: VolumeBeatImpactStatus;
+  reason: "ungenerated" | "generated_without_draft" | "locked_with_draft";
+  hasDraftContent: boolean;
+}
+
 export interface VolumeImpactResult {
   novelId: string;
   sourceVersion: number | null;
@@ -925,6 +1022,11 @@ export interface VolumeImpactResult {
   affectedVolumeCount: number;
   affectedChapterCount: number;
   affectedVolumes: VolumePlanDiffVolume[];
+  affectedBeats?: VolumeBeatImpactItem[];
+  staleBeatCount?: number;
+  lockedBeatCount?: number;
+  defaultImpactAction?: string;
+  advancedImpactActions?: string[];
   requiresChapterSync: boolean;
   requiresCharacterReview: boolean;
   recommendedActions: string[];

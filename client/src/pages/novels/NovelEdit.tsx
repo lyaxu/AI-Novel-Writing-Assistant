@@ -2,11 +2,13 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BOOK_ANALYSIS_SECTIONS } from "@ai-novel/shared/types/bookAnalysis";
-import type { DirectorContinuationMode, DirectorLockScope, DirectorSessionState } from "@ai-novel/shared/types/novelDirector";
+import type { DirectorContinuationMode, DirectorLockScope, DirectorSessionState, DirectorStepCalibrationAction } from "@ai-novel/shared/types/novelDirector";
+import { extractDirectorTaskSeedPayloadFromMeta } from "@ai-novel/shared/types/novelDirector";
 import type { AutoDirectorAction, AutoDirectorMutationActionCode } from "@ai-novel/shared/types/autoDirectorFollowUp";
 import type { DirectorBookAutomationAction, DirectorDashboardMode, DirectorTaskSnapshot } from "@ai-novel/shared/types/directorRuntime";
 import type { NovelExportDownloadFormat, NovelExportScope } from "@ai-novel/shared/types/novelExport";
 import type {
+  Chapter,
   PipelineRepairMode,
   PipelineRunMode,
   ReviewIssue,
@@ -17,10 +19,11 @@ import type {
   VolumeStrategyPlan,
 } from "@ai-novel/shared/types/novel";
 import NovelEditView from "./components/NovelEditView";
+import NovelProductionExperienceHandoff from "./components/NovelProductionExperienceHandoff";
 import type { LLMSelectorValue } from "@/components/common/LLMSelector";
 import { getBaseCharacterList } from "@/api/character";
 import { flattenGenreTreeOptions, getGenreTree } from "@/api/genre";
-import { getDirectorBookAutomationProjection, getDirectorTaskSnapshot } from "@/api/novelDirector";
+import { acceptManualChangesAndContinueDirector, calibrateDirectorStep, getDirectorBookAutomationProjection, getDirectorTaskSnapshot } from "@/api/novelDirector";
 import { continueNovelWorkflow, getActiveAutoDirectorTask } from "@/api/novelWorkflow";
 import { archiveTask, cancelTask, getTaskDetail, retryTask } from "@/api/tasks";
 import { executeAutoDirectorFollowUpAction, getAutoDirectorFollowUpDetail } from "@/api/autoDirectorFollowUps";
@@ -340,7 +343,7 @@ export default function NovelEdit() {
   });
   const shouldLoadVolumeWorkspace = activeTab === "outline" || activeTab === "structured";
   const shouldLoadStoryMacro = activeTab === "story_macro";
-  const shouldLoadWorldSlice = activeTab === "basic";
+  const shouldLoadWorldSlice = activeTab === "basic" || activeTab === "world";
   const shouldLoadQualityReport = activeTab === "pipeline";
   const shouldLoadLatestState = activeTab === "chapter" || activeTab === "pipeline";
   const shouldLoadPayoffLedger = activeTab === "structured" || activeTab === "chapter" || activeTab === "pipeline";
@@ -353,6 +356,12 @@ export default function NovelEdit() {
     queryFn: () => getNovelDetail(id),
     enabled: Boolean(id),
   });
+
+  useEffect(() => {
+    if (novelDetailQuery.data?.data?.creationExperience === "simple") {
+      navigate(`/novels/${id}/simple`, { replace: true });
+    }
+  }, [id, navigate, novelDetailQuery.data?.data?.creationExperience]);
   const qualityReportQuery = useQuery({
     queryKey: queryKeys.novels.qualityReport(id),
     queryFn: () => getNovelQualityReport(id),
@@ -563,7 +572,7 @@ export default function NovelEdit() {
     () => basicForm.title.trim() || novelDetailQuery.data?.data?.title?.trim() || id,
     [basicForm.title, novelDetailQuery.data?.data?.title, id],
   );
-  const currentExportScope = isNovelWorkspaceFlowTab(activeTab) ? activeTab : null;
+  const currentExportScope = isNovelWorkspaceFlowTab(activeTab) && activeTab !== "world" ? activeTab : null;
   const importedBaseCharacterIds = useMemo(
     () => new Set(
       characters
@@ -1054,6 +1063,36 @@ export default function NovelEdit() {
       toast.error(message);
     },
   });
+  const calibrateDirectorStepMutation = useMutation({
+    mutationFn: async (input: {
+      directorTaskId: string;
+      stepId: string;
+      action: DirectorStepCalibrationAction;
+      instruction?: string | null;
+    }) => calibrateDirectorStep(input.directorTaskId, {
+      stepId: input.stepId,
+      action: input.action,
+      instruction: input.instruction,
+    }),
+    onSuccess: async (_response, input) => {
+      await invalidateAutoDirectorTaskState(input.directorTaskId);
+      toast.success(input.action === "validate" ? "当前步骤检查已完成。" : "当前步骤已更新，请检查结果。");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "步骤校准失败。");
+    },
+  });
+  const acceptManualChangesAndContinueMutation = useMutation({
+    mutationFn: (directorTaskId: string) => acceptManualChangesAndContinueDirector(directorTaskId),
+    onSuccess: async (response, directorTaskId) => {
+      setDirectorTaskId(response.data?.taskId ?? directorTaskId);
+      await invalidateAutoDirectorTaskState(response.data?.taskId ?? directorTaskId);
+      toast.success("已确认当前修改，导演将从下一个未完成步骤继续。");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "确认修改并继续失败。");
+    },
+  });
   const continueAutoExecutionMutation = useMutation({
     mutationFn: async (input?: { directorTaskId?: string; continuationMode?: "auto_execute_range" | "skip_quality_repair" }) => {
       const targetTaskId = input?.directorTaskId || actionTargetDirectorTaskId;
@@ -1466,6 +1505,62 @@ export default function NovelEdit() {
         onClick: () => continueAutoDirectorMutation.mutate({ directorTaskId: task.id }),
         variant: "default",
         disabled: continueAutoDirectorMutation.isPending,
+      });
+    } else if (mode === "waiting" && task.checkpointType === "step_review_required") {
+      const stepReview = extractDirectorTaskSeedPayloadFromMeta(task.meta)?.stepReview;
+      const stepId = stepReview?.stepId?.trim() || task.currentItemKey?.trim() || "";
+      const requestCalibrationInstruction = (action: DirectorStepCalibrationAction): string | null | undefined => {
+        if (action === "validate") {
+          return null;
+        }
+        const value = window.prompt("告诉 AI 这一步需要调整什么（可留空）", "");
+        return value === null ? undefined : value.trim();
+      };
+      if (stepId) {
+        actions.push({
+          label: calibrateDirectorStepMutation.isPending ? "检查中..." : "AI 检查当前步骤",
+          onClick: () => calibrateDirectorStepMutation.mutate({
+            directorTaskId: task.id,
+            stepId,
+            action: "validate",
+          }),
+          variant: "outline",
+          disabled: calibrateDirectorStepMutation.isPending,
+        });
+        actions.push({
+          label: calibrateDirectorStepMutation.isPending ? "完善中..." : "AI 完善当前步骤",
+          onClick: () => {
+            const instruction = requestCalibrationInstruction("improve");
+            if (instruction !== undefined) {
+              calibrateDirectorStepMutation.mutate({ directorTaskId: task.id, stepId, action: "improve", instruction });
+            }
+          },
+          variant: "outline",
+          disabled: calibrateDirectorStepMutation.isPending,
+        });
+        actions.push({
+          label: calibrateDirectorStepMutation.isPending ? "生成中..." : "重新生成当前步骤",
+          onClick: () => {
+            const instruction = requestCalibrationInstruction("regenerate");
+            if (instruction !== undefined) {
+              calibrateDirectorStepMutation.mutate({ directorTaskId: task.id, stepId, action: "regenerate", instruction });
+            }
+          },
+          variant: "outline",
+          disabled: calibrateDirectorStepMutation.isPending,
+        });
+      }
+      actions.push({
+        label: acceptManualChangesAndContinueMutation.isPending ? "确认中..." : "保存并确认",
+        onClick: () => acceptManualChangesAndContinueMutation.mutate(task.id),
+        variant: "default",
+        disabled: acceptManualChangesAndContinueMutation.isPending,
+      });
+      actions.push({
+        label: acceptManualChangesAndContinueMutation.isPending ? "继续中..." : "继续自动导演",
+        onClick: () => acceptManualChangesAndContinueMutation.mutate(task.id),
+        variant: "outline",
+        disabled: acceptManualChangesAndContinueMutation.isPending,
       });
     } else if (mode === "waiting" && task.checkpointType === "chapter_batch_ready") {
       actions.push({
@@ -2029,6 +2124,7 @@ export default function NovelEdit() {
     readiness: buildVolumePlanningReadiness({
       volumes: normalizedVolumeDraft,
       strategyPlan: volumeStrategyPlan,
+      critiqueReport: volumeCritiqueReport,
       beatSheets: volumeBeatSheets,
     }),
     derivedOutline: outlineText,
@@ -2180,6 +2276,7 @@ export default function NovelEdit() {
     optimizeStructuredMutation,
     syncStructuredChaptersMutation,
     createChapterMutation,
+    deleteManualChapterMutation,
     runPipelineMutation,
     reviewMutation,
     hookMutation,
@@ -2202,6 +2299,7 @@ export default function NovelEdit() {
     pipelineForm,
     selectedChapterId,
     chapterCount: novelDetailQuery.data?.data?.chapters?.length ?? 0,
+    chapters,
     setActiveTab,
     setSelectedChapterId,
     setCurrentJobId,
@@ -2270,6 +2368,7 @@ export default function NovelEdit() {
   });
 
   const goToCharacterTab = () => setActiveTab("character");
+  const goToStructuredTab = () => setActiveTab("structured");
   const {
     generateChapterPlanMutation,
     replanChapterMutation,
@@ -2301,7 +2400,7 @@ export default function NovelEdit() {
   });
 
   const renderTakeoverEntry = (
-    step: "basic" | "story_macro" | "character" | "outline" | "structured" | "chapter" | "pipeline",
+    step: "basic" | "story_macro" | "world" | "character" | "outline" | "structured" | "chapter" | "pipeline",
     variant: "default" | "outline" | "secondary" = "default",
   ) => {
     const takeoverContextTaskId = resolveTakeoverDialogContextTaskId({
@@ -2384,6 +2483,7 @@ export default function NovelEdit() {
     isGeneratingSkeleton,
     onGenerateSkeleton: startSkeletonGeneration,
     onGoToCharacterTab: goToCharacterTab,
+    onGoToStructuredTab: goToStructuredTab,
     latestStateSnapshot,
     payoffLedger,
     characterResources,
@@ -2461,6 +2561,15 @@ export default function NovelEdit() {
     onGoToCharacterTab: goToCharacterTab,
     onCreateChapter: () => createChapterMutation.mutate(),
     isCreatingChapter: createChapterMutation.isPending,
+    onRemoveChapter: (chapter: Chapter) => {
+      const confirmed = window.confirm(`确认移除「第${chapter.order}章 ${chapter.title || "未命名章节"}」吗？该章节尚未开始写作，移除后不可恢复。`);
+      if (confirmed) {
+        deleteManualChapterMutation.mutate(chapter.id);
+      }
+    },
+    removingChapterId: deleteManualChapterMutation.isPending
+      ? deleteManualChapterMutation.variables ?? null
+      : null,
     chapterOperationMessage,
     strategy: chapterStrategy,
     onStrategyChange: (field: "runMode" | "wordSize" | "conflictLevel" | "pace" | "aiFreedom", value: string | number) =>
@@ -2600,6 +2709,8 @@ export default function NovelEdit() {
   const activeStepTakeoverEntry = renderTakeoverEntry(
     activeTab === "story_macro"
       ? "story_macro"
+      : activeTab === "world"
+        ? "world"
       : activeTab === "character"
         ? "character"
         : activeTab === "outline"
@@ -2625,6 +2736,16 @@ export default function NovelEdit() {
   const isExportingFullJson = exportNovelMutation.isPending
     && exportVariables?.scope === "full"
     && exportVariables?.format === "json";
+
+  if (displayAutoDirectorTask?.checkpointType === "production_experience_required") {
+    return (
+      <NovelProductionExperienceHandoff
+        taskId={displayAutoDirectorTask.id}
+        novelId={id}
+        novelTitle={basicForm.title}
+      />
+    );
+  }
 
   return (
     <NovelEditView
@@ -2657,6 +2778,7 @@ export default function NovelEdit() {
         },
       }}
       basicTab={basicTab}
+      worldTab={basicTab}
       storyMacroTab={storyMacroTab}
       outlineTab={outlineTab}
       structuredTab={structuredTab}

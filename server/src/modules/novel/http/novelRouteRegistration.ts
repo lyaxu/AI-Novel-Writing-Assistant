@@ -5,6 +5,9 @@ import { registerNovelChapterEditorRoutes } from "../production/http/novelChapte
 import { registerNovelChapterRoutes } from "../production/http/novelChapterRoutes";
 import { registerNovelChapterGenerationRoutes } from "../production/http/novelChapterGeneration";
 import { registerNovelCharacterDynamicsRoutes } from "../characters/http/novelCharacterDynamicsRoutes";
+import { registerNovelCharacterInfluenceRoutes } from "../characters/http/novelCharacterInfluenceRoutes";
+import { registerNovelCharacterDialogueRoutes } from "../characters/http/novelCharacterDialogueRoutes";
+import { registerNovelCharacterMindRoutes } from "../characters/http/novelCharacterMindRoutes";
 import { registerNovelCharacterPreparationRoutes } from "../characters/http/novelCharacterPreparationRoutes";
 import { registerNovelCharacterResourceRoutes } from "../characters/http/novelCharacterResourceRoutes";
 import { registerNovelCharacterSyncRoutes } from "../characters/http/novelCharacterSyncRoutes";
@@ -21,6 +24,7 @@ import { registerNovelWorldSliceRoutes } from "../setup/http/novelWorldSliceRout
 import novelChapterSummaryRouter from "../production/http/novelChapterSummary";
 import novelDecisionsRouter from "../state/http/novelDecisions";
 import type { NovelHttpServices } from "./novelHttpServices";
+import { guardSimpleCreationUserWrites } from "./simpleCreationWriteGuard";
 import {
   aiRevisionPreviewSchema,
   arcPlanParamsSchema,
@@ -75,6 +79,8 @@ function forwardBusinessError(error: unknown, next: (err?: unknown) => void): bo
 export function registerNovelHttpRoutes(router: Router, services: NovelHttpServices): void {
   const { novelService, novelDraftOptimizeService } = services;
 
+  router.use("/:id", guardSimpleCreationUserWrites);
+
   registerNovelBaseRoutes({
     router,
     novelService,
@@ -119,6 +125,21 @@ export function registerNovelHttpRoutes(router: Router, services: NovelHttpServi
     router,
     novelService,
     idParamsSchema,
+  });
+
+  registerNovelCharacterMindRoutes({
+    router,
+    novelService,
+  });
+
+  registerNovelCharacterInfluenceRoutes({
+    router,
+    novelService,
+  });
+
+  registerNovelCharacterDialogueRoutes({
+    router,
+    novelService,
   });
 
   registerNovelCharacterPreparationRoutes({

@@ -17,6 +17,10 @@ import {
   buildRuntimePackage,
   type ChapterRuntimePlannerPort,
 } from "./chapterRuntimePackageBuilders";
+import {
+  buildProseQualityAuditReport,
+  detectProseQuality,
+} from "./proseQuality/ProseQualityDetector";
 
 export interface ChapterContentFinalizationAgentRuntime {
   finishChapterGenRun: (runId: string, summary: string, durationMs: number) => Promise<void>;
@@ -74,10 +78,18 @@ export class ChapterContentFinalizationService {
       request: input.request,
     });
     const timelineCheck = timelineGate.result;
+    const proseQualityReport = detectProseQuality(finalContent);
+    const proseQualityAuditReport = buildProseQualityAuditReport({
+      novelId: input.novelId,
+      chapterId: input.chapterId,
+      report: proseQualityReport,
+    });
     const auditResult = {
       score: acceptance.score,
       issues: acceptance.issues,
-      auditReports: acceptance.auditReports,
+      auditReports: proseQualityAuditReport
+        ? [...acceptance.auditReports, proseQualityAuditReport]
+        : acceptance.auditReports,
     };
     const styleReview: StyleReviewResult = {
       report: null,

@@ -213,6 +213,79 @@ test("runFromReady completes immediately when repaired chapters leave no remaini
   assert.equal(calls[1][4], 0);
 });
 
+test("runFromReady keeps partial structured outline windows resumable after the current beat completes", async () => {
+  const calls = [];
+  const runtime = new NovelDirectorAutoExecutionRuntime({
+    novelContextService: {
+      async listChapters() {
+        return [
+          { id: "chapter-1", order: 1, generationState: "approved" },
+          { id: "chapter-2", order: 2, generationState: "published" },
+        ];
+      },
+    },
+    novelService: {
+      async startPipelineJob() {
+        throw new Error("should not start a new pipeline job");
+      },
+      async findActivePipelineJobForRange() {
+        return null;
+      },
+      async getPipelineJobById() {
+        return null;
+      },
+      async cancelPipelineJob() {},
+    },
+    workflowService: {
+      async bootstrapTask(input) {
+        calls.push(["bootstrapTask", input.seedPayload.autoExecution.volumeChapterListComplete]);
+      },
+      async getTaskById() {
+        return { status: "waiting_approval" };
+      },
+      async markTaskRunning() {
+        calls.push(["markTaskRunning"]);
+      },
+      async recordCheckpoint(taskId, input) {
+        calls.push([
+          "recordCheckpoint",
+          taskId,
+          input.checkpointType,
+          input.seedPayload.directorSession.phase,
+          input.seedPayload.autoExecution.remainingChapterCount,
+          input.seedPayload.autoExecution.volumeChapterListComplete,
+        ]);
+      },
+      async markTaskFailed() {
+        calls.push(["markTaskFailed"]);
+      },
+    },
+    buildDirectorSeedPayload(_request, _novelId, extra) {
+      return extra ?? {};
+    },
+  });
+
+  await runtime.runFromReady({
+    taskId: "task-partial-auto-exec",
+    novelId: "novel-1",
+    request: buildRequest({ runMode: "full_book_autopilot" }),
+    existingState: {
+      enabled: true,
+      mode: "book",
+      firstChapterId: "chapter-1",
+      startOrder: 1,
+      endOrder: 2,
+      totalChapterCount: 2,
+      volumeChapterListComplete: false,
+    },
+  });
+
+  assert.deepEqual(calls, [
+    ["bootstrapTask", false],
+    ["recordCheckpoint", "task-partial-auto-exec", "chapter_batch_ready", "structured_outline", 0, false],
+  ]);
+});
+
 test("runFromReady reuses an existing active range job before starting a new pipeline", async () => {
   const calls = [];
   let pipelineCompleted = false;
@@ -1339,124 +1412,6 @@ test("runFromReady keeps full-book replan notices blocking instead of auto-compl
   assert.equal(calls.some((call) => call[0] === "replanNovel"), false);
   assert.ok(calls.some((call) => call[0] === "recordCheckpoint" && call[2] === "replan_required"));
   assert.equal(calls.some((call) => call[0] === "recordCheckpoint" && call[2] === "workflow_completed"), false);
-});
-
-test("runFromReady auto-continues soft full-book replan notices", async () => {
-  const calls = [];
-  let phase = "initial";
-  const runtime = new NovelDirectorAutoExecutionRuntime({
-    novelContextService: {
-      async listChapters() {
-        if (phase === "initial") {
-          return [
-            withExecutionDetail({ id: "chapter-1", order: 1, generationState: "planned", chapterStatus: "unplanned", content: "" }),
-            withExecutionDetail({ id: "chapter-2", order: 2, generationState: "planned", chapterStatus: "unplanned", content: "" }),
-          ];
-        }
-        if (phase === "completed") {
-          return [
-            { id: "chapter-1", order: 1, generationState: "repaired", chapterStatus: "completed", content: "正文1" },
-            { id: "chapter-2", order: 2, generationState: "approved", chapterStatus: "completed", content: "正文2" },
-          ];
-        }
-        return [
-          { id: "chapter-1", order: 1, generationState: "repaired", chapterStatus: "completed", content: "正文1" },
-          withExecutionDetail({ id: "chapter-2", order: 2, generationState: "planned", chapterStatus: "unplanned", content: "" }),
-        ];
-      },
-    },
-    novelService: {
-      async startPipelineJob(_novelId, options) {
-        calls.push(["startPipelineJob", options.startOrder, options.endOrder, options.controlPolicy.advanceMode]);
-        return calls.filter((call) => call[0] === "startPipelineJob").length === 1
-          ? { id: "job-soft-replan", status: "queued" }
-          : { id: "job-after-soft-replan", status: "queued" };
-      },
-      async findActivePipelineJobForRange() {
-        return null;
-      },
-      async getPipelineJobById(jobId) {
-        calls.push(["getPipelineJobById", jobId]);
-        if (jobId === "job-after-soft-replan") {
-          phase = "completed";
-          return {
-            id: jobId,
-            status: "succeeded",
-            progress: 1,
-            currentStage: null,
-            currentItemLabel: null,
-            noticeSummary: null,
-            error: null,
-          };
-        }
-        phase = "after_soft_replan_notice";
-        return {
-          id: "job-soft-replan",
-          status: "succeeded",
-          progress: 1,
-          currentStage: null,
-          currentItemLabel: null,
-          payload: JSON.stringify({
-            repairMode: "heavy_repair",
-            replanAlertDetails: [
-              "第1章需要重规划（原因=正文已完成本章核心剧情和收尾钩子，且没有严重越界；未兑现项主要来自任务合同中混入后续阶段目标，与本章禁止提前展开的边界冲突，不构成暂停人工确认的必要条件。）",
-            ],
-          }),
-          noticeCode: "PIPELINE_REPLAN_REQUIRED",
-          noticeSummary: "State-driven replan is required before continuing: 计划义务配置风险而非正文必须返工问题",
-          error: null,
-        };
-      },
-      async cancelPipelineJob() {},
-    },
-    workflowService: {
-      async bootstrapTask(input) {
-        calls.push(["bootstrapTask", input.seedPayload.autoExecution?.qualityRepairRisk?.autoContinuable ?? null]);
-      },
-      async getTaskById() {
-        return { status: "running" };
-      },
-      async markTaskRunning() {
-        calls.push(["markTaskRunning"]);
-      },
-      async recordCheckpoint(taskId, input) {
-        calls.push(["recordCheckpoint", taskId, input.checkpointType]);
-      },
-      async markTaskFailed() {
-        calls.push(["markTaskFailed"]);
-      },
-    },
-    buildDirectorSeedPayload(_request, _novelId, extra) {
-      return extra ?? {};
-    },
-    async recordAutoApproval(input) {
-      calls.push(["recordAutoApproval", input.checkpointType, input.qualityRepairRisk.riskLevel]);
-    },
-  });
-
-  await runtime.runFromReady({
-    taskId: "task-auto-exec",
-    novelId: "novel-1",
-    request: buildRequest({ runMode: "full_book_autopilot" }),
-    existingState: {
-      enabled: true,
-      mode: "book",
-      firstChapterId: "chapter-1",
-      startOrder: 1,
-      endOrder: 2,
-      totalChapterCount: 2,
-      pipelineJobId: null,
-      pipelineStatus: null,
-    },
-  });
-
-  assert.deepEqual(calls.filter((call) => call[0] === "startPipelineJob").map((call) => call.slice(1)), [
-    [1, 1, "full_book_autopilot"],
-    [2, 2, "full_book_autopilot"],
-  ]);
-  assert.ok(calls.some((call) => call[0] === "recordAutoApproval" && call[1] === "replan_required"));
-  assert.equal(calls.some((call) => call[0] === "recordCheckpoint" && call[2] === "replan_required"), false);
-  assert.ok(calls.some((call) => call[0] === "recordCheckpoint" && call[2] === "workflow_completed"));
 });
 
 test("runFromReady keeps repeated full-book replan loops as replan checkpoints", async () => {
