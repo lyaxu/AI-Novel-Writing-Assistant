@@ -55,12 +55,21 @@
 - If a workflow belongs in another module, explain the correct user entry point directly, for example "从小说基础信息设置书级默认写法", rather than "书级默认写法已经迁回小说页".
 - Before finishing UI work, review newly added copy and rewrite any sentence that sounds like it is talking to the developer or describing the modification process.
 
+## UI Visual Rules
+
+- The client uses project-owned UI primitives, Tailwind CSS, and semantic CSS variables. Do not add or install new shadcn/ui components, run shadcn generators, or treat shadcn defaults as the product's visual authority. Existing files under `client/src/components/ui/` are maintained as project-owned compatibility primitives.
+- Use a low-border visual hierarchy by default. Ordinary content grouping must rely on typography, spacing, alignment, subtle background contrast, and section dividers instead of visible card borders and shadows.
+- Default content surfaces must not render a visible border or shadow. Add a border only when it communicates an interaction or semantic boundary: form controls, selected or focus state, warning/error state, table/list separation, drag/drop targets, or floating layers such as dialogs and menus.
+- Avoid nested bordered cards. When a surface already establishes the outer boundary, inner groups should be borderless rows, sections, muted backgrounds, or separators.
+- Shadows are reserved for floating layers and temporary elevation. Persistent page content, dashboards, lists, and settings sections should remain flat unless a documented interaction requires elevation.
+- Before finishing UI work, inspect the result for repeated rectangles. If removing a border does not reduce comprehension or interaction clarity, remove it.
+
 ## Architecture Rules
 
 - If a single source file becomes too long, it must be split into functional modules.
-- Preferred threshold: keep a single source file around 600 lines.
-- Floating range: 500-700 lines is acceptable when module cohesion is still clear and the file is not becoming hard to maintain.
-- Hard threshold: when a source file exceeds 700 lines, refactoring and modularization are mandatory before continuing feature expansion.
+- Preferred threshold: keep a single source file around 1,200 lines.
+- Floating range: 1,000-1,300 lines is acceptable when module cohesion is still clear and the file is not becoming hard to maintain.
+- Hard threshold: when a source file exceeds 1,300 lines, refactoring and modularization are mandatory before continuing feature expansion.
 - Long-file splitting must improve module boundaries, not merely reduce line count.
 - Before splitting a long file, list its responsibilities and separate business rules, application orchestration, persistence/external adapters, and HTTP/API mapping.
 - Do not split an oversized file by adding loose same-level files such as generic `helper`, `utils`, `shared`, or `runtime` files without clear module ownership.

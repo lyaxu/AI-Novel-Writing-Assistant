@@ -26,7 +26,7 @@ import { beginLlmLiveSession } from "../../platform/llm/live/llmLiveSession";
 import { hasRegisteredPromptAsset } from "../registry";
 import { CUSTOM_SLOT_CONTEXT_GROUP } from "../slots/slotResolution";
 import { promptSlotOverrideService } from "../slots/PromptSlotOverrideService";
-import { resolveAdvancedTextPromptMessages } from "../templates/templateRuntime";
+import { resolveAdvancedPromptMessages } from "../templates/templateRuntime";
 import { selectContextBlocks } from "./contextSelection";
 import {
   recordPromptQualityEvent,
@@ -741,6 +741,21 @@ export async function runStructuredPrompt<I, O, R = O>(input: {
     contextBlocks: overlays.blocks,
     resolvedSlots: overlays.resolvedSlots,
   });
+  const resolvedTemplateMessages = await resolveAdvancedPromptMessages({
+    asset: input.asset,
+    promptInput: input.promptInput,
+    context: prepared.context,
+    officialMessages: prepared.messages,
+    novelId: input.options?.novelId,
+  });
+  const messages = resolvedTemplateMessages === prepared.messages
+    ? prepared.messages
+    : appendStructuredOutputHintMessages({
+    asset: input.asset,
+    promptInput: input.promptInput,
+    context: prepared.context,
+    messages: resolvedTemplateMessages,
+  });
   logPromptEvent({
     event: "started",
     asset: input.asset as PromptAsset<unknown, unknown, unknown>,
@@ -749,7 +764,7 @@ export async function runStructuredPrompt<I, O, R = O>(input: {
     model: input.options?.model,
   });
   const startedAt = Date.now();
-  const renderedPromptChars = estimateRenderedPromptChars(prepared.messages);
+  const renderedPromptChars = estimateRenderedPromptChars(messages);
   try {
     const result = await promptRunnerStructuredInvoker<R>({
       label: `${input.asset.id}@${input.asset.version}`,
@@ -760,7 +775,7 @@ export async function runStructuredPrompt<I, O, R = O>(input: {
       timeoutMs: input.options?.timeoutMs,
       signal: input.options?.signal,
       taskType: input.asset.taskType,
-      messages: prepared.messages,
+      messages,
       schema: outputSchema,
       maxRepairAttempts: resolveStructuredRepairAttempts(input.asset as PromptAsset<unknown, unknown, unknown>),
       promptMeta: prepared.invocation,
@@ -786,7 +801,7 @@ export async function runStructuredPrompt<I, O, R = O>(input: {
       asset: input.asset,
       promptInput: input.promptInput,
       context: prepared.context,
-      baseMessages: prepared.messages,
+      baseMessages: messages,
       outputSchema,
       initialResult: result,
       options: input.options,
@@ -856,7 +871,7 @@ export async function runTextPrompt<I>(input: {
     resolvedSlots: overlays.resolvedSlots,
   });
   const startedAt = Date.now();
-  const messages = await resolveAdvancedTextPromptMessages({
+  const messages = await resolveAdvancedPromptMessages({
     asset: input.asset,
     promptInput: input.promptInput,
     context: prepared.context,
@@ -955,7 +970,7 @@ export async function streamTextPrompt<I>(input: {
     resolvedSlots: overlays.resolvedSlots,
   });
   const startedAt = Date.now();
-  const messages = await resolveAdvancedTextPromptMessages({
+  const messages = await resolveAdvancedPromptMessages({
     asset: input.asset,
     promptInput: input.promptInput,
     context: prepared.context,

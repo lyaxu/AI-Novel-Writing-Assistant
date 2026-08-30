@@ -20,10 +20,7 @@ import type { NovelVolumeService } from "../volume/NovelVolumeService";
 import type { NovelWorkflowService } from "../workflow/NovelWorkflowService";
 import { recordAutoDirectorAutoApprovalFromTask } from "../../task/autoDirectorFollowUps/autoDirectorAutoApprovalAudit";
 import { normalizeDirectorMemoryScope } from "./runtime/autoDirectorMemorySafety";
-import {
-  buildWorkflowSeedPayload,
-  normalizeDirectorRunMode,
-} from "./runtime/novelDirectorHelpers";
+import { buildWorkflowSeedPayload, normalizeDirectorRunMode } from "./runtime/novelDirectorHelpers";
 import {
   type DirectorCharacterSetupPhaseResult,
   runDirectorCharacterSetupPhase,

@@ -1,6 +1,5 @@
 import type { BaseMessageChunk } from "@langchain/core/messages";
 import type { StreamDoneHelpers, StreamDonePayload } from "../../../llm/streaming";
-import type { QualityScore, ReviewIssue } from "@ai-novel/shared/types/novel";
 import { prisma } from "../../../db/prisma";
 import { auditService } from "../../audit/AuditService";
 import { plannerService } from "../../planner/PlannerService";
@@ -15,15 +14,21 @@ import type {
   PipelineRuntimeInput,
   PipelineRuntimeResult,
 } from "./chapterRuntimePipeline";
-import type { RepairOptions, ReviewOptions } from "../novelCoreShared";
+import type { RepairOptions } from "../novelCoreShared";
 import { ChapterRepairStreamRuntime } from "./repair/ChapterRepairStreamRuntime";
 import { ChapterQualityGateService } from "./ChapterQualityGateService";
 import { ChapterContentFinalizationService } from "./ChapterContentFinalizationService";
-import type { ChapterTimelineFinalizationService } from "./ChapterTimelineFinalizationService";
 import { ChapterStreamGenerationOrchestrator } from "./ChapterStreamGenerationOrchestrator";
 import { ChapterPipelineRuntimeAdapter } from "./ChapterPipelineRuntimeAdapter";
 import {
-  createDefaultReviewChapterAfterRepair,
+  chapterTimelineFinalizationService,
+  type ChapterTimelineFinalizationService,
+} from "./ChapterTimelineFinalizationService";
+import {
+  chapterLifecycleService,
+  type ChapterLifecycleService,
+} from "./lifecycle";
+import {
   defaultChapterRuntimeAgent,
   type ChapterRuntimeAgentPort,
 } from "./ChapterRuntimeDefaultDeps";
@@ -32,10 +37,9 @@ interface ChapterRuntimeCoordinatorDeps {
   assembler?: Pick<GenerationContextAssembler, "assemble">;
   chapterWritingGraph?: Pick<ChapterWritingGraph, "createChapterStream">;
   artifactSyncService?: Pick<ChapterArtifactSyncService, "saveDraftAndArtifacts" | "syncChapterArtifacts">;
-  auditService?: Pick<typeof auditService, "auditChapter" | "assessChapterAuditNeed">;
+  auditService?: Pick<typeof auditService, "auditChapter">;
   plannerService?: Pick<typeof plannerService, "buildReplanRecommendation" | "shouldTriggerReplanFromAudit">;
   acceptanceAssessmentService?: Pick<ChapterAcceptanceAssessmentService, "assess">;
-  timelineFinalizer?: Pick<ChapterTimelineFinalizationService, "finalizeCurrentContent" | "ensurePreviousChapterFinalized">;
   readinessService?: Pick<ChapterRuntimeReadinessService, "assertReady">;
   agentRuntime?: ChapterRuntimeAgentPort;
   ensureNovelCharacters?: (novelId: string, actionName: string, minCount?: number) => Promise<void>;
@@ -45,12 +49,12 @@ interface ChapterRuntimeCoordinatorDeps {
     options: ChapterRuntimeRequestInput,
   ) => Promise<unknown>;
   validateRequest?: (input: ChapterRuntimeRequestInput) => ChapterRuntimeRequestInput;
-  reviewChapterAfterRepair?: (
-    novelId: string,
-    chapterId: string,
-    options: ReviewOptions,
-  ) => Promise<{ score: QualityScore; issues: ReviewIssue[] }>;
   resolveAuditIssues?: (novelId: string, issueIds: string[]) => Promise<unknown>;
+  timelineFinalizer?: Pick<ChapterTimelineFinalizationService, "finalizeCurrentContent">;
+  lifecycleService?: Pick<
+    ChapterLifecycleService,
+    "saveWorkingContent" | "markChapterStatus" | "markGenerationState"
+  >;
 }
 
 export class ChapterRuntimeCoordinator {
@@ -61,13 +65,14 @@ export class ChapterRuntimeCoordinator {
   private readonly pipelineAdapter: ChapterPipelineRuntimeAdapter;
 
   constructor(deps: ChapterRuntimeCoordinatorDeps = {}) {
-    const artifactSyncService = deps.artifactSyncService ?? new ChapterArtifactSyncService();
+    const lifecycleService = deps.lifecycleService ?? chapterLifecycleService;
+    const artifactSyncService = deps.artifactSyncService ?? new ChapterArtifactSyncService(lifecycleService);
     const agentRuntime = this.getAgentRuntime(deps.agentRuntime);
     const assembler = deps.assembler ?? new GenerationContextAssembler();
     const chapterWritingGraph = deps.chapterWritingGraph ?? this.createDefaultChapterWritingGraph(artifactSyncService);
     const plannerRuntime = deps.plannerService ?? plannerService;
+    const chapterAuditService = deps.auditService ?? auditService;
     const acceptanceAssessmentService = deps.acceptanceAssessmentService ?? new ChapterAcceptanceAssessmentService();
-    const reviewChapterAfterRepair = deps.reviewChapterAfterRepair ?? createDefaultReviewChapterAfterRepair();
     const ensureNovelCharacters = deps.ensureNovelCharacters ?? this.ensureNovelCharacters.bind(this);
     const validateRequest = deps.validateRequest ?? ((input) => chapterRuntimeRequestSchema.parse(input));
 
@@ -78,9 +83,10 @@ export class ChapterRuntimeCoordinator {
     this.contentFinalizationService = new ChapterContentFinalizationService({
       qualityGateService: this.qualityGateService,
       artifactSyncService,
-      timelineFinalizer: deps.timelineFinalizer,
       plannerService: plannerRuntime,
       agentRuntime,
+      timelineFinalizer: deps.timelineFinalizer ?? chapterTimelineFinalizationService,
+      lifecycleService,
     });
     this.streamOrchestrator = new ChapterStreamGenerationOrchestrator({
       assembler,
@@ -95,13 +101,16 @@ export class ChapterRuntimeCoordinator {
       streamOrchestrator: this.streamOrchestrator,
       artifactSyncService,
       contentFinalizationService: this.contentFinalizationService,
-      timelineFinalizer: deps.timelineFinalizer,
+      timelineFinalizer: deps.timelineFinalizer ?? chapterTimelineFinalizationService,
+      lifecycleService,
       ensureNovelCharacters,
     });
     this.repairStreamRuntime = new ChapterRepairStreamRuntime({
       assembler,
+      auditService: chapterAuditService,
       artifactSyncService,
-      reviewChapterAfterRepair,
+      contentFinalizationService: this.contentFinalizationService,
+      lifecycleService,
       resolveAuditIssues: deps.resolveAuditIssues,
     });
   }

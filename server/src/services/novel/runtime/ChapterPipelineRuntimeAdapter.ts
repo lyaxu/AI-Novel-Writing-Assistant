@@ -1,5 +1,3 @@
-import { prisma } from "../../../db/prisma";
-import { mergeChapterPatchForGenerationStateBump } from "../chapterLifecycleState";
 import { ChapterArtifactSyncService } from "./ChapterArtifactSyncService";
 import {
   runPipelineChapterWithRuntime,
@@ -11,11 +9,9 @@ import {
   isChapterEmptyContentError,
 } from "./chapterEmptyContentError";
 import type { ChapterContentFinalizationService } from "./ChapterContentFinalizationService";
-import {
-  chapterTimelineFinalizationService,
-  type ChapterTimelineFinalizationService,
-} from "./ChapterTimelineFinalizationService";
 import type { ChapterStreamGenerationOrchestrator } from "./ChapterStreamGenerationOrchestrator";
+import type { ChapterTimelineFinalizationService } from "./ChapterTimelineFinalizationService";
+import type { ChapterLifecycleService } from "./lifecycle";
 
 export interface ChapterPipelineRuntimeAdapterDeps {
   streamOrchestrator: Pick<
@@ -24,17 +20,16 @@ export interface ChapterPipelineRuntimeAdapterDeps {
   >;
   artifactSyncService: Pick<ChapterArtifactSyncService, "saveDraftAndArtifacts" | "syncChapterArtifacts">;
   contentFinalizationService: Pick<ChapterContentFinalizationService, "finalizeChapterContent">;
-  timelineFinalizer?: Pick<ChapterTimelineFinalizationService, "finalizeCurrentContent">;
+  timelineFinalizer: Pick<ChapterTimelineFinalizationService, "finalizeCurrentContent">;
+  lifecycleService: Pick<ChapterLifecycleService, "markGenerationState">;
   ensureNovelCharacters: (novelId: string, actionName: string, minCount?: number) => Promise<void>;
 }
 
 export class ChapterPipelineRuntimeAdapter {
   private readonly deps: ChapterPipelineRuntimeAdapterDeps;
-  private readonly timelineFinalizer: Pick<ChapterTimelineFinalizationService, "finalizeCurrentContent">;
 
   constructor(deps: ChapterPipelineRuntimeAdapterDeps) {
     this.deps = deps;
-    this.timelineFinalizer = deps.timelineFinalizer ?? chapterTimelineFinalizationService;
   }
 
   async runPipelineChapter(
@@ -87,7 +82,7 @@ export class ChapterPipelineRuntimeAdapter {
             };
           },
           finalizeChapterTimeline: async (input) => {
-            await this.timelineFinalizer.finalizeCurrentContent({
+            await this.deps.timelineFinalizer.finalizeCurrentContent({
               novelId: input.novelId,
               chapterId: input.chapterId,
               content: input.content,
@@ -121,9 +116,6 @@ export class ChapterPipelineRuntimeAdapter {
     chapterId: string,
     generationState: "reviewed" | "approved",
   ): Promise<void> {
-    await prisma.chapter.update({
-      where: { id: chapterId },
-      data: mergeChapterPatchForGenerationStateBump({}, generationState),
-    });
+    await this.deps.lifecycleService.markGenerationState(chapterId, generationState);
   }
 }

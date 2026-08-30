@@ -3,6 +3,9 @@ import type { BookContract } from "./novelWorkflow";
 import type { NovelWorkflowCheckpoint } from "./novelWorkflow";
 import type { NovelStoryMode } from "./storyMode";
 import type { TaskStatus, TaskTokenUsageSummary } from "./task";
+import type { NarrativeForm } from "./creationStudio";
+import type { WritingPlatform } from "./writingPlatform";
+import type { DirectorRiskHistoryItem } from "./directorRisk";
 export type {
   BaseCharacter,
   Character,
@@ -107,6 +110,8 @@ export type SimpleCreationShelfChapterStatus =
   | "waiting_writing"
   | "generating"
   | "reviewing"
+  | "quality_debt"
+  | "replan_required"
   | "completed"
   | "error";
 
@@ -125,7 +130,10 @@ export interface SimpleCreationShelfProjection {
     currentAction: string;
     status: "queued" | "running" | "paused" | "failed" | "completed";
     canRetry: boolean;
+    recoveryAction?: "replan_and_continue" | "continue";
     safetyMessage?: string | null;
+    latestRiskAssessment?: DirectorRiskHistoryItem | null;
+    riskHistory?: DirectorRiskHistoryItem[];
   };
   chapters: Array<{
     id: string;
@@ -183,6 +191,8 @@ export type PipelineRepairMode =
 export interface NovelAutoDirectorTaskSummary {
   id: string;
   status: TaskStatus;
+  /** The production lane selected for this task; used to restore the correct workspace entry. */
+  productionExperience?: "simple" | "professional" | null;
   pendingManualRecovery?: boolean;
   progress: number;
   currentStage?: string | null;
@@ -224,6 +234,11 @@ export interface Novel {
   writingMode: NovelWritingMode;
   projectMode?: ProjectMode | null;
   creationExperience: CreationExperience;
+  narrativeForm: NarrativeForm;
+  targetWordCount?: number | null;
+  derivedFromNovelId?: string | null;
+  writingPlatform?: WritingPlatform | null;
+  writingPlatformProfileVersion?: number | null;
   narrativePov?: NarrativePov | null;
   pacePreference?: PacePreference | null;
   styleTone?: string | null;
@@ -1058,6 +1073,7 @@ export interface VolumeSyncPreview {
 export interface ReplanRecommendation {
   recommended: boolean;
   action?: "continue_with_warning" | "local_patch_plan" | "stop_for_replan";
+  scope?: "local_window" | "global_book";
   reason: string;
   blockingIssueIds: string[];
   blockingLedgerKeys?: string[];

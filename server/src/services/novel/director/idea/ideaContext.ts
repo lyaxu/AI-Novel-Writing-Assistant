@@ -1,9 +1,5 @@
-import type {
-  DirectorIdeaInspirationRequest,
-  DirectorIdeaInspirationsResponse,
-} from "@ai-novel/shared/types/novelDirector";
-import { runStructuredPrompt } from "../../../../prompting/core/promptRunner";
-import { directorIdeaInspirationPrompt } from "../../../../prompting/prompts/novel/ideaInspiration.prompts";
+import type { DirectorIdeaContextRequest } from "@ai-novel/shared/types/novelDirector";
+import { StructuredOutputError } from "../../../../llm/structuredOutput";
 import { buildBookFramingSummary } from "../../bookFraming";
 
 function compactText(value: string | null | undefined): string {
@@ -15,7 +11,7 @@ function line(label: string, value: string | null | undefined): string {
   return text ? `${label}：${text}` : "";
 }
 
-function readerChannelPreferenceLabel(value: DirectorIdeaInspirationRequest["readerChannelPreference"]): string {
+function readerChannelPreferenceLabel(value: DirectorIdeaContextRequest["readerChannelPreference"]): string {
   switch (value) {
     case "ai_judge":
       return "AI 判断";
@@ -30,7 +26,7 @@ function readerChannelPreferenceLabel(value: DirectorIdeaInspirationRequest["rea
   }
 }
 
-function buildContextSummary(input: DirectorIdeaInspirationRequest): string {
+export function buildDirectorIdeaContextSummary(input: DirectorIdeaContextRequest, marketBriefPrompt = ""): string {
   const framing = buildBookFramingSummary({
     targetAudience: input.targetAudience,
     bookSellingPoint: input.bookSellingPoint,
@@ -43,9 +39,13 @@ function buildContextSummary(input: DirectorIdeaInspirationRequest): string {
     line("暂定标题", input.title),
     line("已有概述", input.description),
     line("题材基底", input.genreLabel ?? input.genreId),
+    line("题材说明", input.genreDescription),
     line("主推进模式", input.primaryStoryModeLabel ?? input.primaryStoryModeId),
+    line("主推进说明", input.primaryStoryModeDescription),
     line("副推进模式", input.secondaryStoryModeLabel ?? input.secondaryStoryModeId),
+    line("副推进说明", input.secondaryStoryModeDescription),
     line("世界观", input.worldName ?? input.worldId),
+    marketBriefPrompt.trim() ? `开书市场简报：\n${marketBriefPrompt.trim()}` : "",
     line("读者频道倾向", readerChannelPreferenceLabel(input.readerChannelPreference)),
     input.narrativePov ? `叙事视角：${input.narrativePov}` : "",
     input.pacePreference ? `节奏偏好：${input.pacePreference}` : "",
@@ -55,28 +55,6 @@ function buildContextSummary(input: DirectorIdeaInspirationRequest): string {
   ].filter(Boolean).join("\n");
 }
 
-export class NovelDirectorIdeaInspirationService {
-  async generate(input: DirectorIdeaInspirationRequest): Promise<DirectorIdeaInspirationsResponse> {
-    const result = await runStructuredPrompt({
-      asset: directorIdeaInspirationPrompt,
-      promptInput: {
-        contextSummary: buildContextSummary(input),
-      },
-      options: {
-        provider: input.provider,
-        model: input.model,
-        temperature: Math.max(0.6, input.temperature ?? 0.8),
-      },
-    });
-
-    return {
-      ideas: result.output.ideas.map((idea) => ({
-        angle: idea.angle.trim(),
-        text: idea.text.trim(),
-        tags: idea.tags.map((tag) => tag.trim()).filter(Boolean),
-      })),
-    };
-  }
+export function shouldRetryDirectorIdeaWithOriginalContext(error: unknown): error is StructuredOutputError {
+  return error instanceof StructuredOutputError && error.category !== "transport_error";
 }
-
-export const novelDirectorIdeaInspirationService = new NovelDirectorIdeaInspirationService();

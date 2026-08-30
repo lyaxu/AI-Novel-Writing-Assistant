@@ -12,15 +12,12 @@ import { useLocation } from "react-router-dom";
 import { getQuickSetupStatus } from "@/api/onboarding";
 import { queryKeys } from "@/api/queryKeys";
 import QuickSetupDialog from "./QuickSetupDialog";
+import {
+  shouldOpenAutomaticSetupPrompt,
+  shouldOpenSetupPromptForRoute,
+} from "./creationSetupState";
 
 const DISMISSED_STORAGE_KEY = "ai-novel.quick-setup.dismissed.v1";
-const GATED_ROUTE_PREFIXES = [
-  "/novels/auto-director",
-  "/creative-hub",
-  "/book-analysis",
-  "/style-engine",
-  "/worlds/generator",
-];
 
 interface CreationSetupContextValue {
   readyForCreation: boolean;
@@ -45,6 +42,7 @@ export function useCreationSetup(): CreationSetupContextValue {
 export function CreationSetupProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [forceConfiguration, setForceConfiguration] = useState(false);
   const [automaticPromptChecked, setAutomaticPromptChecked] = useState(false);
   const statusQuery = useQuery({
     queryKey: queryKeys.settings.quickSetup,
@@ -55,6 +53,7 @@ export function CreationSetupProvider({ children }: { children: ReactNode }) {
   const readyForCreation = statusQuery.data?.data?.readyForCreation === true;
 
   const openQuickSetup = useCallback(() => {
+    setForceConfiguration(true);
     setDialogOpen(true);
   }, []);
 
@@ -62,12 +61,13 @@ export function CreationSetupProvider({ children }: { children: ReactNode }) {
     if (readyForCreation) {
       return true;
     }
+    setForceConfiguration(false);
     setDialogOpen(true);
     return false;
   }, [readyForCreation]);
 
   useEffect(() => {
-    if (automaticPromptChecked || statusQuery.isPending || statusQuery.isError) {
+    if (automaticPromptChecked || !statusQuery.isSuccess) {
       return;
     }
     setAutomaticPromptChecked(true);
@@ -75,24 +75,34 @@ export function CreationSetupProvider({ children }: { children: ReactNode }) {
       window.localStorage.removeItem(DISMISSED_STORAGE_KEY);
       return;
     }
-    if (window.localStorage.getItem(DISMISSED_STORAGE_KEY) !== "true") {
+    if (shouldOpenAutomaticSetupPrompt({
+      statusResolved: statusQuery.isSuccess,
+      readyForCreation,
+      dismissed: window.localStorage.getItem(DISMISSED_STORAGE_KEY) === "true",
+    })) {
+      setForceConfiguration(false);
       setDialogOpen(true);
     }
-  }, [automaticPromptChecked, readyForCreation, statusQuery.isError, statusQuery.isPending]);
+  }, [automaticPromptChecked, readyForCreation, statusQuery.isSuccess]);
 
   useEffect(() => {
-    if (
-      !readyForCreation
-      && GATED_ROUTE_PREFIXES.some((prefix) => location.pathname.startsWith(prefix))
-    ) {
+    if (shouldOpenSetupPromptForRoute({
+      statusResolved: statusQuery.isSuccess,
+      readyForCreation,
+      pathname: location.pathname,
+    })) {
+      setForceConfiguration(false);
       setDialogOpen(true);
     }
-  }, [location.pathname, readyForCreation, statusQuery.isError, statusQuery.isPending]);
+  }, [location.pathname, readyForCreation, statusQuery.isSuccess]);
 
   const handleOpenChange = (open: boolean) => {
     setDialogOpen(open);
     if (!open && !readyForCreation) {
       window.localStorage.setItem(DISMISSED_STORAGE_KEY, "true");
+    }
+    if (!open) {
+      setForceConfiguration(false);
     }
   };
 
@@ -120,6 +130,7 @@ export function CreationSetupProvider({ children }: { children: ReactNode }) {
         loading={statusQuery.isPending}
         error={statusQuery.isError}
         onRetry={() => void statusQuery.refetch()}
+        forceConfiguration={forceConfiguration}
       />
     </CreationSetupContext.Provider>
   );

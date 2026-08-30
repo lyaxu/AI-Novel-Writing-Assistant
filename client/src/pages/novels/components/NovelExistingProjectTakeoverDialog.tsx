@@ -169,7 +169,6 @@ export default function NovelExistingProjectTakeoverDialog({
     queryFn: () => getStyleBindings({ targetType: "novel", targetId: novelId }),
     enabled: open && Boolean(novelId),
   });
-
   const readiness = readinessQuery.data?.data ?? null;
   const contextTaskSnapshot = contextTaskSnapshotQuery.data?.data?.snapshot ?? null;
   const contextTaskIsContinuable = Boolean(

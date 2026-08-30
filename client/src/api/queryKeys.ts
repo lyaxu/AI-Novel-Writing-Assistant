@@ -62,6 +62,11 @@ export const queryKeys = {
     detail: (id: string) => ["book-analysis", "detail", id] as const,
     characters: (id: string) => ["book-analysis", "characters", id] as const,
   },
+  marketRadar: {
+    sources: ["market-radar", "sources"] as const,
+    scan: (id: string) => ["market-radar", "scan", id] as const,
+    brief: (id: string) => ["market-radar", "brief", id] as const,
+  },
   writingFormula: {
     all: ["writing-formula"] as const,
     detail: (id: string) => ["writing-formula", "detail", id] as const,
@@ -112,6 +117,7 @@ export const queryKeys = {
     autoDirectorFollowUpDetail: (directorTaskId: string) => ["tasks", "auto-director-follow-up", directorTaskId] as const,
     directorTaskSnapshot: (directorTaskId: string) => ["tasks", "director-task-snapshot", directorTaskId] as const,
     directorRuntime: (directorTaskId: string) => ["tasks", "director-runtime", directorTaskId] as const,
+    directorIssuePolicy: (novelId: string) => ["novels", "director-issue-policy", novelId] as const,
   },
   autoDirectorFollowUps: {
     overview: ["auto-director-follow-ups", "overview"] as const,
@@ -148,6 +154,7 @@ export const queryKeys = {
     modelRouteConnectivity: ["settings", "model-route-connectivity"] as const,
     structuredFallback: ["settings", "structured-fallback"] as const,
     autoDirectorChannels: ["settings", "auto-director-channels"] as const,
+    autoDirectorIssuePolicy: ["settings", "auto-director-issue-policy"] as const,
     autoDirectorApprovalPreferences: ["settings", "auto-director-approval-preferences"] as const,
     pendingReviewAutoPromotion: ["settings", "pending-review-auto-promotion"] as const,
     quickSetup: ["settings", "quick-setup"] as const,

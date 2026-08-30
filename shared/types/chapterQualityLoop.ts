@@ -1,5 +1,5 @@
 import type { ChapterRuntimePackage } from "./chapterRuntime.js";
-import type { QualityScore, ReviewIssue } from "./novel.js";
+import type { QualityScore, ReplanRecommendation, ReviewIssue } from "./novel.js";
 import type {
   ChapterExecutionMissingObligation,
   ChapterFailureClassification,
@@ -83,6 +83,9 @@ export function classifyChapterQualityLoopRisk(
   ) {
     return "blocking";
   }
+  // A chapter can carry local quality debt while the autopilot is explicitly
+  // allowed to continue. The terminal action is the authoritative workflow
+  // decision; do not re-promote the stored recommendation to a global block.
   if (qualityLoop.terminalAction === "defer_and_continue") {
     return "non_blocking_quality_debt";
   }
@@ -122,12 +125,23 @@ export function hasContinuableChapterQualityLoopRiskFlags(riskFlags: string | nu
     );
 }
 
+/**
+ * 标识必须先调整章节窗口的结构性问题。该判断只消费已落库的结构化质量闭环结果，
+ * 供任务投影与阅读入口区分“待优化”与“等待重规划”。
+ */
+export function hasChapterQualityLoopReplanRequiredRiskFlags(riskFlags: string | null | undefined): boolean {
+  const qualityLoop = parseRiskFlagsObject(riskFlags)?.qualityLoop;
+  return isRecord(qualityLoop)
+    && (qualityLoop.rootCauseCode === "replan_required" || qualityLoop.recommendedAction === "replan");
+}
+
 export interface ChapterQualityLoopAssessmentInput {
   chapterId: string;
   chapterOrder?: number | null;
   score: QualityScore;
   issues: ReviewIssue[];
   runtimePackage?: ChapterRuntimePackage | null;
+  replanRecommendation?: ReplanRecommendation | null;
   evaluatedAt?: string | Date;
   previousRepairHistory?: string | null;
 }
@@ -353,8 +367,10 @@ function buildProseQualitySignal(input: ChapterQualityLoopAssessmentInput): Chap
 }
 
 function buildRollingWindowSignal(input: ChapterQualityLoopAssessmentInput): ChapterQualityLoopSignal {
-  const replanRecommendation = input.runtimePackage?.replanRecommendation ?? null;
-  if (replanRecommendation?.recommended && replanRecommendation.action === "stop_for_replan") {
+  const replanRecommendation = input.runtimePackage?.replanRecommendation
+    ?? input.replanRecommendation
+    ?? null;
+  if (replanRecommendation?.recommended && replanRecommendation.scope === "global_book") {
     return {
       artifactType: "rolling_window_review",
       status: "invalid",

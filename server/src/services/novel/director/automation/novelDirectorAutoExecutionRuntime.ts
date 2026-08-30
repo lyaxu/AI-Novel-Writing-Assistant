@@ -9,6 +9,7 @@ import {
   buildDirectorAutoExecutionPausedSummary,
   buildDirectorAutoExecutionScopeLabelFromState,
   buildDirectorAutoExecutionDeferredQualityState,
+  buildDirectorAutoExecutionStageLabel,
   buildDirectorAutoExecutionPipelineOptions,
   resolveDirectorAutoExecutionRepairMode,
   resolveDirectorAutoExecutionWorkflowState,
@@ -38,6 +39,7 @@ import {
 import { prepareRequestedAutoExecution as prepareRequestedAutoExecutionState, resolveAutoExecutionRuntimeRangeAndState, shouldStopAutoExecution } from "./novelDirectorAutoExecutionRuntimePreparation";
 import type { NovelDirectorAutoExecutionRuntimeDeps, PipelineJobSnapshot } from "./novelDirectorAutoExecutionRuntimePorts";
 import { directorAutomationLedgerEventService } from "../runtime/DirectorAutomationLedgerEventService";
+import { prisma } from "../../../../db/prisma";
 import {
   buildDirectorQualityLoopBudgetWindow,
   buildDirectorQualityLoopIssueSignature,
@@ -67,6 +69,7 @@ export class NovelDirectorAutoExecutionRuntime {
     allowSkipReviewBlockedChapter?: boolean;
     approveAutoExecutionScope?: boolean;
     skipCurrentQualityRepair?: boolean;
+    resumePendingManualRecovery?: boolean;
   }): Promise<void> {
     const allowLazyChapterPlanning = isFullBookAutopilotRunMode(input.request.runMode);
     let { range, autoExecution, pipelineJobId } = await prepareRequestedAutoExecutionState(this.deps, {
@@ -79,7 +82,11 @@ export class NovelDirectorAutoExecutionRuntime {
     });
     let knownPipelineJob: PipelineJobSnapshot = null;
     if (pipelineJobId) {
-      knownPipelineJob = await this.resolvePipelineJobForExecution(pipelineJobId);
+      knownPipelineJob = await this.deps.novelService.getPipelineJobById(pipelineJobId);
+      if (knownPipelineJob?.pendingManualRecovery && input.resumePendingManualRecovery) {
+        await this.deps.novelService.resumePipelineJob(knownPipelineJob.id);
+        knownPipelineJob = await this.deps.novelService.getPipelineJobById(knownPipelineJob.id);
+      }
       if (!knownPipelineJob || ["failed", "cancelled"].includes(knownPipelineJob.status)) {
         pipelineJobId = "";
         ({ range, autoExecution } = await resolveAutoExecutionRuntimeRangeAndState(this.deps, {
@@ -124,7 +131,7 @@ export class NovelDirectorAutoExecutionRuntime {
       }
 
       if (pipelineJobId) {
-        const existingJob = knownPipelineJob ?? await this.resolvePipelineJobForExecution(pipelineJobId);
+        const existingJob = knownPipelineJob ?? await this.deps.novelService.getPipelineJobById(pipelineJobId);
         knownPipelineJob = existingJob;
         if (!existingJob || ["failed", "cancelled"].includes(existingJob.status)) {
           pipelineJobId = "";
@@ -182,7 +189,7 @@ export class NovelDirectorAutoExecutionRuntime {
         await this.deps.workflowService.markTaskRunning(input.taskId, {
           stage: "chapter_execution",
           itemKey: "chapter_execution",
-          itemLabel: `正在自动执行${buildDirectorAutoExecutionScopeLabelFromState(autoExecution, range.totalChapterCount)}`,
+          itemLabel: buildDirectorAutoExecutionStageLabel(autoExecution),
           progress: 0.93,
           clearCheckpoint: shouldClearAutoExecutionCheckpoint(input.resumeCheckpointType),
         });
@@ -250,9 +257,38 @@ export class NovelDirectorAutoExecutionRuntime {
         if (await shouldStopAutoExecution(this.deps, input.taskId, pipelineJobId)) {
           return;
         }
-        const job = await this.resolvePipelineJobForExecution(pipelineJobId);
+        const job = await this.deps.novelService.getPipelineJobById(pipelineJobId);
         if (!job) {
           throw new Error("自动执行章节批次时未能找到对应的批量任务。");
+        }
+        if (job.pendingManualRecovery) {
+          const failureMessage = job.error?.trim() || "章节批次已暂停，等待人工确认后继续。";
+          ({ range, autoExecution } = await resolveAutoExecutionRuntimeRangeAndState(this.deps, {
+            novelId: input.novelId,
+            existingState: autoExecution,
+            pipelineJobId,
+            pipelineStatus: job.status,
+            allowLazyChapterPlanning,
+          }));
+          await this.deps.workflowService.markTaskFailed(input.taskId, failureMessage, {
+            stage: "quality_repair",
+            itemKey: "quality_repair",
+            itemLabel: buildDirectorAutoExecutionPausedLabel(autoExecution),
+            checkpointType: "chapter_batch_ready",
+            checkpointSummary: failureMessage,
+            chapterId: autoExecution.nextChapterId ?? range.firstChapterId,
+            progress: job.progress,
+          });
+          await syncAutoExecutionTaskState(this.deps, {
+            taskId: input.taskId,
+            novelId: input.novelId,
+            request: input.request,
+            range,
+            autoExecution,
+            isBackgroundRunning: false,
+            resumeStage: "pipeline",
+          });
+          return;
         }
         if (job.status === "queued" || job.status === "running") {
           const runningState = resolveDirectorAutoExecutionWorkflowState(job, range, autoExecution);
@@ -360,7 +396,9 @@ export class NovelDirectorAutoExecutionRuntime {
             novelId: input.novelId,
             request: input.request,
             range,
-            autoExecution,
+            // The risk decision is part of the checkpoint snapshot so every
+            // recovery surface reads the same explanation immediately.
+            autoExecution: noticeAction.checkpointState,
             pipelineJobId,
             pipelineStatus: job.status,
             checkpointType: noticeAction.checkpointType,
@@ -382,6 +420,16 @@ export class NovelDirectorAutoExecutionRuntime {
         if (job.status === "succeeded") {
           const completedPipelineJobId = pipelineJobId;
           pipelineJobId = "";
+          const handoffTask = await prisma.novelWorkflowTask.findUnique({
+            where: { id: input.taskId },
+            select: { currentItemKey: true, checkpointType: true },
+          }).catch(() => null);
+          if (
+            handoffTask?.currentItemKey === "professional_production_handoff"
+            && handoffTask.checkpointType === "workflow_completed"
+          ) {
+            return;
+          }
           if ((autoExecution.remainingChapterCount ?? 0) > 0) {
             if (this.deps.autoConfirmPendingCandidates) {
               await this.deps.autoConfirmPendingCandidates(input.novelId).catch(() => null);
@@ -667,16 +715,6 @@ export class NovelDirectorAutoExecutionRuntime {
     } catch (error) {
       throw error;
     }
-  }
-
-  private async resolvePipelineJobForExecution(jobId: string): Promise<PipelineJobSnapshot> {
-    let job = await this.deps.novelService.getPipelineJobById(jobId);
-    if (!job?.pendingManualRecovery) {
-      return job;
-    }
-    await this.deps.novelService.resumePipelineJob(job.id);
-    job = await this.deps.novelService.getPipelineJobById(job.id);
-    return job;
   }
 
   private async resolveQualityIssueChapter(

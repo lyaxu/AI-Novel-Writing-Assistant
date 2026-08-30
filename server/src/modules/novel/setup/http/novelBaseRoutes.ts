@@ -1,8 +1,13 @@
 import type { Router } from "express";
 import type { ApiResponse } from "@ai-novel/shared/types/api";
+import {
+  hasChapterQualityLoopReplanRequiredRiskFlags,
+  hasContinuableChapterQualityLoopRiskFlags,
+} from "@ai-novel/shared/types/chapterQualityLoop";
 import { NOVEL_LIST_PAGE_LIMIT_DEFAULT, NOVEL_LIST_PAGE_LIMIT_MAX } from "@ai-novel/shared/types/pagination";
 import { z } from "zod";
 import type { SimpleCreationShelfProjection } from "@ai-novel/shared/types/novel";
+import { parsePersistedDirectorRiskAssessment } from "@ai-novel/shared/types/directorRisk";
 import { prisma } from "../../../../db/prisma";
 import { llmProviderSchema } from "../../../../llm/providerSchema";
 import { validate } from "../../../../middleware/validate";
@@ -13,6 +18,11 @@ import type { NovelApplicationServices } from "../../../../services/novel/applic
 const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(NOVEL_LIST_PAGE_LIMIT_MAX).default(NOVEL_LIST_PAGE_LIMIT_DEFAULT),
+  search: z.string().trim().max(120).optional(),
+  status: z.enum(["draft", "published"]).optional(),
+  narrativeForm: z.enum(["short_story", "long_novel"]).optional(),
+  writingMode: z.enum(["original", "continuation"]).optional(),
+  sort: z.enum(["updated", "created", "progress"]).default("updated"),
 });
 
 const bookAnalysisSectionKeySchema = z.enum([
@@ -29,6 +39,21 @@ const bookAnalysisSectionKeySchema = z.enum([
 const idParamsSchema = z.object({
   id: z.string().trim().min(1),
 });
+const creationExperienceParamsSchema = idParamsSchema.extend({
+  experience: z.enum(["simple", "professional"]),
+});
+
+function parseJsonRecord(value: string | null | undefined): Record<string, unknown> | null {
+  if (!value?.trim()) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 const createNovelSchema = z.object({
   title: z.string().trim().min(1, "标题不能为空。"),
@@ -155,7 +180,7 @@ export function registerNovelBaseRoutes(input: RegisterNovelBaseRoutesInput): vo
   router.get("/", validate({ query: paginationSchema }), async (req, res, next) => {
     try {
       const query = paginationSchema.parse(req.query);
-      const data = await novelService.listNovels({ page: query.page, limit: query.limit });
+      const data = await novelService.listNovels(query);
       const response: ApiResponse<typeof data> = {
         success: true,
         data,
@@ -169,7 +194,14 @@ export function registerNovelBaseRoutes(input: RegisterNovelBaseRoutesInput): vo
 
   router.post("/", validate({ body: createNovelSchema }), async (req, res, next) => {
     try {
-      const data = await novelService.createNovel(req.body as z.infer<typeof createNovelSchema>);
+      const createInput = req.body as z.infer<typeof createNovelSchema>;
+      const foundation = await novelCreateResourceRecommendationService.resolveRequired(createInput);
+      const data = await novelService.createNovel({
+        ...createInput,
+        genreId: foundation.genreId,
+        primaryStoryModeId: foundation.primaryStoryModeId,
+        secondaryStoryModeId: foundation.secondaryStoryModeId,
+      });
       const response: ApiResponse<typeof data> = {
         success: true,
         data,
@@ -280,6 +312,7 @@ export function registerNovelBaseRoutes(input: RegisterNovelBaseRoutesInput): vo
               content: true,
               chapterStatus: true,
               generationState: true,
+              riskFlags: true,
               updatedAt: true,
             },
           },
@@ -302,6 +335,12 @@ export function registerNovelBaseRoutes(input: RegisterNovelBaseRoutesInput): vo
               pendingManualRecovery: true,
               lastError: true,
               checkpointType: true,
+              seedPayloadJson: true,
+              directorEvents: {
+                orderBy: { occurredAt: "desc" },
+                take: 80,
+                select: { id: true, metadataJson: true },
+              },
             },
           },
         },
@@ -311,6 +350,16 @@ export function registerNovelBaseRoutes(input: RegisterNovelBaseRoutesInput): vo
         return;
       }
       const task = novel.workflowTasks[0] ?? null;
+      const seedPayload = parseJsonRecord(task?.seedPayloadJson);
+      const autoExecution = seedPayload?.autoExecution;
+      const autoExecutionRecord = autoExecution && typeof autoExecution === "object" && !Array.isArray(autoExecution)
+        ? autoExecution as Record<string, unknown>
+        : null;
+      const riskHistory = task?.directorEvents.flatMap((event) => {
+        const metadata = parseJsonRecord(event.metadataJson);
+        const assessment = parsePersistedDirectorRiskAssessment(metadata?.riskAssessment);
+        return assessment ? [{ ...assessment, eventId: event.id }] : [];
+      }) ?? [];
       const completedChapters = novel.chapters.filter((chapter) => (
         chapter.chapterStatus === "completed"
         || chapter.generationState === "approved"
@@ -343,24 +392,36 @@ export function registerNovelBaseRoutes(input: RegisterNovelBaseRoutesInput): vo
           currentAction: task?.currentItemLabel ?? (progressStatus === "completed" ? "整本书已完成" : "等待 AI 开始处理"),
           status: progressStatus,
           canRetry: progressStatus === "failed" || progressStatus === "paused",
+          recoveryAction: task?.checkpointType === "replan_required" ? "replan_and_continue" : "continue",
           safetyMessage: task?.lastError ?? null,
+          latestRiskAssessment: riskHistory[0] ?? null,
+          riskHistory,
         },
         chapters: novel.chapters.map((chapter) => {
           const isCompleted = chapter.chapterStatus === "completed"
             || chapter.generationState === "approved"
             || chapter.generationState === "published";
+          const content = chapter.content?.trim() || null;
+          const hasContinuableQualityDebt = Boolean(content)
+            && hasContinuableChapterQualityLoopRiskFlags(chapter.riskFlags);
+          const requiresReplan = hasChapterQualityLoopReplanRequiredRiskFlags(chapter.riskFlags);
           const status: SimpleCreationShelfProjection["chapters"][number]["status"] = isCompleted
             ? "completed"
-            : chapter.chapterStatus === "needs_repair" || chapter.chapterStatus === "pending_review"
-              ? "reviewing"
-              : chapter.chapterStatus === "generating"
-                ? "generating"
-                : chapter.chapterStatus === "pending_generation"
-                  ? "waiting_writing"
-                  : progressStatus === "failed" && task?.checkpointType?.includes("chapter")
-                    ? "error"
-                    : "waiting_planning";
-          const content = isCompleted ? chapter.content?.trim() || null : null;
+            : requiresReplan
+              ? "replan_required"
+              : hasContinuableQualityDebt
+                ? "quality_debt"
+                : chapter.chapterStatus === "needs_repair" || chapter.chapterStatus === "pending_review"
+                  ? "reviewing"
+                  : chapter.chapterStatus === "generating"
+                    ? "generating"
+                    : chapter.chapterStatus === "pending_generation"
+                      ? "waiting_writing"
+                      : progressStatus === "failed" && task?.checkpointType?.includes("chapter")
+                        ? "error"
+                        : "waiting_planning";
+          // 已保存的草稿也可以只读查看。章节状态仍然决定它是否是稳定正文，
+          // 但不能因为正在审校/修复就把已经生成的内容隐藏掉。
           return {
             id: chapter.id,
             order: chapter.order,
@@ -457,11 +518,11 @@ export function registerNovelBaseRoutes(input: RegisterNovelBaseRoutesInput): vo
   );
 
   router.post(
-    "/:id/creation-experience/professional",
-    validate({ params: idParamsSchema }),
+    "/:id/creation-experience/:experience",
+    validate({ params: creationExperienceParamsSchema }),
     async (req, res, next) => {
       try {
-        const { id } = req.params as z.infer<typeof idParamsSchema>;
+        const { id, experience } = req.params as z.infer<typeof creationExperienceParamsSchema>;
         const current = await novelService.getNovelById(id);
         if (!current) {
           res.status(404).json({
@@ -470,13 +531,15 @@ export function registerNovelBaseRoutes(input: RegisterNovelBaseRoutesInput): vo
           } satisfies ApiResponse<null>);
           return;
         }
-        const data = current.creationExperience === "professional"
+        const data = current.creationExperience === experience
           ? current
-          : await novelService.updateNovel(id, { creationExperience: "professional" });
+          : await novelService.updateNovel(id, { creationExperience: experience });
         res.status(200).json({
           success: true,
           data,
-          message: "已转为专业创作，可使用完整编辑工作台。",
+        message: experience === "simple"
+            ? "已切换到简易模式，将优先展示章节进度与成稿。"
+            : "已切换到专业模式，将展示完整创作工作台。",
         } satisfies ApiResponse<typeof data>);
       } catch (error) {
         next(error);
