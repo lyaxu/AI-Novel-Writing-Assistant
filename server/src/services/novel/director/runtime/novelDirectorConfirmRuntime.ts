@@ -33,6 +33,7 @@ import { runStructuredPrompt } from "../../../../prompting/core/promptRunner";
 import { writingPlatformRecommendationPrompt } from "../../../../prompting/prompts/novel/writingPlatformRecommendation.prompts";
 import { writingPlatformProfileService } from "../../../../modules/novel/writing-platform";
 import { prisma } from "../../../../db/prisma";
+import { directorIssuePolicyService } from "../issues/DirectorIssuePolicyService";
 import { novelCreateResourceRecommendationService } from "../../NovelCreateResourceRecommendationService";
 
 type WorkflowTaskSnapshot = Awaited<ReturnType<NovelWorkflowService["getTaskByIdWithoutHealing"]>>;
@@ -180,6 +181,7 @@ export class NovelDirectorConfirmRuntime {
           styleTone: directorInput.styleTone,
           emotionIntensity: directorInput.emotionIntensity,
           aiFreedom: directorInput.aiFreedom,
+          powerSystemPreference: directorInput.powerSystemPreference,
           provider: directorInput.provider,
           model: directorInput.model,
           temperature: directorInput.temperature,
@@ -189,6 +191,10 @@ export class NovelDirectorConfirmRuntime {
           genreId: foundation.genreId,
           primaryStoryModeId: foundation.primaryStoryModeId,
           secondaryStoryModeId: foundation.secondaryStoryModeId,
+          candidate: {
+            ...directorInput.candidate,
+            productionFoundation: foundation.recommendation,
+          },
         };
         const selectedPlatform = resolvedDirectorInput.writingPlatformPreference && resolvedDirectorInput.writingPlatformPreference !== "ai_recommend"
           ? resolvedDirectorInput.writingPlatformPreference
@@ -256,6 +262,8 @@ export class NovelDirectorConfirmRuntime {
               sourceKnowledgeDocumentId: resolvedInput.sourceKnowledgeDocumentId ?? undefined,
               continuationBookAnalysisId: resolvedInput.continuationBookAnalysisId ?? undefined,
               continuationBookAnalysisSections: resolvedInput.continuationBookAnalysisSections ?? undefined,
+              referenceBookAnalysisId: resolvedInput.referenceBookAnalysisId ?? undefined,
+              referenceBookAnalysisSections: resolvedInput.referenceBookAnalysisSections ?? undefined,
             });
             await this.deps.workflowService.attachNovelToTask(workflowTask.id, novel.id, "project_setup");
             return novel;
@@ -284,6 +292,9 @@ export class NovelDirectorConfirmRuntime {
             writingPlatformSnapshotJson: JSON.stringify(platformSnapshot),
           },
         });
+        if (executionDirectorInput.issueGovernanceVersion === 1 && executionDirectorInput.issuePolicy) {
+          await directorIssuePolicyService.saveNovelOverride(createdNovel.id, executionDirectorInput.issuePolicy);
+        }
         await this.deps.ensurePrimaryNovelStyleBinding(createdNovel.id, resolvedInput.styleProfileId);
         const directorSession = buildDirectorSessionState({
           runMode,

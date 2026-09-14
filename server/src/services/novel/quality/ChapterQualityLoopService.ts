@@ -7,7 +7,10 @@ import {
 } from "@ai-novel/shared/types/chapterQualityLoop";
 import { prisma } from "../../../db/prisma";
 import { directorAutomationLedgerEventService } from "../director/runtime/DirectorAutomationLedgerEventService";
-import type { QualityDebtAttribution } from "../runtime/chapterRuntimePipeline";
+import type {
+  ChapterRepairSelectionRecord,
+  QualityDebtAttribution,
+} from "../runtime/chapterRuntimePipeline";
 import { chapterLifecycleService } from "../runtime/lifecycle/ChapterLifecycleService";
 
 interface RecordChapterQualityLoopInput {
@@ -24,6 +27,7 @@ interface RecordChapterQualityLoopInput {
   runId?: string | null;
   /** 阶段0 归因数据：仅在 terminalAction=defer_and_continue 时有意义 */
   qualityDebtAttribution?: QualityDebtAttribution | null;
+  repairSelection?: ChapterRepairSelectionRecord | null;
 }
 
 type ChapterQualityLoopChapter = {
@@ -54,6 +58,7 @@ function serializeRiskFlags(
   source: RecordChapterQualityLoopInput["source"],
   terminalAction?: RecordChapterQualityLoopInput["terminalAction"],
   qualityDebtAttribution?: RecordChapterQualityLoopInput["qualityDebtAttribution"],
+  repairSelection?: RecordChapterQualityLoopInput["repairSelection"],
 ): string {
   const parsed = parseJsonObject(previous);
   return JSON.stringify({
@@ -63,6 +68,7 @@ function serializeRiskFlags(
       source,
       ...(terminalAction ? { terminalAction } : {}),
       ...(qualityDebtAttribution ? { qualityDebtAttribution } : {}),
+      ...(repairSelection ? { repairSelection } : {}),
     },
   });
 }
@@ -79,9 +85,6 @@ function appendRepairHistory(
     `[quality_loop ${assessment.evaluatedAt}]`,
     `status=${assessment.overallStatus}`,
     `action=${assessment.recommendedAction}`,
-    assessment.budget?.signature ? `signature=${assessment.budget.signature}` : "",
-    assessment.budget ? `attempt=${assessment.budget.attempt}/${assessment.budget.maxAttempts}` : "",
-    assessment.budget?.nextAction ? `budget=${assessment.budget.nextAction}` : "",
     terminalAction ? `terminal=${terminalAction}` : "",
     assessment.signals
       .filter((signal) => signal.status !== "valid")
@@ -122,6 +125,7 @@ export function buildChapterQualityLoopChapterUpdate(
   source: RecordChapterQualityLoopInput["source"],
   terminalAction?: RecordChapterQualityLoopInput["terminalAction"],
   qualityDebtAttribution?: RecordChapterQualityLoopInput["qualityDebtAttribution"],
+  repairSelection?: RecordChapterQualityLoopInput["repairSelection"],
 ): Prisma.ChapterUpdateInput {
   const nextRepairHistory = appendRepairHistory(chapter.repairHistory, assessment, terminalAction);
   const shouldContinueChapter = assessment.recommendedAction === "continue" || terminalAction === "defer_and_continue";
@@ -129,7 +133,14 @@ export function buildChapterQualityLoopChapterUpdate(
     ? resolveContinuableChapterState(chapter)
     : {};
   return {
-    riskFlags: serializeRiskFlags(chapter.riskFlags, assessment, source, terminalAction, qualityDebtAttribution),
+    riskFlags: serializeRiskFlags(
+      chapter.riskFlags,
+      assessment,
+      source,
+      terminalAction,
+      qualityDebtAttribution,
+      repairSelection,
+    ),
     ...(nextRepairHistory !== undefined ? { repairHistory: nextRepairHistory } : {}),
     ...(shouldContinueChapter ? continuableChapterState : resolveBlockedChapterState(source)),
   };
@@ -160,11 +171,20 @@ export class ChapterQualityLoopService {
       issues: input.issues,
       runtimePackage: input.runtimePackage,
       replanRecommendation: input.replanRecommendation,
-      previousRepairHistory: chapter.repairHistory,
     });
+    const terminalAction = assessment.recommendedAction === "continue"
+      ? null
+      : input.terminalAction ?? null;
     await chapterLifecycleService.applyQualityAssessmentState({
       chapterId: input.chapterId,
-      data: buildChapterQualityLoopChapterUpdate(chapter, assessment, input.source, input.terminalAction ?? null, input.qualityDebtAttribution),
+      data: buildChapterQualityLoopChapterUpdate(
+        chapter,
+        assessment,
+        input.source,
+        terminalAction,
+        input.qualityDebtAttribution,
+        input.repairSelection,
+      ),
     });
     await directorAutomationLedgerEventService.recordQualityLoopAssessment({
       taskId: input.taskId,

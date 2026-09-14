@@ -18,6 +18,7 @@ export const queryKeys = {
     chapterTraces: (novelId: string, chapterId: string) => ["novels", "chapter-traces", novelId, chapterId] as const,
     pipelineJob: (id: string, jobId: string) => ["novels", "pipeline", id, jobId] as const,
     qualityReport: (id: string) => ["novels", "quality-report", id] as const,
+    simpleShelf: (id: string) => ["novels", id, "simple-shelf"] as const,
     state: (id: string) => ["novels", "state", id] as const,
     latestStateSnapshot: (id: string) => ["novels", "state-snapshots", id, "latest"] as const,
     payoffLedger: (id: string, chapterOrder?: number) => ["novels", "payoff-ledger", id, chapterOrder ?? "latest"] as const,
@@ -64,6 +65,8 @@ export const queryKeys = {
   },
   marketRadar: {
     sources: ["market-radar", "sources"] as const,
+    latest: ["market-radar", "latest"] as const,
+    savedTopics: ["market-radar", "saved-topics"] as const,
     scan: (id: string) => ["market-radar", "scan", id] as const,
     brief: (id: string) => ["market-radar", "brief", id] as const,
   },

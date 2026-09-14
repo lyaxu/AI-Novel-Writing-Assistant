@@ -518,7 +518,7 @@ test("volume strategy prompt renders volume count guidance and fixed-count const
   assert.equal(messages.length, 2);
   assert.match(String(messages[0].content), /recommendedVolumeCount 必须严格等于 10/);
   assert.match(String(messages[0].content), /hardPlannedVolumeCount 必须落在 2-4 之间/);
-  assert.match(String(messages[0].content), /60 章以上默认至少保留三段结构/);
+  assert.match(String(messages[0].content), /开局、转向和终局必须各有独立空间/);
   assert.match(String(messages[0].content), /超长篇必须避免把大量章节压成少数巨卷/);
   assert.match(String(messages[1].content), /decision volume count range: 8-13/);
   assert.match(String(messages[1].content), /user preferred volume count: 10/);
@@ -679,7 +679,7 @@ test("novel main-chain prompt assets declare explicit non-zero context budgets",
     ["novel.volume.skeleton@v3", NOVEL_PROMPT_BUDGETS.volumeSkeleton],
     ["novel.volume.beat_sheet@v3", NOVEL_PROMPT_BUDGETS.volumeBeatSheet],
     ["novel.volume.chapter_list@v9", NOVEL_PROMPT_BUDGETS.volumeChapterList],
-    ["novel.volume.chapter_purpose@v1", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
+    ["novel.volume.chapter_purpose@v3", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
     ["novel.volume.chapter_boundary@v1", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
     ["novel.volume.chapter_task_sheet@v3", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
     ["novel.volume.rebalance.adjacent@v1", NOVEL_PROMPT_BUDGETS.volumeRebalance],
@@ -1557,20 +1557,24 @@ test("runStructuredPrompt retries semantically after postValidate failure", asyn
 test("streamTextPrompt buffers streamed output and resolves completion metadata", async () => {
   resetPromptQualityTelemetryForTests();
   const originalContextPolicy = { ...styleRewritePrompt.contextPolicy };
+  let capturedOptions = null;
   styleRewritePrompt.contextPolicy = {
     maxTokensBudget: 8,
     requiredGroups: ["core"],
     dropOrder: ["overflow"],
   };
 
-  setPromptRunnerLLMFactoryForTests(async () => ({
-    stream: async () => ({
-      async *[Symbol.asyncIterator]() {
-        yield { content: "修" };
-        yield { content: "订" };
-      },
-    }),
-  }));
+  setPromptRunnerLLMFactoryForTests(async (_provider, options) => {
+    capturedOptions = options;
+    return {
+      stream: async () => ({
+        async *[Symbol.asyncIterator]() {
+          yield { content: "修" };
+          yield { content: "订" };
+        },
+      }),
+    };
+  });
 
   try {
     const handle = await streamTextPrompt({
@@ -1601,6 +1605,7 @@ test("streamTextPrompt buffers streamed output and resolves completion metadata"
           content: "额外补充：".concat("低优先级。".repeat(20)),
         }),
       ],
+      options: { reasoningEnabled: false, maxTokens: 6000 },
     });
 
     const streamedChunks = [];
@@ -1614,6 +1619,8 @@ test("streamTextPrompt buffers streamed output and resolves completion metadata"
     assert.deepEqual(completed.meta.invocation.droppedContextBlockIds, ["overflow-1"]);
     assert.deepEqual(completed.meta.invocation.summarizedContextBlockIds, ["core-1"]);
     assert.equal(completed.meta.invocation.repairAttempts, 0);
+    assert.equal(capturedOptions.reasoningEnabled, false);
+    assert.equal(capturedOptions.maxTokens, 6000);
     const telemetry = getSinglePromptQualityEntry();
     assert.equal(telemetry.completedCount, 1);
     assert.equal(telemetry.emptyOutputCount, 0);
@@ -2131,6 +2138,49 @@ test("streamStructuredPrompt parses streamed JSON and preserves telemetry", asyn
   } finally {
     genreTreePrompt.contextPolicy = originalContextPolicy;
     setPromptRunnerLLMFactoryForTests();
+  }
+});
+
+test("streamStructuredPrompt falls back to prompt JSON when native structured streaming is empty", async () => {
+  let streamCall = null;
+  let fallbackCall = null;
+  setPromptRunnerLLMFactoryForTests(async (provider, options) => {
+    return {
+      stream: async (_messages, invokeOptions) => {
+        streamCall = { provider, responseFormat: invokeOptions.response_format?.type };
+        return {
+          async *[Symbol.asyncIterator]() {},
+        };
+      },
+    };
+  });
+  setPromptRunnerStructuredInvokerForTests(async (input) => {
+    fallbackCall = input;
+    return {
+      data: { name: "都市", description: "异能成长", children: [] },
+      repairUsed: false,
+      repairAttempts: 0,
+    };
+  });
+
+  try {
+    const handle = await streamStructuredPrompt({
+      asset: genreTreePrompt,
+      promptInput: { prompt: "都市异能", retry: false, forceJson: true },
+      options: { provider: "deepseek", model: "deepseek-v4-flash" },
+    });
+
+    for await (const _chunk of handle.stream) {
+      // drain stream
+    }
+    const completed = await handle.complete;
+
+    assert.deepEqual(streamCall, { provider: "deepseek", responseFormat: "json_object" });
+    assert.equal(fallbackCall.structuredStrategy, "prompt_json");
+    assert.equal(completed.output.name, "都市");
+  } finally {
+    setPromptRunnerLLMFactoryForTests();
+    setPromptRunnerStructuredInvokerForTests();
   }
 });
 

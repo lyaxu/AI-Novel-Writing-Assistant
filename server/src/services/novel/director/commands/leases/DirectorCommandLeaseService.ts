@@ -3,38 +3,42 @@ import { prisma } from "../../../../../db/prisma";
 import { taskDispatcher } from "../../../../../workers/TaskDispatcher";
 import { NovelWorkflowService } from "../../../workflow/NovelWorkflowService";
 import { directorIssueService, loadDirectorIssueTaskContext } from "../../issues";
-import { parsePayload, resolveNumberEnv } from "../DirectorCommandServiceHelpers";
 
-const DEFAULT_STALE_AUTO_RECOVERY_MAX_ATTEMPTS = 2;
 const STALE_COMMAND_AUTO_RECOVERY_MESSAGE = "后台执行中断，系统已自动从最近进度继续。";
 const STALE_COMMAND_MANUAL_RECOVERY_MESSAGE = "后台执行中断，任务已暂停。点击恢复后会从最近进度继续。";
 const STALE_COMMAND_INTERNAL_MESSAGE = "Director Worker 租约过期，任务等待恢复。";
 const CANCELLED_COMMAND_MESSAGE = "自动导演任务已取消。";
 
-function isAutoRecoverableStaleCommand(command: {
-  commandType: string;
-  attempt: number;
-  payloadJson?: string | null;
-}): boolean {
-  const defaultMaxAttempts = resolveNumberEnv(
-    "DIRECTOR_WORKER_STALE_AUTO_RECOVERY_MAX_ATTEMPTS",
-    DEFAULT_STALE_AUTO_RECOVERY_MAX_ATTEMPTS,
-  );
-  const payload = parsePayload(command.payloadJson ?? null);
-  const payloadRunMode = payload.confirmRequest?.runMode ?? payload.takeoverRequest?.runMode ?? null;
-  const isFullBookAutopilot = payloadRunMode === "full_book_autopilot";
-  const maxAttempts = isFullBookAutopilot
-    ? resolveNumberEnv(
-      "DIRECTOR_WORKER_FULL_BOOK_STALE_AUTO_RECOVERY_MAX_ATTEMPTS",
-      Math.max(defaultMaxAttempts, 5),
-    )
-    : defaultMaxAttempts;
-  return command.attempt < maxAttempts
-    && (
-      isFullBookAutopilot
-      || command.commandType === "continue"
-      || command.commandType === "resume_from_checkpoint"
-    );
+interface DirectorLeaseRecoveryState {
+  taskPendingManualRecovery: boolean;
+  linkedPipelineJob: {
+    id: string;
+    status: string;
+    pendingManualRecovery: boolean;
+    cancelRequestedAt: Date | null;
+    error: string | null;
+  } | null;
+}
+
+function parseLinkedPipelineJobId(seedPayloadJson: string | null): string | null {
+  if (!seedPayloadJson?.trim()) return null;
+  const seed = JSON.parse(seedPayloadJson) as { autoExecution?: { pipelineJobId?: unknown } };
+  const value = seed.autoExecution?.pipelineJobId;
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("Invalid linked pipeline job id.");
+  }
+  return value.trim();
+}
+
+function parsePipelineWorkflowTaskId(payload: string | null): string | null {
+  if (!payload?.trim()) return null;
+  const value = (JSON.parse(payload) as { workflowTaskId?: unknown }).workflowTaskId;
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("Invalid pipeline workflow task id.");
+  }
+  return value.trim();
 }
 
 export class DirectorCommandLeaseService {
@@ -52,38 +56,41 @@ export class DirectorCommandLeaseService {
         taskId: true,
         commandType: true,
         attempt: true,
-        payloadJson: true,
       },
     });
     for (const command of staleCommands) {
-      const autoRecoverable = isAutoRecoverableStaleCommand(command);
-      const governance = await loadDirectorIssueTaskContext(command.taskId);
+      let recoveryState: DirectorLeaseRecoveryState | null;
+      try {
+        recoveryState = await this.loadRecoveryState(command.taskId);
+      } catch {
+        await this.markCommandWaitingForManualRecovery(
+          command.id,
+          command.taskId,
+          now,
+          "无法确认章节流水线的恢复状态，任务已暂停以避免重复调用。",
+        );
+        continue;
+      }
+      if (recoveryState?.taskPendingManualRecovery || recoveryState?.linkedPipelineJob?.pendingManualRecovery) {
+        await this.markCommandWaitingForManualRecovery(
+          command.id,
+          command.taskId,
+          now,
+          recoveryState.taskPendingManualRecovery
+            ? null
+            : recoveryState.linkedPipelineJob?.error ?? STALE_COMMAND_MANUAL_RECOVERY_MESSAGE,
+        );
+        continue;
+      }
+      if (this.canReattachToPipeline(recoveryState?.linkedPipelineJob ?? null)) {
+        await this.requeueCommandWithoutClearingPause(command.id, command.taskId, now);
+        continue;
+      }
+      const governance = await loadDirectorIssueTaskContext(command.taskId).catch(() => null);
       let actionApplied = false;
       const applyAction = async (action: "auto_retry" | "continue_with_warning" | "pause_for_manual" | "fail_task") => {
         if (action === "auto_retry" || action === "continue_with_warning") {
-          await prisma.directorRunCommand.updateMany({
-            where: { id: command.id },
-            data: {
-              status: "queued",
-              leaseOwner: null,
-              leaseExpiresAt: null,
-              runAfter: now,
-              startedAt: null,
-              finishedAt: null,
-              errorMessage: STALE_COMMAND_AUTO_RECOVERY_MESSAGE,
-            },
-          });
-          await prisma.novelWorkflowTask.updateMany({
-            where: { id: command.taskId },
-            data: {
-              status: "queued",
-              pendingManualRecovery: false,
-              lastError: null,
-              heartbeatAt: now,
-              finishedAt: null,
-            },
-          });
-          taskDispatcher.notify();
+          await this.requeueCommandWithoutClearingPause(command.id, command.taskId, now);
           actionApplied = true;
           return;
         }
@@ -108,7 +115,7 @@ export class DirectorCommandLeaseService {
       };
 
       if (!governance?.novelId) {
-        await applyAction(autoRecoverable ? "auto_retry" : "pause_for_manual");
+        await applyAction("pause_for_manual");
         continue;
       }
       await directorIssueService.reportIssue({
@@ -117,9 +124,9 @@ export class DirectorCommandLeaseService {
         novelId: governance.novelId,
         issueCode: "runtime.worker_stale",
         stage: "director_worker",
-        summary: autoRecoverable ? STALE_COMMAND_AUTO_RECOVERY_MESSAGE : STALE_COMMAND_MANUAL_RECOVERY_MESSAGE,
+        summary: STALE_COMMAND_MANUAL_RECOVERY_MESSAGE,
         evidence: `command=${command.commandType}; attempt=${command.attempt}`,
-        attempt: command.attempt,
+        attempt: Math.max(0, command.attempt - 1),
         hasUsableOutput: false,
         runMode: governance.runMode,
         fingerprint: ["worker_stale", command.id, command.attempt].join(":"),
@@ -127,22 +134,141 @@ export class DirectorCommandLeaseService {
         policySource: governance.policySource,
         applyAction: (decision) => applyAction(decision.action),
       }).catch(async () => {
-        if (!actionApplied) await applyAction(autoRecoverable ? "auto_retry" : "pause_for_manual");
+        if (!actionApplied) await applyAction("pause_for_manual");
       });
     }
     return staleCommands.length;
+  }
+
+  private async loadRecoveryState(taskId: string): Promise<DirectorLeaseRecoveryState | null> {
+    const task = await prisma.novelWorkflowTask.findUnique({
+      where: { id: taskId },
+      select: {
+        novelId: true,
+        pendingManualRecovery: true,
+        seedPayloadJson: true,
+      },
+    });
+    if (!task) return null;
+    const pipelineJobId = parseLinkedPipelineJobId(task.seedPayloadJson);
+    if (!pipelineJobId) {
+      return { taskPendingManualRecovery: task.pendingManualRecovery, linkedPipelineJob: null };
+    }
+    const job = await prisma.generationJob.findUnique({
+      where: { id: pipelineJobId },
+      select: {
+        id: true,
+        novelId: true,
+        status: true,
+        pendingManualRecovery: true,
+        cancelRequestedAt: true,
+        error: true,
+        payload: true,
+      },
+    });
+    if (!job) {
+      throw new Error("Linked pipeline job does not exist.");
+    }
+    if (job.novelId !== task.novelId) {
+      throw new Error("Linked pipeline job belongs to another novel.");
+    }
+    const payloadTaskId = parsePipelineWorkflowTaskId(job.payload);
+    if (payloadTaskId && payloadTaskId !== taskId) {
+      throw new Error("Linked pipeline job belongs to another workflow task.");
+    }
+    return {
+      taskPendingManualRecovery: task.pendingManualRecovery,
+      linkedPipelineJob: job,
+    };
+  }
+
+  private canReattachToPipeline(
+    job: DirectorLeaseRecoveryState["linkedPipelineJob"],
+  ): boolean {
+    return Boolean(
+      job
+      && !job.pendingManualRecovery
+      && !job.cancelRequestedAt
+      && ["queued", "running", "succeeded"].includes(job.status),
+    );
+  }
+
+  private async requeueCommandWithoutClearingPause(
+    commandId: string,
+    taskId: string,
+    now: Date,
+  ): Promise<void> {
+    await prisma.directorRunCommand.updateMany({
+      where: { id: commandId, status: { in: ["leased", "running"] } },
+      data: {
+        status: "queued",
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        runAfter: now,
+        startedAt: null,
+        finishedAt: null,
+        errorMessage: STALE_COMMAND_AUTO_RECOVERY_MESSAGE,
+      },
+    });
+    await prisma.novelWorkflowTask.updateMany({
+      where: {
+        id: taskId,
+        status: { in: ["queued", "running"] },
+        pendingManualRecovery: false,
+      },
+      data: {
+        status: "queued",
+        lastError: null,
+        heartbeatAt: now,
+        finishedAt: null,
+      },
+    });
+    taskDispatcher.notify();
+  }
+
+  private async markCommandWaitingForManualRecovery(
+    commandId: string,
+    taskId: string,
+    now: Date,
+    recoveryMessage: string | null,
+  ): Promise<void> {
+    await prisma.directorRunCommand.updateMany({
+      where: { id: commandId, status: { in: ["leased", "running"] } },
+      data: {
+        status: "stale",
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        finishedAt: now,
+        errorMessage: STALE_COMMAND_INTERNAL_MESSAGE,
+      },
+    });
+    await prisma.directorStepRun.updateMany({
+      where: { taskId, status: "running" },
+      data: { status: "failed", finishedAt: now, error: STALE_COMMAND_INTERNAL_MESSAGE },
+    }).catch(() => null);
+    if (recoveryMessage) {
+      await this.workflowService.requeueTaskForRecovery(taskId, recoveryMessage);
+    }
   }
 
   async leaseNextCommand(input: { workerId: string; leaseMs: number }) {
     const now = new Date();
     const leaseExpiresAt = new Date(now.getTime() + input.leaseMs);
     const candidate = await prisma.directorRunCommand.findFirst({
-      where: { status: "queued", runAfter: { lte: now } },
+      where: {
+        status: "queued",
+        runAfter: { lte: now },
+        task: { status: { in: ["queued", "running"] }, pendingManualRecovery: false },
+      },
       orderBy: [{ runAfter: "asc" }, { createdAt: "asc" }, { id: "asc" }],
     });
     if (!candidate) return null;
     const claimed = await prisma.directorRunCommand.updateMany({
-      where: { id: candidate.id, status: "queued" },
+      where: {
+        id: candidate.id,
+        status: "queued",
+        task: { status: { in: ["queued", "running"] }, pendingManualRecovery: false },
+      },
       data: {
         status: "leased",
         leaseOwner: input.workerId,

@@ -285,6 +285,11 @@ test("createChapterStream uses lightweight readiness without forcing execution c
     ensureChapterExecutionContract: async (novelId, chapterId, options) => {
       calls.push(["ensure_contract", novelId, chapterId, options]);
     },
+    preparationService: {
+      prepare: async (novelId, chapterId, options) => {
+        calls.push(["prepare", novelId, chapterId, options]);
+      },
+    },
     assembler: {
       assemble: async (novelId, chapterId, options) => {
         calls.push(["assemble", novelId, chapterId, options]);
@@ -307,12 +312,14 @@ test("createChapterStream uses lightweight readiness without forcing execution c
   await coordinator.createChapterStream("novel-1", "chapter-1", { provider: "openai" });
 
   const ensureContractIndex = calls.findIndex((item) => Array.isArray(item) && item[0] === "ensure_contract");
+  const prepareIndex = calls.findIndex((item) => Array.isArray(item) && item[0] === "prepare");
   const assembleIndex = calls.findIndex((item) => Array.isArray(item) && item[0] === "assemble");
   const writerIndex = calls.findIndex((item) => Array.isArray(item) && item[0] === "writer");
 
   assert.notEqual(assembleIndex, -1);
   assert.notEqual(writerIndex, -1);
   assert.equal(ensureContractIndex, -1);
+  assert.ok(prepareIndex < assembleIndex);
   assert.ok(assembleIndex < writerIndex);
 });
 
@@ -370,7 +377,6 @@ test("finalizeChapterContent runs acceptance gate once and finalizes the current
 
   const gateCalls = [];
   let acceptanceCalls = 0;
-  let timelineCalls = 0;
   const originalListOpenConflicts = openConflictService.listOpenConflicts;
   const originalCheckpointFindUnique = prisma.chapterArtifactSyncCheckpoint.findUnique;
   const originalCheckpointUpsert = prisma.chapterArtifactSyncCheckpoint.upsert;
@@ -378,17 +384,6 @@ test("finalizeChapterContent runs acceptance gate once and finalizes the current
   prisma.chapterArtifactSyncCheckpoint.findUnique = async () => null;
   prisma.chapterArtifactSyncCheckpoint.upsert = async () => undefined;
   try {
-    coordinator.qualityGateService.executeTimelineGate = async () => {
-      timelineCalls += 1;
-      gateCalls.push(["timeline-start", Date.now()]);
-      await sleep(70);
-      gateCalls.push(["timeline-end", Date.now()]);
-      return {
-        status: "passed",
-        score: 0.98,
-        issues: [],
-      };
-    };
     coordinator.buildRuntimePackage = () => ({
       audit: {
         score: {
@@ -416,7 +411,7 @@ test("finalizeChapterContent runs acceptance gate once and finalizes the current
     });
 
     const start = Date.now();
-    await coordinator.contentFinalizationService.finalizeChapterContent({
+    const deferredInput = {
       novelId: "novel-1",
       chapterId: "chapter-1",
       request: {},
@@ -427,14 +422,20 @@ test("finalizeChapterContent runs acceptance gate once and finalizes the current
       content: "正文",
       runId: null,
       startMs: null,
-    });
+      deferTerminalCommit: true,
+    };
+    const deferredEvaluation = await coordinator.contentFinalizationService.finalizeChapterContent(deferredInput);
     const duration = Date.now() - start;
 
     const firstAcceptanceStart = gateCalls.find((item) => item[0] === "acceptance-start")[1];
     const firstAcceptanceEnd = gateCalls.find((item) => item[0] === "acceptance-end")[1];
 
     assert.equal(acceptanceCalls, 1);
-    assert.equal(timelineCalls, 0);
+    assert.equal(timelineFinalizationCalls.length, 0);
+    await coordinator.contentFinalizationService.commitFinalizedChapterContent({
+      ...deferredInput,
+      evaluation: deferredEvaluation,
+    });
     assert.equal(timelineFinalizationCalls.length, 1);
     assert.equal(timelineFinalizationCalls[0].mode, "stable");
     assert.equal(timelineFinalizationCalls[0].sourceStage, "chapter_content_finalization");
@@ -454,8 +455,7 @@ test("finalizeChapterContent runs acceptance gate once and finalizes the current
       startMs: null,
     });
 
-    assert.equal(acceptanceCalls, 1);
-    assert.equal(timelineCalls, 0);
+    assert.equal(acceptanceCalls, 2);
     assert.equal(timelineFinalizationCalls.length, 2);
     assert.ok(firstAcceptanceEnd >= firstAcceptanceStart);
   } finally {
@@ -809,7 +809,9 @@ test("createRepairStream discovers fallback issues through read-only audit", asy
         },
       },
       artifactSyncService: {
-        async syncChapterArtifacts() {},
+        async syncChapterArtifacts() {
+          return { status: "completed", contentHash: "test", completedArtifacts: ["artifact_delta"] };
+        },
       },
       timelineFinalizer: createTimelineFinalizer(),
     });
@@ -835,19 +837,13 @@ test("createRepairStream discovers fallback issues through read-only audit", asy
   }
 });
 
-test("createRepairStream escalates patch schema failures to a single heavy repair stream", async () => {
+test("createRepairStream does not escalate patch schema failures to a heavy repair stream", async () => {
   const originalNovelFindUnique = prisma.novel.findUnique;
   const originalChapterFindFirst = prisma.chapter.findFirst;
   const originalBibleFindUnique = prisma.novelBible.findUnique;
-  const originalChapterUpdate = prisma.chapter.update;
   const originalRunStructuredPrompt = promptRunner.runStructuredPrompt;
   const originalStreamTextPrompt = promptRunner.streamTextPrompt;
 
-  const chapterUpdates = [];
-  const syncCalls = [];
-  const acceptanceCalls = [];
-  const resolvedIssues = [];
-  const frames = [];
   let patchPlanCalls = 0;
   let heavyRepairCalls = 0;
 
@@ -858,10 +854,6 @@ test("createRepairStream escalates patch schema failures to a single heavy repai
     content: "旧正文里有一段需要修复的内容。",
   });
   prisma.novelBible.findUnique = async () => ({ rawContent: "作品圣经" });
-  prisma.chapter.update = async ({ data }) => {
-    chapterUpdates.push(data);
-    return { id: "chapter-1", ...data };
-  };
   promptRunner.runStructuredPrompt = async () => {
     patchPlanCalls += 1;
     throw new Error("[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":6,\"inclusive\":true,\"path\":[\"patches\",0,\"targetExcerpt\"],\"message\":\"Too small: expected string to have >=6 characters\"}]");
@@ -883,103 +875,36 @@ test("createRepairStream escalates patch schema failures to a single heavy repai
       assembler: {
         assemble: async () => createRepairAssembledChapter(),
       },
-      artifactSyncService: {
-        async syncChapterArtifacts(...args) {
-          syncCalls.push(args);
-        },
-      },
-      acceptanceAssessmentService: {
-        assess: async (input) => {
-          acceptanceCalls.push(input.content);
-          const score = {
-            coherence: 92,
-            repetition: 93,
-            pacing: 91,
-            voice: 90,
-            engagement: 94,
-            overall: 92,
-          };
-          return {
-            assessment: {
-              status: "accepted",
-              score,
-              blockingIssues: [],
-              repairDirectives: [],
-              missingObligations: [],
-              repairability: "none",
-              decisionReason: "修复稿通过统一接收检查。",
-              riskTags: [],
-              assetSyncRecommendation: {
-                priority: "normal",
-                reason: "ok",
-                requiresFullPayoffReconcile: false,
-              },
-              continuePolicy: "continue",
-              summary: "accepted",
-            },
-            score,
-            issues: [],
-            auditReports: [],
-          };
-        },
-      },
-      resolveAuditIssues: async (_novelId, issueIds) => {
-        resolvedIssues.push(issueIds);
-      },
-      timelineFinalizer: createTimelineFinalizer(),
     });
 
-    const streamResult = await coordinator.createRepairStream("novel-1", "chapter-1", {
-      repairMode: "light_repair",
-      auditIssueIds: ["issue-1"],
-      reviewIssues: [{
-        severity: "high",
-        category: "pacing",
-        evidence: "第一次反压没有真正落地。",
-        fixSuggestion: "让主角在本章拿到明确反压结果。",
-      }],
-    });
-
-    let streamedContent = "";
-    for await (const chunk of streamResult.stream) {
-      streamedContent += chunk.content ?? "";
-    }
-    await streamResult.onDone(streamedContent, {
-      writeFrame(frame) {
-        frames.push(frame);
-      },
-    });
-
-    assert.equal(streamedContent, "全文修复片段");
-    assert.deepEqual(acceptanceCalls, ["全文修复后的正文"]);
-    assert.equal(syncCalls.length, 1);
-    assert.equal(syncCalls[0][2], "全文修复后的正文");
-    assert.equal(syncCalls[0][3].awaitArtifactDelta, true);
-    assert.equal(syncCalls[0][3].skipLegacySummaryAndFacts, true);
-    assert.equal(syncCalls[0][3].contentProvenance, "confirmed");
-    assert.deepEqual(resolvedIssues, [["issue-1"]]);
-    assert.deepEqual(chapterUpdates.map((item) => item.generationState).filter(Boolean), ["repaired", "approved"]);
-    assert.equal(chapterUpdates.some((item) => item.chapterStatus === "pending_review"), true);
-    assert.equal(chapterUpdates.at(-1)?.chapterStatus, "completed");
-    assert.equal(frames.at(-1)?.status, "succeeded");
-    assert.equal(frames.at(-1)?.phase, "completed");
+    await assert.rejects(
+      coordinator.createRepairStream("novel-1", "chapter-1", {
+        repairMode: "light_repair",
+        auditIssueIds: ["issue-1"],
+        reviewIssues: [{
+          severity: "high",
+          category: "pacing",
+          evidence: "第一次反压没有真正落地。",
+          fixSuggestion: "让主角在本章拿到明确反压结果。",
+        }],
+      }),
+      (error) => error?.name === "ChapterPatchRepairFailedError",
+    );
     assert.equal(patchPlanCalls, 1);
-    assert.equal(heavyRepairCalls, 1);
+    assert.equal(heavyRepairCalls, 0);
   } finally {
     prisma.novel.findUnique = originalNovelFindUnique;
     prisma.chapter.findFirst = originalChapterFindFirst;
     prisma.novelBible.findUnique = originalBibleFindUnique;
-    prisma.chapter.update = originalChapterUpdate;
     promptRunner.runStructuredPrompt = originalRunStructuredPrompt;
     promptRunner.streamTextPrompt = originalStreamTextPrompt;
   }
 });
 
-test("createChapterStream does not block hot path on execution contract failure", async () => {
+test("createChapterStream stops before context assembly when explicit preparation fails", async () => {
   const warnings = [];
   const originalWarn = console.warn;
   let assembledCalled = false;
-  let contractCalled = false;
 
   console.warn = (...args) => {
     warnings.push(args);
@@ -989,9 +914,10 @@ test("createChapterStream does not block hot path on execution contract failure"
     const coordinator = new ChapterRuntimeCoordinator({
       validateRequest: (input) => input,
       ensureNovelCharacters: async () => undefined,
-      ensureChapterExecutionContract: async () => {
-        contractCalled = true;
-        throw new Error("contract invalid");
+      preparationService: {
+        prepare: async () => {
+          throw new Error("contract invalid");
+        },
       },
       assembler: {
         assemble: async () => {
@@ -1009,9 +935,11 @@ test("createChapterStream does not block hot path on execution contract failure"
     });
     coordinator.streamOrchestrator.markChapterStatus = async () => undefined;
 
-    await coordinator.createChapterStream("novel-1", "chapter-1", {});
-    assert.equal(contractCalled, false);
-    assert.equal(assembledCalled, true);
+    await assert.rejects(
+      coordinator.createChapterStream("novel-1", "chapter-1", {}),
+      /contract invalid/,
+    );
+    assert.equal(assembledCalled, false);
     assert.equal(warnings.length, 0);
   } finally {
     console.warn = originalWarn;
@@ -1031,6 +959,7 @@ test("createChapterStream blocks when state-driven decision requires review firs
     validateRequest: (input) => input,
     ensureNovelCharacters: async () => undefined,
     ensureChapterExecutionContract: async () => undefined,
+    preparationService: { prepare: async () => undefined },
     assembler: {
       assemble: async () => assembled,
     },
@@ -1064,6 +993,7 @@ test("createChapterStream lets full_book_autopilot continue past pending state p
     validateRequest: (input) => input,
     ensureNovelCharacters: async () => undefined,
     ensureChapterExecutionContract: async () => undefined,
+    preparationService: { prepare: async () => undefined },
     assembler: {
       assemble: async () => assembled,
     },
@@ -1105,6 +1035,7 @@ test("createChapterStream retries once before failing empty generated content", 
     validateRequest: (input) => input,
     ensureNovelCharacters: async () => undefined,
     ensureChapterExecutionContract: async () => undefined,
+    preparationService: { prepare: async () => undefined },
     assembler: {
       assemble: async () => assembled,
     },
@@ -1158,6 +1089,7 @@ test("runPipelineChapter does not leave a blocked chapter in generating status",
     validateRequest: (input) => input,
     ensureNovelCharacters: async () => undefined,
     ensureChapterExecutionContract: async () => undefined,
+    preparationService: { prepare: async () => undefined },
     assembler: {
       assemble: async () => assembled,
     },

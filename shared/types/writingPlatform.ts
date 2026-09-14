@@ -10,6 +10,7 @@ export interface WritingPlatformGuidance {
   auditing: string;
   repairing: string;
 }
+
 export interface WritingPlatformProfileDefinition {
   platform: WritingPlatform;
   label: string;
@@ -43,3 +44,4 @@ export interface WritingPlatformProfileVersionView {
   active: boolean;
   createdAt: string;
 }
+

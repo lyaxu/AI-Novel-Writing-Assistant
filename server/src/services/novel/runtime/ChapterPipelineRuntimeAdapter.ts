@@ -9,8 +9,8 @@ import {
   isChapterEmptyContentError,
 } from "./chapterEmptyContentError";
 import type { ChapterContentFinalizationService } from "./ChapterContentFinalizationService";
-import type { ChapterStreamGenerationOrchestrator } from "./ChapterStreamGenerationOrchestrator";
 import type { ChapterTimelineFinalizationService } from "./ChapterTimelineFinalizationService";
+import type { ChapterStreamGenerationOrchestrator } from "./ChapterStreamGenerationOrchestrator";
 import type { ChapterLifecycleService } from "./lifecycle";
 
 export interface ChapterPipelineRuntimeAdapterDeps {
@@ -19,9 +19,12 @@ export interface ChapterPipelineRuntimeAdapterDeps {
     "prepareRuntimeChapter" | "generateDraftFromWriter" | "markChapterStatus"
   >;
   artifactSyncService: Pick<ChapterArtifactSyncService, "saveDraftAndArtifacts" | "syncChapterArtifacts">;
-  contentFinalizationService: Pick<ChapterContentFinalizationService, "finalizeChapterContent">;
-  timelineFinalizer: Pick<ChapterTimelineFinalizationService, "finalizeCurrentContent">;
+  contentFinalizationService: Pick<
+    ChapterContentFinalizationService,
+    "finalizeChapterContent" | "commitFinalizedChapterContent"
+  >;
   lifecycleService: Pick<ChapterLifecycleService, "markGenerationState">;
+  timelineFinalizer: Pick<ChapterTimelineFinalizationService, "finalizeCurrentContent">;
   ensureNovelCharacters: (novelId: string, actionName: string, minCount?: number) => Promise<void>;
 }
 
@@ -75,25 +78,41 @@ export class ChapterPipelineRuntimeAdapter {
               ...input,
               deferArtifactBackgroundSync: true,
               scheduleDeferredArtifactBackgroundSync: false,
+              deferTerminalCommit: true,
+              assertExecutionOwnership: hooks.onCheckCancelled,
             });
             return {
               finalContent: finalized.finalContent,
               runtimePackage: finalized.runtimePackage,
+              needsRepair: finalized.needsRepair,
+              acceptanceResult: finalized.acceptanceResult,
+              acceptancePersistenceDeferred: finalized.acceptancePersistenceDeferred,
             };
           },
           finalizeChapterTimeline: async (input) => {
-            await this.deps.timelineFinalizer.finalizeCurrentContent({
+            const result = await this.deps.timelineFinalizer.finalizeCurrentContent({
+              ...input,
+              sourceStage: "pipeline_finalization",
+            });
+            if (!result.checkpointWritten) {
+              throw new Error("Chapter timeline finalization is still running");
+            }
+          },
+          commitFinalizedChapterContent: (input) =>
+            this.deps.contentFinalizationService.commitFinalizedChapterContent({
               novelId: input.novelId,
               chapterId: input.chapterId,
-              content: input.content,
-              contextPackage: input.contextPackage,
               request: input.request,
-              mode: input.mode,
-              reason: input.reason,
-              sourceStage: "pipeline_finalization",
-              qualityDebt: input.qualityDebt,
-            });
-          },
+              contextPackage: input.contextPackage,
+              runId: null,
+              startMs: null,
+              deferArtifactBackgroundSync: true,
+              scheduleDeferredArtifactBackgroundSync: false,
+              evaluation: {
+                ...input.evaluation,
+              },
+              assertExecutionOwnership: hooks.onCheckCancelled,
+            }),
           markChapterGenerationState: (targetChapterId, generationState) =>
             this.markChapterGenerationState(targetChapterId, generationState),
           markChapterNeedsRepair: (targetChapterId) =>

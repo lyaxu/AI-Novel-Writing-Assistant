@@ -7,8 +7,14 @@ import type {
   ChapterEditorRevisionScope,
   ChapterEditorTargetRange,
 } from "@ai-novel/shared/types/novel";
-import { createNovelSnapshot, previewChapterAiRevision, updateNovelChapter } from "@/api/novel";
+import {
+  readChapterQualityDebtDetails,
+  type ChapterQualityDebtDetails,
+} from "@ai-novel/shared/types/chapterQualityLoop";
+import { AlertTriangle, Loader2 } from "lucide-react";
+import { createNovelSnapshot, previewChapterAiRevision, reviewNovelChapter, updateNovelChapter } from "@/api/novel";
 import { queryKeys } from "@/api/queryKeys";
+import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { useLocalDB } from "@/hooks/useLocalDB";
 import { useLLMStore } from "@/store/llmStore";
@@ -54,6 +60,23 @@ interface ChapterEditorLocalDraft {
   updatedAt: number;
 }
 
+function formatQualityDebtSource(source: string | null): string {
+  if (source === "repair_recheck") return "自动修复后的复审";
+  if (source === "pipeline_review") return "AI 自动审校";
+  if (source === "manual_review") return "手动审校";
+  return "历史质量记录";
+}
+
+function formatQualityDebtAttempts(details: ChapterQualityDebtDetails): string {
+  if (details.repairAttemptsUsed === null) {
+    return "历史记录未保存自动修复次数";
+  }
+  if (details.repairAttemptsAllowed === 0) {
+    return `${details.repairAttemptsUsed} 次，本次未启用自动修复`;
+  }
+  return `${details.repairAttemptsUsed}/${details.repairAttemptsAllowed} 次`;
+}
+
 function toSelectionFromRange(
   content: string,
   range?: Pick<ChapterEditorTargetRange, "from" | "to"> | null,
@@ -96,6 +119,10 @@ export default function ChapterEditorShell(props: ChapterEditorShellProps) {
   const draftStorageKey = useMemo(
     () => (chapter?.id ? `${CHAPTER_DRAFT_STORAGE_PREFIX}:${novelId}:${chapter.id}` : ""),
     [chapter?.id, novelId],
+  );
+  const qualityDebtDetails = useMemo(
+    () => readChapterQualityDebtDetails(chapter?.riskFlags),
+    [chapter?.riskFlags],
   );
 
   const [contentDraft, setContentDraft] = useState(normalizedChapterContent);
@@ -270,6 +297,8 @@ export default function ChapterEditorShell(props: ChapterEditorShellProps) {
   const invalidateChapterQueries = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.novels.detail(novelId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.novels.simpleShelf(novelId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.novels.qualityReport(novelId) }),
       queryClient.invalidateQueries({ queryKey: queryKeys.novels.chapterEditorWorkspace(novelId, chapter?.id ?? "none") }),
       queryClient.invalidateQueries({ queryKey: queryKeys.novels.snapshots(novelId) }),
       chapter?.id
@@ -304,6 +333,33 @@ export default function ChapterEditorShell(props: ChapterEditorShellProps) {
     onError: (error) => {
       setSaveStatus("error");
       toast.error(error instanceof Error ? error.message : "章节保存失败。");
+    },
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: async () => {
+      if (!chapter) {
+        throw new Error("当前未选中章节。");
+      }
+      if (isDirty || saveMutation.isPending) {
+        throw new Error("请先保存正文，再重新审校。");
+      }
+      return reviewNovelChapter(novelId, chapter.id, {
+        provider: llm.provider,
+        model: llm.model,
+        temperature: 0.1,
+        content: savedContent,
+      });
+    },
+    onSuccess: async (response) => {
+      await invalidateChapterQueries();
+      const assessment = response.data?.qualityAssessment;
+      toast.success(assessment?.recommendedAction === "continue"
+        ? "重新审校通过，本章待优化项已关闭。"
+        : "重新审校完成，AI 仍发现需要处理的内容。");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "重新审校失败，请稍后重试。");
     },
   });
 
@@ -564,6 +620,32 @@ export default function ChapterEditorShell(props: ChapterEditorShellProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
+      {qualityDebtDetails ? (
+        <div className="flex shrink-0 flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-950 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div className="min-w-0 text-sm leading-6">
+              <div className="font-medium">本章正文可继续使用，但还有质量待优化项</div>
+              <div className="text-xs text-amber-900/80">
+                来源：{formatQualityDebtSource(qualityDebtDetails.source)} · {qualityDebtDetails.reason || "AI 审校发现了局部问题。"}
+                {` · 自动修复：${formatQualityDebtAttempts(qualityDebtDetails)}`}
+              </div>
+              {isDirty ? <div className="mt-1 text-xs font-medium">请先保存正文，再让 AI 重新审校确认。</div> : null}
+            </div>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0 border-amber-300 bg-white/70 hover:bg-white"
+            disabled={isDirty || saveMutation.isPending || reviewMutation.isPending}
+            onClick={() => reviewMutation.mutate()}
+          >
+            {reviewMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            重新审校确认
+          </Button>
+        </div>
+      ) : null}
       <div className={`grid min-h-0 flex-1 gap-4 overflow-hidden ${gridClassName}`}>
         <ChapterEditorSidebar
           chapter={chapter}

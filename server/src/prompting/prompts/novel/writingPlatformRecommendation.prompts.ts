@@ -45,3 +45,4 @@ export const writingPlatformRecommendationPrompt: PromptAsset<WritingPlatformRec
     return output;
   },
 };
+

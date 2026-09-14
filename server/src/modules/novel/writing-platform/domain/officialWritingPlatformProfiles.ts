@@ -82,3 +82,4 @@ export const WRITING_PLATFORM_VALUES = Object.keys(OFFICIAL_WRITING_PLATFORM_PRO
 export function supportsWritingPlatformForm(platform: WritingPlatform, form: "short_story" | "long_novel"): boolean {
   return OFFICIAL_WRITING_PLATFORM_PROFILES[platform].supportedNarrativeForms.includes(form);
 }
+

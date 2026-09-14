@@ -14,7 +14,10 @@ import type { ArtifactSyncMode } from "./novel";
 import type { BookAnalysisSectionKey } from "./bookAnalysis";
 import type { NovelWorkflowResumeTarget, NovelWorkflowStage } from "./novelWorkflow";
 import type { WritingPlatformPreference } from "./writingPlatform";
-import type { NovelCreateResourceRecommendation } from "./novelResourceRecommendation";
+import type {
+  NovelCreateResourceRecommendation,
+  PowerSystemPreference,
+} from "./novelResourceRecommendation";
 import type { StoryMacroPlan } from "./storyMacro";
 import type { BookContract, BookContractDraft } from "./novelWorkflow";
 import type { TitleFactorySuggestion } from "./title";
@@ -554,6 +557,8 @@ export interface DirectorTakeoverReadinessResponse {
     hasWorldSetupPrepared: boolean;
     characterCount: number;
     chapterCount: number;
+    /** Long-term book target; the currently generated chapter window may be shorter. */
+    plannedChapterCount?: number | null;
     volumeCount: number;
     firstVolumeId?: string | null;
     firstVolumeChapterCount: number;
@@ -620,6 +625,7 @@ export interface DirectorProjectContextInput {
   writingMode?: "original" | "continuation";
   projectMode?: ProjectMode;
   readerChannelPreference?: "ai_judge" | "male_oriented" | "female_oriented" | "general";
+  powerSystemPreference?: PowerSystemPreference;
   writingPlatformPreference?: WritingPlatformPreference;
   narrativePov?: NarrativePov;
   pacePreference?: PacePreference;
@@ -639,6 +645,8 @@ export interface DirectorProjectContextInput {
   sourceKnowledgeDocumentId?: string;
   continuationBookAnalysisId?: string;
   continuationBookAnalysisSections?: BookAnalysisSectionKey[];
+  referenceBookAnalysisId?: string;
+  referenceBookAnalysisSections?: BookAnalysisSectionKey[];
 }
 
 export type DirectorWorldSetupMode = NonNullable<DirectorProjectContextInput["worldSetupMode"]>;

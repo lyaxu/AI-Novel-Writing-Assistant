@@ -15,6 +15,8 @@ import {
 } from "../../../prompting/prompts/novel/chapterAcceptance.prompts";
 import { openConflictService } from "../../state/OpenConflictService";
 import { normalizeScore, ruleScore } from "../novelP0Utils";
+import { detectProseQuality } from "./proseQuality/ProseQualityDetector";
+import { buildAcceptanceCacheIdentity } from "./acceptance";
 
 export interface ChapterAcceptanceAssessmentInput {
   novelId: string;
@@ -28,6 +30,8 @@ export interface ChapterAcceptanceAssessmentInput {
   provider?: LLMProvider;
   model?: string;
   temperature?: number;
+  /** Candidate evaluations must not overwrite the selected chapter's reports. */
+  persist?: boolean;
 }
 
 export interface ChapterAcceptanceAssessmentResult {
@@ -121,10 +125,6 @@ function isLengthDirective(directive: AcceptanceRepairDirective): boolean {
   return includesAnyMarker(directive.instruction, [...UNDER_LENGTH_MARKERS, ...OVER_LENGTH_MARKERS]);
 }
 
-function isHardMissingObligation(obligation: ChapterExecutionMissingObligation): boolean {
-  return obligation.kind === "must_hit_now" || obligation.kind === "forbidden_crossing";
-}
-
 function shouldDropLengthIssue(input: {
   issue: AcceptanceIssue;
   actualWordCount: number;
@@ -176,29 +176,17 @@ export function normalizeAssessment(
   const score = normalizeScore(reconciled.score ?? ruleScore(content));
   const missingObligations = reconciled.missingObligations ?? [];
   const hasHighRisk = reconciled.blockingIssues.some((issue) => issue.severity === "high" || issue.severity === "critical");
-  const hasHardMissingObligation = missingObligations.some(isHardMissingObligation);
-  const hasSoftOnlyMissingObligations = missingObligations.length > 0 && !hasHardMissingObligation;
   const hasRepairWork = reconciled.blockingIssues.length > 0
     || reconciled.repairDirectives.length > 0
-    || missingObligations.length > 0;
-  let status: ChapterAcceptanceAssessmentOutput["status"] = reconciled.status === "accepted" && hasHighRisk
-    ? "repairable"
-    : reconciled.status;
-  if (status === "accepted" && missingObligations.length > 0) {
-    status = hasHardMissingObligation || reconciled.repairability === "patchable_obligation_gap"
-      ? "repairable"
-      : "continue_with_risk";
+    || missingObligations.length > 0
+    || reconciled.repairability === "patchable_obligation_gap"
+    || reconciled.repairability === "rewrite_needed";
+  let status: ChapterAcceptanceAssessmentOutput["status"] = reconciled.status;
+  if (status === "accepted" && (hasHighRisk || hasRepairWork)) {
+    status = "repairable";
   }
-  if (status === "needs_manual_review" && !hasHighRisk) {
-    status = hasRepairWork ? "repairable" : "continue_with_risk";
-  }
-  if (
-    status === "repairable"
-    && hasSoftOnlyMissingObligations
-    && !hasHighRisk
-    && reconciled.repairability !== "patchable_obligation_gap"
-  ) {
-    status = "continue_with_risk";
+  if (status === "needs_manual_review" && reconciled !== output && !hasHighRisk && hasRepairWork) {
+    status = "repairable";
   }
   if (status === "repairable" && !hasRepairWork) {
     status = "continue_with_risk";
@@ -253,9 +241,25 @@ function buildFallbackAssessment(content: string): ChapterAcceptanceAssessmentOu
 }
 
 export class ChapterAcceptanceAssessmentService {
+  async getCacheIdentity(input: ChapterAcceptanceAssessmentInput): Promise<string> {
+    return buildAcceptanceCacheIdentity(input);
+  }
+
   async assess(input: ChapterAcceptanceAssessmentInput): Promise<ChapterAcceptanceAssessmentResult> {
     const assessment = await this.invokeAssessment(input).catch(() => buildFallbackAssessment(input.content));
-    const normalized = normalizeAssessment(assessment, input.content, input.targetWordCount);
+    const proseQuality = detectProseQuality(input.content);
+    const proseIssues = proseQuality.findings.slice(0, 5).map((finding) => ({
+      severity: finding.severity,
+      category: "voice" as const,
+      code: finding.code,
+      evidence: `第 ${finding.line} 行：${finding.excerpt}`,
+      fixSuggestion: finding.fixSuggestion,
+    }));
+    const normalized = normalizeAssessment({
+      ...assessment,
+      blockingIssues: [...assessment.blockingIssues, ...proseIssues],
+      riskTags: [...assessment.riskTags, ...proseQuality.findings.map((finding) => finding.code)],
+    }, input.content, input.targetWordCount);
     const score = normalizeScore(normalized.score);
     const issues = normalized.blockingIssues.map((issue) => ({
       severity: issue.severity,
@@ -263,7 +267,31 @@ export class ChapterAcceptanceAssessmentService {
       evidence: issue.evidence,
       fixSuggestion: issue.fixSuggestion,
     })).concat(normalized.missingObligations.map((obligation) => missingObligationToReviewIssue(obligation)));
-    const auditReports = await this.persistAcceptanceReports(input, normalized, score);
+    const auditReports = input.persist === false
+      ? this.buildAcceptanceReports(input, normalized, score)
+      : await this.persistAcceptanceReports(input, normalized, score);
+    if (input.persist !== false) {
+      await openConflictService.syncFromAuditReports({
+        novelId: input.novelId,
+        chapterId: input.chapterId,
+        chapterOrder: input.chapterOrder,
+        sourceSnapshotId: null,
+        auditReports,
+      }).catch(() => null);
+    }
+    return {
+      assessment: normalized,
+      score,
+      issues,
+      auditReports,
+    };
+  }
+
+  async persistAssessmentResult(
+    input: ChapterAcceptanceAssessmentInput,
+    result: ChapterAcceptanceAssessmentResult,
+  ): Promise<ChapterAcceptanceAssessmentResult> {
+    const auditReports = await this.persistAcceptanceReports(input, result.assessment, result.score);
     await openConflictService.syncFromAuditReports({
       novelId: input.novelId,
       chapterId: input.chapterId,
@@ -271,12 +299,7 @@ export class ChapterAcceptanceAssessmentService {
       sourceSnapshotId: null,
       auditReports,
     }).catch(() => null);
-    return {
-      assessment: normalized,
-      score,
-      issues,
-      auditReports,
-    };
+    return { ...result, auditReports };
   }
 
   private async invokeAssessment(input: ChapterAcceptanceAssessmentInput): Promise<ChapterAcceptanceAssessmentOutput> {
@@ -309,6 +332,7 @@ export class ChapterAcceptanceAssessmentService {
         provider: input.provider,
         model: input.model,
         temperature: Math.min(input.temperature ?? 0.2, 0.35),
+        maxTokens: 3200,
         novelId: input.novelId,
         chapterId: input.chapterId,
         stage: "chapter_acceptance",
@@ -384,5 +408,53 @@ export class ChapterAcceptanceAssessmentService {
       },
       orderBy: { createdAt: "desc" },
     }) as unknown as Promise<AuditReport[]>;
+  }
+
+  private buildAcceptanceReports(
+    input: ChapterAcceptanceAssessmentInput,
+    assessment: ChapterAcceptanceAssessmentOutput,
+    score: QualityScore,
+  ): AuditReport[] {
+    const grouped = new Map<AuditType, AcceptanceIssue[]>();
+    for (const issue of assessment.blockingIssues) {
+      const auditType = categoryToAuditType(issue.category);
+      grouped.set(auditType, [...(grouped.get(auditType) ?? []), issue]);
+    }
+    if (grouped.size === 0) grouped.set("mode_fit", []);
+    const now = new Date().toISOString();
+    return Array.from(grouped.entries()).map(([auditType, issues]) => {
+      const reportId = `acceptance:${input.chapterId}:${auditType}`;
+      return {
+        id: reportId,
+        novelId: input.novelId,
+        chapterId: input.chapterId,
+        auditType,
+        overallScore: score.overall,
+        summary: assessment.summary,
+        legacyScoreJson: JSON.stringify({
+          ...score,
+          acceptanceStatus: assessment.status,
+          continuePolicy: assessment.continuePolicy,
+          riskTags: assessment.riskTags,
+          assetSyncRecommendation: assessment.assetSyncRecommendation,
+          repairDirectives: assessment.repairDirectives,
+        }),
+        issues: issues.map((issue, index) => ({
+          id: `${reportId}:${issue.code || "issue"}:${index + 1}`,
+          reportId,
+          auditType,
+          severity: issue.severity,
+          code: issue.code || `acceptance_${index + 1}`,
+          description: issue.evidence,
+          evidence: issue.evidence,
+          fixSuggestion: issue.fixSuggestion,
+          status: "open" as const,
+          createdAt: now,
+          updatedAt: now,
+        })),
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
   }
 }

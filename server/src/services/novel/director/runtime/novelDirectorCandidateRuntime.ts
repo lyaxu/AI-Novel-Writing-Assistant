@@ -162,7 +162,11 @@ export class NovelDirectorCandidateRuntime {
       || (currentItemKey?.startsWith("candidate_") ?? false);
     const directorSessionPhase = input.seedPayload.directorSession?.phase;
 
-    if (directorSessionPhase && directorSessionPhase !== "candidate_selection") {
+    if (directorSessionPhase === "candidate_selection") {
+      return true;
+    }
+
+    if (directorSessionPhase) {
       return false;
     }
 
@@ -171,9 +175,6 @@ export class NovelDirectorCandidateRuntime {
     }
 
     if (input.checkpointType === "candidate_selection_required" && (isCandidateStageItem || !currentItemKey)) {
-      return true;
-    }
-    if (directorSessionPhase === "candidate_selection") {
       return true;
     }
     if (input.seedPayload.candidateStage) {
@@ -200,6 +201,9 @@ export class NovelDirectorCandidateRuntime {
       : undefined;
     const continuationBookAnalysisSections = Array.isArray(seedPayload.continuationBookAnalysisSections)
       ? seedPayload.continuationBookAnalysisSections.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      : undefined;
+    const referenceBookAnalysisSections = Array.isArray(seedPayload.referenceBookAnalysisSections)
+      ? seedPayload.referenceBookAnalysisSections.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
       : undefined;
     return {
       workflowTaskId: taskId,
@@ -230,6 +234,11 @@ export class NovelDirectorCandidateRuntime {
         || seedPayload.readerChannelPreference === "general"
         ? seedPayload.readerChannelPreference
         : undefined,
+      powerSystemPreference: seedPayload.powerSystemPreference === "none"
+        || seedPayload.powerSystemPreference === "soft"
+        || seedPayload.powerSystemPreference === "ranked"
+        ? seedPayload.powerSystemPreference
+        : "ai_recommend",
       narrativePov: seedPayload.narrativePov === "first_person"
         || seedPayload.narrativePov === "third_person"
         || seedPayload.narrativePov === "mixed"
@@ -290,6 +299,8 @@ export class NovelDirectorCandidateRuntime {
       sourceKnowledgeDocumentId: readText(seedPayload.sourceKnowledgeDocumentId),
       continuationBookAnalysisId: readText(seedPayload.continuationBookAnalysisId),
       continuationBookAnalysisSections: continuationBookAnalysisSections as DirectorCandidatesRequest["continuationBookAnalysisSections"],
+      referenceBookAnalysisId: readText(seedPayload.referenceBookAnalysisId),
+      referenceBookAnalysisSections: referenceBookAnalysisSections as DirectorCandidatesRequest["referenceBookAnalysisSections"],
       provider: llm?.provider,
       model: llm?.model,
       temperature: llm?.temperature,

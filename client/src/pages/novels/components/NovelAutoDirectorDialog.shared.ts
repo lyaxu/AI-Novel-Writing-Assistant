@@ -70,6 +70,7 @@ export function buildAutoDirectorRequestPayload(
     writingMode: basicForm.writingMode,
     projectMode: basicForm.projectMode,
     readerChannelPreference: basicForm.readerChannelPreference,
+    powerSystemPreference: basicForm.powerSystemPreference,
     writingPlatformPreference: basicForm.writingPlatformPreference,
     narrativePov: basicForm.narrativePov,
     pacePreference: basicForm.pacePreference,
@@ -89,6 +90,10 @@ export function buildAutoDirectorRequestPayload(
     continuationBookAnalysisId: basicForm.continuationBookAnalysisId || undefined,
     continuationBookAnalysisSections: basicForm.continuationBookAnalysisSections.length > 0
       ? basicForm.continuationBookAnalysisSections
+      : undefined,
+    referenceBookAnalysisId: basicForm.referenceBookAnalysisId || undefined,
+    referenceBookAnalysisSections: basicForm.referenceBookAnalysisSections.length > 0
+      ? basicForm.referenceBookAnalysisSections
       : undefined,
     provider: llm.provider,
     model: llm.model,

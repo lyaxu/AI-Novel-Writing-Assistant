@@ -1,7 +1,7 @@
 import type {
   CreateMarketCreativeBriefRequest,
   MarketCreativeBrief,
-  MarketFoundationSyncTarget,
+  MarketCreativeSeed,
   MarketPlatformStatus,
   MarketProductionFoundationCandidate,
   MarketProductionFoundationSyncState,
@@ -51,6 +51,7 @@ interface MarketStoryModeCatalogOption extends MarketFoundationCatalogOption {
 
 interface StoredMarketBriefSelection {
   signals: MarketTrendReport["signals"];
+  creativeSeed?: MarketCreativeSeed | null;
   productionFoundation?: NovelCreateResourceRecommendation | null;
 }
 
@@ -148,7 +149,6 @@ function formatRankingItems(items: MarketRankingItem[]): string {
     const item = appearances.sort((left, right) => left.rank - right.rank)[0];
     return [
     `证据层级=${isPrimary(appearances) ? "主要（新书榜或新晋作者榜）" : "辅助（成熟榜单，仅用于验证持续需求）"}`,
-    `证据ID=${appearances.map((appearance) => appearance.id).join(",")}`,
     `上榜记录=${appearances.map((appearance) => `${appearance.listKey}第${appearance.rank}名`).join("、")}`,
     `书名=${item.title}`,
     item.author ? `作者=${item.author}` : "",
@@ -231,8 +231,26 @@ export function parseStoredMarketBriefSelection(value: string): StoredMarketBrie
     ? { signals: parsed }
     : {
       signals: Array.isArray(parsed.signals) ? parsed.signals : [],
+      creativeSeed: parsed.creativeSeed ?? null,
       productionFoundation: parsed.productionFoundation ?? null,
     };
+}
+
+export function buildMarketBriefRuntimePromptBlock(
+  promptBlock: string,
+  creativeSeed: MarketCreativeSeed,
+  selectedSignals: MarketTrendReport["signals"],
+): string {
+  return [
+    promptBlock.trim(),
+    "【用户确认的市场信号】",
+    ...selectedSignals.map((signal) => `- ${signal.kind}｜${signal.label}：${signal.summary}`),
+    "【开书创意种子】",
+    `起始想法：${creativeSeed.openingIdea}`,
+    `金手指 / 核心优势：${creativeSeed.coreAdvantage}`,
+    `核心卖点：${creativeSeed.bookSellingPoint}`,
+    `前30章承诺：${creativeSeed.first30ChapterPromise}`,
+  ].join("\n");
 }
 
 function markMarketRecommended(
@@ -411,6 +429,14 @@ export class MarketRadarService {
     return report ? this.serializeReport(report) : null;
   }
 
+  async getLatestDisplayableScan(): Promise<MarketScanRun | null> {
+    const run = await prisma.marketScanRun.findFirst({
+      where: { snapshots: { some: { items: { some: {} } } } },
+      orderBy: { createdAt: "desc" },
+    });
+    return run ? this.getScan(run.id) : null;
+  }
+
   async getScan(id: string): Promise<MarketScanRun | null> {
     const run = await prisma.marketScanRun.findUnique({
       where: { id },
@@ -441,64 +467,6 @@ export class MarketRadarService {
     return report ? this.serializeReport(report) : null;
   }
 
-  async syncReportFoundation(id: string, target: MarketFoundationSyncTarget): Promise<MarketTrendReport> {
-    const row = await prisma.marketTrendReport.findUnique({ where: { id } });
-    if (!row) throw new Error("市场分析报告不存在。");
-    const stored = parseJson<StoredMarketReportData>(row.structuredDataJson, { signals: [] });
-    const legacy = stored.productionFoundation;
-    const syncState = stored.productionFoundationSync ?? {};
-
-    await ensureSystemResourceStarterData();
-    const [genreTree, storyModeTree] = await Promise.all([
-      this.genreService.listGenreTree(),
-      this.storyModeService.listStoryModeTree(),
-    ]);
-    const catalog = {
-      genres: flattenGenreCatalog(genreTree),
-      storyModes: flattenStoryModeCatalog(storyModeTree),
-    };
-
-    if (target === "genre") {
-      if (stored.productionFoundationDraft) {
-        syncState.genre = await this.syncGenreFoundation(stored.productionFoundationDraft, catalog.genres);
-      } else if (legacy) {
-        const genre = catalog.genres.find((item) => item.id === legacy.genre.id);
-        if (!genre) throw new Error("报告推荐的题材基底已不存在，请重新分析。");
-        syncState.genre = { ...legacy.genre, path: genre.path, source: "market_recommended" };
-      } else {
-        throw new Error("这份历史报告没有可加入的题材基底，请重新分析。");
-      }
-    } else {
-      if (stored.productionFoundationDraft) {
-        syncState.storyModes = await this.syncStoryModeFoundation(stored.productionFoundationDraft, catalog.storyModes);
-      } else if (legacy) {
-        const primary = catalog.storyModes.find((item) => item.id === legacy.primaryStoryMode.id);
-        const secondary = legacy.secondaryStoryMode
-          ? catalog.storyModes.find((item) => item.id === legacy.secondaryStoryMode?.id)
-          : null;
-        if (!primary || (legacy.secondaryStoryMode && !secondary)) {
-          throw new Error("报告推荐的推进模式已不存在，请重新分析。");
-        }
-        syncState.storyModes = {
-          primaryStoryMode: { ...legacy.primaryStoryMode, path: primary.path, source: "market_recommended" },
-          secondaryStoryMode: legacy.secondaryStoryMode && secondary
-            ? { ...legacy.secondaryStoryMode, path: secondary.path, source: "market_recommended" }
-            : null,
-        };
-      } else {
-        throw new Error("这份历史报告没有可加入的推进模式，请重新分析。");
-      }
-    }
-
-    await prisma.marketTrendReport.update({
-      where: { id },
-      data: { structuredDataJson: JSON.stringify({ ...stored, productionFoundationSync: syncState }) },
-    });
-    const report = await this.getReport(id);
-    if (!report) throw new Error("市场分析报告同步后无法读取。");
-    return report;
-  }
-
   async createBrief(input: CreateMarketCreativeBriefRequest): Promise<MarketCreativeBrief> {
     const report = await this.getReport(input.reportId);
     if (!report) throw new Error("市场分析报告不存在。");
@@ -512,22 +480,34 @@ export class MarketRadarService {
         influenceMode: input.influenceMode,
         selectedSignalsText: selectedSignals.map((signal) => `${signal.kind}｜${signal.label}｜${signal.summary}`).join("\n"),
       },
-      options: { temperature: 0.25, maxTokens: 1_600, stage: "market_radar", itemKey: "creative_brief", entrypoint: "market_radar" },
+      options: { temperature: 0.25, maxTokens: 2_800, stage: "market_radar", itemKey: "creative_brief", entrypoint: "market_radar" },
     });
+    const runtimePromptBlock = buildMarketBriefRuntimePromptBlock(
+      result.output.promptBlock,
+      result.output.creativeSeed,
+      selectedSignals,
+    );
     const foundation = await novelCreateResourceRecommendationService.resolveRequired({
-      marketBriefPrompt: result.output.promptBlock,
+      marketBriefPrompt: runtimePromptBlock,
       genreId: report.productionFoundationSync?.genre?.id,
       primaryStoryModeId: report.productionFoundationSync?.storyModes?.primaryStoryMode.id,
       secondaryStoryModeId: report.productionFoundationSync?.storyModes?.secondaryStoryMode?.id,
+      description: result.output.creativeSeed.openingIdea,
+      bookSellingPoint: result.output.creativeSeed.bookSellingPoint,
+      first30ChapterPromise: result.output.creativeSeed.first30ChapterPromise,
     });
     const productionFoundation = markMarketRecommended(foundation.recommendation);
     const row = await prisma.marketCreativeBrief.create({
       data: {
         reportId: report.id,
         influenceMode: input.influenceMode,
-        selectedSignalsJson: JSON.stringify({ signals: selectedSignals, productionFoundation }),
+        selectedSignalsJson: JSON.stringify({
+          signals: selectedSignals,
+          creativeSeed: result.output.creativeSeed,
+          productionFoundation,
+        }),
         summary: result.output.summary,
-        promptBlock: result.output.promptBlock,
+        promptBlock: runtimePromptBlock,
       },
     });
     return this.serializeBrief(row);
@@ -542,6 +522,29 @@ export class MarketRadarService {
     if (!id?.trim()) return "";
     const brief = await prisma.marketCreativeBrief.findUnique({ where: { id: id.trim() }, select: { promptBlock: true } });
     return brief?.promptBlock.trim() ?? "";
+  }
+
+  async listSavedTopics() {
+    const rows = await prisma.marketSavedTopic.findMany({ orderBy: { createdAt: "desc" } });
+    return rows.map((row) => ({ id: row.id, reportId: row.reportId, signalId: row.signalId, kind: row.kind as MarketTrendReport["signals"][number]["kind"], label: row.label || row.name || "未命名题材", summary: row.summary || row.reason || "", direction: row.direction as MarketTrendReport["signals"][number]["direction"], heat: row.heat, crowding: row.crowding, createdAt: row.createdAt.toISOString() }));
+  }
+
+  async saveTopic(input: { reportId: string; signalId: string }) {
+    const report = await prisma.marketTrendReport.findUnique({ where: { id: input.reportId } });
+    if (!report) throw new Error("市场分析报告不存在。");
+    const stored = parseJson<StoredMarketReportData>(report.structuredDataJson, { signals: [] });
+    const signal = stored.signals.find((item) => item.id === input.signalId);
+    if (!signal) throw new Error("这条市场信号不属于当前报告。");
+    const row = await prisma.marketSavedTopic.upsert({
+      where: { reportId_signalId: { reportId: report.id, signalId: signal.id } },
+      create: { reportId: report.id, signalId: signal.id, kind: signal.kind, label: signal.label, summary: signal.summary, direction: signal.direction, heat: signal.heat, crowding: signal.crowding },
+      update: { kind: signal.kind, label: signal.label, summary: signal.summary, direction: signal.direction, heat: signal.heat, crowding: signal.crowding },
+    });
+    return { id: row.id, reportId: row.reportId, signalId: row.signalId, kind: row.kind as MarketTrendReport["signals"][number]["kind"], label: row.label, summary: row.summary, direction: row.direction as MarketTrendReport["signals"][number]["direction"], heat: row.heat, crowding: row.crowding, createdAt: row.createdAt.toISOString() };
+  }
+
+  async deleteSavedTopic(id: string): Promise<void> {
+    await prisma.marketSavedTopic.delete({ where: { id } });
   }
 
   private async collectRankings(runId: string): Promise<void> {
@@ -616,7 +619,7 @@ export class MarketRadarService {
       if (items.length === 0) return null;
       const result = await runStructuredPrompt({
         asset: marketPlatformDigestPrompt,
-        promptInput: { platformLabel: platformLabel(platform), rankingText: formatRankingItems(items), evidenceItemIds: items.map((item) => item.id) },
+        promptInput: { platformLabel: platformLabel(platform), rankingText: formatRankingItems(items) },
         options: { temperature: 0.2, maxTokens: 3_000, taskId: runId, stage: "market_radar", itemKey: `digest_${platform}`, entrypoint: "market_radar" },
       });
       return { platform, ...result.output };
@@ -640,7 +643,6 @@ export class MarketRadarService {
         storyModeCatalogText: formatStoryModeCatalog(storyModeCatalog),
         allowedGenreIds: genreCatalog.map((item) => item.id),
         allowedStoryModeIds: storyModeCatalog.map((item) => item.id),
-        evidenceItemIds: allItems.map((item) => item.id),
         hasComparableHistory: history.hasComparableHistory,
       },
       options: { temperature: 0.2, maxTokens: 6_000, taskId: runId, stage: "market_radar", itemKey: "cross_platform_synthesis", entrypoint: "market_radar" },
@@ -690,92 +692,11 @@ export class MarketRadarService {
     return { text: lines.join("\n"), hasComparableHistory: lines.length > 0 };
   }
 
-  private async syncGenreFoundation(
-    draft: MarketProductionFoundationDraft,
-    catalog: MarketFoundationCatalogOption[],
-  ): Promise<NovelResourceRecommendationOption> {
-    const genreMatch = findMarketFoundationAsset(catalog, draft.genre);
-    if (draft.genre.existingId && !genreMatch) {
-      throw new Error("AI 推荐的题材基底在同步前失效，请重新分析。");
-    }
-    let genre = genreMatch;
-    if (!genre) {
-      const created = await this.genreService.createGenreTree({
-        name: draft.genre.name,
-        description: draft.genre.description,
-        template: draft.genre.template,
-      });
-      genre = { ...created, path: created.name };
-    }
-
-    return {
-      id: genre.id,
-      name: genre.name,
-      path: genre.path,
-      reason: draft.genre.reason,
-      source: "market_recommended",
-    };
-  }
-
-  private async syncStoryModeFoundation(
-    draft: MarketProductionFoundationDraft,
-    catalog: MarketStoryModeCatalogOption[],
-  ): Promise<NonNullable<MarketProductionFoundationSyncState["storyModes"]>> {
-    const resolveStoryMode = async (
-      modeDraft: MarketProductionFoundationDraft["primaryStoryMode"],
-    ): Promise<MarketStoryModeCatalogOption> => {
-      const matched = findMarketFoundationAsset(catalog, modeDraft);
-      if (modeDraft.existingId && !matched) {
-        throw new Error("AI 推荐的推进模式在同步前失效，请重新分析。");
-      }
-      if (matched) {
-        return matched;
-      }
-      const created = await this.storyModeService.createStoryModeTree({
-        name: modeDraft.name,
-        description: modeDraft.description,
-        template: modeDraft.template,
-        profile: modeDraft.profile,
-      });
-      const option = { ...created, path: created.name };
-      catalog.push(option);
-      return option;
-    };
-
-    const primaryStoryMode = await resolveStoryMode(draft.primaryStoryMode);
-    const secondaryStoryMode = draft.secondaryStoryMode
-      ? await resolveStoryMode(draft.secondaryStoryMode)
-      : null;
-    if (secondaryStoryMode?.id === primaryStoryMode.id) {
-      throw new Error("AI 推荐的主推进模式与辅助推进模式重复，请重新分析。");
-    }
-
-    return {
-      primaryStoryMode: {
-        id: primaryStoryMode.id,
-        name: primaryStoryMode.name,
-        path: primaryStoryMode.path,
-        reason: draft.primaryStoryMode.reason,
-        source: "market_recommended",
-      },
-      secondaryStoryMode: secondaryStoryMode && draft.secondaryStoryMode
-        ? {
-          id: secondaryStoryMode.id,
-          name: secondaryStoryMode.name,
-          path: secondaryStoryMode.path,
-          reason: draft.secondaryStoryMode.reason,
-          source: "market_recommended",
-        }
-        : null,
-    };
-  }
-
   private serializeReport(report: {
     id: string; runId: string; summary: string; structuredDataJson: string; createdAt: Date;
     run: { snapshots: Array<{ platform: string; listKey: string; status: string; error: string | null; capturedAt: Date; items: any[] }> };
   }): MarketTrendReport {
     const structured = parseJson<StoredMarketReportData>(report.structuredDataJson, { signals: [] });
-    const evidenceItems = report.run.snapshots.flatMap((snapshot) => snapshot.items.map((item) => toRankingItem({ ...item, snapshot })));
     const successfulSnapshots = report.run.snapshots.filter((snapshot) => snapshot.status === "succeeded" && snapshot.items.length > 0);
     const analyzedLists = structured.analyzedLists?.length
       ? structured.analyzedLists
@@ -793,7 +714,7 @@ export class MarketRadarService {
       analyzedLists, analyzedItemIds: structured.analyzedItemIds,
       productionFoundationCandidate: toMarketFoundationCandidate(structured),
       productionFoundationSync: structured.productionFoundationSync ?? null,
-      platformStatuses, evidenceItems, createdAt: report.createdAt.toISOString(),
+      platformStatuses, createdAt: report.createdAt.toISOString(),
     };
   }
 
@@ -802,6 +723,7 @@ export class MarketRadarService {
     return {
       id: row.id, reportId: row.reportId, influenceMode: row.influenceMode as MarketCreativeBrief["influenceMode"],
       selectedSignals: selection.signals, summary: row.summary, promptBlock: row.promptBlock,
+      creativeSeed: selection.creativeSeed ?? null,
       productionFoundation: selection.productionFoundation ?? null,
       createdAt: row.createdAt.toISOString(),
     };

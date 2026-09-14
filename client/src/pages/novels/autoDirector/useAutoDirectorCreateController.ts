@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { buildStyleIntentSummary } from "@ai-novel/shared/types/styleEngine";
 import type { UnifiedTaskDetail } from "@ai-novel/shared/types/task";
+import type { DirectorIssuePolicy } from "@ai-novel/shared/types/directorIssue";
 import {
   DIRECTOR_RUN_MODES,
   buildFullBookAutopilotExecutionPlan,
@@ -26,6 +27,7 @@ import {
 } from "@/api/novelDirector";
 import { queryKeys } from "@/api/queryKeys";
 import { getStyleProfiles } from "@/api/styleEngine";
+import { getAutoDirectorIssuePolicy } from "@/api/settings";
 import { getTaskDetail } from "@/api/tasks";
 import { toast } from "@/components/ui/toast";
 import { isChapterTitleDiversitySummary } from "@/lib/directorTaskNotice";
@@ -57,9 +59,11 @@ import {
 } from "../components/directorCandidateSelectionHandlers";
 import { useNovelAutoDirectorCandidateMutations } from "../components/useNovelAutoDirectorCandidateMutations";
 import { hasCreationFoundationChanged } from "./creationFoundationPickerState";
+import type { AutoDirectorCreateDraft } from "./draft/autoDirectorCreateDraft";
 
 interface UseAutoDirectorCreateControllerInput {
   marketBriefId?: string;
+  initialStyleProfileId?: string;
   basicForm: NovelBasicFormState;
   genreOptions: Array<{
     id: string;
@@ -74,6 +78,7 @@ interface UseAutoDirectorCreateControllerInput {
     description?: string | null;
   }>;
   worldOptions: Array<{ id: string; name: string }>;
+  initialDraft?: AutoDirectorCreateDraft | null;
   workflowTaskId?: string;
   restoredTask?: UnifiedTaskDetail | null;
   onWorkflowTaskChange?: (workflowTaskId: string) => void;
@@ -99,15 +104,17 @@ export function useAutoDirectorCreateController(input: UseAutoDirectorCreateCont
     genreOptions,
     storyModeOptions,
     worldOptions,
+    initialDraft,
     workflowTaskId: workflowTaskIdProp,
     restoredTask,
     onWorkflowTaskChange,
     onBasicFormChange,
     marketBriefId,
+    initialStyleProfileId,
   } = input;
   const llm = useLLMStore();
   const queryClient = useQueryClient();
-  const [idea, setIdea] = useState("");
+  const [idea, setIdea] = useState(initialDraft?.idea ?? "");
   const [feedback, setFeedback] = useState("");
   const [selectedPresets, setSelectedPresets] = useState<DirectorCorrectionPreset[]>([]);
   const [batches, setBatches] = useState<DirectorCandidateBatch[]>([]);
@@ -117,18 +124,30 @@ export function useAutoDirectorCreateController(input: UseAutoDirectorCreateCont
   const [executionRequested, setExecutionRequested] = useState(false);
   const [pendingTitleHint, setPendingTitleHint] = useState("");
   const [executionError, setExecutionError] = useState("");
-  const [runMode, setRunMode] = useState<DirectorRunMode>(DEFAULT_VISIBLE_RUN_MODE);
+  const [runMode, setRunMode] = useState<DirectorRunMode>(initialDraft?.runMode ?? DEFAULT_VISIBLE_RUN_MODE);
   const [worldSetupMode, setWorldSetupMode] = useState<DirectorWorldSetupMode>("auto_generate");
   const [autoExecutionDraft, setAutoExecutionDraft] = useState(() => createDefaultDirectorAutoExecutionDraftState());
-  const [selectedStyleProfileId, setSelectedStyleProfileId] = useState("");
+  const [selectedStyleProfileId, setSelectedStyleProfileId] = useState(
+    initialStyleProfileId || initialDraft?.selectedStyleProfileId || "",
+  );
   const [ideaInspirations, setIdeaInspirations] = useState<DirectorIdeaInspiration[]>([]);
   const [ideaConstellationOptions, setIdeaConstellationOptions] = useState<DirectorIdeaConstellationOption[]>([]);
   const [candidatePatchFeedbacks, setCandidatePatchFeedbacks] = useState<Record<string, string>>({});
   const [titlePatchFeedbacks, setTitlePatchFeedbacks] = useState<Record<string, string>>({});
   const [isUpdatingFoundation, setIsUpdatingFoundation] = useState(false);
+  const issuePolicyQuery = useQuery({
+    queryKey: ["settings", "auto-director-issue-policy"],
+    queryFn: getAutoDirectorIssuePolicy,
+    retry: false,
+  });
+  const [issuePolicy, setIssuePolicy] = useState<DirectorIssuePolicy | null>(null);
   const confirmSubmitLockedRef = useRef(false);
   const autoApprovalDraft = useDirectorAutoApprovalDraft(true);
   const { applySnapshot: applyAutoApprovalSnapshot } = autoApprovalDraft;
+
+  useEffect(() => {
+    if (issuePolicyQuery.data?.data) setIssuePolicy(issuePolicyQuery.data.data);
+  }, [issuePolicyQuery.data?.data]);
 
   useEffect(() => {
     if (!workflowTaskIdProp || workflowTaskIdProp === workflowTaskId) {
@@ -136,6 +155,12 @@ export function useAutoDirectorCreateController(input: UseAutoDirectorCreateCont
     }
     setWorkflowTaskId(workflowTaskIdProp);
   }, [workflowTaskId, workflowTaskIdProp]);
+
+  useEffect(() => {
+    if (initialStyleProfileId) {
+      setSelectedStyleProfileId((current) => current || initialStyleProfileId);
+    }
+  }, [initialStyleProfileId]);
 
   useEffect(() => {
     if (!restoredTask) {
@@ -164,16 +189,11 @@ export function useAutoDirectorCreateController(input: UseAutoDirectorCreateCont
     if (typeof seedPayload?.styleProfileId === "string") {
       setSelectedStyleProfileId(seedPayload.styleProfileId);
     }
-    if (seedPayload?.worldSetupMode === "skip") {
-      setWorldSetupMode("skip");
-    } else if (!seedPayload?.worldId) {
-      setWorldSetupMode("auto_generate");
-    }
+    setWorldSetupMode("auto_generate");
   }, [applyAutoApprovalSnapshot, restoredTask, workflowTaskId]);
 
   const directorBasicForm = useMemo(
     () => patchNovelBasicForm(basicForm, {
-      writingMode: "original",
       projectMode: "ai_led",
     }),
     [basicForm],
@@ -369,6 +389,9 @@ export function useAutoDirectorCreateController(input: UseAutoDirectorCreateCont
         styleProfileId: selectedStyleProfileId || null,
         styleIntentSummary: selectedStyleSummary ?? null,
         marketBriefId: marketBriefId || null,
+        issueGovernanceVersion: issuePolicy ? 1 : undefined,
+        issuePolicy: issuePolicy ?? undefined,
+        issuePolicySource: "global",
       },
     });
     const taskId = response.data?.id ?? "";
@@ -450,6 +473,9 @@ export function useAutoDirectorCreateController(input: UseAutoDirectorCreateCont
         autoApproval: {
           ...autoApprovalDraft.buildPayload(runMode),
         },
+        issueGovernanceVersion: issuePolicy ? 1 : undefined,
+        issuePolicy: issuePolicy ?? undefined,
+        issuePolicySource: "novel",
       });
       return {
         command: response.data ?? null,
@@ -546,6 +572,7 @@ export function useAutoDirectorCreateController(input: UseAutoDirectorCreateCont
   const updateProductionFoundation = async (patch: Partial<{
     genreId: string;
     primaryStoryModeId: string;
+    powerSystemPreference: NovelBasicFormState["powerSystemPreference"];
   }>): Promise<boolean> => {
     if (!hasCreationFoundationChanged(directorBasicForm, patch)) {
       return true;
@@ -554,14 +581,16 @@ export function useAutoDirectorCreateController(input: UseAutoDirectorCreateCont
     const shouldInvalidateCandidates = batches.length > 0;
     if (
       shouldInvalidateCandidates
-      && !window.confirm("修改故事类型或推进方式后，旧方向需要重新适配并重新生成。确认修改吗？")
+      && !window.confirm("修改故事类型、推进方式或战力体系后，旧方向需要重新适配并重新生成。确认修改吗？")
     ) {
       return false;
     }
 
     const nextPatch: Partial<NovelBasicFormState> = {
       ...patch,
-      secondaryStoryModeId: "",
+      ...(patch.genreId !== undefined || patch.primaryStoryModeId !== undefined
+        ? { secondaryStoryModeId: "" }
+        : {}),
     };
     const nextForm = patchNovelBasicForm(directorBasicForm, nextPatch);
 
@@ -576,7 +605,8 @@ export function useAutoDirectorCreateController(input: UseAutoDirectorCreateCont
             basicForm: nextForm,
             genreId: nextForm.genreId || null,
             primaryStoryModeId: nextForm.primaryStoryModeId || null,
-            secondaryStoryModeId: null,
+            secondaryStoryModeId: nextForm.secondaryStoryModeId || null,
+            powerSystemPreference: nextForm.powerSystemPreference,
             productionFoundation: null,
             batches: [],
             candidateStage: null,
@@ -684,6 +714,9 @@ export function useAutoDirectorCreateController(input: UseAutoDirectorCreateCont
     titlePatchFeedbacks,
     setTitlePatchFeedbacks,
     isUpdatingFoundation,
+    issuePolicy,
+    issuePolicyLoading: issuePolicyQuery.isLoading,
+    setIssuePolicy,
     updateProductionFoundation,
     canGenerate,
     generateMutation,

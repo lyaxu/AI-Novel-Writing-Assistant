@@ -10,7 +10,6 @@ import {
 interface PlatformDigestInput {
   platformLabel: string;
   rankingText: string;
-  evidenceItemIds: string[];
 }
 
 interface TrendReportInput {
@@ -20,7 +19,6 @@ interface TrendReportInput {
   storyModeCatalogText: string;
   allowedGenreIds: string[];
   allowedStoryModeIds: string[];
-  evidenceItemIds: string[];
   hasComparableHistory: boolean;
 }
 
@@ -32,7 +30,7 @@ interface CreativeBriefInput {
 const analystSystem = [
   "你是中文网络文学市场分析师。只分析输入中的公开榜单元数据，不补写作品正文，不假装知道未提供的信息。",
   "语义分类、套路归纳和机会判断必须由你完成；不能只按标题关键词机械计数。",
-  "所有结论都必须引用输入中存在的 evidenceItemIds。不得捏造作品、人名、数据或证据ID。",
+  "只根据输入中的公开榜单元数据归纳热门题材和市场信号；对输入未提供的信息不要臆测。",
   "重点分析：热门题材组合、主角身份、金手指机制、开篇危机、关系卖点、标题句式、拥挤套路和差异化机会。",
   "输入有新书榜或新晋作者榜时只分析这些新书证据；成熟榜单只会在没有可用新书榜时作为回退数据。",
   "kind 只能使用 genre、protagonist、advantage、opening、relationship、title_pattern、opportunity、crowding；不得创造近义枚举值。",
@@ -59,13 +57,8 @@ export const marketPlatformDigestPrompt: PromptAsset<PlatformDigestInput, z.infe
       input.rankingText,
     ].join("\n")),
   ],
-  postValidate: (output, input) => {
-    const allowed = new Set(input.evidenceItemIds);
-    if (output.signals.some((signal) => signal.evidenceItemIds.some((id) => !allowed.has(id)))) {
-      throw new Error("平台榜单归纳引用了不存在的证据。");
-    }
-    return output;
-  },
+  postValidate: (output) => output,
+  semanticRetryPolicy: { maxAttempts: 1 },
 };
 
 export const marketTrendSynthesisPrompt: PromptAsset<TrendReportInput, z.infer<typeof marketTrendReportSchema>> = {
@@ -105,20 +98,8 @@ export const marketTrendSynthesisPrompt: PromptAsset<TrendReportInput, z.infer<t
     ].join("\n")),
   ],
   postValidate: (output, input) => {
-    const allowed = new Set(input.evidenceItemIds);
     if (!input.hasComparableHistory && output.signals.some((signal) => signal.direction !== "current")) {
       throw new Error("没有历史快照时不能声称趋势变化。");
-    }
-    if (output.signals.some((signal) => signal.evidenceItemIds.some((id) => !allowed.has(id)))) {
-      throw new Error("跨平台分析引用了不存在的证据。");
-    }
-    const foundationAssets = [
-      output.productionFoundation.genre,
-      output.productionFoundation.primaryStoryMode,
-      output.productionFoundation.secondaryStoryMode,
-    ].filter(Boolean);
-    if (foundationAssets.some((asset) => asset!.evidenceItemIds.some((id) => !allowed.has(id)))) {
-      throw new Error("生产底座推荐引用了不存在的证据。");
     }
     if (
       output.productionFoundation.genre.existingId
@@ -134,11 +115,12 @@ export const marketTrendSynthesisPrompt: PromptAsset<TrendReportInput, z.infer<t
     }
     return output;
   },
+  semanticRetryPolicy: { maxAttempts: 1 },
 };
 
 export const marketCreativeBriefPrompt: PromptAsset<CreativeBriefInput, z.infer<typeof marketCreativeBriefSchema>> = {
   id: "market_radar.creative_brief",
-  version: "v1",
+  version: "v3",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -150,7 +132,13 @@ export const marketCreativeBriefPrompt: PromptAsset<CreativeBriefInput, z.infer<
     new SystemMessage([
       "你是自动导演的开书市场简报编辑。把用户选择的市场信号整理成第一次创意生成可执行的约束。",
       "严禁复用榜单作品的人名、专有设定、简介句子和完整书名；只能提炼读者需求、爽点机制和结构机会。",
+      "雷达阶段不得新造或输出任何具体人物姓名、艺名、笔名、作品名、组织名、学校名、城市名或门派名。summary、promptBlock 和 creativeSeed 全部使用身份、角色职能或通用场景称谓，例如“女经纪人”“当红演员”“商业对手”；具体命名留给后续角色与世界规划阶段。",
       "promptBlock 必须能直接指导题材推荐、金手指、首章爆点、整书方向和网文书名。",
+      "creativeSeed.openingIdea 必须是一段可直接开书的中文起始想法，写清主角身份、金手指或核心优势、开局发生的具体事件和近期目标，不输出标题、大纲、Markdown 或过程说明。",
+      "creativeSeed.coreAdvantage 必须说明主角能做什么，并至少包含触发条件、使用边界、成长方向或代价中的一项；现实题材可使用专业能力、信息差、身份资源或稀缺关系。",
+      "creativeSeed.bookSellingPoint 要说明读者持续追读的核心满足点，不能只复述题材名称。",
+      "creativeSeed.first30ChapterPromise 要写清前30章必须兑现的阶段结果、关系变化或能力成长。",
+      "用户选中的 advantage、opening、protagonist、relationship 信号必须分别进入对应创作内容；若某类未选择，再结合其余信号补齐，不得用题材和推进模式代替具体设定。",
       "不要要求后续质量复审补救，目标是提高第一次生成质量。",
     ].join("\n")),
     new HumanMessage([

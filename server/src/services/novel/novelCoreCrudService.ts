@@ -23,6 +23,7 @@ import {
   UpdateNovelInput,
 } from "./novelCoreShared";
 import { queueRagDelete, queueRagUpsert } from "./novelCoreSupport";
+import { novelEventBus } from "../../events";
 
 export class NovelCoreCrudService {
   private readonly novelContinuationService = new NovelContinuationService();
@@ -32,6 +33,19 @@ export class NovelCoreCrudService {
   private validateStoryModeSelection(primaryStoryModeId?: string | null, secondaryStoryModeId?: string | null): void {
     if (primaryStoryModeId && secondaryStoryModeId && primaryStoryModeId === secondaryStoryModeId) {
       throw new AppError("主流派模式和副流派模式不能选择同一项。", 400);
+    }
+  }
+
+  private async validateReferenceBookAnalysis(analysisId: string | null | undefined): Promise<void> {
+    if (!analysisId) {
+      return;
+    }
+    const analysis = await prisma.bookAnalysis.findFirst({
+      where: { id: analysisId, status: "succeeded" },
+      select: { id: true },
+    });
+    if (!analysis) {
+      throw new AppError("参考拆书不存在或尚未完成。", 400);
     }
   }
 
@@ -335,6 +349,10 @@ export class NovelCoreCrudService {
     const continuationBookAnalysisSections = serializeContinuationBookAnalysisSections(
       input.continuationBookAnalysisSections,
     );
+    const referenceBookAnalysisId = writingMode === "original" ? (input.referenceBookAnalysisId ?? null) : null;
+    const referenceBookAnalysisSections = serializeContinuationBookAnalysisSections(
+      input.referenceBookAnalysisSections,
+    );
     const commercialTagsJson = serializeCommercialTagsJson(input.commercialTags);
     this.validateStoryModeSelection(input.primaryStoryModeId, input.secondaryStoryModeId);
 
@@ -344,6 +362,7 @@ export class NovelCoreCrudService {
       sourceKnowledgeDocumentId,
       continuationBookAnalysisId: normalizedContinuationBookAnalysisId,
     });
+    await this.validateReferenceBookAnalysis(referenceBookAnalysisId);
 
     const created = await prisma.novel.create({
       data: {
@@ -385,6 +404,8 @@ export class NovelCoreCrudService {
           && normalizedContinuationBookAnalysisId
             ? continuationBookAnalysisSections
             : null,
+        referenceBookAnalysisId,
+        referenceBookAnalysisSections: referenceBookAnalysisId ? referenceBookAnalysisSections : null,
       },
     });
 
@@ -427,6 +448,8 @@ export class NovelCoreCrudService {
         sourceKnowledgeDocumentId: true,
         continuationBookAnalysisId: true,
         continuationBookAnalysisSections: true,
+        referenceBookAnalysisId: true,
+        referenceBookAnalysisSections: true,
         primaryStoryModeId: true,
         secondaryStoryModeId: true,
       },
@@ -446,6 +469,12 @@ export class NovelCoreCrudService {
     const nextContinuationBookAnalysisSections = input.continuationBookAnalysisSections !== undefined
       ? input.continuationBookAnalysisSections
       : parseContinuationBookAnalysisSections(existing.continuationBookAnalysisSections);
+    const nextReferenceBookAnalysisId = input.referenceBookAnalysisId !== undefined
+      ? input.referenceBookAnalysisId
+      : existing.referenceBookAnalysisId;
+    const nextReferenceBookAnalysisSections = input.referenceBookAnalysisSections !== undefined
+      ? input.referenceBookAnalysisSections
+      : parseContinuationBookAnalysisSections(existing.referenceBookAnalysisSections);
     const nextPrimaryStoryModeId = input.primaryStoryModeId !== undefined
       ? input.primaryStoryModeId
       : existing.primaryStoryModeId;
@@ -456,6 +485,9 @@ export class NovelCoreCrudService {
       nextWritingMode === "continuation" && (nextSourceNovelId || nextSourceKnowledgeDocumentId)
         ? nextContinuationBookAnalysisId
         : null;
+    const normalizedNextReferenceBookAnalysisId = nextWritingMode === "original"
+      ? nextReferenceBookAnalysisId
+      : null;
     this.validateStoryModeSelection(nextPrimaryStoryModeId, nextSecondaryStoryModeId);
 
     await this.novelContinuationService.validateWritingModeConfig({
@@ -465,9 +497,11 @@ export class NovelCoreCrudService {
       sourceKnowledgeDocumentId: nextSourceKnowledgeDocumentId,
       continuationBookAnalysisId: normalizedNextContinuationBookAnalysisId,
     });
+    await this.validateReferenceBookAnalysis(normalizedNextReferenceBookAnalysisId);
 
     const {
       continuationBookAnalysisSections: _ignoreSectionPatch,
+      referenceBookAnalysisSections: _ignoreReferenceSectionPatch,
       targetAudience: _ignoreTargetAudience,
       bookSellingPoint: _ignoreBookSellingPoint,
       competingFeel: _ignoreCompetingFeel,
@@ -477,6 +511,7 @@ export class NovelCoreCrudService {
     } = input;
 
     const serializedContinuationSections = serializeContinuationBookAnalysisSections(nextContinuationBookAnalysisSections);
+    const serializedReferenceSections = serializeContinuationBookAnalysisSections(nextReferenceBookAnalysisSections);
     const commercialTagsJson = input.commercialTags !== undefined
       ? serializeCommercialTagsJson(input.commercialTags)
       : undefined;
@@ -503,6 +538,8 @@ export class NovelCoreCrudService {
           && normalizedNextContinuationBookAnalysisId
             ? serializedContinuationSections
             : null,
+        referenceBookAnalysisId: normalizedNextReferenceBookAnalysisId,
+        referenceBookAnalysisSections: normalizedNextReferenceBookAnalysisId ? serializedReferenceSections : null,
         ...(shouldResetWorldSlice
           ? {
             storyWorldSliceJson: null,
@@ -521,13 +558,70 @@ export class NovelCoreCrudService {
     if (updated.worldId) {
       queueRagUpsert("world", updated.worldId);
     }
+    void novelEventBus.emit({
+      type: "novel:updated",
+      payload: { novelId: id, fields: Object.keys(input) },
+    }).catch(() => {});
     return normalizeNovelOutput(updated);
   }
 
   async deleteNovel(id: string) {
+    await prisma.$transaction(async (transaction) => {
+      const [failedWorkflowTasks, failedAgentRuns, failedPipelineJobs, failedImageTasks] = await Promise.all([
+        transaction.novelWorkflowTask.findMany({
+          where: { novelId: id, status: "failed" },
+          select: { id: true },
+        }),
+        transaction.agentRun.findMany({
+          where: { novelId: id, status: "failed" },
+          select: { id: true },
+        }),
+        transaction.generationJob.findMany({
+          where: { novelId: id, status: "failed" },
+          select: { id: true },
+        }),
+        transaction.imageGenerationTask.findMany({
+          where: { novelId: id, status: "failed" },
+          select: { id: true },
+        }),
+      ]);
+      const failedWorkflowTaskIds = failedWorkflowTasks.map((task) => task.id);
+      const failedAgentRunIds = failedAgentRuns.map((task) => task.id);
+      const failedPipelineJobIds = failedPipelineJobs.map((task) => task.id);
+      const failedImageTaskIds = failedImageTasks.map((task) => task.id);
+
+      if (
+        failedWorkflowTaskIds.length > 0
+        || failedAgentRunIds.length > 0
+        || failedPipelineJobIds.length > 0
+        || failedImageTaskIds.length > 0
+      ) {
+        await transaction.taskCenterArchive.deleteMany({
+          where: {
+            OR: [
+              { taskKind: "novel_workflow", taskId: { in: failedWorkflowTaskIds } },
+              { taskKind: "agent_run", taskId: { in: failedAgentRunIds } },
+              { taskKind: "novel_pipeline", taskId: { in: failedPipelineJobIds } },
+              { taskKind: "image_generation", taskId: { in: failedImageTaskIds } },
+            ],
+          },
+        });
+      }
+      if (failedWorkflowTaskIds.length > 0) {
+        await transaction.novelWorkflowTask.deleteMany({
+          where: { id: { in: failedWorkflowTaskIds } },
+        });
+      }
+      if (failedAgentRunIds.length > 0) {
+        await transaction.agentRun.deleteMany({
+          where: { id: { in: failedAgentRunIds } },
+        });
+      }
+
+      await transaction.novel.delete({ where: { id } });
+    });
     queueRagDelete("novel", id);
     queueRagDelete("bible", id);
-    await prisma.novel.delete({ where: { id } });
   }
 
   async listChapters(novelId: string) {
