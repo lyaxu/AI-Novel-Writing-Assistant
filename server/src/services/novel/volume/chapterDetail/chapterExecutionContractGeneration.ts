@@ -141,7 +141,8 @@ export async function generateChapterTaskSheetDetail(params: {
           provider: params.options.provider,
           model: params.options.model,
           temperature: params.options.temperature ?? 0.35,
-          maxTokens: 3_200,
+          // The contract includes all scene cards, not just the task-sheet summary.
+          maxTokens: 8_192,
           taskId: params.options.taskId,
           entrypoint: params.options.entrypoint,
           novelId: promptInput.workspace.novelId,

@@ -9,6 +9,8 @@ import type { TaskType } from "./modelRouter";
 import type { StructuredOutputStrategy } from "./structuredOutput";
 import { toText } from "../services/novel/novelP0Utils";
 import type { PromptInvocationMeta } from "../prompting/core/promptTypes";
+import { extractLlmTokenUsage, mergeStreamTokenUsage, type LlmTokenUsageSnapshot } from "./usageTracking";
+import { extractFinishReason, reachedOutputLimit, resolveRepairOutputBudget } from "../platform/llm/streaming/responseDiagnostics";
 
 export interface StructuredRepairInput<T> {
   provider?: LLMProvider;
@@ -16,6 +18,8 @@ export interface StructuredRepairInput<T> {
   apiKey?: string;
   baseURL?: string;
   maxTokens?: number;
+  tokenUsage?: LlmTokenUsageSnapshot | null;
+  finishReason?: string | null;
   timeoutMs?: number;
   signal?: AbortSignal;
   taskType?: TaskType;
@@ -164,13 +168,18 @@ export async function repairWithLlm<T>(
     repairAttempt,
     strategy: "prompt_json",
   });
+  const repairMaxTokens = resolveRepairOutputBudget({
+    maxTokens: input.maxTokens,
+    finishReason: input.finishReason,
+    completionTokens: input.tokenUsage?.completionTokens,
+  });
   const llm = await getLLM(input.provider, {
     fallbackProvider: "deepseek",
     apiKey: input.apiKey,
     baseURL: input.baseURL,
     model: input.model,
     temperature: 0.15,
-    maxTokens: input.maxTokens,
+    maxTokens: repairMaxTokens,
     timeoutMs: input.timeoutMs,
     taskType: input.taskType ?? "planner",
     requestProtocol: input.requestProtocol,
@@ -250,6 +259,8 @@ export async function repairWithLlm<T>(
     if (input.signal) {
       invokeOptions.signal = input.signal;
     }
+    let repairUsage: LlmTokenUsageSnapshot | null = null;
+    let repairFinishReason: string | null = null;
     const repairedRaw = await runWithEnforcedTimeout({
       label: `${input.label}#repair-${repairAttempt}`,
       timeoutMs: input.timeoutMs,
@@ -261,6 +272,8 @@ export async function repairWithLlm<T>(
         );
         let content = "";
         for await (const chunk of stream) {
+          repairUsage = mergeStreamTokenUsage(repairUsage, extractLlmTokenUsage(chunk));
+          repairFinishReason = extractFinishReason(chunk) ?? repairFinishReason;
           const delta = toText(chunk.content);
           content += delta;
           input.onRepairOutputDelta?.(delta);
@@ -297,7 +310,12 @@ export async function repairWithLlm<T>(
     });
     const repairParse = helpers.tryParseStructuredJsonValue(repairedRaw);
     if ("error" in repairParse) {
-      throw new Error(`[${input.label}] JSON repair 后仍无法解析。错误：${repairParse.error}`);
+      const limitHint = reachedOutputLimit({
+        finishReason: repairFinishReason,
+        maxTokens: repairMaxTokens,
+        completionTokens: (repairUsage as LlmTokenUsageSnapshot | null)?.completionTokens,
+      }) ? `修复输出也达到额度上限（${repairMaxTokens ?? "未知"} tokens）。` : "";
+      throw new Error(`[${input.label}] ${limitHint}JSON repair 后仍无法解析。错误：${repairParse.error}`);
     }
 
     const final = input.schema.safeParse(repairParse.parsed);

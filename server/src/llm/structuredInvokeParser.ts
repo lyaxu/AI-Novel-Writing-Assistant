@@ -18,6 +18,7 @@ import {
 import { extractJSONValue } from "../services/novel/novelP0Utils";
 import type { PromptInvocationMeta } from "../prompting/core/promptTypes";
 import type { LlmTokenUsageSnapshot } from "./usageTracking";
+import { reachedOutputLimit } from "../platform/llm/streaming/responseDiagnostics";
 
 export interface StructuredInvokeResult<T> {
   data: T;
@@ -31,6 +32,7 @@ export interface StructuredInvokeRawParseInput<T> {
   rawContent: string;
   schema: ZodType<T>;
   tokenUsage?: LlmTokenUsageSnapshot | null;
+  finishReason?: string | null;
   provider?: LLMProvider;
   model?: string;
   apiKey?: string;
@@ -385,6 +387,11 @@ export async function parseStructuredLlmRawContentDetailed<T>(
   const initialParse = tryParseStructuredJsonValue(input.rawContent);
   const parseErrorMessage = "error" in initialParse ? initialParse.error : "";
   const parsed = "parsed" in initialParse ? initialParse.parsed : null;
+  const limitHint = reachedOutputLimit({
+    finishReason: input.finishReason,
+    maxTokens: input.maxTokens,
+    completionTokens: input.tokenUsage?.completionTokens,
+  }) ? `模型输出达到额度上限（${input.maxTokens ?? "未知"} tokens），结果被截断。` : "";
 
   const maxRepairAttempts = input.maxRepairAttempts ?? 1;
   if (parseErrorMessage) {
@@ -403,7 +410,7 @@ export async function parseStructuredLlmRawContentDetailed<T>(
       } catch (repairError) {
         if (attempt >= maxRepairAttempts) {
           throw buildStructuredError({
-            message: `[${input.label}] JSON 解析失败且修复未成功。错误：${repairError instanceof Error ? repairError.message : String(repairError)}`,
+            message: `[${input.label}] ${limitHint}JSON 解析失败且修复未成功。错误：${repairError instanceof Error ? repairError.message : String(repairError)}`,
             category: classifyStructuredOutputFailure({
               error: repairError,
               rawContent: input.rawContent,

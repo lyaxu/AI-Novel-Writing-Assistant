@@ -68,6 +68,8 @@
 - 流式文本输出使用 `streamTextPrompt`
 - 流式结构化输出使用 `streamStructuredPrompt`
 - 调用方继续保留原 service 的 public method、数据库写入和返回 shape
+- 流式消费与完成结果是两个独立的失败通道。`core/streaming/promptStreamCapture.ts` 负责立即观察完成结果的拒绝；调用方延迟等待或跳过 `complete` 不得造成未处理异常，之后等待原 Promise 仍必须收到原错误。
+- 流式消费提前结束不能把部分正文当作完成结果保存。断线、取消和后处理失败都必须保持拒绝语义，不可通过全局吞掉异常来维持进程。
 
 说明：
 

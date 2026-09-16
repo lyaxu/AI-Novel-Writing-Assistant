@@ -36,6 +36,7 @@ import {
 import { toText } from "../services/novel/novelP0Utils";
 import type { PromptInvocationMeta } from "../prompting/core/promptTypes";
 import { ReasoningStreamCollector } from "./reasoning";
+import { extractFinishReason } from "../platform/llm/streaming/responseDiagnostics";
 
 export {
   parseStructuredLlmRawContentDetailed,
@@ -279,6 +280,7 @@ async function invokeStructuredAttempt<T>(input: {
         );
         let rawContent = "";
         let tokenUsage = null;
+        let finishReason: string | null = null;
         const reasoningCollector = new ReasoningStreamCollector();
         for await (const chunk of stream) {
           const content = toText(chunk.content);
@@ -286,9 +288,10 @@ async function invokeStructuredAttempt<T>(input: {
           rawContent += content;
           liveSession.delta(content);
           tokenUsage = mergeStreamTokenUsage(tokenUsage, extractLlmTokenUsage(chunk));
+          finishReason = extractFinishReason(chunk) ?? finishReason;
         }
         liveSession.reasoning(reasoningCollector.flush());
-        return { rawContent, tokenUsage };
+        return { rawContent, tokenUsage, finishReason };
       },
     });
     const rawContent = collected.rawContent;
@@ -310,6 +313,7 @@ async function invokeStructuredAttempt<T>(input: {
       rawContent,
       schema: input.baseInput.schema,
       tokenUsage: collected.tokenUsage,
+      finishReason: collected.finishReason,
       provider: resolved.provider,
       model: resolved.model,
       apiKey: input.target.apiKey,

@@ -31,6 +31,7 @@ import {
   type PromptQualityFailureKind,
 } from "./promptQualityTelemetry";
 import { appendStructuredOutputHintMessages } from "./structuredOutputHint";
+import { captureStreamOutput, observeStreamCompletion } from "./streaming/promptStreamCapture";
 import type {
   PromptAsset,
   PromptExecutionOptions,
@@ -425,60 +426,6 @@ function recordPromptFailure(input: {
     semanticRetryAttempts: input.invocation.semanticRetryAttempts,
     failureKind: classifyPromptQualityFailure(input.error),
   });
-}
-
-function captureStreamOutput(
-  rawStream: AsyncIterable<BaseMessageChunk>,
-  onChunk?: (content: string) => void,
-  onReasoning?: (content: string) => void,
-): {
-  stream: AsyncIterable<BaseMessageChunk>;
-  completedText: Promise<string>;
-  completedUsage: Promise<LlmTokenUsageSnapshot | null>;
-} {
-  let resolveText!: (value: string) => void;
-  let rejectText!: (reason?: unknown) => void;
-  let resolveUsage!: (value: LlmTokenUsageSnapshot | null) => void;
-  let rejectUsage!: (reason?: unknown) => void;
-  const completedText = new Promise<string>((resolve, reject) => {
-    resolveText = resolve;
-    rejectText = reject;
-  });
-  const completedUsage = new Promise<LlmTokenUsageSnapshot | null>((resolve, reject) => {
-    resolveUsage = resolve;
-    rejectUsage = reject;
-  });
-
-  const stream = {
-    async *[Symbol.asyncIterator]() {
-      const chunks: string[] = [];
-      let usage: LlmTokenUsageSnapshot | null = null;
-      const reasoningCollector = new ReasoningStreamCollector();
-      try {
-        for await (const chunk of rawStream) {
-          const content = toText(chunk.content);
-          chunks.push(content);
-          onChunk?.(content);
-          onReasoning?.(reasoningCollector.push(chunk, content));
-          usage = mergeStreamTokenUsage(usage, extractLlmTokenUsage(chunk));
-          yield chunk;
-        }
-        onReasoning?.(reasoningCollector.flush());
-        resolveText(chunks.join(""));
-        resolveUsage(usage);
-      } catch (error) {
-        rejectText(error);
-        rejectUsage(error);
-        throw error;
-      }
-    },
-  };
-
-  return {
-    stream,
-    completedText,
-    completedUsage,
-  };
 }
 
 function buildPromptRunResult<T>(input: {
@@ -1024,7 +971,7 @@ export async function streamTextPrompt<I>(input: {
 
   return {
     stream: captured.stream,
-    complete: captured.completedText.then(async (content) => {
+    complete: observeStreamCompletion(captured.completedText.then(async (content) => {
       liveSession.phase("validating", "正在整理生成结果");
       const output = applyPromptPostValidate({
         asset: input.asset,
@@ -1071,7 +1018,7 @@ export async function streamTextPrompt<I>(input: {
         error,
       });
       throw error;
-    }),
+    })),
     context: prepared.context,
     invocation: prepared.invocation,
   };
@@ -1166,12 +1113,15 @@ export async function streamStructuredPrompt<I, O, R = O>(input: {
 
   return {
     stream: captured.stream,
-    complete: captured.completedText.then(async (rawContent) => {
+    complete: observeStreamCompletion(captured.completedText.then(async (rawContent) => {
       liveSession.phase("validating", "正在检查生成结果");
+      const capturedUsage = await captured.completedUsage;
       let repairStarted = false;
       const parsed = rawContent.trim()
         ? await parseStructuredLlmRawContentDetailed({
           rawContent,
+          tokenUsage: capturedUsage,
+          finishReason: captured.getFinishReason(),
           schema: outputSchema,
           provider: input.options?.provider,
           model: input.options?.model,
@@ -1217,7 +1167,7 @@ export async function streamStructuredPrompt<I, O, R = O>(input: {
         initialResult: parsed,
         options: input.options,
       });
-      const tokenUsage = parsed.tokenUsage ?? await captured.completedUsage.catch(() => null);
+      const tokenUsage = parsed.tokenUsage ?? capturedUsage;
       const result = buildPromptRunResult({
         asset: input.asset as PromptAsset<unknown, unknown, unknown>,
         output: resolved.output,
@@ -1249,7 +1199,7 @@ export async function streamStructuredPrompt<I, O, R = O>(input: {
         error,
       });
       throw error;
-    }),
+    })),
     context: prepared.context,
     invocation: prepared.invocation,
   };

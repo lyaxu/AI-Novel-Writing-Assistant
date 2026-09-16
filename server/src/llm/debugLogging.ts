@@ -3,6 +3,8 @@ import type { ChatOpenAI } from "@langchain/openai";
 import type { TaskType } from "./modelRouter";
 import type { PromptInvocationMeta } from "../prompting/core/promptTypes";
 import { appendLlmSessionLog } from "./sessionLogFile";
+import { extractLlmTokenUsage, mergeStreamTokenUsage, type LlmTokenUsageSnapshot } from "./usageTracking";
+import { extractFinishReason, extractTransportErrorCode, reachedOutputLimit } from "../platform/llm/streaming/responseDiagnostics";
 
 const LLM_DEBUG_PATCHED = Symbol("LLM_DEBUG_PATCHED");
 const LOG_TRUE_VALUES = new Set(["1", "true", "on", "yes"]);
@@ -374,25 +376,7 @@ function nextRequestId(method: "invoke" | "stream" | "batch"): string {
 }
 
 function extractActualPromptTokens(payload: unknown): number | null {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-  const record = payload as {
-    usage_metadata?: unknown;
-    usageMetadata?: unknown;
-    response_metadata?: unknown;
-    responseMetadata?: unknown;
-  };
-  const usage = (record.usage_metadata ?? record.usageMetadata) as
-    | { input_tokens?: unknown; prompt_tokens?: unknown }
-    | undefined;
-  const response = (record.response_metadata ?? record.responseMetadata) as
-    | { tokenUsage?: { promptTokens?: unknown } }
-    | undefined;
-  const candidate = usage?.input_tokens
-    ?? usage?.prompt_tokens
-    ?? response?.tokenUsage?.promptTokens;
-  return typeof candidate === "number" && Number.isFinite(candidate) ? candidate : null;
+  return extractLlmTokenUsage(payload)?.promptTokens ?? null;
 }
 
 function buildFileLogBlock(input: {
@@ -418,6 +402,13 @@ function buildFileLogBlock(input: {
     baseURL: input.meta.baseURL ?? null,
     promptMeta: input.meta.promptMeta ?? null,
     actualPromptTokens: input.event === "response" ? extractActualPromptTokens(input.payload) : null,
+    finishReason: extractFinishReason(input.payload),
+    actualCompletionTokens: extractLlmTokenUsage(input.payload)?.completionTokens ?? null,
+    outputLimitReached: input.event === "response" && reachedOutputLimit({
+      finishReason: extractFinishReason(input.payload),
+      maxTokens: input.meta.maxTokens,
+      completionTokens: extractLlmTokenUsage(input.payload)?.completionTokens,
+    }),
     latencyMs: input.latencyMs ?? null,
     payload: input.payload ?? null,
     error: input.error ?? null,
@@ -491,7 +482,7 @@ function logLLMError(method: "invoke" | "stream" | "batch", error: unknown, meta
     meta,
     latencyMs,
     error: error instanceof Error
-      ? { name: error.name, message: error.message, stack: error.stack ?? null }
+      ? { name: error.name, message: error.message, stack: error.stack ?? null, code: extractTransportErrorCode(error) }
       : { message },
   });
 }
@@ -500,8 +491,12 @@ function wrapLoggedStream(stream: AsyncIterable<unknown>, meta: LLMDebugMeta, re
   return {
     async *[Symbol.asyncIterator]() {
       const chunks: string[] = [];
+      let usage: LlmTokenUsageSnapshot | null = null;
+      let finishReason: string | null = null;
       try {
         for await (const chunk of stream) {
+          usage = mergeStreamTokenUsage(usage, extractLlmTokenUsage(chunk));
+          finishReason = extractFinishReason(chunk) ?? finishReason;
           if (chunk && typeof chunk === "object" && "content" in (chunk as Record<string, unknown>)) {
             chunks.push(stringifyContent((chunk as { content?: unknown }).content));
           } else {
@@ -511,7 +506,7 @@ function wrapLoggedStream(stream: AsyncIterable<unknown>, meta: LLMDebugMeta, re
         }
         logLLMResponse(
           "stream",
-          { content: chunks.join("") },
+          { content: chunks.join(""), response_metadata: { finish_reason: finishReason, usage } },
           meta,
           requestId,
           Date.now() - startedAt,

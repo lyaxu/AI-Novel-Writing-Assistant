@@ -9,6 +9,34 @@ const structuredInvoke = require("../dist/llm/structuredInvoke.js");
 const { plannerOutputSchema } = require("../dist/services/planner/plannerSchemas.js");
 const { normalizePlannerOutput } = require("../dist/services/planner/PlannerService.js");
 
+test("truncated structured output gets bounded repair headroom and explicit limit diagnostics", async () => {
+  const originalGetLLM = factory.getLLM;
+  const budgets = [];
+  let failRepair = false;
+  factory.getLLM = async (_provider, options) => {
+    budgets.push(options.maxTokens);
+    return {stream: async function* () {
+      yield {content: failRepair ? '{"value":"unfinished' : '{"value":"fixed"}', response_metadata: {finish_reason: failRepair ? "length" : "stop"}};
+    }};
+  };
+  const input = {
+    rawContent:'{"value":"unfinished', schema:z.object({value:z.string()}),
+    maxTokens:3200, finishReason:"length", provider:"deepseek", model:"deepseek-chat",
+    label:"test.truncated", maxRepairAttempts:1, strategy:"prompt_json",
+    profile:resolveStructuredOutputProfile({provider:"deepseek"}),
+  };
+  try {
+    assert.deepEqual((await structuredInvoke.parseStructuredLlmRawContentDetailed(input)).data, {value:"fixed"});
+    failRepair = true;
+    await assert.rejects(structuredInvoke.parseStructuredLlmRawContentDetailed(input), error => {
+      assert.match(error.message, /3200 tokens/);
+      assert.match(error.message, /6400 tokens/);
+      return error.category === "incomplete_json";
+    });
+    assert.deepEqual(budgets,[6400,6400]);
+  } finally { factory.getLLM = originalGetLLM; }
+});
+
 test("parseStructuredLlmRawContentDetailed recovers when repair output is truncated but completable", async () => {
   const originalGetLLM = factory.getLLM;
 

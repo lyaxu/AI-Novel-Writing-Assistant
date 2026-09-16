@@ -19,6 +19,8 @@ settings are separate data and must not be silently reset.
 | Timeline finalization when autoReview=false | Keep and adapt | This path bypasses the upstream terminal commit. Finalize after artifact sync, check execution ownership before and after, and refuse approval if the timeline checkpoint is not written. |
 | Supporting world context bridge | Keep | It supplies the existing context consumer with the world prompt block. |
 | Legacy context render helpers | Compatibility only | They are referenced by existing regression tests, not the production context assembler. Do not extend them or reintroduce them into generation. |
+| Stream completion rejection ownership | Keep until upstream equivalent is verified | A caught network error must not leave rejected completion promises that crash the server. Preserve strict-process regression coverage. |
+| Chapter contract output budget and exhaustion diagnostics | Keep or adopt verified equivalent | Full scene-card contracts exceeded 3200 tokens. Preserve bounded repair headroom and finish-reason/usage logging separately from prose length controls. |
 
 ## Continuation boundaries
 

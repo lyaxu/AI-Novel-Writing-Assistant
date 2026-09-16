@@ -116,16 +116,31 @@ function parseStreamLine(line: string): unknown | null {
   }
 }
 
-function extractDeltaText(event: unknown): string {
+function extractStreamChunk(event: unknown): AIMessageChunk | null {
   if (!event || typeof event !== "object") {
-    return "";
+    return null;
   }
-  const delta = (event as { delta?: unknown }).delta;
-  if (!delta || typeof delta !== "object") {
-    return "";
+  const value = event as {
+    type?: string;
+    delta?: { type?: string; text?: string; stop_reason?: string };
+    usage?: Record<string, unknown>;
+    message?: { usage?: Record<string, unknown> };
+    error?: { type?: string; message?: string };
+  };
+  if (value.type === "error") {
+    throw new Error(`Anthropic stream error (${value.error?.type ?? "unknown"}): ${value.error?.message ?? "Request failed."}`);
   }
-  const candidate = delta as { type?: unknown; text?: unknown };
-  return candidate.type === "text_delta" && typeof candidate.text === "string" ? candidate.text : "";
+  const text = value.delta?.type === "text_delta" ? value.delta.text ?? "" : "";
+  const usage = value.usage ?? value.message?.usage;
+  const stopReason = value.delta?.stop_reason;
+  if (!text && !usage && !stopReason) return null;
+  return new AIMessageChunk({
+    content: text,
+    response_metadata: {
+      ...(usage ? { usage } : {}),
+      ...(stopReason ? { stop_reason: stopReason } : {}),
+    },
+  });
 }
 
 export function createAnthropicLLM(options: AnthropicLLMOptions): {
@@ -203,9 +218,9 @@ export function createAnthropicLLM(options: AnthropicLLMOptions): {
               const lines = buffer.split(/\r?\n/u);
               buffer = lines.pop() ?? "";
               for (const line of lines) {
-                const text = extractDeltaText(parseStreamLine(line));
-                if (text) {
-                  yield new AIMessageChunk(text);
+                const chunk = extractStreamChunk(parseStreamLine(line));
+                if (chunk) {
+                  yield chunk;
                 }
               }
             }
@@ -214,9 +229,9 @@ export function createAnthropicLLM(options: AnthropicLLMOptions): {
               buffer += tail;
             }
             for (const line of buffer.split(/\r?\n/u)) {
-              const text = extractDeltaText(parseStreamLine(line));
-              if (text) {
-                yield new AIMessageChunk(text);
+              const chunk = extractStreamChunk(parseStreamLine(line));
+              if (chunk) {
+                yield chunk;
               }
             }
           } finally {
