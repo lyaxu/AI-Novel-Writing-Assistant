@@ -1,5 +1,9 @@
-# AI 小说创作工作台 / AI Novel Production Engine
-一个面向长篇小说创作的 AI Native 开源项目。
+# AI 小说创作工作台 / Biz Novel Studio
+一个帮助新手从灵感走到完整长篇的 AI Native 开源小说创作工作台；英文名由 **AI Novel Production Engine** 更新为 **Biz Novel Studio**。
+
+Open-source AI novel writing assistant and long-form production studio.
+
+> 中文名仍为 **AI 小说创作工作台**；`AI Novel Writing Assistant` 仓库地址和既有下载入口保持不变。
 
 当前开发主线：
 `Creative Hub + 自动导演开书 + 本书世界上下文 + 整本生产主链 + 写法引擎`
@@ -19,7 +23,7 @@
 
 ## ✨ 项目简介
 
-这是一个**面向长篇小说完成度的 AI 生产系统**，不是普通的"你写一句、AI 补一句"聊天壳子。
+**AI 小说创作工作台 / Biz Novel Studio** 是一个**面向长篇小说完成度的 AI 生产系统**。
 
 它的核心做法是：
 
@@ -148,15 +152,24 @@
 - 角色、世界观、写法、知识库和质量控制一起托住单章生成，让每一章都尽量还在同一本书里。
 - 每写完一章，系统都会把新状态回灌回去，继续影响后续章节、卷级节奏和必要时的重规划。
 
+## 自动导演交互架构图
+
+[![自动导演：从想法到完整小说](./docs/architecture/diagram.webp)](https://explosivecoderflome.github.io/AI-Novel-Writing-Assistant/architecture/auto-director-idea-to-novel.detailed.workflow.html)
+
+- [打开交互架构图](https://explosivecoderflome.github.io/AI-Novel-Writing-Assistant/architecture/auto-director-idea-to-novel.detailed.workflow.html)，查看从想法、全书规划、写法与反 AI 契约到逐章生产和写后同步的完整链路。
+- 图表使用 [Archify](https://github.com/tt-a1i/archify) 生成；仓库内保留[图表源数据](./docs/architecture/auto-director-idea-to-novel.detailed.workflow.json)与[自包含 HTML](./docs/architecture/auto-director-idea-to-novel.detailed.workflow.html)。
+
 ## 最新更新
 
-### 2026-09-16
+### 2026-09-20
 
 #### 修复
 
-- 复杂章节规划使用更充足的输出额度，确认额度耗尽后会在有限范围内增加修复额度，减少反复截断导致的创作中断；正文目标字数不受影响。
-- 模型连接中断或用户取消流式生成时，错误保留在当前任务内处理，避免未处理的异步异常导致整个服务退出。
-- 生成失败信息和调用日志区分输出额度耗尽与网络连接异常，便于判断应调整额度还是检查模型服务连接。
+- 本地网页版创建小说时，可识别 AI 误填的有效候选序号，减少题材与推进方式推荐中断；无效选项仍会要求重新生成。
+
+#### 优化
+
+- 本地部署同步开书兼容修复与交互架构文档，并保留章节草稿恢复、模型断流保护、复杂规划输出额度和已有写法设置。
 
 完整历史更新见 [docs/releases/release-notes.md](./docs/releases/release-notes.md)。
 

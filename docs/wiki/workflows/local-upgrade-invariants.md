@@ -5,7 +5,7 @@ branches. Preserve observable behavior, not obsolete implementations. Manuscript
 are disposable for upgrade acceptance; credentials, style profiles and knowledge
 settings are separate data and must not be silently reset.
 
-## Decisions verified against v0.4.24
+## Decisions verified against v0.4.26
 
 | Local change | Decision | Reason |
 | --- | --- | --- |
@@ -21,6 +21,10 @@ settings are separate data and must not be silently reset.
 | Legacy context render helpers | Compatibility only | They are referenced by existing regression tests, not the production context assembler. Do not extend them or reintroduce them into generation. |
 | Stream completion rejection ownership | Keep until upstream equivalent is verified | A caught network error must not leave rejected completion promises that crash the server. Preserve strict-process regression coverage. |
 | Chapter contract output budget and exhaustion diagnostics | Keep or adopt verified equivalent | Full scene-card contracts exceeded 3200 tokens. Preserve bounded repair headroom and finish-reason/usage logging separately from prose length controls. |
+
+Resource recommendation uses the upstream v3 schema and catalog ordinal
+normalization. It accepts only valid selections from the supplied catalog; this
+does not replace or weaken stream failure handling or chapter output budgets.
 
 ## Continuation boundaries
 
