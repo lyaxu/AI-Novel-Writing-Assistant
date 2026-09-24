@@ -161,15 +161,16 @@ Open-source AI novel writing assistant and long-form production studio.
 
 ## 最新更新
 
-### 2026-09-20
+### 2026-09-25
 
 #### 修复
 
-- 本地网页版创建小说时，可识别 AI 误填的有效候选序号，减少题材与推进方式推荐中断；无效选项仍会要求重新生成。
+- 同步多卷规划输出空间、DeepSeek Flash / Pro 和 Kimi K3 调用兼容修复，减少自动创作中断。
+- 热门题材雷达支持更换榜单作品重新分析，并保留已有分析关联的收藏和创作简报。
 
 #### 优化
 
-- 本地部署同步开书兼容修复与交互架构文档，并保留章节草稿恢复、模型断流保护、复杂规划输出额度和已有写法设置。
+- 保留章节草稿恢复、模型断流保护、复杂章节规划额度与本地写法配置。
 
 完整历史更新见 [docs/releases/release-notes.md](./docs/releases/release-notes.md)。
 

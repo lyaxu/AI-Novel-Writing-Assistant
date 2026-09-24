@@ -5,7 +5,7 @@ branches. Preserve observable behavior, not obsolete implementations. Manuscript
 are disposable for upgrade acceptance; credentials, style profiles and knowledge
 settings are separate data and must not be silently reset.
 
-## Decisions verified against v0.4.26
+## Decisions verified against v0.4.28
 
 | Local change | Decision | Reason |
 | --- | --- | --- |
@@ -25,6 +25,10 @@ settings are separate data and must not be silently reset.
 Resource recommendation uses the upstream v3 schema and catalog ordinal
 normalization. It accepts only valid selections from the supplied catalog; this
 does not replace or weaken stream failure handling or chapter output budgets.
+
+Volume strategy output uses the upstream count-based budget (1800-5200 tokens).
+This is separate from the local 8192-token chapter execution contract budget;
+neither budget changes the prose target word count.
 
 ## Continuation boundaries
 

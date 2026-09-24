@@ -163,12 +163,21 @@ test("structured output profiles distinguish official, ModelScope Qwen and unkno
 
   const deepseekFlashProfile = resolveStructuredOutputProfile({
     provider: "deepseek",
-    model: "deepseek-v4-flash",
+    model: "deepseek-flash",
     baseURL: "https://api.deepseek.com/v1",
     executionMode: "structured",
   });
   assert.equal(deepseekFlashProfile.requiresNonThinkingForStructured, true);
   assert.equal(deepseekFlashProfile.supportsReasoningToggle, true);
+
+  const deepseekLegacyFlashProfile = resolveStructuredOutputProfile({
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+    baseURL: "https://api.deepseek.com/v1",
+    executionMode: "structured",
+  });
+  assert.equal(deepseekLegacyFlashProfile.requiresNonThinkingForStructured, true);
+  assert.equal(deepseekLegacyFlashProfile.supportsReasoningToggle, true);
 
   const kimiProfile = resolveStructuredOutputProfile({
     provider: "kimi",
@@ -288,6 +297,11 @@ test("resolveLLMClientOptions applies structured reasoning and token guardrails"
   setProviderSecretCache("kimi", {
     key: "test-key",
   });
+  setProviderSecretCache("custom_kimik3", {
+    key: "test-key",
+    model: "kimi-k3",
+    baseURL: "https://gateway.example.com/v1",
+  });
 
   try {
     const modelscope = await resolveLLMClientOptions("custom_modelscope", {
@@ -333,6 +347,11 @@ test("resolveLLMClientOptions applies structured reasoning and token guardrails"
     });
     assert.equal(kimiK3.temperature, 1);
 
+    const proxiedKimiK3 = await resolveLLMClientOptions("custom_kimik3", {
+      temperature: 0.1,
+    });
+    assert.equal(proxiedKimiK3.temperature, 1);
+
     const qwenThinking = await resolveLLMClientOptions("qwen", {
       apiKey: "test-key",
       model: "qwen3-235b-a22b-thinking-2507",
@@ -349,7 +368,7 @@ test("resolveLLMClientOptions applies structured reasoning and token guardrails"
     assert.equal(qwenThinking.requestProtocol, "openai_compatible");
 
     const deepseekFlash = await resolveLLMClientOptions("deepseek", {
-      model: "deepseek-v4-flash",
+      model: "deepseek-flash",
       executionMode: "structured",
       structuredStrategy: "json_object",
       maxTokens: 5000,
@@ -387,6 +406,7 @@ test("resolveLLMClientOptions applies structured reasoning and token guardrails"
     setProviderSecretCache("deepseek", null);
     setProviderSecretCache("glm", null);
     setProviderSecretCache("kimi", null);
+    setProviderSecretCache("custom_kimik3", null);
   }
 });
 
