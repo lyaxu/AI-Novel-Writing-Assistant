@@ -49,6 +49,43 @@ function buildSlice() {
   };
 }
 
+test("automatic world context retains the director's selected model", async () => {
+  let captured;
+  const gateway = new WorldContextGateway({
+    ensureStoryWorldSlice: async (id, options) => { captured = { id, ...options }; return buildSlice(); },
+  }, {
+    ensureFromLegacyNovel: async () => ({ id: "world-instance" }),
+    persistStorySlice: async () => {},
+  });
+  await gateway.getWorldContextBlock("novel-1", {
+    purpose: "character", forceRefresh: false, provider: "deepseek",
+    model: "deepseek-v4-flash", temperature: 0.7, storyInput: "idea",
+  });
+  assert.equal(captured.provider, "deepseek");
+  assert.equal(captured.model, "deepseek-v4-flash");
+  assert.equal(captured.temperature, 0.7);
+});
+
+test("stale world slice regeneration passes model options to the actual invocation", async () => {
+  const { NovelWorldSliceService } = require("../dist/services/novel/storyWorldSlice/NovelWorldSliceService.js");
+  const service = new NovelWorldSliceService();
+  service.getNovelContext = async () => ({ id: "novel-1" });
+  service.getActiveWorldSource = async () => ({ id: "world-1", updatedAt: new Date() });
+  service.resolveStoryInput = () => ({ storyInput: "idea" });
+  service.isSliceStale = () => true;
+  service.persistSlice = async () => {};
+  let captured;
+  service.invokeSliceModel = async (input) => { captured = input; return buildSlice(); };
+  await service.ensureStoryWorldSlice("novel-1", { provider: "deepseek", model: "deepseek-v4-flash", temperature: 0 });
+  assert.equal(captured.provider, "deepseek");
+  assert.equal(captured.model, "deepseek-v4-flash");
+  assert.equal(captured.temperature, 0);
+  service.isSliceStale = () => false;
+  captured = null;
+  await service.ensureStoryWorldSlice("novel-1", { provider: "deepseek" });
+  assert.equal(captured, null, "fresh cached slices must not invoke a model");
+});
+
 test("world context block formats character purpose from story slice", () => {
   const block = buildWorldContextBlockFromSlice({
     slice: buildSlice(),
@@ -122,6 +159,7 @@ test("gateway delegates novel theme world generation through novel world service
     temperature: 0.4,
     storyMacroContext: undefined,
     bookContractContext: undefined,
+    openingOnly: undefined,
   }]);
 });
 
@@ -173,6 +211,9 @@ test("gateway builds context through story slice service and persists slice to n
     options: {
       builderMode: "runtime",
       storyInput: "第一卷发生在北境。",
+      provider: undefined,
+      model: undefined,
+      temperature: undefined,
     },
   }, {
     type: "persistStorySlice",
