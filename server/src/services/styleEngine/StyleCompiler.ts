@@ -287,7 +287,9 @@ export class StyleCompiler {
     const selfCheck = buildContractSection({
       key: "selfCheck",
       lines: [
-        "- Check whether the draft explains psychology instead of showing it through action or tone.",
+        input.styleProfile.characterRules.psychologyMode === "situated_inner_voice"
+          ? "- Keep concrete, character-specific inner reasoning that changes a choice or reveals a contradiction; remove redundant emotional labels and narrator explanations. Do not replace every thought with a gesture."
+          : "- Check whether the draft explains psychology instead of showing it through action or tone.",
         "- Check whether paragraph endings summarize, elevate, or moralize.",
         "- Check whether sentence rhythm becomes too even or template-like.",
         "- If AI flavor remains, revise before returning the final draft.",

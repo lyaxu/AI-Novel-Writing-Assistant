@@ -25,6 +25,7 @@ export interface NarrativeRules {
 }
 
 export interface CharacterRules {
+  psychologyMode?: "action_only" | "situated_inner_voice" | null;
   allowSelfReflection?: boolean | null;
   emotionExpression?: string | null;
   defenseMechanisms?: string[];

@@ -60,8 +60,25 @@ export class AntiAiPolicyResolver {
     effectiveStyleProfileId?: string | null;
   }): Promise<AntiAiEffectiveRulesResult> {
     const baselineRules = await this.listGlobalBaselineRules();
+    // Match the compiler's same-field inheritance, not the profile name or author.
+    const psychologyMode = sortEffectiveBindings(input.matchedBindings)
+      .map((binding) => binding.styleProfile?.characterRules?.psychologyMode)
+      .find((mode) => mode != null);
+    const contextualizeRule = (rule: AntiAiRule): AntiAiRule => {
+      if (psychologyMode !== "situated_inner_voice" || rule.key !== "forbid-explicit-psychology") {
+        return rule;
+      }
+      return {
+        ...rule,
+        name: "避免重复解释心理，保留人物内心声音",
+        detectPatterns: [],
+        description: "避免旁白替人物贴情绪标签；允许符合人物处境的内心盘算、误解和犹豫。",
+        promptInstruction: "禁止用抽象情绪总结重复已经写清的动作；允许人物结合眼前损失、经验和欲望作具体盘算。内心声音可以直写，但须属于这个人的口气和认知，不能变成作者讲道理。",
+        rewriteSuggestion: "删除重复的情绪结论，保留推动下一步选择或显出人物矛盾的具体念头。",
+      };
+    };
     const globalBaselineRules = baselineRules.map((rule): AntiAiEffectiveRuleItem => ({
-      rule,
+      rule: contextualizeRule(rule),
       source: "global_baseline",
       sourceLabel: "全局默认",
       styleProfileId: null,
@@ -83,7 +100,7 @@ export class AntiAiPolicyResolver {
           continue;
         }
         styleRulesById.set(rule.id, {
-          rule,
+          rule: contextualizeRule(rule),
           source: "style_profile",
           sourceLabel: profile.name,
           styleProfileId: profile.id,

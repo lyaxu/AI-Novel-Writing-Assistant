@@ -12,6 +12,8 @@ settings are separate data and must not be silently reset.
 | Stable chapter editor key and IndexedDB drafts | Keep | Upstream still resets content when server content changes and does not restore browser-local drafts. |
 | Conflict/reveal strength and pace passed to writer | Keep | The local prompt bridge remains needed; retain upstream prose contract and configurable slots. |
 | Reusable local style presets | Keep | These are user-selected writing resources, not replacements for all upstream defaults. |
+| Personal situated inner voice policy | Keep or adapt | Preserve the personal profile JSON and its scoped psychology policy in generation, detection and self-check. Do not alter legacy profiles or silently restore the blanket psychology ban. See [personal style](personal-style-and-task-cleanup.md). |
+| Deleted novel task cleanup | Keep or adopt verified equivalent | Delete linked tasks in every status, runtime projections and follow-up records before losing novel identity. Preserve unrelated novels and legitimate unbound drafts; do not sweep all null novelId rows. |
 | Target chapter length and scene budgets | Use upstream | The current writer and scene controls already carry and enforce the length goal. |
 | Soft obligation classification patch | Retire | Upstream acceptance normalization and issue governance now own repairability and continuation. |
 | Legacy persistent quality gate cache patch | Retire | Upstream owns cache identity, in-flight coalescing and acceptance persistence. |
