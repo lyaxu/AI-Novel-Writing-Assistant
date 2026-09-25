@@ -434,6 +434,10 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/novel/chapterEditor/rewriteCandidates.prompts").chapterEditorRewriteCandidatesPrompt as UnknownPromptAsset,
   },
   {
+    key: "novel.second_reader@v1",
+    load: () => require("../prompts/novel/secondReader.prompts").secondReaderPrompt as UnknownPromptAsset,
+  },
+  {
     key: "novel.review.chapter@v2",
     load: () => require("../prompts/novel/review.prompts").chapterReviewPrompt as UnknownPromptAsset,
   },

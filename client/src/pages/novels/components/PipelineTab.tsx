@@ -13,6 +13,7 @@ import { getLowScoreChapterRange, getPipelineStageState, PIPELINE_STAGE_ITEMS } 
 import DirectorTakeoverEntryPanel from "./DirectorTakeoverEntryPanel";
 import SelectControl from "@/components/common/SelectControl";
 import NovelDirectorIssuePolicyCard from "./NovelDirectorIssuePolicyCard";
+import SecondReaderButton from "./SecondReaderButton";
 
 interface PipelineTabProps {
   novelId: string;
@@ -222,6 +223,7 @@ export default function PipelineTab(props: PipelineTabProps) {
           </SelectControl>
           <div className="flex flex-wrap gap-2">
             <AiButton onClick={onReviewChapter} disabled={isReviewing || !selectedChapterId}>执行审校</AiButton>
+            <SecondReaderButton key={novelId} novelId={novelId} maxOrder={maxOrder} />
             <AiButton variant="secondary" onClick={onRepairChapter} disabled={isRepairing || !selectedChapterId}>执行修复</AiButton>
             <AiButton variant="outline" onClick={onGenerateHook} disabled={isGeneratingHook || !selectedChapterId}>生成钩子</AiButton>
           </div>
