@@ -25,6 +25,7 @@ export interface DirectorCommandPayload {
   continuationMode?: DirectorContinuationMode;
   batchAlreadyStartedCount?: number;
   forceResume?: boolean;
+  planningRepairRecoveryKey?: string;
   takeoverRequest?: DirectorTakeoverRequest;
   policyUpdateRequest?: DirectorRuntimePolicyUpdateRequest;
   workspaceAnalysisRequest?: {

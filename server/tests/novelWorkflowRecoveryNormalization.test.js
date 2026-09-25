@@ -4,6 +4,16 @@ const assert = require("node:assert/strict");
 const { NovelWorkflowService } = require("../dist/services/novel/workflow/NovelWorkflowService.js");
 const { prisma } = require("../dist/db/prisma.js");
 
+const originalTransaction = prisma.$transaction;
+test.beforeEach(() => {
+  // Keep the existing row fixtures inside the new atomic read/update boundary.
+  prisma.$transaction = async run => run({ novelWorkflowTask: {
+    findUniqueOrThrow: async args => ({ seedPayloadJson: null, ...await prisma.novelWorkflowTask.findUnique(args) }),
+    update: args => prisma.novelWorkflowTask.update(args),
+  } });
+});
+test.afterEach(() => { prisma.$transaction = originalTransaction; });
+
 test("healHistoricalAutoDirectorRecoveryFailure restores legacy restart failures back to checkpoint state", async () => {
   const originals = {
     findUnique: prisma.novelWorkflowTask.findUnique,
@@ -146,6 +156,7 @@ test("healAutoDirectorTaskState completes chapter batch checkpoints when every c
 
 test("healRuntimeGateApprovalState mirrors blocked runtime gates into waiting approval task state", async () => {
   const originals = {
+    findUnique: prisma.novelWorkflowTask.findUnique,
     commandFindFirst: prisma.directorRunCommand.findFirst,
     stepFindFirst: prisma.directorStepRun.findFirst,
     update: prisma.novelWorkflowTask.update,
@@ -171,6 +182,7 @@ test("healRuntimeGateApprovalState mirrors blocked runtime gates into waiting ap
     pendingManualRecovery: false,
   };
 
+  prisma.novelWorkflowTask.findUnique = async () => currentRow;
   prisma.directorRunCommand.findFirst = async () => null;
   prisma.directorStepRun.findFirst = async () => ({
     status: "blocked_scope",
@@ -203,6 +215,7 @@ test("healRuntimeGateApprovalState mirrors blocked runtime gates into waiting ap
     assert.equal(currentRow.currentItemLabel, "等待确认章节执行");
     assert.equal(currentRow.checkpointSummary, "该动作可能覆盖用户手写内容，需要确认后继续。");
   } finally {
+    prisma.novelWorkflowTask.findUnique = originals.findUnique;
     prisma.directorRunCommand.findFirst = originals.commandFindFirst;
     prisma.directorStepRun.findFirst = originals.stepFindFirst;
     prisma.novelWorkflowTask.update = originals.update;
@@ -211,6 +224,7 @@ test("healRuntimeGateApprovalState mirrors blocked runtime gates into waiting ap
 
 test("healRuntimeFailedState mirrors failed runtime steps out of false running task state", async () => {
   const originals = {
+    findUnique: prisma.novelWorkflowTask.findUnique,
     commandFindFirst: prisma.directorRunCommand.findFirst,
     stepFindFirst: prisma.directorStepRun.findFirst,
     update: prisma.novelWorkflowTask.update,
@@ -236,6 +250,7 @@ test("healRuntimeFailedState mirrors failed runtime steps out of false running t
     pendingManualRecovery: false,
   };
 
+  prisma.novelWorkflowTask.findUnique = async () => currentRow;
   prisma.directorRunCommand.findFirst = async () => null;
   prisma.directorStepRun.findFirst = async () => ({
     status: "failed",
@@ -266,6 +281,7 @@ test("healRuntimeFailedState mirrors failed runtime steps out of false running t
     assert.equal(currentRow.lastError, "[STRUCTURED_OUTPUT:transport_error] Connection error.");
     assert.equal(currentRow.checkpointSummary, "[STRUCTURED_OUTPUT:transport_error] Connection error.");
   } finally {
+    prisma.novelWorkflowTask.findUnique = originals.findUnique;
     prisma.directorRunCommand.findFirst = originals.commandFindFirst;
     prisma.directorStepRun.findFirst = originals.stepFindFirst;
     prisma.novelWorkflowTask.update = originals.update;

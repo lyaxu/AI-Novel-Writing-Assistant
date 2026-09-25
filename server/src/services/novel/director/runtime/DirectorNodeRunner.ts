@@ -6,6 +6,7 @@ import type {
 import { runWithLlmUsageTracking } from "../../../../llm/usageTracking";
 import { DirectorPolicyEngine, type DirectorPolicyRequest } from "./DirectorPolicyEngine";
 import { DirectorRuntimeStore } from "./DirectorRuntimeStore";
+import { isPlanningRepairConfirmationError } from "../recovery/planningRepair/planningRepairRecovery";
 
 function buildNodeIdempotencyKey(input: {
   taskId: string;
@@ -162,6 +163,22 @@ export class DirectorNodeRunner {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (input.taskId?.trim() && isPlanningRepairConfirmationError(error)) {
+        await this.runtimeStore.recordNodeGate({
+          taskId: input.taskId.trim(),
+          novelId: input.novelId,
+          nodeKey: contract.nodeKey,
+          label: contract.label,
+          targetType: input.targetType,
+          targetId: input.targetId,
+          status: "waiting_approval",
+          decision: {
+            canRun: false, requiresApproval: true, gateType: "approval", reason: message,
+            mayOverwriteUserContent: false, affectedArtifacts: [], riskTags: [],
+          },
+        });
+        throw error;
+      }
       if (input.taskId?.trim()) {
         await this.runtimeStore.recordStepFailed({
           taskId: input.taskId.trim(),

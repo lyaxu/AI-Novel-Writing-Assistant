@@ -155,6 +155,9 @@ export async function generateChapterTaskSheetDetail(params: {
           signal: params.options.signal,
         },
       });
+      if (params.options.planningRepairManaged && promptInput.targetChapter.targetWordCount) {
+        generated.output.targetWordCount = promptInput.targetChapter.targetWordCount;
+      }
       const scenePlan = normalizeChapterScenePlan(
         {
           scenes: generated.output.sceneCards,
@@ -162,7 +165,7 @@ export async function generateChapterTaskSheetDetail(params: {
         },
         generated.output.targetWordCount ?? promptInput.targetChapter.targetWordCount,
       );
-      await qualityGate.assertCanEnterExecution({
+      if (!params.options.planningRepairManaged) await qualityGate.assertCanEnterExecution({
         novelId: promptInput.workspace.novelId,
         volumeId: promptInput.targetVolume.id,
         chapterId: promptInput.targetChapter.id,

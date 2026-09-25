@@ -523,6 +523,7 @@ export class DirectorRuntimeStore {
         nodeKey: input.nodeKey,
         label: input.label,
         status: input.status,
+        error: null,
         targetType: input.targetType ?? null,
         targetId: input.targetId ?? null,
         startedAt: snapshot.steps.find((step) => step.idempotencyKey === idempotencyKey)?.startedAt ?? now,

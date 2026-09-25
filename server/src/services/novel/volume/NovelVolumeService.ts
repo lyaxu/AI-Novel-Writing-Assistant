@@ -19,6 +19,7 @@ import { payoffLedgerSyncService } from "../../payoff/PayoffLedgerSyncService";
 import { StoryMacroPlanService } from "../storyMacro/StoryMacroPlanService";
 import { StyleBindingService } from "../../styleEngine/StyleBindingService";
 import { ChapterExecutionContractService } from "./ChapterExecutionContractService";
+import { isCommittedPlanningRepairDocument } from "./planningRepair/PlanningRepairCoordinator";
 import {
   hasPayoffLedgerRelevantPlanChanges,
   hasPayoffLedgerSourceSignals,
@@ -405,6 +406,13 @@ export class NovelVolumeService {
     } = {},
   ): Promise<VolumePlanDocument> {
     const currentDocument = await this.ensureVolumeWorkspace(novelId);
+    if (isCommittedPlanningRepairDocument(input)) {
+      if (JSON.stringify(currentDocument.volumes) !== JSON.stringify((input as VolumePlanDocument).volumes)) {
+        throw new Error("规划提交后已发生其他修改，请刷新后继续，不能覆盖较新的规划。");
+      }
+      this.emitVolumeUpdated(novelId, "chapter_execution_contract_refined");
+      return currentDocument;
+    }
     const mergedDocument = mergeVolumeWorkspaceInput(novelId, currentDocument, input);
     const persistedDocument = await this.persistWorkspaceDocument(novelId, mergedDocument, {
       volumeUpdateReason: options.volumeUpdateReason,

@@ -16,6 +16,7 @@ import StructuredBeatSheetCard from "./StructuredBeatSheetCard";
 import StructuredChapterListCard from "./StructuredChapterListCard";
 import StructuredChapterDetailCard from "./StructuredChapterDetailCard";
 import WorldInjectionHint from "./WorldInjectionHint";
+import PlanningRepairPanel from "./planningRepair/PlanningRepairPanel";
 import {
   chapterMatchesBeat,
   findChapterBeat,
@@ -250,6 +251,7 @@ export default function StructuredOutlineWorkspace(props: StructuredTabViewProps
       <Card className="border-0 bg-transparent shadow-none">
         <CardHeader><CardTitle>节奏 / 拆章</CardTitle></CardHeader>
         <CardContent className="space-y-4 px-0">
+          <PlanningRepairPanel novelId={novelId} />
           <WorldInjectionHint worldInjectionSummary={worldInjectionSummary} />
           {!hasCharacters ? (
             <div className="flex items-center justify-between gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
@@ -275,6 +277,7 @@ export default function StructuredOutlineWorkspace(props: StructuredTabViewProps
         </Button>
       </CardHeader>
       <CardContent className="space-y-5 px-0 pt-5">
+        <PlanningRepairPanel novelId={novelId} />
         <WorldInjectionHint worldInjectionSummary={worldInjectionSummary} />
 
         {directorTakeoverEntry ? (

@@ -248,6 +248,8 @@ export class NovelDirectorAutoExecutionRuntime {
         if (!job) {
           throw new Error("自动执行章节批次时未能找到对应的批量任务。");
         }
+        if ((job.pendingManualRecovery || job.status === "failed")
+          && await this.deps.pausePlanningRepairIfNeeded?.(input.taskId)) return;
         if (job.pendingManualRecovery) {
           const failureMessage = job.error?.trim() || "章节批次已暂停，等待人工确认后继续。";
           ({ range, autoExecution } = await resolveAutoExecutionRuntimeRangeAndState(this.deps, {

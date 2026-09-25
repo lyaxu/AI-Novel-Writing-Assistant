@@ -14,6 +14,8 @@ import {
 import type { UnifiedTaskDetail } from "@ai-novel/shared/types/task";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
+import { Link } from "react-router-dom";
+import { getPlanningRepairStatus, planningRepairQueryKey } from "@/api/planningRepair";
 import {
   getDirectorTaskSnapshot,
 } from "@/api/novelDirector";
@@ -292,6 +294,17 @@ export default function NovelAutoDirectorProgressPanel({
   const taskChapterTitleWarning = resolveChapterTitleWarning(task);
   const chapterTitleRepairMutation = useDirectorChapterTitleRepair();
   const runtimeTaskId = task?.id ?? taskId;
+  const planningRepairQuery = useQuery({
+    queryKey: planningRepairQueryKey(runtimeTaskId),
+    queryFn: () => getPlanningRepairStatus(runtimeTaskId),
+    enabled: Boolean(runtimeTaskId), retry: false, refetchInterval: 4000,
+  });
+  const planningRepair = planningRepairQuery.data?.planningRepair;
+  const hasPendingPlanningRepair = Boolean(planningRepair && planningRepair.phase !== "committed");
+  const planningRepairNeedsConfirmation = Boolean(planningRepair && (
+    ["waiting_confirmation", "uncertain", "technical_failed"].includes(planningRepair.phase)
+    || planningRepair.pendingOperation || planningRepairQuery.data?.recoveryRequest
+  ));
   const snapshotQuery = useQuery({
     queryKey: queryKeys.tasks.directorTaskSnapshot(runtimeTaskId || "none"),
     queryFn: () => getDirectorTaskSnapshot(runtimeTaskId),
@@ -462,8 +475,14 @@ export default function NovelAutoDirectorProgressPanel({
         currentAction={currentAction}
         checkpointLabel={displayStateForDisplay?.checkpointLabel || formatCheckpoint(task?.checkpointType, task)}
         taskId={task?.id || taskId}
-        actions={actions}
+        actions={planningRepairNeedsConfirmation ? [] : actions}
       >
+        {hasPendingPlanningRepair && planningRepair ? <div className="my-4 space-y-2 text-sm">
+          <p>{planningRepair.summary}</p>
+          <Link className="font-medium underline" to={`/novels/${encodeURIComponent(planningRepair.novelId)}/edit?stage=structured&directorTaskId=${encodeURIComponent(runtimeTaskId)}&volumeId=${encodeURIComponent(planningRepair.volumeId)}&chapterId=${encodeURIComponent(planningRepair.chapterId)}`}>
+            查看章节规划修复
+          </Link>
+        </div> : null}
         <NovelDirectorPreparationJourney
           steps={candidateSetupFlow
             ? stepDefinitions

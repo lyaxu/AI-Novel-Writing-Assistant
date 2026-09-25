@@ -4,6 +4,8 @@ import {
   runWithLlmUsageTracking,
   type LlmUsageTrackingContext,
 } from "../../../llm/usageTracking";
+import { PlanningRepairRecoveryService } from "./recovery/planningRepair/PlanningRepairRecoveryService";
+import { isPlanningRepairConfirmationError } from "./recovery/planningRepair/planningRepairRecovery";
 import type {
   DirectorPolicyMode,
   DirectorRuntimeProjection,
@@ -132,6 +134,7 @@ export class NovelDirectorService {
   private readonly styleBindingService = new StyleBindingService();
   private readonly candidateStageService = new NovelDirectorCandidateStageService(this.workflowService);
   private readonly autoExecutionRuntime = new NovelDirectorAutoExecutionRuntime({
+    pausePlanningRepairIfNeeded: (taskId) => new PlanningRepairRecoveryService(this.workflowService).pauseIfNeeded(taskId),
     novelContextService: this.novelContextService,
     novelService: this.novelService,
     volumeWorkspaceService: this.volumeService,
@@ -263,6 +266,10 @@ export class NovelDirectorService {
         runner,
       );
     } catch (error) {
+      if (isPlanningRepairConfirmationError(error)) {
+        await new PlanningRepairRecoveryService(this.workflowService).pauseAfterFailure(taskId, error);
+        return;
+      }
       if (isWorkflowTaskCancelledError(error) || isDirectorRuntimeGateError(error)) {
         return;
       }
@@ -408,6 +415,7 @@ export class NovelDirectorService {
   }
 
   async continueTask(taskId: string, input?: {
+    planningRepairRecoveryKey?: string;
     continuationMode?: DirectorContinuationMode;
     batchAlreadyStartedCount?: number;
     forceResume?: boolean;
@@ -417,6 +425,7 @@ export class NovelDirectorService {
   }
 
   async executeContinueTask(taskId: string, input?: {
+    planningRepairRecoveryKey?: string;
     continuationMode?: DirectorContinuationMode;
     batchAlreadyStartedCount?: number;
     forceResume?: boolean;

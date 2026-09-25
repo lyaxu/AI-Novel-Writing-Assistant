@@ -28,6 +28,7 @@ import {
   stageLabel,
 } from "./novelWorkflow.helpers";
 import { isStaleAutoDirectorRunningTask } from "./autoDirectorStaleTaskRecovery";
+import { updateWorkflowTaskWithPlanningRepairGuard } from "./planningRepairWorkflowWriteGuard";
 
 export interface NovelWorkflowHealingPort {
   healAutoDirectorTaskState(taskId: string, row?: unknown): Promise<boolean>;
@@ -51,7 +52,7 @@ export class NovelWorkflowStoreService {
 
   public updateTaskWithRetry(args: NovelWorkflowTaskUpdateArgs) {
     return withSqliteRetry(
-      () => prisma.novelWorkflowTask.update(args),
+      () => updateWorkflowTaskWithPlanningRepairGuard(prisma, args).then(result => result.after),
       { label: "novelWorkflowTask.update" },
     );
   }
@@ -160,8 +161,8 @@ export class NovelWorkflowStoreService {
     before: T;
     data: NovelWorkflowTaskUpdateArgs["data"];
   }): Promise<T> {
-    const next = await withSqliteRetry(
-      () => prisma.novelWorkflowTask.update({
+    const updated = await withSqliteRetry(
+      () => updateWorkflowTaskWithPlanningRepairGuard(prisma, {
         where: { id: input.before.id },
         data: input.data,
         include: {
@@ -173,7 +174,8 @@ export class NovelWorkflowStoreService {
         },
       }),
       { label: "novelWorkflowTask.update" },
-    ) as unknown as T;
+    );
+    const next = updated.after as unknown as T;
     const stepStatus = next.pendingManualRecovery
       ? "waiting_approval"
       : next.status === "failed"
@@ -197,7 +199,7 @@ export class NovelWorkflowStoreService {
       );
     }
     await this.notifyAutoDirectorTaskTransition({
-      before: input.before,
+      before: updated.before,
       after: next,
     });
     return next;

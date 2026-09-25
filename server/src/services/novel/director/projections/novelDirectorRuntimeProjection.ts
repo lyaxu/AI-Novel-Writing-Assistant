@@ -7,6 +7,7 @@ import type {
   DirectorRuntimeSnapshot,
 } from "@ai-novel/shared/types/directorRuntime";
 import { prisma } from "../../../../db/prisma";
+import { overlayPlanningRepairPause } from "../recovery/planningRepair/planningRepairProjection";
 import { buildDefaultDirectorPolicy } from "../runtime/directorRuntimeDefaults";
 import { DirectorEventProjectionService, parseDirectorIssueEventMetadata } from "../runtime/DirectorEventProjectionService";
 import { directorUsageTelemetryQueryService } from "../runtime/DirectorUsageTelemetryQueryService";
@@ -559,7 +560,7 @@ export async function loadPersistentDirectorRuntimeProjection(
     }) as Promise<RuntimeInstanceProjectionRow | null>,
     prisma.novelWorkflowTask.findUnique({
       where: { id: taskId },
-      select: { status: true, seedPayloadJson: true },
+      select: { status: true, seedPayloadJson: true, checkpointType: true, checkpointSummary: true },
     }).catch(() => null),
     prisma.directorEvent.findMany({
       where: { taskId },
@@ -586,14 +587,14 @@ export async function loadPersistentDirectorRuntimeProjection(
     const chapterExecutionProgress = runtime.novelId
       ? await new ChapterExecutionProgressInspector().inspectNovel(runtime.novelId).catch(() => null)
       : null;
-    return {
+    return overlayPlanningRepairPause({
       ...buildRuntimeOnlyProjection(taskId, runtime),
       startupPreparation,
       latestRiskAssessment,
       riskHistory,
       riskHistoryTotal: riskHistory.length,
       chapterExecutionProgress,
-    };
+    }, taskRow);
   }
 
   const snapshot: DirectorRuntimeSnapshot = {
@@ -651,7 +652,7 @@ export async function loadPersistentDirectorRuntimeProjection(
   const chapterExecutionProgress = run.novelId
     ? await new ChapterExecutionProgressInspector().inspectNovel(run.novelId).catch(() => null)
     : null;
-  return {
+  return overlayPlanningRepairPause({
     ...overlayRuntimeInstance(overlayActiveCommand(projection, commandToOverlay), runtimeToOverlay),
     startupPreparation,
     latestRiskAssessment,
@@ -662,7 +663,7 @@ export async function loadPersistentDirectorRuntimeProjection(
     recentUsage: usageTelemetry.recentUsage,
     stepUsage: usageTelemetry.stepUsage,
     promptUsage: usageTelemetry.promptUsage,
-  };
+  }, taskRow);
 }
 
 export async function loadPersistentDirectorRuntimeEventHistory(

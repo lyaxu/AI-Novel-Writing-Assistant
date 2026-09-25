@@ -7,6 +7,7 @@ import { DirectorCommandService } from "../commands/DirectorCommandService";
 import { DirectorProductionExperienceService } from "../commands/DirectorProductionExperienceService";
 import { NovelWorkflowService } from "../../workflow/NovelWorkflowService";
 import { NovelWorkflowTaskAdapter } from "../../../task/adapters/NovelWorkflowTaskAdapter";
+import { createPlanningRepairRouter } from "./planningRepairRoutes";
 
 const router = Router();
 const workflowService = new NovelWorkflowService();
@@ -80,6 +81,7 @@ const syncStageSchema = z.object({
 });
 
 router.use(authMiddleware);
+router.use(createPlanningRepairRouter());
 
 router.post("/bootstrap", validate({ body: bootstrapSchema }), async (req, res, next) => {
   try {

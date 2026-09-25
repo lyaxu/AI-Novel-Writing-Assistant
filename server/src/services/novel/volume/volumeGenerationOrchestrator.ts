@@ -53,6 +53,7 @@ import type {
   VolumeWorkspace,
 } from "./volumeModels";
 import { buildVolumeWorkspaceDocument } from "./volumeWorkspaceDocument";
+import { PlanningRepairCoordinator } from "./planningRepair/PlanningRepairCoordinator";
 import { formatChapterDetailModeLabel } from "./chapterDetailModeLabel";
 import {
   generateBeatSheet,
@@ -112,6 +113,7 @@ async function loadGenerationContext(params: {
         first30ChapterPromise: true,
         commercialTagsJson: true,
         estimatedChapterCount: true,
+        defaultChapterLength: true,
         narrativePov: true,
         pacePreference: true,
         emotionIntensity: true,
@@ -508,6 +510,20 @@ async function generateChapterDetail(params: {
     guidance: options.guidance,
     detailMode,
   };
+  if (detailMode === "task_sheet" && options.taskId) {
+    return new PlanningRepairCoordinator().run({
+      document, volumeId: targetVolume.id, chapterId: targetChapter.id,
+      options: { ...options, taskId: options.taskId },
+      context: { novel, storyMacroPlan },
+        generateInitial: () => generateChapterTaskSheetDetail({
+          promptInput: { ...promptInput, detailMode: "task_sheet", targetChapter: {
+            ...targetChapter,
+            targetWordCount: targetChapter.targetWordCount ?? novel.defaultChapterLength ?? 2800,
+          } },
+        options: { ...options, planningRepairManaged: true },
+      }),
+    });
+  }
   await notifyVolumeGenerationPhase({
     novelId: document.novelId,
     scope: "chapter_detail",

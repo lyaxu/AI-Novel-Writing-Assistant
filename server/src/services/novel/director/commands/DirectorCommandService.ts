@@ -39,6 +39,7 @@ import {
 } from "./DirectorCommandServiceHelpers";
 import { taskDispatcher } from "../../../../workers/TaskDispatcher";
 import { DirectorCommandLeaseService } from "./leases/DirectorCommandLeaseService";
+import { assertPlanningRepairResumeAllowed } from "../recovery/planningRepair/planningRepairRecovery";
 
 const ACTIVE_COMMAND_STATUSES: DirectorRunCommandStatus[] = ["queued", "leased", "running"];
 const EXECUTION_COMMAND_TYPES: DirectorRunCommandType[] = [
@@ -299,6 +300,15 @@ export class DirectorCommandService {
       taskId,
       commandType: "continue",
       payload: input,
+    });
+  }
+
+  async enqueuePlanningRepairRecoveryCommand(taskId: string, repairKey: string, idempotencyKey: string) {
+    return this.enqueueExecutionCommand({
+      taskId,
+      commandType: "continue",
+      payload: { continuationMode: "resume", forceResume: true, planningRepairRecoveryKey: idempotencyKey },
+      idempotencyKey: `planning_repair:${hashPayload({ taskId, repairKey, idempotencyKey })}`,
     });
   }
 
@@ -659,6 +669,7 @@ export class DirectorCommandService {
     payload: DirectorCommandPayload;
     allowTerminalReuse?: boolean;
     preserveLastError?: boolean;
+    idempotencyKey?: string;
   }): Promise<DirectorCommandAcceptedResponse> {
     let row = await this.workflowService.getTaskById(input.taskId);
     if (!row) {
@@ -666,6 +677,15 @@ export class DirectorCommandService {
     }
     if (row.lane !== "auto_director") {
       throw new AppError("Only auto director workflow tasks can be queued as director commands.", 400);
+    }
+    if (input.idempotencyKey) {
+      const existing = await prisma.directorRunCommand.findFirst({
+        where: { taskId: input.taskId, commandType: input.commandType, idempotencyKey: input.idempotencyKey },
+      });
+      if (existing) return toAcceptedResponse(existing, null);
+    }
+    if (input.commandType !== "cancel") {
+      assertPlanningRepairResumeAllowed(row.seedPayloadJson, input.payload.planningRepairRecoveryKey);
     }
     const recoveredStaleLeaseCount = await this.recoverStaleLeases(new Date(), { taskId: input.taskId });
     if (recoveredStaleLeaseCount > 0) {
@@ -689,7 +709,7 @@ export class DirectorCommandService {
     const normalizedPayload = Object.fromEntries(
       Object.entries(input.payload).filter(([, value]) => value !== undefined),
     );
-    const idempotencyKey = `${input.commandType}:${row.updatedAt.getTime()}:${hashPayload(normalizedPayload)}`;
+    const idempotencyKey = input.idempotencyKey ?? `${input.commandType}:${row.updatedAt.getTime()}:${hashPayload(normalizedPayload)}`;
     const payloadJson = stableJson(normalizedPayload);
     const createCommand = () => prisma.directorRunCommand.create({
       data: {

@@ -342,6 +342,14 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/novel/volume/chapterTaskSheetQuality.prompts").chapterTaskSheetQualityPrompt as UnknownPromptAsset,
   },
   {
+    key: "novel.volume.planning_repair@v1",
+    load: () => require("../prompts/novel/volume/planningRepair.prompts").planningRepairPrompt as UnknownPromptAsset,
+  },
+  {
+    key: "novel.volume.planning_repair_review@v1",
+    load: () => require("../prompts/novel/volume/planningRepair.prompts").planningRepairReviewPrompt as UnknownPromptAsset,
+  },
+  {
     key: "novel.volume.rebalance.adjacent@v1",
     load: () => require("../prompts/novel/volume/rebalance.prompts").volumeRebalancePrompt as UnknownPromptAsset,
   },

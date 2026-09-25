@@ -17,6 +17,7 @@ import {
 } from "./volumeWorkspacePersistence";
 import { serializeVolumeWorkspaceDocument } from "./volumeWorkspaceDocument";
 import { inspectChapterExecutionContractReadiness } from "./chapterDetail/chapterExecutionContractReadiness";
+import { isCommittedPlanningRepairDocument } from "./planningRepair/PlanningRepairCoordinator";
 
 export interface ChapterExecutionContractServiceDeps {
   storyMacroPlanService: Pick<StoryMacroPlanService, "getPlan">;
@@ -129,7 +130,7 @@ export class ChapterExecutionContractService {
         persisted: chapter,
       })
       : null;
-    if (readiness?.canReuse) {
+    if (readiness?.canReuse && !options.taskId) {
       const styleContract = await this.resolveStyleContract(novelId, chapterId, options.taskStyleProfileId);
       return {
         ...chapter,
@@ -187,6 +188,12 @@ export class ChapterExecutionContractService {
     }
 
     const styleContract = await this.resolveStyleContract(novelId, chapterId, options.taskStyleProfileId);
+    if (isCommittedPlanningRepairDocument(generatedDocument)) {
+      const committed = await prisma.chapter.findFirst({ where: { id: chapterId, novelId } });
+      if (!committed) throw new Error("已复核的章节合同未能连接到正文执行区。");
+      this.deps.emitVolumeUpdated(novelId, "chapter_execution_contract_refined");
+      return { ...committed, styleContract };
+    }
     targetChapter.styleContract = styleContract;
 
     const persistedChapter = await runVolumeWorkspaceTransaction(async (tx) => {

@@ -59,6 +59,7 @@ export interface VolumeGenerationNovel {
   first30ChapterPromise: string | null;
   commercialTagsJson: string | null;
   estimatedChapterCount: number | null;
+  defaultChapterLength?: number | null;
   completionProfile?: DirectorCompletionProfile;
   narrativePov: string | null;
   pacePreference: string | null;
@@ -96,6 +97,8 @@ export interface VolumeGenerateOptions {
   taskId?: string;
   entrypoint?: string;
   chapterTaskSheetQualityMode?: ChapterTaskSheetQualityMode;
+  /** Internal: the planning repair coordinator owns semantic review and commit. */
+  planningRepairManaged?: boolean;
   signal?: AbortSignal;
   persistIntermediateDocuments?: boolean;
   onPhaseStart?: (event: VolumeGenerationPhaseEvent) => void | Promise<void>;

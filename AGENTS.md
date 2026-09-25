@@ -22,6 +22,7 @@
 
 ## Auto-Director Quality Gate Rules (Highest Priority)
 
+- Pre-writing planning is a distinct boundary: new task sheets must pass semantic and window review before prose starts. Automatically repair within the current and next two unwritten same-volume chapters, with a persisted two-round budget. Exhausted or out-of-scope planning repairs require explicit source-workspace confirmation; do not apply the completed-prose quality-debt bypass to unapproved plans.
 - Chapter audit, acceptance, and quality-loop results must not automatically block the global auto-director or full-book execution chain.
 - This non-blocking behavior is the default for the completion-first issue policy. When the task snapshot explicitly selects a quality-first policy and its unified issue decision is `pause_for_manual`, the pipeline must pause at the saved chapter boundary and wait for explicit recovery instead of overriding the preset.
 - Non-global chapter quality problems, including `local_patch_plan`, `continue_with_warning`, `patchable_obligation_gap`, `draft_obligation_unmet`, recoverable repair failures, and `defer_and_continue` quality debt, must be recorded as chapter-level quality debt or local repair guidance and allow the remaining chapter range to continue.

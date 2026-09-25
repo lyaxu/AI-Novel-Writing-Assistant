@@ -110,6 +110,7 @@ export interface NovelDirectorAutoExecutionVolumeWorkspacePort {
 }
 
 export interface NovelDirectorAutoExecutionRuntimeDeps {
+  pausePlanningRepairIfNeeded?: (taskId: string) => Promise<boolean>;
   novelContextService: Pick<NovelDirectorAutoExecutionNovelPort, "listChapters">;
   novelService: Pick<
     NovelDirectorAutoExecutionNovelPort,

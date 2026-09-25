@@ -40,6 +40,7 @@ function buildAutoDirectorTask(overrides = {}) {
 
 test("markTaskWaitingApproval delivers WeCom notification for auto director approval-required transitions", async () => {
   const originals = {
+    transaction: prisma.$transaction,
     fetch: global.fetch,
     archiveFindUnique: prisma.taskCenterArchive.findUnique,
     findUnique: prisma.novelWorkflowTask.findUnique,
@@ -53,6 +54,10 @@ test("markTaskWaitingApproval delivers WeCom notification for auto director appr
 
   prisma.taskCenterArchive.findUnique = async () => null;
   prisma.novelWorkflowTask.findUnique = async () => before;
+  prisma.$transaction = async run => run({ novelWorkflowTask: {
+    findUniqueOrThrow: args => prisma.novelWorkflowTask.findUnique(args),
+    update: args => prisma.novelWorkflowTask.update(args),
+  } });
   prisma.novelWorkflowTask.update = async ({ data, include }) => {
     assert.deepEqual(include, {
       novel: {
@@ -131,6 +136,7 @@ test("markTaskWaitingApproval delivers WeCom notification for auto director appr
     assert.equal(notifications[0].status, "delivered");
     assert.equal(notifications[0].responseStatus, 200);
   } finally {
+    prisma.$transaction = originals.transaction;
     global.fetch = originals.fetch;
     prisma.taskCenterArchive.findUnique = originals.archiveFindUnique;
     prisma.novelWorkflowTask.findUnique = originals.findUnique;

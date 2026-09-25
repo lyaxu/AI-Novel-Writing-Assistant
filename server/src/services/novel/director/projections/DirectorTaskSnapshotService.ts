@@ -18,6 +18,7 @@ import {
 import { directorWorkflowStepModuleRegistry } from "../workflowStepRuntime/directorWorkflowStepModules";
 import { buildDirectorDisplayState } from "./DirectorDisplayStateBuilder";
 import { buildDirectorDashboardView } from "./DirectorDashboardViewBuilder";
+import { overlayPlanningRepairPause } from "../recovery/planningRepair/planningRepairProjection";
 
 function buildNextActions(input: {
   taskStatus: string;
@@ -220,7 +221,7 @@ export class DirectorTaskSnapshotService {
     const runtime = await this.runtimeStore.getSnapshot(taskId);
     const inspected = await this.inspectFacts({ state, runtime });
     const factStep = inspected.factStep;
-    const projection = this.projectionService.buildSnapshotProjection(runtime, {
+    const projection = overlayPlanningRepairPause(this.projectionService.buildSnapshotProjection(runtime, {
       chapterProgress: state.chapterProgress ?? null,
       factSummary: inspected.factSummary,
       currentFactStep: factStep
@@ -231,7 +232,7 @@ export class DirectorTaskSnapshotService {
           nextActionLabel: factStep.progress.nextAction ?? null,
         }
         : null,
-    });
+    }), { ...state.task, seedPayloadJson: JSON.stringify(state.seedPayload) });
     const displayState = buildDirectorDisplayState({
       task: state.task,
       projection,

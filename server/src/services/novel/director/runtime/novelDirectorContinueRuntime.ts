@@ -38,6 +38,7 @@ import type { NovelDirectorRuntimeOrchestrator } from "./novelDirectorRuntimeOrc
 import type { DirectorRuntimeService } from "./DirectorRuntimeService";
 import { buildDefaultDirectorPolicy } from "./directorRuntimeDefaults";
 import { prisma } from "../../../../db/prisma";
+import { assertPlanningRepairResumeAllowed, readPlanningRepairSeed, resolvePlanningRepairResumePhase } from "../recovery/planningRepair/planningRepairRecovery";
 
 export type DirectorAssetFirstRecovery =
   | {
@@ -238,6 +239,7 @@ export class NovelDirectorContinueRuntime {
   }
 
   async continueTask(taskId: string, input?: {
+    planningRepairRecoveryKey?: string;
     continuationMode?: DirectorContinuationMode;
     batchAlreadyStartedCount?: number;
     forceResume?: boolean;
@@ -251,6 +253,13 @@ export class NovelDirectorContinueRuntime {
       await this.deps.workflowService.continueTask(taskId);
       return;
     }
+    assertPlanningRepairResumeAllowed(row.seedPayloadJson, input?.planningRepairRecoveryKey);
+    const planningRepairSeed = readPlanningRepairSeed(row.seedPayloadJson);
+    const planningRepairRecovery = planningRepairSeed.repair && planningRepairSeed.repair.phase !== "committed"
+      ? planningRepairSeed.recovery ?? {
+        repairKey: planningRepairSeed.repair.key,
+        resumePhase: resolvePlanningRepairResumePhase(row),
+      } : null;
     const continuationMode = normalizeDirectorContinuationMode(input?.continuationMode);
     if (row.status === "running" && !row.pendingManualRecovery && input?.forceResume !== true) {
       return;
@@ -295,9 +304,9 @@ export class NovelDirectorContinueRuntime {
       throw new Error("自动导演任务缺少恢复所需上下文。");
     }
 
-    const requestedReplanRecovery = row.checkpointType === "replan_required"
+    const requestedReplanRecovery = !planningRepairRecovery && row.checkpointType === "replan_required"
       && continuationMode !== "skip_quality_repair";
-    const requestedSkipQualityRepair = !requestedReplanRecovery && shouldSkipCurrentQualityRepair({
+    const requestedSkipQualityRepair = !planningRepairRecovery && !requestedReplanRecovery && shouldSkipCurrentQualityRepair({
       continuationMode,
       checkpointType: row.checkpointType,
       currentItemKey: row.currentItemKey,
@@ -314,11 +323,15 @@ export class NovelDirectorContinueRuntime {
       runMode,
       ...(input?.acceptManualChanges ? { stepCalibrationInstruction: null } : {}),
     });
-    const assetFirstRecovery = await this.resolveAssetFirstRecovery({
+    const assetFirstRecovery: DirectorAssetFirstRecovery = planningRepairRecovery
+      ? planningRepairRecovery.resumePhase === "chapter_execution"
+        ? { type: "auto_execution", resumeCheckpointType: "chapter_batch_ready" }
+        : { type: "phase", phase: "structured_outline" }
+      : await this.resolveAssetFirstRecovery({
       novelId,
       directorInput: effectiveDirectorInput,
     });
-    const canSkipReviewBlockedChapter = (
+    const canSkipReviewBlockedChapter = !planningRepairRecovery && (
       row.status === "failed"
       || row.status === "cancelled"
     ) && (
@@ -411,8 +424,10 @@ export class NovelDirectorContinueRuntime {
           taskId,
           novelId,
           request: effectiveDirectorInput,
-          existingPipelineJobId: seedPayload.autoExecution?.pipelineJobId ?? null,
-          existingState: seedPayload.autoExecution ?? null,
+          existingPipelineJobId: planningRepairRecovery ? null : seedPayload.autoExecution?.pipelineJobId ?? null,
+          existingState: planningRepairRecovery && seedPayload.autoExecution
+            ? { ...seedPayload.autoExecution, pipelineJobId: null, pipelineStatus: null }
+            : seedPayload.autoExecution ?? null,
           resumeCheckpointType: assetFirstRecovery.resumeCheckpointType,
           previousFailureMessage: row.lastError ?? null,
           allowSkipReviewBlockedChapter: canSkipReviewBlockedChapter,
