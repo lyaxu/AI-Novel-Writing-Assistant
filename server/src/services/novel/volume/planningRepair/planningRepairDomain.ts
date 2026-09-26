@@ -14,6 +14,8 @@ export const planningRepairChangeSchema = z.object({
   exclusiveEvent: contractText,
   endingState: contractText,
   nextChapterEntryState: contractText,
+  conflictLevel: z.number().int().min(0).max(100).optional(),
+  revealLevel: z.number().int().min(0).max(100).optional(),
   taskSheet: taskSheetShape.taskSheet,
   mustAvoid: contractText,
   payoffRefs: z.array(requiredText.max(160)).max(8),
@@ -113,6 +115,18 @@ export function applyPlanningRepairCandidate(
   const chapters = volume.chapters.map((chapter): VolumeChapterPlan => {
     const change = changes.get(chapter.id);
     if (!change) return chapter;
+    const levels: Record<"conflictLevel" | "revealLevel", number> = { conflictLevel: 0, revealLevel: 0 };
+    for (const key of ["conflictLevel", "revealLevel"] as const) {
+      const original = chapter[key];
+      if (original != null && change[key] !== undefined && change[key] !== original) {
+        throw new Error(`Planning repair cannot change the established ${key} for ${chapter.id}.`);
+      }
+      const value = original ?? change[key];
+      if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 100) {
+        throw new Error(`Planning repair must supply missing ${key} for ${chapter.id}.`);
+      }
+      levels[key] = value;
+    }
     const target = chapter.targetWordCount;
     // Guard before normalization: a target below scene count cannot be apportioned into positive budgets.
     if (!Number.isSafeInteger(target) || (target ?? 0) < change.sceneCards.length) {
@@ -144,6 +158,8 @@ export function applyPlanningRepairCandidate(
       exclusiveEvent: change.exclusiveEvent,
       endingState: change.endingState,
       nextChapterEntryState: change.nextChapterEntryState,
+      conflictLevel: levels.conflictLevel,
+      revealLevel: levels.revealLevel,
       taskSheet: change.taskSheet,
       mustAvoid: change.mustAvoid,
       payoffRefs: change.payoffRefs,

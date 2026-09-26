@@ -232,6 +232,17 @@ test("begin snapshots task quota and current+next-two plan IDs without touching 
   assert.deepEqual(JSON.parse(h.db.task.seedPayloadJson).untouched, { setting: 42 });
 });
 
+test("persisting a candidate retains the declared review window even if a neighbor is unchanged", async () => {
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  await h.store.save(session, { ...session.state, affectedChapterIds: ["p2", "p3", "p4"] }, h.candidate());
+  assert.deepEqual(session.state.affectedChapterIds, ["p2", "p3", "p4"]);
+  const resumed = await h.store.begin(h.input);
+  assert.deepEqual(resumed.state.affectedChapterIds, ["p2", "p3", "p4"]);
+  await h.store.save(resumed, { ...resumed.state, phase: "reviewing" }, resumed.candidate);
+  assert.deepEqual(resumed.state.affectedChapterIds, ["p2", "p3", "p4"]);
+});
+
 test("resume preserves pending operations, quota, history and an unresolved different chapter", async () => {
   const h = fixture();
   const session = await h.store.begin(h.input);

@@ -473,7 +473,8 @@ export class PlanningRepairStore {
       let draft = await this.loadCandidate(tx, previous, snapshot);
       if (requestedState.candidateVersionId !== previous.candidateVersionId) conflict("Candidate ownership is managed by the store.");
       if (requestedCandidate) {
-        const affected = [...new Set([previous.chapterId, ...validateCandidate(snapshot, requestedCandidate)])];
+        const affected = [...new Set([previous.chapterId, ...(requestedState.affectedChapterIds ?? []),
+          ...validateCandidate(snapshot, requestedCandidate)])];
         await this.ensureActiveBaseline(tx, task, snapshot, source);
         const version = await this.createDraft(tx, previous.novelId, requestedCandidate, next.summary);
         next = { ...next, candidateVersionId: version.id, affectedChapterIds: affected };

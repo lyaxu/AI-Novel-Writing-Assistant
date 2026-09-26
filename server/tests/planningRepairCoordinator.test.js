@@ -46,7 +46,7 @@ function output(ids) {
   return { requiresUserDecision: false, reason: "reduce overload", obligationMoves: [], changes: ids.map((id, i) => ({
     chapterId: id, summary: "Repaired summary", purpose: "Repaired purpose", exclusiveEvent: `repaired ${id}`,
     endingState: `finish ${id}`, nextChapterEntryState: `next ${id}`, taskSheet: "Plan the encounter and concrete investigation without repetition. ".repeat(3),
-    mustAvoid: "Do not alter established facts.", payoffRefs: [],
+    mustAvoid: "Do not alter established facts.", payoffRefs: [], conflictLevel: 55, revealLevel: 30,
     sceneCards: [1, 2, 3].map(n => ({ key: `s${n}`, title: `scene ${n}`, purpose: "Move investigation forward", mustAdvance: ["Investigate"], mustPreserve: ["Facts"],
       entryState: "Prior state", exitState: "New state", forbiddenExpansion: ["Other chapters"], targetWordCount: 1000,
       resistance: "Resistance", turn: "Concrete turn", emotionalShift: "Shift", readerValue: "Value" })),
@@ -280,6 +280,20 @@ test("local repair does not inherit or touch neighboring null budgets", async ()
   h.input.document.volumes[0].chapters[1].targetWordCount = null;
   const result = await h.coordinator.run(h.input);
   assert.equal(result.volumes[0].chapters[1].targetWordCount, null);
+});
+
+test("local review contains only the actual window and readonly next is not another candidate", async () => {
+  const h = harness({ local: true });
+  const invoke = async args => {
+    const context = JSON.parse(args.promptInput.contextJson);
+    assert.deepEqual(context.allowedChapterIds, ["c3"]);
+    assert.deepEqual(context.originalChapters.map(c => c.id), ["c3"]);
+    assert.deepEqual(context.candidateChapters.map(c => c.id), ["c3"]);
+    assert.equal(context.readonlyNext.id, "c4");
+    return h.invoke(args);
+  };
+  await new PlanningRepairCoordinator(h.store, h.gate, invoke).run(h.input);
+  assert.equal(h.commits, 1);
 });
 
 test("window budgets prefer the session-frozen default over changed input context", async () => {

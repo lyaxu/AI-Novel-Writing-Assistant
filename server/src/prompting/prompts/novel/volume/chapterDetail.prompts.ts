@@ -210,6 +210,8 @@ function validateAdjacentChapterBoundary<T extends {
   return output;
 }
 
+const intensityScaleRule = "conflictLevel 与 revealLevel 统一采用 0-100 整数尺度，不是 1-5 星级。0 表示无冲突或无新增揭示，20 表示低强度铺垫，50 表示中等阻力或实质线索，80 表示高压对抗或重大揭示，100 表示本书极限。按实际场景的阻力、代价和信息变化评分，不为曲线好看硬造高潮；用户已固定的数值必须保留。";
+
 function createVolumeDetailSystemPrompt(detailMode: VolumeChapterDetailPromptInput["detailMode"]): string {
   if (detailMode === "purpose") {
     return [
@@ -223,6 +225,7 @@ function createVolumeDetailSystemPrompt(detailMode: VolumeChapterDetailPromptInp
     return [
       "你是资深网文章节编辑。",
       "当前任务是为单章定义执行边界。",
+      intensityScaleRule,
       "只输出严格 JSON，且只包含 exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、targetWordCount、mustAvoid、payoffRefs。",
       "exclusiveEvent 表示只能由本章承担的一次性里程碑事件，必须具体，不能写成空泛主题。",
       "endingState 表示本章写完时的稳定局面。",
@@ -274,6 +277,7 @@ function createExecutionContractSystemPrompt(): string {
   return [
     "你是资深网文章节编辑。",
     "当前任务是一次性生成可直接交给写作器的章节执行合同。",
+    intensityScaleRule,
     "只输出严格 JSON，必须同时包含 purpose、exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、targetWordCount、mustAvoid、payoffRefs、taskSheet、readerExperience、sceneCards。",
     "purpose 用一句话说明本章到底要推进什么，不要写成摘要复述。",
     "exclusiveEvent / endingState / nextChapterEntryState 等字段不可缺失，它们是章节的硬边界合同。",
@@ -333,7 +337,7 @@ export const volumeChapterBoundaryPrompt: PromptAsset<
   ReturnType<typeof createChapterBoundarySchema>["_output"]
 > = {
   id: "novel.volume.chapter_boundary",
-  version: "v1",
+  version: "v2",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -375,7 +379,7 @@ export const volumeChapterExecutionContractPrompt: PromptAsset<
   ReturnType<typeof createChapterExecutionContractSchema>["_output"]
 > = {
   id: "novel.volume.chapter_execution_contract",
-  version: "v3",
+  version: "v4",
   taskType: "planner",
   mode: "structured",
   language: "zh",

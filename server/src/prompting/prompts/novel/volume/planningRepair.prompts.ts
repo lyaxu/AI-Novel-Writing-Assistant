@@ -19,7 +19,8 @@ const commonRules = [
   "必须完整阅读 bookConstraints、volume、strategyPlan、beatSheet、allowedChapterIds、originalChapters、candidateChapters（如有）、readonlyPrevious、readonlyNext、assessment、obligationMoves（如有）和 guidance，不能只看问题摘要。assessment 包含完整原始质量评估。",
   "changes 和 obligationMoves 中的 chapterId 指 VolumeChapterPlan.id，不是可选的持久化 chapterId。",
   "只允许修改当前卷 allowedChapterIds 内的章节。readonlyPrevious、readonlyNext 以及其他章节全部只读。",
-  "禁止修改章节和卷的 ID、持久化 chapterId 关联、volumeId、title、chapterOrder、beatKey、章节数量与顺序、targetWordCount、冲突和揭露等级、风格合同及元数据。",
+  "禁止修改章节和卷的 ID、持久化 chapterId 关联、volumeId、title、chapterOrder、beatKey、章节数量与顺序、targetWordCount、风格合同及元数据。冲突等级 conflictLevel、揭露等级 revealLevel 已有数值时必须原样保留；仅在缺失或 null 时根据本章职责补齐 0-100 整数，不得改变用户已定强度。",
+  "本轮唯一有效范围是顶层 allowedChapterIds；originalChapters 和 candidateChapters 仅包含本轮待修复或待审章节。assessment.original 是历史问题依据，不是当前权限，若其文字引用旧窗口，应以顶层当前范围为准。",
   "严格保留每章原始目标字数。允许在原始预算内重新分配场景字数，但 sceneCards.targetWordCount 的总和不得超过本章原始 targetWordCount；优先恰好等于原始预算。不能靠增加目标字数解决职责过载。",
   "保留原始叙事义务、兑现引用和继承钩子，不得靠静默删掉职责或重复兑现一次性事件解决过载。同一全书钩子可被多章合理引用，不能把 payoffRefs 的引用次数直接当作实际义务重复。",
   "遵守全书约束、节拍表和只读上下文，保持世界设定、人物知情范围、动机、关系、人物线与状态变化一致。",
@@ -29,7 +30,7 @@ const commonRules = [
 // These assets do not resolve models; the coordinator must pass its explicit modelRoute to the runner.
 export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, PlanningRepairOutput> = {
   id: "novel.volume.planning_repair",
-  version: "v1",
+  version: "v2",
   taskType: "replan",
   mode: "structured",
   language: "zh",
@@ -40,7 +41,7 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
       "你是网文规划修复器。只修复限定章节窗口的执行合同，不写正文，不重做全书规划。",
       commonRules,
       "逐项解决 assessment 中的原始问题，用具体的章节职责和场景变化降低负载，而不是只改措辞。只能在允许窗口内保留、合并或移动职责。",
-      "输出 {requiresUserDecision:boolean,reason:string,changes:[{chapterId,summary,purpose,exclusiveEvent,endingState,nextChapterEntryState,taskSheet,mustAvoid,payoffRefs:string[],sceneCards:[],readerExperience:{}}],obligationMoves:[{obligation,fromChapterId,toChapterId,action,reason}]}。",
+      "输出 {requiresUserDecision:boolean,reason:string,changes:[{chapterId,summary,purpose,exclusiveEvent,endingState,nextChapterEntryState,conflictLevel:number,revealLevel:number,taskSheet,mustAvoid,payoffRefs:string[],sceneCards:[],readerExperience:{}}],obligationMoves:[{obligation,fromChapterId,toChapterId,action,reason}]}。",
       "changes 必须对每个 allowedChapterIds 恰好返回一次完整的允许字段，包括无需变化的字段。不返回完整替换文档，不新增其他字段。",
       "sceneCards 沿用章节细纲场景结构，每章 3-8 场；每场包含唯一 key、title、purpose、mustAdvance:string[]、mustPreserve:string[]、entryState、exitState、forbiddenExpansion:string[]、正整数 targetWordCount、resistance、turn、emotionalShift、readerValue。",
       "readerExperience 沿用现有结构：readerQuestion、promisedReward、rewardLevel（只能 setup|partial|major）、protagonistWant、primaryResistance、keyTurn、emotionalShift、informationReveal、netChange、inheritedHookResponsibilities（最多4项）、endingHook。",
@@ -63,7 +64,7 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
 
 export const planningRepairReviewPrompt: PromptAsset<PlanningRepairReviewPromptInput, PlanningRepairReviewOutput> = {
   id: "novel.volume.planning_repair_review",
-  version: "v1",
+  version: "v2",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -76,6 +77,7 @@ export const planningRepairReviewPrompt: PromptAsset<PlanningRepairReviewPromptI
       "核对原始职责与修复章节及 obligationMoves，检查丢失或重复职责、无人承接的兑现与钩子、无依据的移动，以及只在账本宣称保留却未落实的义务。同章或同场景合并允许，但不能因此吞掉原有叙事功能。",
       "检查各章原始字数预算与场景分配，还要判断实际叙事工作量能否在不变预算内完成。归一化后的数字合规不代表负载合理。",
       "检查窗口内部以及 readonlyPrevious、readonlyNext 两端的章节边界：独占事件、结束态与入口态、揭露时机、节拍承诺都要连续且不越界。",
+      "只要求 candidateChapters 内的章节具有完整执行合同。readonlyPrevious、readonlyNext 是只读边界参照，可能仅有标题与摘要；不得因为未进入本轮的邻章尚无任务单、场景卡或强度字段而拒绝当前窗口。仍须根据其已有信息检查真实的剧情衔接矛盾，并指出具体冲突，不得虚构缺失内容。",
       "检查设定一致性与每条受影响的人物线，包括知情范围、动机、关系和状态迁移；不得擅自变更全书约束。",
       "逐项对比 assessment 中完整的原始质量结果和 guidance，确认修复确实消除了原问题。仅重述合同、掩盖问题或把缺陷转移到另一章均不能通过。",
       "严格输出 {usable:boolean,safeToSync:boolean,requiresUserDecision:boolean,summary:string,issues:string[]}，不添加其他字段。",

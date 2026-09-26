@@ -326,7 +326,7 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/novel/volume/chapterDetail.prompts").volumeChapterPurposePrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.chapter_boundary@v1",
+    key: "novel.volume.chapter_boundary@v2",
     load: () => require("../prompts/novel/volume/chapterDetail.prompts").volumeChapterBoundaryPrompt as UnknownPromptAsset,
   },
   {
@@ -334,7 +334,7 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/novel/volume/chapterDetail.prompts").volumeChapterTaskSheetPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.chapter_execution_contract@v3",
+    key: "novel.volume.chapter_execution_contract@v4",
     load: () => require("../prompts/novel/volume/chapterDetail.prompts").volumeChapterExecutionContractPrompt as UnknownPromptAsset,
   },
   {
@@ -342,11 +342,11 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/novel/volume/chapterTaskSheetQuality.prompts").chapterTaskSheetQualityPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.planning_repair@v1",
+    key: "novel.volume.planning_repair@v2",
     load: () => require("../prompts/novel/volume/planningRepair.prompts").planningRepairPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.planning_repair_review@v1",
+    key: "novel.volume.planning_repair_review@v2",
     load: () => require("../prompts/novel/volume/planningRepair.prompts").planningRepairReviewPrompt as UnknownPromptAsset,
   },
   {

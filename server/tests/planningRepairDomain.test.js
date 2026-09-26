@@ -135,6 +135,38 @@ test("rejects protected fields instead of stripping or applying them", () => {
   assert.throws(() => apply(document(), { ...output(), document: document() }));
 });
 
+test("chapter 8/9 missing strengths are repairable without altering established chapter 7 strengths", () => {
+  const doc = document();
+  const blank = doc.volumes[0].chapters[2];
+  blank.conflictLevel = null;
+  blank.revealLevel = null;
+  blank.conflictLevelSource = "ai";
+  const proposal = output(["plan-1", "plan-2"]);
+  proposal.changes[1].conflictLevel = 35;
+  proposal.changes[1].revealLevel = 40;
+  const result = apply(doc, proposal, ["plan-1", "plan-2"]);
+  assert.equal(result.volumes[0].chapters[2].conflictLevel, 35);
+  assert.equal(result.volumes[0].chapters[2].revealLevel, 40);
+  assert.equal(result.volumes[0].chapters[1].conflictLevel, 55);
+  assert.equal(result.volumes[0].chapters[1].revealLevel, 30);
+  assert.equal(blank.conflictLevel, null);
+  delete proposal.changes[1].revealLevel;
+  assert.throws(() => apply(doc, proposal, ["plan-1", "plan-2"]), /missing revealLevel/);
+});
+
+test("existing user or AI strengths cannot be overwritten, legacy responses may omit known strengths", () => {
+  for (const source of ["user", "ai"]) {
+    const doc = document();
+    doc.volumes[0].chapters[1].conflictLevelSource = source;
+    for (const field of ["conflictLevel", "revealLevel"]) {
+      const proposal = output();
+      proposal.changes[0][field] = 99;
+      assert.throws(() => apply(doc, proposal), /established/);
+    }
+    assert.equal(apply(doc).volumes[0].chapters[1].conflictLevel, 55);
+  }
+});
+
 test("requires the exact allowed chapter set once, using planning IDs not persisted IDs", () => {
   assert.throws(() => apply(document(), output([])), /exact allowed/);
   assert.throws(() => apply(document(), output(["plan-1", "plan-1"])), /exact allowed/);
@@ -315,4 +347,15 @@ test("registered assets expose the coordinator API without model routing or call
   assert.match(instructions, /完整的原始质量结果/);
   assert.match(instructions, /数字合规不代表负载合理/);
   assert.match(planningRepairPrompt.render({ contextJson: "{}" }, {})[0].content, /同一场景内合并职责/);
+});
+
+test("boundary and execution prompts explicitly use the curve's 0-100 scale", () => {
+  const assets = require("../dist/prompting/prompts/novel/volume/chapterDetail.prompts.js");
+  for (const asset of [assets.volumeChapterBoundaryPrompt, assets.volumeChapterExecutionContractPrompt]) {
+    assert.equal(getRegisteredPromptAsset(asset.id, asset.version), asset);
+    const instructions = asset.render({ detailMode: "boundary" }, { blocks: [] })[0].content;
+    assert.match(instructions, /0-100/);
+    assert.match(instructions, /不是 1-5/);
+    assert.match(instructions, /不为曲线好看硬造高潮/);
+  }
 });
