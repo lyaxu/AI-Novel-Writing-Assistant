@@ -22,7 +22,7 @@ const { PlanningRepairRecoveryService } = require(artifact("services/novel/direc
 const { assertPlanningRepairResumeAllowed, isPlanningRepairConfirmationError, resolvePlanningRepairResumePhase } = require(artifact("services/novel/director/recovery/planningRepair/planningRepairRecovery"));
 const { NovelDirectorContinueRuntime } = require(artifact("services/novel/director/runtime/novelDirectorContinueRuntime"));
 const { errorHandler } = require(artifact("middleware/errorHandler"));
-const { overlayPlanningRepairPause } = require(artifact("services/novel/director/recovery/planningRepair/planningRepairProjection"));
+const { getPlanningRepairCheckpointStage, overlayPlanningRepairPause } = require(artifact("services/novel/director/recovery/planningRepair/planningRepairProjection"));
 const { DirectorNodeRunner } = require(artifact("services/novel/director/runtime/DirectorNodeRunner"));
 const { DirectorRuntimeStore } = require(artifact("services/novel/director/runtime/DirectorRuntimeStore"));
 
@@ -30,7 +30,7 @@ test("explicit planning pause supersedes current failure text without erasing hi
   const history = [{ type: "node_failed", summary: "old semantic failure 3000" }];
   const projection = { status: "failed", blockedReason: history[0].summary, blockingReason: history[0].summary,
     detail: history[0].summary, lastErrorMessage: history[0].summary, recentEvents: history };
-  for (const phase of ["waiting_confirmation", "uncertain", "committed"]) {
+  for (const phase of ["waiting_confirmation", "uncertain", "committed", "assessing"]) {
     const task = { status: "waiting_approval", checkpointType: "step_review_required",
       checkpointSummary: "Current planning checkpoint", seedPayloadJson: JSON.stringify({ planningRepair: state({ phase }) }) };
     const next = overlayPlanningRepairPause(projection, task);
@@ -47,6 +47,19 @@ test("explicit planning pause supersedes current failure text without erasing hi
       { seedPayloadJson: JSON.stringify({ planningRepair: state({ phase: "technical_failed" }) }) }]) {
       assert.strictEqual(overlayPlanningRepairPause(projection, { ...task, ...patch }), projection);
     }
+  }
+});
+
+test("planning recovery checkpoint identifies its source stage independently of stale runtime facts", () => {
+  for (const phase of ["waiting_confirmation", "uncertain", "assessing", "committed"]) {
+    const repair = state({ phase });
+    const task = { status: "waiting_approval", checkpointType: "step_review_required",
+      seedPayloadJson: JSON.stringify({ planningRepair: repair,
+        planningRepairRecovery: { repairKey: repair.key, resumePhase: "chapter_execution" } }) };
+    assert.equal(getPlanningRepairCheckpointStage(task),
+      ["assessing", "committed"].includes(phase) ? "chapter_execution" : "structured_outline");
+    assert.equal(getPlanningRepairCheckpointStage({ ...task, status: "running" }), null);
+    assert.equal(getPlanningRepairCheckpointStage({ ...task, seedPayloadJson: "{}" }), null);
   }
 });
 

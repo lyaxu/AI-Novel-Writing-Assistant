@@ -253,6 +253,7 @@ export default function NovelWorkspaceRail(props: NovelWorkspaceRailProps) {
       activeTask?.currentItemKey,
       activeTask?.currentStage,
       reviewScope,
+      activeTask?.status,
     ],
   );
   const effectiveResetSteps = useMemo(

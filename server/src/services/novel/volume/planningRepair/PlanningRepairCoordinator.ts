@@ -31,7 +31,7 @@ export interface PlanningRepairInput {
   chapterId: string;
   options: VolumeGenerateOptions & { taskId: string };
   context: unknown;
-  generateInitial: () => Promise<Partial<VolumeChapterPlan>>;
+  generateInitial: (beforeModelCall: () => Promise<void>) => Promise<Partial<VolumeChapterPlan>>;
 }
 
 export function passedPlanningReview(result: ChapterTaskSheetQualityGateResult): boolean {
@@ -108,8 +108,10 @@ export class PlanningRepairCoordinator {
         else if (canReplayPendingOutput) return this.pause(session, "已保存的规划修正响应缺失，请确认后继续。");
       }
       if (!session.candidate) {
-        await this.beforeCall(session, "initial_generation", "正在准备待复核的章节任务单");
-        const generated = await input.generateInitial();
+        // Reusing a persisted contract is local work, not an uncertain paid request.
+        const generated = await input.generateInitial(() => this.beforeCall(
+          session, "initial_generation", "正在准备待复核的章节任务单",
+        ));
         const candidate = structuredClone(input.document);
         const chapter = chaptersOf(candidate, input.volumeId).find(c => c.id === input.chapterId)!;
         // Generation must not purchase more space by changing the agreed chapter length.

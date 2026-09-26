@@ -137,11 +137,34 @@ test("an interrupted paid operation becomes uncertain without automatic replay",
 
 test("network errors remain technical errors and preserve the pending call", async () => {
   const h = harness();
-  h.input.generateInitial = async () => { throw new Error("ECONNRESET"); };
+  h.input.generateInitial = async (beforeModelCall) => { await beforeModelCall(); throw new Error("ECONNRESET"); };
   await assert.rejects(h.coordinator.run(h.input), /ECONNRESET/);
   assert.equal(h.session.state.phase, "technical_failed");
   assert.ok(h.session.state.pendingOperation);
   assert.equal(h.commits, 0);
+});
+
+test("local contract reuse failures never acquire an uncertain paid-call marker", async () => {
+  const h = harness();
+  h.input.generateInitial = async () => { throw new Error("Local scene decoding failed"); };
+  await assert.rejects(h.coordinator.run(h.input), /Local scene decoding failed/);
+  assert.equal(h.session.state.phase, "technical_failed");
+  assert.equal(h.session.state.pendingOperation, undefined);
+  assert.equal(h.session.state.rounds, 0);
+  assert.equal(h.calls.length, 0);
+});
+
+test("reused contracts still require semantic and window review before commit", async () => {
+  const h = harness();
+  h.gate.evaluate = async () => { h.calls.push("semantic"); return pass; };
+  h.input.generateInitial = async () => {
+    assert.equal(h.session.state.pendingOperation, undefined);
+    return { taskSheet: h.input.document.volumes[0].chapters[0].taskSheet };
+  };
+  await h.coordinator.run(h.input);
+  assert.deepEqual(h.calls, ["semantic", "novel.volume.planning_repair_review"]);
+  assert.equal(h.commits, 1);
+  assert.equal(h.session.state.rounds, 0);
 });
 
 test("autopilot permission alone is not a semantic pass", () => {

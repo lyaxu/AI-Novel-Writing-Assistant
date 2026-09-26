@@ -18,7 +18,7 @@ import {
 import { directorWorkflowStepModuleRegistry } from "../workflowStepRuntime/directorWorkflowStepModules";
 import { buildDirectorDisplayState } from "./DirectorDisplayStateBuilder";
 import { buildDirectorDashboardView } from "./DirectorDashboardViewBuilder";
-import { overlayPlanningRepairPause } from "../recovery/planningRepair/planningRepairProjection";
+import { getPlanningRepairCheckpointStage, overlayPlanningRepairPause } from "../recovery/planningRepair/planningRepairProjection";
 
 function buildNextActions(input: {
   taskStatus: string;
@@ -235,6 +235,9 @@ export class DirectorTaskSnapshotService {
     }), { ...state.task, seedPayloadJson: JSON.stringify(state.seedPayload) });
     const displayState = buildDirectorDisplayState({
       task: state.task,
+      planningRepairStage: getPlanningRepairCheckpointStage({
+        ...state.task, seedPayloadJson: JSON.stringify(state.seedPayload),
+      }),
       projection,
       factSummary: inspected.factSummary,
       activeStepNodeKey: state.activeStep?.nodeKey ?? null,

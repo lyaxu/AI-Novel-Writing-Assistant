@@ -16,6 +16,7 @@ const {
 const {
   canReuseChapterExecutionContract,
   shouldRetryChapterExecutionContract,
+  generateChapterTaskSheetDetail,
 } = require("../dist/services/novel/volume/chapterDetail/chapterExecutionContractGeneration.js");
 const {
   ChapterTaskSheetQualityGateError,
@@ -122,6 +123,27 @@ test("incomplete persisted contracts are regenerated instead of reused", () => {
       targetWordCount: null,
     },
   }), false);
+});
+
+test("saved JSON scene cards are reused without a model request and keep their budget", async () => {
+  const candidate = buildCandidate();
+  const chapter = { ...candidate, id: candidate.chapterId };
+  let modelRequests = 0;
+  const result = await generateChapterTaskSheetDetail({
+    promptInput: {
+      novel: {}, workspace: { novelId: candidate.novelId }, storyMacroPlan: null,
+      strategyPlan: null, targetVolume: { id: candidate.volumeId }, targetBeatSheet: null,
+      targetChapter: chapter, detailMode: "task_sheet",
+    },
+    options: { planningRepairManaged: true },
+    onBeforeModelCall: async () => { modelRequests++; throw new Error("Unexpected model call"); },
+  });
+  assert.equal(modelRequests, 0);
+  assert.equal(result.taskSheet, chapter.taskSheet);
+  const scenePlan = JSON.parse(result.sceneCards);
+  assert.equal(scenePlan.scenes.length, 3);
+  assert.equal(scenePlan.targetWordCount, 3000);
+  assert.equal(scenePlan.scenes.reduce((sum, scene) => sum + scene.targetWordCount, 0), 3000);
 });
 
 test("contract readiness distinguishes structural completeness from current requirement compatibility", () => {

@@ -77,6 +77,7 @@ export async function generateChapterTaskSheetDetail(params: {
     detailMode: "task_sheet";
   };
   options: VolumeGenerateOptions;
+  onBeforeModelCall?: () => Promise<void>;
 }): Promise<{
   purpose: string;
   exclusiveEvent: string;
@@ -100,7 +101,7 @@ export async function generateChapterTaskSheetDetail(params: {
     })
   ) {
     const scenePlan = normalizeChapterScenePlan(
-      existingChapter.sceneCards,
+      JSON.parse(existingChapter.sceneCards!),
       existingChapter.targetWordCount,
     );
     return {
@@ -133,6 +134,7 @@ export async function generateChapterTaskSheetDetail(params: {
           ].filter(Boolean).join("\n"),
         }
         : params.promptInput;
+      await params.onBeforeModelCall?.();
       const generated = await runStructuredPrompt({
         asset: volumeChapterExecutionContractPrompt,
         promptInput,

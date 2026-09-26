@@ -281,10 +281,11 @@ export function buildDirectorDisplayState(input: {
   currentFactStepLabel?: string | null;
   factStep: FactStepStateLike;
   chapterProgress?: DirectorChapterExecutionProgressSummary | null;
+  planningRepairStage?: DirectorDisplayStageKey | null;
 }): DirectorDisplayState {
   const isLiveRunning = hasLiveRuntimeProgress(input.task, input.projection);
   const needsRecovery = Boolean(input.task.pendingManualRecovery) && !isLiveRunning;
-  const stageKey = resolveWorkflowDisplayStage({
+  const stageKey = input.planningRepairStage ?? resolveWorkflowDisplayStage({
     factStepId: input.currentFactStepId ?? input.projection?.currentFactStepId ?? null,
     currentNodeKey: input.projection?.currentNodeKey ?? null,
     activeNodeKey: input.activeStepNodeKey ?? null,

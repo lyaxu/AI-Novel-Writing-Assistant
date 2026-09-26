@@ -188,6 +188,7 @@ export function tabFromDirectorProgress(input: {
     case "chapter_list":
     case "chapter_sync":
     case "chapter_detail_bundle":
+    case "planning_repair_confirmation":
       return "structured";
     case "chapter_execution":
     case "chapter_execution_node":

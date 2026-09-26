@@ -2,6 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { tabFromDirectorProgress } from "./novelWorkspaceNavigation.ts";
+import { resolveAutoDirectorResetStepsForWorkflowProgress } from "../../components/layout/novelWorkspaceRailState.ts";
+
+test("planning repair pause retains completed volume strategy despite old takeover reset flags", () => {
+  const tab = tabFromDirectorProgress({
+    status: "waiting_approval", currentStage: "结构化大纲",
+    currentItemKey: "planning_repair_confirmation", checkpointType: "step_review_required",
+  });
+  assert.equal(tab, "structured");
+  const reset = resolveAutoDirectorResetStepsForWorkflowProgress(
+    new Set(["outline", "structured", "chapter", "pipeline"]), tab,
+  );
+  assert.equal(reset.has("outline"), false);
+  assert.equal(reset.has("chapter"), true);
+});
 
 test("running chapter execution uses the active item over a stale chapter batch checkpoint", () => {
   assert.equal(tabFromDirectorProgress({
