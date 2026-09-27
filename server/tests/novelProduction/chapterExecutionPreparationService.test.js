@@ -63,3 +63,21 @@ test("manual chapter preparation does not create an autopilot route window", asy
   assert.equal(result.mode, "manual");
   assert.deepEqual(result.preparedArtifacts, ["chapter_plan"]);
 });
+
+test("sample preparation caps route prefetch without treating the sample as a complete book", async () => {
+  let received;
+  const service = new ChapterExecutionPreparationService({
+    chapterPlanJITService: { ensureExecutionReady: async (_novelId, _chapterId, options) => { received = options; } },
+    planner: { ensureChapterPlan: async () => ({ id: "sample-plan" }) },
+    loadEstimatedChapterCount: async () => 80,
+  });
+  await service.prepare("novel-1", "chapter-2", {
+    controlPolicy: {
+      kickoffMode: "director_start", advanceMode: "full_book_autopilot", reviewCheckpoints: [],
+      autoExecutionRange: { mode: "chapter_range", start: 1, end: 3 },
+    },
+  });
+  assert.equal(received.endOrder, 3);
+  assert.equal(received.completionProfile.targetChapterCount, 80);
+  assert.equal(received.completionProfile.mode, "serial_book");
+});

@@ -3,6 +3,7 @@ import type {
   StateChangeProposal,
 } from "@ai-novel/shared/types/canonicalState";
 import { prisma } from "../../../db/prisma";
+import { runWithEnforcedTimeout } from "../../../llm/invokeTimeout";
 import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
 import {
   chapterArtifactDeltaPrompt,
@@ -371,29 +372,35 @@ export class ChapterArtifactDeltaService {
 
     const previousSnapshot = await stateService.getLatestSnapshotBeforeChapter(input.novelId, chapter.order);
     const contentHash = buildContentHash(content);
-    const result = await runStructuredPrompt({
-      asset: chapterArtifactDeltaPrompt,
-      promptInput: {
-        novelTitle: novel.title,
-        chapterOrder: chapter.order,
-        chapterTitle: chapter.title,
-        chapterGoal: chapter.taskSheet?.trim() || chapter.expectation?.trim() || "无明确章节目标",
-        characterRosterText: this.buildCharacterRosterText(characters).slice(0, 7000),
-        previousStateText: stringifyPreviousState(previousSnapshot).slice(0, 5000),
-        existingResourceText: stringifyChapterResourceText(existingResources).slice(0, 5000),
-        existingPayoffText: stringifyPayoffText(payoffRows).slice(0, 6000),
-        activeCharacterDialogueInfluenceText: stringifyActiveCharacterDialogueInfluenceText(activeCharacterDialogueInfluences).slice(0, 3500),
-        chapterContent: content.slice(0, 26000),
-      },
-      options: {
-        provider: input.provider,
-        model: input.model,
-        temperature: Math.min(input.temperature ?? 0.2, 0.4),
-        maxTokens: 6000,
-        novelId: input.novelId,
-        chapterId: input.chapterId,
-        stage: "chapter_artifact_delta",
-      },
+    const result = await runWithEnforcedTimeout({
+      label: "novel.chapter.artifact_delta.extract",
+      timeoutMs: 300_000,
+      run: (signal) => runStructuredPrompt({
+        asset: chapterArtifactDeltaPrompt,
+        promptInput: {
+          novelTitle: novel.title,
+          chapterOrder: chapter.order,
+          chapterTitle: chapter.title,
+          chapterGoal: chapter.taskSheet?.trim() || chapter.expectation?.trim() || "无明确章节目标",
+          characterRosterText: this.buildCharacterRosterText(characters).slice(0, 7000),
+          previousStateText: stringifyPreviousState(previousSnapshot).slice(0, 5000),
+          existingResourceText: stringifyChapterResourceText(existingResources).slice(0, 5000),
+          existingPayoffText: stringifyPayoffText(payoffRows).slice(0, 6000),
+          activeCharacterDialogueInfluenceText: stringifyActiveCharacterDialogueInfluenceText(activeCharacterDialogueInfluences).slice(0, 3500),
+          chapterContent: content.slice(0, 26000),
+        },
+        options: {
+          provider: input.provider,
+          model: input.model,
+          temperature: Math.min(input.temperature ?? 0.2, 0.4),
+          maxTokens: 6000,
+          timeoutMs: 300_000,
+          signal,
+          novelId: input.novelId,
+          chapterId: input.chapterId,
+          stage: "chapter_artifact_delta",
+        },
+      }),
     });
 
     return {

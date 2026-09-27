@@ -893,3 +893,57 @@ test("buildStructuredResponseFormat keeps string length limits in json schema se
   assert.equal(serializedSchema.includes("maxLength"), true);
   assert.equal(serializedSchema.includes("maxItems"), true);
 });
+
+test("whole-operation deadline aborts stalled stream and forbids strategy or model retries", async () => {
+  const { runWithEnforcedTimeout } = require("../dist/llm/invokeTimeout.js");
+  const originalResolve = factory.resolveLLMClientOptions;
+  const originalCreate = factory.createLLMFromResolvedOptions;
+  const originalFallback = structuredFallbackSettings.getStructuredFallbackSettings;
+  let calls = 0;
+  let aborted = false;
+  factory.resolveLLMClientOptions = async (provider, options = {}) => ({
+    ...options, provider, apiKey: "fake", model: options.model, temperature: 0.2,
+    baseURL: "https://api.moonshot.cn/v1",
+    structuredProfile: resolveStructuredOutputProfile({
+      provider, model: options.model, baseURL: "https://api.moonshot.cn/v1",
+    }),
+  });
+  factory.createLLMFromResolvedOptions = () => ({
+    stream: async function* (_messages, { signal }) {
+      calls++;
+      yield { content: "", additional_kwargs: { reasoning_content: "still reasoning" } };
+      await new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => {
+          aborted = true;
+          reject(signal.reason);
+        }, { once: true });
+      });
+    },
+  });
+  structuredFallbackSettings.getStructuredFallbackSettings = async () => ({
+    enabled: true, provider: "deepseek", model: "deepseek-chat", retryCount: 3,
+  });
+  try {
+    await assert.rejects(runWithEnforcedTimeout({
+      timeoutMs: 25,
+      run: (signal) => structuredInvoke.invokeStructuredLlmDetailed({
+        provider: "custom_k3", model: "kimi-k3", signal, timeoutMs: 1000,
+        label: "test.deadline", schema: z.object({ value: z.string() }),
+        systemPrompt: "JSON", userPrompt: "test",
+      }),
+    }), { name: "TimeoutError" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(calls, 1);
+    assert.equal(aborted, true);
+    const stopped = new AbortController();
+    stopped.abort(new Error("cancelled before entry"));
+    await assert.rejects(structuredInvoke.invokeStructuredLlmDetailed({
+      signal: stopped.signal, label: "test.pre-abort", schema: z.object({ value: z.string() }),
+    }), /cancelled before entry/);
+    assert.equal(calls, 1);
+  } finally {
+    factory.resolveLLMClientOptions = originalResolve;
+    factory.createLLMFromResolvedOptions = originalCreate;
+    structuredFallbackSettings.getStructuredFallbackSettings = originalFallback;
+  }
+});

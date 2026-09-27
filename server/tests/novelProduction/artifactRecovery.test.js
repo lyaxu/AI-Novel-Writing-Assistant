@@ -118,3 +118,33 @@ test("C3: stale content is rejected before extraction or consumer writes", async
   assert.equal(extractionCalls, 0);
   assert.equal(applyCalls, 0);
 });
+
+test("extraction deadline persists failed checkpoint and explicit recovery reuses subsequent success", async () => {
+  const checkpoints = createCheckpointStore();
+  let calls = 0;
+  const Recovery = loadRecoveryService();
+  const service = new Recovery({
+    checkpoints,
+    readCurrentContent: async () => "draft",
+    deltaService: {
+      async extractChapterArtifacts() {
+        calls++;
+        if (calls === 1) {
+          const error = new Error("deadline");
+          error.name = "TimeoutError";
+          throw error;
+        }
+        return { contentHash: "draft", output: {} };
+      },
+      async applyChapterArtifactConsumer() { return {}; },
+      toSyncResult(extraction) { return extraction; },
+    },
+  });
+  const input = { novelId: "n", chapterId: "c", content: "draft", artifactSyncMode: "adaptive" };
+  await assert.rejects(service.syncChapterArtifacts(input), { name: "TimeoutError" });
+  assert.equal(calls, 1);
+  assert.equal([...checkpoints.rows.values()][0].status, "failed");
+  await service.syncChapterArtifacts(input);
+  await service.syncChapterArtifacts(input);
+  assert.equal(calls, 2);
+});

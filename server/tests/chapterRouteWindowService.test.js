@@ -129,3 +129,30 @@ test("route window adds a future skeleton before planning the next beat and chap
     prisma.chapter.count = originalCount;
   }
 });
+
+for (const fromOrder of [2, 3, 4]) {
+  test(`bounded route window at chapter ${fromOrder} does not prefetch beyond sample chapter 3`, async () => {
+    const originalCount = prisma.chapter.count;
+    const queries = [];
+    prisma.chapter.count = async ({ where }) => {
+      queries.push(where);
+      return [1, 2, 3, 4, 5, 6, 7].filter((order) => (
+        order >= where.order.gte && (where.order.lte == null || order <= where.order.lte)
+      )).length;
+    };
+    const service = new ChapterRouteWindowService({
+      getVolumes: async () => { throw new Error("Existing in-scope routes must avoid generation"); },
+    });
+    try {
+      const result = await service.ensureRouteWindow("sample-novel", fromOrder, {
+        endOrder: 3, min: 3, target: 5,
+        completionProfile: { mode: "serial_book", targetChapterCount: 80 },
+      });
+      assert.deepEqual(result, { availableRouteCount: Math.max(0, 4 - fromOrder), extended: false });
+      if (fromOrder <= 3) assert.deepEqual(queries[0].order, { gte: fromOrder, lte: 3 });
+      else assert.equal(queries.length, 0);
+    } finally {
+      prisma.chapter.count = originalCount;
+    }
+  });
+}

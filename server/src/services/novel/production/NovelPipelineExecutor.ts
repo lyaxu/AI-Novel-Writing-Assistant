@@ -665,13 +665,14 @@ export class NovelPipelineExecutor {
           if (!shouldStopAfterCurrentChapter && isAutopilotMode && chapter.order < autopilotTargetEndOrder) {
             try {
               await routeWindowService.ensureRouteWindow(novelId, chapter.order + 1, {
+                endOrder: autopilotTargetEndOrder,
                 min: 3,
                 target: 5,
                 provider: runtimePayload.provider,
                 model: runtimePayload.model,
                 temperature: runtimePayload.temperature,
                 taskId: runtimePayload.workflowTaskId ?? jobId,
-                completionProfile: buildDirectorCompletionProfile(autopilotTargetEndOrder),
+                completionProfile: buildDirectorCompletionProfile(novel.estimatedChapterCount ?? autopilotTargetEndOrder),
               });
             } catch (error) {
               throw new PipelineIssueFailure(

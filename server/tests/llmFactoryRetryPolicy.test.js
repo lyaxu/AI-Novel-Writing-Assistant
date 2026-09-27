@@ -78,3 +78,21 @@ test("OpenAI-compatible clients leave retries to explicit product workflows", ()
 
   assert.equal(llm.caller.maxRetries, 0);
 });
+
+test("official K3 fact extraction uses low reasoning without shrinking completion budget", async () => {
+  const provider = "custom_k3_fact_test";
+  setProviderSecretCache(provider, { key: "fake", reasoningEnabled: true, reasoningEffort: "max" });
+  try {
+    for (const baseURL of ["https://api.moonshot.cn/v1", "https://api.moonshot.ai/v1"]) {
+      const resolved = await resolveLLMClientOptions(provider, {
+        model: "kimi-k3", baseURL, taskType: "fact_extraction", maxTokens: 6000,
+        executionMode: "structured", structuredStrategy: "json_object",
+      });
+      assert.equal(resolved.reasoningEffort, "low");
+      assert.equal(resolved.maxTokens, 32768);
+      assert.equal(createLLMFromResolvedOptions(resolved).invocationParams({}).reasoning_effort, "low");
+    }
+  } finally {
+    setProviderSecretCache(provider, null);
+  }
+});

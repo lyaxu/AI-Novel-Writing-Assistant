@@ -33,6 +33,7 @@ export class ChapterExecutionPreparationService {
     if (isAutopilot) {
       const estimatedChapterCount = await this.deps.loadEstimatedChapterCount(novelId);
       await this.deps.chapterPlanJITService.ensureExecutionReady(novelId, chapterId, {
+        endOrder: request.controlPolicy?.autoExecutionRange?.end ?? undefined,
         min: 3,
         target: 5,
         provider: request.provider,

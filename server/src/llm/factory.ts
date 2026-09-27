@@ -306,7 +306,7 @@ export async function resolveLLMClientOptions(
     : undefined;
   const kimiLowEffortCall = kimiCompletionBudget != null && (
     (executionMode === "plain" && options.reasoningEnabled === false) ||
-    ["planner", "outline_planning", "replan"].includes(options.taskType ?? "")
+    ["planner", "outline_planning", "replan", "fact_extraction"].includes(options.taskType ?? "")
     || ["novel.director.candidates", "novel.world.generate_from_theme"].includes(options.promptMeta?.promptId ?? "")
   );
   const structuredProfile = executionMode === "structured"

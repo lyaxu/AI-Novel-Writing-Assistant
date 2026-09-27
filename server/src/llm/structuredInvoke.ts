@@ -395,6 +395,7 @@ async function tryStructuredStrategies<T>(input: {
     : sequence;
   let lastError: StructuredOutputError | null = null;
   for (let index = 0; index < preferredSequence.length; index += 1) {
+    input.baseInput.signal?.throwIfAborted();
     const strategy = preferredSequence[index]!;
     try {
       return await invokeStructuredAttempt({
@@ -476,6 +477,7 @@ async function tryStructuredStrategiesWithTransportRetries<T>(input: {
 }
 
 export async function invokeStructuredLlmDetailed<T>(input: StructuredInvokeInput<T>): Promise<StructuredInvokeResult<T>> {
+  input.signal?.throwIfAborted();
   const primaryTarget = await resolveAttemptTarget({
     provider: input.provider,
     model: input.model,
@@ -508,6 +510,7 @@ export async function invokeStructuredLlmDetailed<T>(input: StructuredInvokeInpu
       retryCount: transportRetryCount,
     });
   } catch (primaryError) {
+    input.signal?.throwIfAborted();
     if (primaryError instanceof StructuredOutputError && primaryError.category === "output_limit") {
       throw primaryError;
     }

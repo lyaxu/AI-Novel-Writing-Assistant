@@ -9,6 +9,8 @@ import {
 } from "../volume/volumeGenerationHelpers";
 
 export interface ChapterRouteWindowOptions {
+  /** Last chapter authorized for this production run; not the book ending. */
+  endOrder?: number;
   min?: number;
   target?: number;
   provider?: LLMProvider;
@@ -49,8 +51,15 @@ export class ChapterRouteWindowService {
     fromChapterOrder: number,
     options: ChapterRouteWindowOptions,
   ): Promise<ChapterRouteWindowResult> {
-    const minimum = Math.max(1, options.min ?? 3);
-    const target = Math.max(minimum, options.target ?? 5);
+    const endOrder = typeof options.endOrder === "number" && Number.isFinite(options.endOrder)
+      ? Math.floor(options.endOrder)
+      : undefined;
+    const remainingInRange = endOrder === undefined
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, endOrder - fromChapterOrder + 1);
+    if (remainingInRange === 0) return { availableRouteCount: 0, extended: false };
+    const minimum = Math.min(remainingInRange, Math.max(1, options.min ?? 3));
+    const target = Math.min(remainingInRange, Math.max(minimum, options.target ?? 5));
     const compactTarget = options.completionProfile?.mode === "compact_book"
       ? options.completionProfile.targetChapterCount
       : null;
@@ -60,7 +69,7 @@ export class ChapterRouteWindowService {
       : remaining != null && remaining <= 8
         ? `紧凑全书收束规划：剩余约 ${remaining} 章。优先完成主冲突、关系变化和未兑现回报，不扩展远期世界或新主线。`
         : undefined;
-    let availableRouteCount = await this.countAvailableRoute(novelId, fromChapterOrder);
+    let availableRouteCount = await this.countAvailableRoute(novelId, fromChapterOrder, endOrder);
     if (availableRouteCount >= minimum) {
       return { availableRouteCount, extended: false };
     }
@@ -125,7 +134,7 @@ export class ChapterRouteWindowService {
         syncPayoffLedger: false,
       });
       extended = true;
-      availableRouteCount = await this.countAvailableRoute(novelId, fromChapterOrder);
+      availableRouteCount = await this.countAvailableRoute(novelId, fromChapterOrder, endOrder);
     }
     return { availableRouteCount, extended };
   }
@@ -178,11 +187,11 @@ export class ChapterRouteWindowService {
     });
   }
 
-  private async countAvailableRoute(novelId: string, fromChapterOrder: number): Promise<number> {
+  private async countAvailableRoute(novelId: string, fromChapterOrder: number, endOrder?: number): Promise<number> {
     return prisma.chapter.count({
       where: {
         novelId,
-        order: { gte: fromChapterOrder },
+        order: { gte: fromChapterOrder, ...(endOrder !== undefined ? { lte: endOrder } : {}) },
       },
     });
   }
