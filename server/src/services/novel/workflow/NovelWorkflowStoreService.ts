@@ -160,6 +160,7 @@ export class NovelWorkflowStoreService {
   }>(input: {
     before: T;
     data: NovelWorkflowTaskUpdateArgs["data"];
+    explicitRetry?: boolean;
   }): Promise<T> {
     const updated = await withSqliteRetry(
       () => updateWorkflowTaskWithPlanningRepairGuard(prisma, {
@@ -172,7 +173,7 @@ export class NovelWorkflowStoreService {
             },
           },
         },
-      }),
+      }, { explicitRetry: input.explicitRetry }),
       { label: "novelWorkflowTask.update" },
     );
     const next = updated.after as unknown as T;

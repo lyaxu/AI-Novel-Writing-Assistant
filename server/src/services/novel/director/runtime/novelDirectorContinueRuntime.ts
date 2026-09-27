@@ -39,6 +39,8 @@ import type { DirectorRuntimeService } from "./DirectorRuntimeService";
 import { buildDefaultDirectorPolicy } from "./directorRuntimeDefaults";
 import { prisma } from "../../../../db/prisma";
 import { assertPlanningRepairResumeAllowed, readPlanningRepairSeed, resolvePlanningRepairResumePhase } from "../recovery/planningRepair/planningRepairRecovery";
+import { normalizeDirectorAutoExecutionPlan } from "../automation/novelDirectorAutoExecution";
+import { buildRequestedAutoExecutionState } from "../automation/novelDirectorAutoExecutionScopeRuntime";
 
 export type DirectorAssetFirstRecovery =
   | {
@@ -342,6 +344,73 @@ export class NovelDirectorContinueRuntime {
     const approveAutoExecutionGate = approveCurrentGate || requestedAutoExecutionContinue;
 
     if (assetFirstRecovery?.type === "auto_execution") {
+      // Asset readiness is not consent to start prose or choose its range.
+      // Recovery can bypass the structured-outline phase that normally saves this gate.
+      if (seedPayload.productionExperience !== "simple" && seedPayload.productionExperience !== "professional") {
+        const target = mergeResumeTargets(
+          parseResumeTargetLike(row.resumeTargetJson),
+          parseResumeTargetLike(seedPayload.resumeTarget),
+        );
+        const resumeTarget = buildNovelEditResumeTarget({
+          novelId,
+          taskId,
+          stage: "chapter",
+          volumeId: target?.volumeId,
+          chapterId: target?.chapterId ?? seedPayload.autoExecution?.firstChapterId ?? null,
+        });
+        await this.deps.workflowService.recordCheckpoint(taskId, {
+          stage: "chapter_execution",
+          checkpointType: "production_experience_required",
+          checkpointSummary: "开篇准备已完成，请选择创作界面和试写范围。",
+          itemLabel: "等待选择创作界面和试写范围",
+          volumeId: resumeTarget.volumeId,
+          chapterId: resumeTarget.chapterId,
+          progress: 0.93,
+          seedPayload: {
+            ...seedPayload,
+            ...this.deps.buildDirectorSeedPayload(effectiveDirectorInput, novelId, {
+              directorSession: buildDirectorSessionState({
+                runMode: effectiveDirectorInput.runMode,
+                phase: "chapter_execution",
+                isBackgroundRunning: false,
+              }),
+              resumeTarget,
+              autoExecution: seedPayload.autoExecution ?? null,
+            }),
+          },
+        });
+        return;
+      }
+      const requestedPlan = normalizeDirectorAutoExecutionPlan(effectiveDirectorInput.autoExecutionPlan);
+      const previousState = seedPayload.autoExecution ?? null;
+      const changedExecutionScope = Boolean(effectiveDirectorInput.autoExecutionPlan && previousState && (
+        previousState.mode !== requestedPlan.mode
+        || (requestedPlan.mode === "chapter_range" && (
+          previousState.startOrder !== requestedPlan.startOrder || previousState.endOrder !== requestedPlan.endOrder
+        ))
+        || (requestedPlan.mode === "volume" && previousState.volumeOrder !== requestedPlan.volumeOrder)
+      ));
+      const existingPipelineJobId = planningRepairRecovery || changedExecutionScope
+        ? null : previousState?.pipelineJobId ?? null;
+      const existingExecutionState = changedExecutionScope
+        ? {
+          ...buildRequestedAutoExecutionState({
+            request: effectiveDirectorInput,
+            existingState: previousState,
+            existingPipelineJobId: null,
+          })!,
+          totalChapterCount: undefined,
+          completedChapterCount: undefined,
+          remainingChapterCount: undefined,
+          remainingChapterIds: undefined,
+          remainingChapterOrders: undefined,
+          firstChapterId: null,
+          nextChapterId: null,
+          nextChapterOrder: null,
+        }
+        : planningRepairRecovery && previousState
+          ? { ...previousState, pipelineJobId: null, pipelineStatus: null }
+          : previousState;
       const checkpointChapterId = (
         parseResumeTargetLike(row.resumeTargetJson)?.chapterId
         ?? parseResumeTargetLike(seedPayload.resumeTarget)?.chapterId
@@ -379,7 +448,7 @@ export class NovelDirectorContinueRuntime {
             stage: "pipeline",
             chapterId: resumedChapterId,
           }),
-          autoExecution: seedPayload.autoExecution ?? null,
+          autoExecution: existingExecutionState,
         }),
       });
       this.deps.scheduleBackgroundRun(taskId, async () => {
@@ -411,8 +480,8 @@ export class NovelDirectorContinueRuntime {
             taskId,
             novelId,
             request: effectiveDirectorInput,
-            existingPipelineJobId: seedPayload.autoExecution?.pipelineJobId ?? null,
-            existingState: seedPayload.autoExecution ?? null,
+            existingPipelineJobId,
+            existingState: existingExecutionState,
             resumeCheckpointType: "chapter_batch_ready",
             previousFailureMessage: row.lastError ?? null,
             allowSkipReviewBlockedChapter: canSkipReviewBlockedChapter,
@@ -424,10 +493,8 @@ export class NovelDirectorContinueRuntime {
           taskId,
           novelId,
           request: effectiveDirectorInput,
-          existingPipelineJobId: planningRepairRecovery ? null : seedPayload.autoExecution?.pipelineJobId ?? null,
-          existingState: planningRepairRecovery && seedPayload.autoExecution
-            ? { ...seedPayload.autoExecution, pipelineJobId: null, pipelineStatus: null }
-            : seedPayload.autoExecution ?? null,
+          existingPipelineJobId,
+          existingState: existingExecutionState,
           resumeCheckpointType: assetFirstRecovery.resumeCheckpointType,
           previousFailureMessage: row.lastError ?? null,
           allowSkipReviewBlockedChapter: canSkipReviewBlockedChapter,

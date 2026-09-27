@@ -16,6 +16,7 @@ import { buildRestoreTaskToCheckpointResult } from "./novelWorkflowCheckpoint";
 import { applyDirectorLlmOverride, type DirectorWorkflowSeedPayload } from "../director/runtime/novelDirectorHelpers";
 import type { DirectorLLMOptions } from "@ai-novel/shared/types/novelDirector";
 import { NovelWorkflowStoreService } from "./NovelWorkflowStoreService";
+import { assertPlanningRepairResumeAllowed } from "../director/recovery/planningRepair/planningRepairRecovery";
 
 type WorkflowRow = Awaited<ReturnType<typeof prisma.novelWorkflowTask.findUnique>>;
 
@@ -343,8 +344,10 @@ export class NovelWorkflowApplicationService {
     if (!existing) {
       throw new AppError("Task not found.", 404);
     }
+    assertPlanningRepairResumeAllowed(existing.seedPayloadJson);
     return this.workflow.updateWorkflowTaskWithNotifications({
       before: existing,
+      explicitRetry: true,
       data: {
         status: existing.checkpointType ? "waiting_approval" : "queued",
         pendingManualRecovery: false,

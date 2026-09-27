@@ -40,7 +40,7 @@ export function isVolumeChapterListPartiallyPersisted(volume: Pick<VolumePlan, "
     || normalizedStatus.startsWith(`${VOLUME_CHAPTER_LIST_PARTIAL_STATUS_PREFIX}:`);
 }
 
-function resolveOriginalVolumeStatus(status: string): string {
+export function resolveOriginalVolumeStatus(status: string): string {
   const normalizedStatus = status.trim();
   const prefixedStatus = `${VOLUME_CHAPTER_LIST_PARTIAL_STATUS_PREFIX}:`;
   if (normalizedStatus.startsWith(prefixedStatus)) {

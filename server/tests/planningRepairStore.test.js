@@ -27,6 +27,11 @@ const workspace = load("volumeWorkspaceDocument.ts", {
   "@ai-novel/shared/types/volumeBeatSlots": require("../../shared/dist/types/volumeBeatSlots.js"),
   "./volumePlanUtils": utils,
 });
+const volumeStatus = load("volumeGenerationHelpers.ts", {
+  "./volumeWorkspaceDocument": workspace,
+  "./volumeChapterBudgetAllocation": {},
+  "./chapterDetail": {},
+});
 const copy = (value) => structuredClone(value);
 const epoch = new Date(0).toISOString();
 
@@ -80,6 +85,8 @@ function fixture({ active = true, materialized = true, realPersistence = false }
     return row[key] === value;
   });
   const tx = {
+    generationJob: { findFirst: async () => db.activeJob ?? null },
+    directorRunCommand: { findFirst: async () => db.activeCommand ?? null },
     novelWorkflowTask: {
       findUnique: async ({ where }) => db.task.id === where.id ? copy(db.task) : null,
       findMany: async ({ where }) => copy(otherTasks.filter((row) => matches(row, where))),
@@ -179,6 +186,7 @@ function fixture({ active = true, materialized = true, realPersistence = false }
     "../../runtime/BatchContextCache": { batchContextCache: { invalidate: (novelId) => events.push({ invalidated: novelId }) } },
     "../volumeWorkspaceDocument": workspace,
     "../volumeModels": { mapVolumeRow: (row) => copy(row) },
+    "../volumeGenerationHelpers": volumeStatus,
     "../volumeWorkspacePersistence": {
       VOLUME_WORKSPACE_TRANSACTION_TIMEOUT_MS: 60000,
       persistActiveVolumeWorkspace: async (_tx, _novelId, value, versionId) => {
@@ -215,6 +223,145 @@ function passedQuality() {
     window: { usable: true, safeToSync: true, requiresUserDecision: false, issues: [] },
   };
 }
+
+function partialVolumeFixture(status = "chapter_list_partial:active") {
+  const h = fixture();
+  h.input.document.volumes[0].status = status;
+  h.db.volumes[0].status = status;
+  h.db.versions[0].contentJson = JSON.stringify(h.input.document);
+  return h;
+}
+
+async function legacyPartialFailure() {
+  const h = partialVolumeFixture();
+  await h.store.begin(h.input);
+  const seed = JSON.parse(h.db.task.seedPayloadJson);
+  seed.planningRepair.phase = "waiting_confirmation";
+  seed.planningRepair.summary = "Planning source is stale or the chapter is protected.";
+  seed.planningRepairSnapshot.eligibleChapterIds = [];
+  h.db.task.seedPayloadJson = JSON.stringify(seed);
+  h.db.task.status = "cancelled";
+  h.db.task.cancelRequestedAt = epoch;
+  return h;
+}
+
+async function cancelledInitialGenerationFixture() {
+  const h = partialVolumeFixture();
+  const session = await h.store.begin(h.input);
+  await h.store.save(session, { ...session.state,
+    pendingOperation: { kind: "initial_generation", startedAt: epoch },
+  });
+  h.db.task.status = "cancelled";
+  h.db.task.cancelRequestedAt = epoch;
+  return h;
+}
+
+test("completed initial response recovery preserves cancellation and budget, saving only a draft for review", async () => {
+  const h = await cancelledInitialGenerationFixture();
+  const before = copy(h.db);
+  const next = await h.store.recoverCompletedInitialGeneration({
+    novelId: "n", taskId: "t", expectedSeedPayloadJson: h.db.task.seedPayloadJson,
+    operationStartedAt: epoch, candidate: h.candidate(),
+  });
+  assert.equal(next.phase, "reviewing");
+  assert.equal(next.rounds, 0);
+  assert.equal(next.maxRounds, 2);
+  assert.deepEqual(next.history, []);
+  assert.equal(next.pendingOperation, undefined);
+  assert.ok(next.candidateVersionId);
+  assert.deepEqual(next.affectedChapterIds, ["p2"]);
+  assert.equal(h.db.task.status, "cancelled");
+  assert.equal(h.db.task.cancelRequestedAt, epoch);
+  assert.deepEqual(h.db.chapters, before.chapters);
+  assert.deepEqual(h.db.volumes, before.volumes);
+  assert.equal(h.db.versions.find(v => v.id === next.candidateVersionId).status, "draft");
+  assert.equal(h.db.versions.find(v => v.id === "v1").status, "active");
+  assert.deepEqual(h.chapterWrites, []);
+});
+
+for (const reason of ["source changed", "other chapter", "CAS conflict", "pending kind", "operation mismatch", "active job", "active command", "stale seed"]) {
+  test(`completed initial response recovery rejects ${reason} atomically`, async () => {
+    const h = await cancelledInitialGenerationFixture();
+    const candidate = h.candidate();
+    if (reason === "source changed") h.db.novel.defaultChapterLength = 3200;
+    if (reason === "other chapter") candidate.volumes[0].chapters[2].summary = "unrelated chapter change";
+    if (reason === "CAS conflict") h.failCAS();
+    if (reason === "pending kind") {
+      const seed = JSON.parse(h.db.task.seedPayloadJson);
+      seed.planningRepair.pendingOperation.kind = "review";
+      h.db.task.seedPayloadJson = JSON.stringify(seed);
+    }
+    if (reason === "active job") h.db.activeJob = { id: "job" };
+    if (reason === "active command") h.db.activeCommand = { id: "command" };
+    const before = copy(h.db);
+    await assert.rejects(h.store.recoverCompletedInitialGeneration({
+      novelId: "n", taskId: "t",
+      expectedSeedPayloadJson: reason === "stale seed" ? "{}" : h.db.task.seedPayloadJson,
+      operationStartedAt: reason === "operation mismatch" ? "different" : epoch, candidate,
+    }), { code: "PLANNING_REPAIR_CONFLICT" });
+    assert.deepEqual(h.db, before);
+    assert.deepEqual(h.chapterWrites, []);
+  });
+}
+
+test("partial chapter-list progress keeps active volumes writable but never unlocks frozen volumes", async () => {
+  const active = partialVolumeFixture();
+  assert.equal((await active.store.begin(active.input)).state.phase, "assessing");
+  const frozen = partialVolumeFixture("chapter_list_partial:frozen");
+  assert.equal((await frozen.store.begin(frozen.input)).state.phase, "waiting_confirmation");
+});
+
+test("technical correction restores an untouched partial-volume session without changing cancellation or quota", async () => {
+  const h = await legacyPartialFailure();
+  const before = copy(h.db);
+  const state = await h.store.recoverInitialPartialVolumeProtection({ novelId: "n", taskId: "t" });
+  assert.equal(state.phase, "assessing");
+  assert.equal(state.rounds, 0);
+  assert.equal(state.maxRounds, 2);
+  assert.deepEqual(state.history, []);
+  assert.equal(h.db.task.status, "cancelled");
+  assert.equal(h.db.task.cancelRequestedAt, epoch);
+  assert.deepEqual(JSON.parse(h.db.task.seedPayloadJson).planningRepairSnapshot.eligibleChapterIds, ["p2", "p3", "p4"]);
+  assert.deepEqual(h.db.chapters, before.chapters);
+  assert.deepEqual(h.db.volumes, before.volumes);
+  await assert.rejects(h.store.recoverInitialPartialVolumeProtection({ novelId: "n", taskId: "t" }), /untouched initial/);
+});
+
+for (const reason of ["draft", "changed source", "round", "pending", "active job", "active command", "cas"]) {
+  test(`technical correction refuses ${reason}`, async () => {
+    const h = await legacyPartialFailure();
+    if (reason === "draft") h.db.chapters[1].content = "protected prose";
+    if (reason === "changed source") {
+      const doc = JSON.parse(h.db.versions[0].contentJson);
+      doc.volumes[0].chapters[1].summary = "manual edit";
+      h.db.versions[0].contentJson = JSON.stringify(doc);
+    }
+    if (reason === "round" || reason === "pending") {
+      const seed = JSON.parse(h.db.task.seedPayloadJson);
+      if (reason === "round") seed.planningRepair.rounds = 1;
+      else seed.planningRepair.pendingOperation = { kind: "review", startedAt: epoch };
+      h.db.task.seedPayloadJson = JSON.stringify(seed);
+    }
+    if (reason === "active job") h.db.activeJob = { id: "job" };
+    if (reason === "active command") h.db.activeCommand = { id: "command" };
+    if (reason === "cas") h.failCAS();
+    const before = h.db.task.seedPayloadJson;
+    await assert.rejects(h.store.recoverInitialPartialVolumeProtection({ novelId: "n", taskId: "t" }), { code: "PLANNING_REPAIR_CONFLICT" });
+    assert.equal(h.db.task.seedPayloadJson, before);
+  });
+}
+
+test("switching production experience does not invalidate repair but changed novel input does", async () => {
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  h.db.novel.creationExperience = "simple";
+  h.db.novel.updatedAt = "ui-only update";
+  const continued = await h.store.begin(h.input);
+  assert.equal(continued.state.phase, "assessing");
+  assert.equal(continued.snapshotToken, session.snapshotToken);
+  h.db.novel.defaultChapterLength = 3200;
+  assert.equal((await h.store.begin(h.input)).state.phase, "waiting_confirmation");
+});
 
 test("begin snapshots task quota and current+next-two plan IDs without touching the workspace", async () => {
   const h = fixture();
@@ -259,7 +406,7 @@ test("source changes wait without resetting rounds or pending operations", async
   const session = await h.store.begin(h.input);
   await h.store.save(session, { ...session.state, rounds: 1 });
   await h.store.save(session, { ...session.state, rounds: 2, pendingOperation: { kind: "review", startedAt: epoch } });
-  h.db.novel.updatedAt = "changed";
+  h.db.novel.title = "changed business input";
   const resumed = await h.store.begin(h.input);
   assert.equal(resumed.state.phase, "waiting_confirmation");
   assert.equal(resumed.state.rounds, 2);
@@ -486,7 +633,7 @@ for (const change of ["body", "lock", "workspace", "macro"]) {
 test("stale save throws after persisting wait, preventing another paid call", async () => {
   const h = fixture();
   const session = await h.store.begin(h.input);
-  h.db.novel.updatedAt = "new";
+  h.db.novel.title = "new business input";
   await assert.rejects(h.store.save(session, { ...session.state, pendingOperation: { kind: "repair", startedAt: epoch } }), /waiting for confirmation/);
   assert.equal(session.state.phase, "waiting_confirmation");
   assert.equal(h.state().pendingOperation, undefined);
@@ -610,7 +757,7 @@ test("explicit rebase refreshes changed sources, preserves approved quota/histor
   const seed = JSON.parse(h.db.task.seedPayloadJson);
   seed.planningRepair.maxRounds = 3;
   h.db.task.seedPayloadJson = JSON.stringify(seed);
-  h.db.novel.updatedAt = "changed";
+  h.db.novel.title = "changed business input";
   const rebased = await h.store.rebase(h.input);
   assert.equal(rebased.state.maxRounds, 3);
   assert.equal(rebased.state.rounds, 1);
@@ -696,7 +843,7 @@ test("rebase rejects a stale recovery reservation without replacing newer state 
   await h.ready(session);
   const expectedSeedPayloadJson = h.db.task.seedPayloadJson;
   await h.store.save(session, { ...session.state, guidance: "Newer recovery command", rounds: 1 });
-  h.db.novel.updatedAt = "changed source";
+  h.db.novel.title = "changed source input";
   const before = copy(h.db);
   await assert.rejects(h.store.rebase({ ...h.input, expectedSeedPayloadJson }), {
     code: "PLANNING_REPAIR_CONFLICT", message: /seed reservation changed/,

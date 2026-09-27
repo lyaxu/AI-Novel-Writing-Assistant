@@ -9,6 +9,7 @@ const {
 const {
   NovelPipelineExecutor,
 } = require("../../dist/services/novel/production/NovelPipelineExecutor.js");
+const { ChapterRouteWindowService } = require("../../dist/services/novel/planning/ChapterRouteWindowService.js");
 
 function createExecutorHarness({
   used = 0,
@@ -17,6 +18,8 @@ function createExecutorHarness({
   currentExecutionOwner = executionOwner,
   cancelAfterChapter = false,
   executeOptions = options,
+  estimatedChapterCount = 1,
+  chapterCount = 1,
   runChapter,
 }) {
   const originals = {
@@ -26,9 +29,11 @@ function createExecutorHarness({
     novelFindUnique: prisma.novel.findUnique,
     chapterFindMany: prisma.chapter.findMany,
     emit: novelEventBus.emit,
+    ensureRouteWindow: ChapterRouteWindowService.prototype.ensureRouteWindow,
   };
   const updates = [];
   const claims = [];
+  const routeRequests = [];
   let chapterCalls = 0;
   let receivedMaxRetries = null;
   const jobState = {
@@ -101,14 +106,15 @@ function createExecutorHarness({
   prisma.novel.findUnique = async () => ({
     id: "novel-1",
     title: "测试小说",
-    estimatedChapterCount: 1,
+    estimatedChapterCount,
   });
-  prisma.chapter.findMany = async () => [{
-    id: "chapter-1",
-    order: 1,
-    title: "第一章",
+  prisma.chapter.findMany = async () => Array.from({ length: chapterCount }, (_, index) => ({
+    id: `chapter-${index + 1}`,
+    order: index + 1,
+    title: `第${index + 1}章`,
     content: "已保存草稿",
-  }];
+  }));
+  ChapterRouteWindowService.prototype.ensureRouteWindow = async (_novelId, order) => { routeRequests.push(order); };
   novelEventBus.emit = async () => undefined;
 
   const attempts = {
@@ -138,6 +144,7 @@ function createExecutorHarness({
     execute: () => executor.execute("job-1", "novel-1", executeOptions, executionOwner || undefined),
     updates,
     claims,
+    routeRequests,
     get chapterCalls() { return chapterCalls; },
     get receivedMaxRetries() { return receivedMaxRetries; },
     get jobState() { return jobState; },
@@ -148,6 +155,7 @@ function createExecutorHarness({
       prisma.novel.findUnique = originals.novelFindUnique;
       prisma.chapter.findMany = originals.chapterFindMany;
       novelEventBus.emit = originals.emit;
+      ChapterRouteWindowService.prototype.ensureRouteWindow = originals.ensureRouteWindow;
     },
   };
 }
@@ -167,6 +175,26 @@ const options = {
   repairMode: "light_repair",
   controlPolicy: { advanceMode: "full_book_autopilot" },
 };
+
+for (const endOrder of [1, 3]) {
+  test(`autopilot honors requested 1-${endOrder} despite an 80-chapter novel estimate`, async () => {
+    const harness = createExecutorHarness({
+      estimatedChapterCount: 80, chapterCount: endOrder,
+      executeOptions: { ...options, endOrder, autoReview: false },
+      runChapter: async () => ({ reviewExecuted: false, pass: true, score: { overall: 100 },
+        issues: [], runtimePackage: null, retryCountUsed: 0 }),
+    });
+    try {
+      await harness.execute();
+      assert.equal(harness.jobState.status, "succeeded");
+      assert.equal(harness.chapterCalls, endOrder);
+      assert.equal(harness.jobState.endOrder, endOrder);
+      assert.equal(harness.jobState.totalCount, endOrder);
+      assert.ok(harness.updates.every(update => update.data.endOrder === undefined || update.data.endOrder <= endOrder));
+      assert.deepEqual(harness.routeRequests, Array.from({ length: endOrder - 1 }, (_, index) => index + 2));
+    } finally { harness.restore(); }
+  });
+}
 
 test("pipeline recovery gives an already-reserved chapter no second automatic attempt", async () => {
   const harness = createExecutorHarness({

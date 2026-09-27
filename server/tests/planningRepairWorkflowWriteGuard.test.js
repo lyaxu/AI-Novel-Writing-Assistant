@@ -5,7 +5,7 @@ const { guardPlanningRepairWorkflowUpdate: guard, updateWorkflowTaskWithPlanning
 
 function row(phase = "repairing", extra = {}) {
   return { id: "task", status: "running", cancelRequestedAt: null,
-    seedPayloadJson: JSON.stringify({ planningRepair: { phase, rounds: 2 },
+    seedPayloadJson: JSON.stringify({ planningRepair: { version: 1, key: "repair", phase, rounds: 2, maxRounds: 2, history: [] },
       planningRepairSnapshot: { token: "new" }, planningRepairRecoveryRequests: ["grant"],
       resumeTarget: "planning" }), ...extra };
 }
@@ -38,6 +38,47 @@ test("cancelled repair tasks keep cancellation and cannot return to running", ()
   const current = row("repairing", { status: "cancelled", cancelRequestedAt: date });
   assert.equal(guard(current, { status: "running" }).status, undefined);
   assert.strictEqual(guard(current, { status: "cancelled", cancelRequestedAt: null }).cancelRequestedAt, date);
+});
+
+for (const phase of ["assessing", "repairing", "reviewing", "ready", "committed"]) {
+  test(`explicit retry releases cancellation for ${phase} without changing repair budget`, () => {
+    const current = row(phase, { status: "cancelled", cancelRequestedAt: new Date() });
+    const desired = { status: "queued", cancelRequestedAt: null, attemptCount: 3, seedPayloadJson: "{}" };
+    const result = guard(current, desired, { explicitRetry: true });
+    assert.equal(result.status, "queued");
+    assert.equal(result.cancelRequestedAt, null);
+    assert.equal(result.attemptCount, 3);
+    assert.deepEqual(JSON.parse(result.seedPayloadJson).planningRepair, JSON.parse(current.seedPayloadJson).planningRepair);
+    assert.equal(guard(current, desired).status, undefined);
+  });
+}
+
+for (const phase of ["waiting_confirmation", "uncertain", "technical_failed"]) {
+  test(`explicit retry does not bypass ${phase}`, () => {
+    assert.throws(() => guard(row(phase, { status: "cancelled" }), {
+      status: "queued", cancelRequestedAt: null,
+    }, { explicitRetry: true }));
+  });
+}
+
+test("explicit retry rejects an uncertain paid operation even if phase is resumable", () => {
+  const current = row("assessing", { status: "cancelled" });
+  const seed = JSON.parse(current.seedPayloadJson);
+  seed.planningRepair.pendingOperation = { kind: "review", startedAt: "old" };
+  current.seedPayloadJson = JSON.stringify(seed);
+  assert.throws(() => guard(current, { status: "queued", cancelRequestedAt: null }, { explicitRetry: true }));
+});
+
+test("transaction rechecks repair state changed after explicit retry was requested", async () => {
+  let wrote = false;
+  const client = { $transaction: async run => run({ novelWorkflowTask: {
+    findUniqueOrThrow: async () => row("waiting_confirmation", { status: "cancelled" }),
+    update: async () => { wrote = true; },
+  } }) };
+  await assert.rejects(update(client, { where: { id: "task" }, data: {
+    status: "queued", cancelRequestedAt: null,
+  } }, { explicitRetry: true }));
+  assert.equal(wrote, false);
 });
 
 test("ordinary writer cannot invent repair state and legacy updates remain unchanged", () => {

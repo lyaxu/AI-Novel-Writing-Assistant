@@ -1,4 +1,5 @@
 import type { NovelWorkflowTask, Prisma, PrismaClient } from "@prisma/client";
+import { assertPlanningRepairResumeAllowed } from "../director/recovery/planningRepair/planningRepairRecovery";
 
 const REPAIR_SEED_KEYS = [
   "planningRepair", "planningRepairSnapshot", "planningRepairRecovery", "planningRepairRecoveryRequests",
@@ -12,6 +13,7 @@ const REPAIR_LIFECYCLE_FIELDS = [
 
 type UpdateData = Prisma.NovelWorkflowTaskUpdateArgs["data"];
 type Seed = Record<string, unknown>;
+export interface PlanningRepairWorkflowWriteOptions { explicitRetry?: boolean }
 
 function parseSeed(value: string | null): Seed | null {
   if (value === null) return {};
@@ -28,7 +30,7 @@ function isRecord(value: unknown): value is Seed {
 }
 
 /** Ordinary progress writers cannot create, roll back or erase repair-owned state. */
-export function guardPlanningRepairWorkflowUpdate(current: NovelWorkflowTask, desired: UpdateData): UpdateData {
+export function guardPlanningRepairWorkflowUpdate(current: NovelWorkflowTask, desired: UpdateData, options: PlanningRepairWorkflowWriteOptions = {}): UpdateData {
   const data = { ...desired };
   const currentSeed = parseSeed(current.seedPayloadJson);
   const repair = currentSeed?.planningRepair;
@@ -36,11 +38,22 @@ export function guardPlanningRepairWorkflowUpdate(current: NovelWorkflowTask, de
   const hasRepair = currentSeed !== null && REPAIR_SEED_KEYS.some(key => Object.hasOwn(currentSeed, key));
   const cancelled = hasRepair && (current.status === "cancelled" || current.cancelRequestedAt !== null);
   const desiredStatus = typeof data.status === "string" ? data.status : data.status?.set;
-  if ((waiting || cancelled) && desiredStatus !== "cancelled") {
+  const explicitRetry = options.explicitRetry === true;
+  if (explicitRetry) {
+    assertPlanningRepairResumeAllowed(current.seedPayloadJson);
+    if (!["queued", "waiting_approval"].includes(desiredStatus ?? "") || data.cancelRequestedAt !== null) {
+      throw new Error("Explicit retry must enqueue the task and clear its cancellation request.");
+    }
+    if (isRecord(repair) && (! ["assessing", "repairing", "reviewing", "ready", "committed"].includes(String(repair.phase))
+      || repair.pendingOperation || (isRecord(currentSeed?.planningRepairRecovery) && currentSeed.planningRepairRecovery.pendingGrant))) {
+      throw new Error("Planning repair still requires explicit source confirmation before retry.");
+    }
+  }
+  if ((waiting || (cancelled && !explicitRetry)) && desiredStatus !== "cancelled") {
     for (const field of REPAIR_LIFECYCLE_FIELDS) delete data[field];
   }
   // Even a repeated cancellation cannot clear an already persisted cancellation request.
-  if (cancelled && current.cancelRequestedAt !== null) data.cancelRequestedAt = current.cancelRequestedAt;
+  if (cancelled && !explicitRetry && current.cancelRequestedAt !== null) data.cancelRequestedAt = current.cancelRequestedAt;
 
   const seedWrite = data.seedPayloadJson;
   const desiredRaw = typeof seedWrite === "object" && seedWrite !== null ? seedWrite.set : seedWrite;
@@ -72,6 +85,7 @@ export function guardPlanningRepairWorkflowUpdate(current: NovelWorkflowTask, de
 export function updateWorkflowTaskWithPlanningRepairGuard(
   client: Pick<PrismaClient, "$transaction">,
   args: Prisma.NovelWorkflowTaskUpdateArgs,
+  options: PlanningRepairWorkflowWriteOptions = {},
 ) {
   return client.$transaction(async (tx) => {
     const before = await tx.novelWorkflowTask.findUniqueOrThrow({
@@ -80,7 +94,7 @@ export function updateWorkflowTaskWithPlanningRepairGuard(
     });
     const after = await tx.novelWorkflowTask.update({
       ...args,
-      data: guardPlanningRepairWorkflowUpdate(before, args.data),
+      data: guardPlanningRepairWorkflowUpdate(before, args.data, options),
     });
     return { before, after };
   }, { isolationLevel: "Serializable" });

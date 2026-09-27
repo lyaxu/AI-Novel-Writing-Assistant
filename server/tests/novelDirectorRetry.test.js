@@ -609,6 +609,7 @@ test("continueTask resumes auto execution in the background instead of blocking 
     }),
     lastError: "Chapter generation is blocked until review is resolved.",
     seedPayloadJson: JSON.stringify({
+      productionExperience: "simple",
       directorInput: buildDirectorInput({
         workflowTaskId: "task_auto_execution_resume",
         runMode: "auto_to_execution",
@@ -712,6 +713,7 @@ test("continueTask lets full_book_autopilot recover review-blocked chapter check
     }),
     lastError: "Chapter generation is blocked until review is resolved. 2 pending state proposal(s)",
     seedPayloadJson: JSON.stringify({
+      productionExperience: "simple",
       directorInput: buildDirectorInput({
         workflowTaskId: "task_full_book_autopilot_resume",
         runMode: "full_book_autopilot",
@@ -819,6 +821,7 @@ test("continueTask upgrades an explicit auto-execution continuation to execution
     }),
     seedPayloadJson: JSON.stringify({
       runMode: "auto_to_ready",
+      productionExperience: "simple",
       directorInput: buildDirectorInput({
         workflowTaskId: "task_chapter_range_execution_continue",
         runMode: "auto_to_ready",
@@ -934,6 +937,7 @@ test("continueTask does not skip the current chapter when approving a waiting au
     }),
     lastError: "Chapter generation is blocked until review is resolved.",
     seedPayloadJson: JSON.stringify({
+      productionExperience: "simple",
       directorInput: buildDirectorInput({
         workflowTaskId: "task_waiting_auto_execution_resume",
         runMode: "auto_to_execution",
@@ -1034,6 +1038,7 @@ test("continueTask replans the affected window before continuing from a replan c
     }),
     lastError: "当前章需要先处理质量修复建议。",
     seedPayloadJson: JSON.stringify({
+      productionExperience: "simple",
       directorInput: buildDirectorInput({
         workflowTaskId: "task_quality_repair_skip_normalized",
         runMode: "auto_to_execution",
@@ -1138,6 +1143,7 @@ test("continueTask keeps the replan checkpoint when window replanning fails", as
     resumeTargetJson: JSON.stringify({ stage: "pipeline", chapterId: "chapter_14" }),
     lastError: "相邻章节计划需要调整。",
     seedPayloadJson: JSON.stringify({
+      productionExperience: "simple",
       directorInput: buildDirectorInput({ workflowTaskId: "task_replan_failure", runMode: "auto_to_execution" }),
       autoExecution: {
         enabled: true,

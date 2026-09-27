@@ -12,6 +12,7 @@ import {
   serializeVolumeWorkspaceDocument,
 } from "../volumeWorkspaceDocument";
 import { mapVolumeRow } from "../volumeModels";
+import { isVolumeChapterListPartiallyPersisted, resolveOriginalVolumeStatus } from "../volumeGenerationHelpers";
 import {
   persistActiveVolumeWorkspace,
   VOLUME_WORKSPACE_TRANSACTION_TIMEOUT_MS,
@@ -182,10 +183,10 @@ function owner(task: NovelWorkflowTask) {
   };
 }
 
-async function readTask(tx: Prisma.TransactionClient, taskId: string, novelId: string) {
+async function readTask(tx: Prisma.TransactionClient, taskId: string, novelId: string, allowCancelled = false) {
   const task = await tx.novelWorkflowTask.findUnique({ where: { id: taskId } });
   if (!task || task.novelId !== novelId) return conflict("Repair task does not own this novel.");
-  if (task.cancelRequestedAt || task.status === "cancelled" || task.status === "succeeded") {
+  if ((!allowCancelled && (task.cancelRequestedAt || task.status === "cancelled")) || task.status === "succeeded") {
     return conflict("The repair task is cancelled or completed.");
   }
   const otherTasks = await tx.novelWorkflowTask.findMany({
@@ -226,9 +227,12 @@ async function readSource(tx: Prisma.TransactionClient, novelId: string, task: N
       source: volumes.length ? "volume" : "empty", activeVersionId: active[0].id,
     })
     : buildVolumeWorkspaceDocument({ novelId, volumes: volumes.map(mapVolumeRow), source: "volume" });
+  // Switching the production interface must not invalidate a planning source.
+  const { creationExperience: _experience, updatedAt: _updatedAt, ...novelPlanningSource } = novel;
   return {
     chapters, volumes, versions, document, effectiveDefaultChapterLength,
-    token: hash({ novel, volumes, versions, chapters, macro }),
+    token: hash({ novel: novelPlanningSource, volumes, versions, chapters, macro }),
+    legacyToken: hash({ novel, volumes, versions, chapters, macro }),
   };
 }
 
@@ -274,7 +278,8 @@ function eligibleWindow(document: VolumePlanDocument, volumeId: string, chapterI
   const index = sorted.findIndex((p) => p.id === chapter.id);
   const eligible: string[] = [];
   const sourceVolume = source.volumes.find((v) => v.id === volumeId);
-  const frozen = volume.status !== "active" || (sourceVolume && sourceVolume.status !== "active")
+  const frozen = resolveOriginalVolumeStatus(volume.status) !== "active"
+    || (sourceVolume && resolveOriginalVolumeStatus(sourceVolume.status) !== "active")
     || source.versions.some((v) => v.id === sourceVolume?.sourceVersionId && v.status === "frozen");
   if (!frozen) {
     for (const plan of sorted.slice(index, index + 3)) {
@@ -364,6 +369,106 @@ export class PlanningRepairStore {
   // Keep CAS authority separate from the coordinator's intentionally mutable session/state.
   private readonly seeds = new WeakMap<RepairSession, string | null>();
   private readonly owners = new WeakMap<RepairSession, string>();
+
+  /** Persist a verified, already returned initial contract after cancellation; never calls AI or grants rounds. */
+  async recoverCompletedInitialGeneration(input: {
+    novelId: string; taskId: string; expectedSeedPayloadJson: string;
+    operationStartedAt: string; candidate: VolumePlanDocument;
+  }): Promise<PlanningRepairState> {
+    return transaction(async (tx) => {
+      const task = await readTask(tx, input.taskId, input.novelId, true);
+      if (task.status !== "cancelled" || task.seedPayloadJson !== input.expectedSeedPayloadJson) {
+        return conflict("Completed-response recovery requires the exact cancelled task snapshot.");
+      }
+      const seed = parseSeed(task.seedPayloadJson);
+      const state = readState(seed);
+      const snapshot = readSnapshot(seed, task.id);
+      if (!state || state.phase !== "assessing" || state.rounds !== 0 || state.maxRounds !== 2
+        || state.history.length || state.candidateVersionId || snapshot.candidateHash || snapshot.committed
+        || state.pendingOperation?.kind !== "initial_generation"
+        || state.pendingOperation.startedAt !== input.operationStartedAt) {
+        return conflict("Only the original interrupted initial contract can be recovered.");
+      }
+      const source = await readSource(tx, input.novelId, task);
+      if (source.token !== snapshot.snapshotToken) return conflict("Planning source changed; response cannot be replayed.");
+      if (await tx.generationJob.findFirst({ where: { novelId: input.novelId, status: { in: ["queued", "running"] } } })
+        || await tx.directorRunCommand.findFirst({ where: { taskId: task.id, status: { in: ["queued", "leased", "running"] } } })) {
+        return conflict("Wait for active execution before replaying a completed response.");
+      }
+      const { eligible } = eligibleWindow(source.document, state.volumeId, state.chapterId, source);
+      const affected = validateCandidate(snapshot, input.candidate);
+      if (!eligible.includes(state.chapterId) || affected.some(id => id !== state.chapterId)) {
+        return conflict("Initial response may only restore its original unwritten chapter.");
+      }
+      await this.ensureActiveBaseline(tx, task, snapshot, source);
+      const version = await this.createDraft(tx, input.novelId, input.candidate, "已接收任务单，等待规划复核");
+      const next: PlanningRepairState = {
+        ...state, phase: "reviewing", pendingOperation: undefined, candidateVersionId: version.id,
+        affectedChapterIds: [state.chapterId], quality: { chapters: {} }, summary: "已接收任务单，等待规划复核",
+      };
+      snapshot.candidateHash = hash(input.candidate);
+      await casSeed(tx, task, { ...seed, planningRepair: next, [SNAPSHOT_KEY]: snapshot });
+      return next;
+    });
+  }
+
+  /** Explicit technical correction for the initial partial-active misclassification; grants no budget. */
+  async recoverInitialPartialVolumeProtection(input: { novelId: string; taskId: string }): Promise<PlanningRepairState> {
+    return transaction(async (tx) => {
+      const task = await readTask(tx, input.taskId, input.novelId, true);
+      if (task.lane !== "auto_director" || !["cancelled", "failed", "waiting_approval"].includes(task.status)) {
+        return conflict("Technical correction requires an inactive auto-director task.");
+      }
+      const activeJob = await tx.generationJob.findFirst({
+        where: { novelId: input.novelId, status: { in: ["queued", "running"] } }, select: { id: true },
+      });
+      const activeCommand = await tx.directorRunCommand.findFirst({
+        where: { taskId: task.id, status: { in: ["queued", "leased", "running"] } }, select: { id: true },
+      });
+      if (activeJob || activeCommand) return conflict("Wait for active generation and commands before technical correction.");
+      const seed = parseSeed(task.seedPayloadJson);
+      const state = readState(seed);
+      const snapshot = readSnapshot(seed, task.id);
+      if (!state || state.novelId !== input.novelId || state.phase !== "waiting_confirmation"
+        || state.summary !== "Planning source is stale or the chapter is protected."
+        || state.rounds !== 0 || state.maxRounds !== 2 || state.history.length !== 0
+        || state.quality != null || state.candidateVersionId || state.pendingOperation || state.repairOutputPending
+        || state.affectedChapterIds?.length || state.obligationMoves?.length || state.guidance
+        || snapshot.eligibleChapterIds.length !== 0 || snapshot.candidateHash || snapshot.committed
+        || seed.planningRepairRecoveryRequests || (record(seed.planningRepairRecovery) && seed.planningRepairRecovery.pendingGrant)) {
+        return conflict("Only an untouched initial partial-volume protection failure can be corrected without a grant.");
+      }
+      const source = await readSource(tx, input.novelId, task);
+      if (![source.token, source.legacyToken].includes(snapshot.snapshotToken)
+        || snapshot.effectiveDefaultChapterLength !== source.effectiveDefaultChapterLength) {
+        return conflict("Planning inputs changed; explicit source confirmation is still required.");
+      }
+      if (hash(semanticDocument(snapshot.baselineDocument)) !== hash(semanticDocument(source.document))) {
+        return conflict("Planning source changed; explicit source confirmation is still required.");
+      }
+      const volume = source.document.volumes.find((v) => v.id === state.volumeId);
+      const persistedVolume = source.volumes.find((v) => v.id === state.volumeId);
+      if (!volume || !persistedVolume || !isVolumeChapterListPartiallyPersisted(volume)
+        || !isVolumeChapterListPartiallyPersisted(persistedVolume)
+        || resolveOriginalVolumeStatus(volume.status) !== "active"
+        || resolveOriginalVolumeStatus(persistedVolume.status) !== "active") {
+        return conflict("This failure is not the partial-active volume compatibility case.");
+      }
+      const { chapter, eligible } = eligibleWindow(source.document, state.volumeId, state.chapterId, source);
+      if (chapter.id !== state.chapterId || chapter.chapterOrder !== state.chapterOrder || !eligible.includes(chapter.id)) {
+        return conflict("The original repair chapter is missing, moved, or protected.");
+      }
+      const corrected = { ...state, phase: "assessing" as const, summary: undefined };
+      const nextSnapshot: StoredSnapshot = {
+        ...snapshot, baselineDocument: clone(source.document), eligibleChapterIds: eligible,
+        snapshotToken: source.token,
+        inputFingerprint: hash({ document: semanticDocument(source.document), source: source.token }),
+        effectiveDefaultChapterLength: source.effectiveDefaultChapterLength,
+      };
+      await casSeed(tx, task, { ...seed, planningRepair: corrected, [SNAPSHOT_KEY]: nextSnapshot });
+      return corrected;
+    });
+  }
 
   async begin(input: BeginPlanningRepairInput): Promise<RepairSession> {
     const result = await transaction(async (tx) => {

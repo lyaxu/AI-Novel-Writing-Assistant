@@ -397,9 +397,9 @@ export class NovelPipelineExecutor {
         });
 
         const isAutopilotMode = runtimePayload.controlPolicy?.advanceMode === "full_book_autopilot";
-        const autopilotTargetEndOrder = isAutopilotMode
-          ? Math.max(options.endOrder, novel.estimatedChapterCount ?? options.endOrder)
-          : options.endOrder;
+        // Autopilot controls how chapters run, not permission to expand the requested range.
+        // The director schedules subsequent windows when the selected production scope allows it.
+        const autopilotTargetEndOrder = options.endOrder;
         let totalCount = isAutopilotMode
           ? Math.max(1, autopilotTargetEndOrder - options.startOrder + 1)
           : Math.max(existingJob?.totalCount ?? 0, chapterCandidates.length, 1);
