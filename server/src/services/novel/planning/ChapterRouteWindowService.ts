@@ -2,7 +2,7 @@ import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import type { DirectorCompletionProfile } from "@ai-novel/shared/types/directorCompletion";
 import type { VolumePlanDocument } from "@ai-novel/shared/types/novel";
 import { prisma } from "../../../db/prisma";
-import { NovelVolumeService } from "../volume/NovelVolumeService";
+import { NovelVolumeService, createVolumeGenerationWriteGuard } from "../volume/NovelVolumeService";
 import {
   getBeatExpectedChapterCount,
   resolveVolumeChapterBeatKey,
@@ -74,6 +74,8 @@ export class ChapterRouteWindowService {
       return { availableRouteCount, extended: false };
     }
 
+    const writeGuard = await createVolumeGenerationWriteGuard(novelId, options.taskId);
+
     let workspace = await this.volumeService.getVolumes(novelId);
     let extended = false;
     while (availableRouteCount < target) {
@@ -83,6 +85,7 @@ export class ChapterRouteWindowService {
           novelId,
           workspace,
           options,
+          writeGuard,
         );
         if (!expandedWorkspace) {
           break;
@@ -93,6 +96,7 @@ export class ChapterRouteWindowService {
       }
       if (!next.beatKey) {
         workspace = await this.volumeService.generateVolumes(novelId, {
+          writeGuard,
           scope: "beat_sheet",
           targetVolumeId: next.volumeId,
           draftWorkspace: workspace,
@@ -104,6 +108,7 @@ export class ChapterRouteWindowService {
           entrypoint: "jit_route_window",
         });
         workspace = await this.volumeService.updateVolumesWithOptions(novelId, workspace, {
+          writeGuard,
           emitEvent: false,
           syncPayoffLedger: false,
           volumeUpdateReason: "chapter_execution_contract_refined",
@@ -112,6 +117,7 @@ export class ChapterRouteWindowService {
       }
 
       workspace = await this.volumeService.generateVolumes(novelId, {
+        writeGuard,
         scope: "chapter_list",
         targetVolumeId: next.volumeId,
         generationMode: "single_beat",
@@ -130,6 +136,7 @@ export class ChapterRouteWindowService {
         applyDeletes: false,
         allowIncompleteExecutionContracts: true,
       }, {
+        writeGuard,
         emitEvent: false,
         syncPayoffLedger: false,
       });
@@ -143,6 +150,7 @@ export class ChapterRouteWindowService {
     novelId: string,
     workspace: VolumePlanDocument,
     options: ChapterRouteWindowOptions,
+    writeGuard?: Awaited<ReturnType<typeof createVolumeGenerationWriteGuard>>,
   ): Promise<VolumePlanDocument | null> {
     const targetChapterCount = options.completionProfile?.targetChapterCount ?? 0;
     const plannedChapterEnd = Math.max(
@@ -158,6 +166,7 @@ export class ChapterRouteWindowService {
       workspace.strategyPlan.recommendedVolumeCount,
     );
     const generatedSkeleton = await this.volumeService.generateVolumes(novelId, {
+      writeGuard,
       scope: "skeleton",
       skeletonVolumeCount,
       draftWorkspace: workspace,
@@ -181,6 +190,7 @@ export class ChapterRouteWindowService {
       beatSheets: workspace.beatSheets,
       rebalanceDecisions: workspace.rebalanceDecisions,
     }, {
+      writeGuard,
       emitEvent: false,
       syncPayoffLedger: false,
       volumeUpdateReason: "chapter_execution_contract_refined",

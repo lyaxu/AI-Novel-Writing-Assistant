@@ -18,6 +18,7 @@ import type {
 } from "@ai-novel/shared/types/novel";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../../db/prisma";
+import type { VolumeGenerationWriteGuard } from "./infrastructure/VolumeGenerationWriteGuard";
 
 export type ChapterDetailMode = "purpose" | "boundary" | "task_sheet";
 export type VolumeGenerationPhase = "load_context" | "prompt";
@@ -77,6 +78,8 @@ export interface VolumeGenerationNovel {
 }
 
 export interface VolumeGenerateOptions {
+  /** Internal transaction fence shared by a rolling generation and its materialization. */
+  writeGuard?: VolumeGenerationWriteGuard;
   provider?: LLMProvider;
   model?: string;
   temperature?: number;

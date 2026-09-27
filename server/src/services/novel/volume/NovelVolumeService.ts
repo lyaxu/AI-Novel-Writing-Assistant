@@ -19,6 +19,8 @@ import { payoffLedgerSyncService } from "../../payoff/PayoffLedgerSyncService";
 import { StoryMacroPlanService } from "../storyMacro/StoryMacroPlanService";
 import { StyleBindingService } from "../../styleEngine/StyleBindingService";
 import { ChapterExecutionContractService } from "./ChapterExecutionContractService";
+import { createVolumeGenerationWriteGuard, type VolumeGenerationWriteGuard } from "./infrastructure/VolumeGenerationWriteGuard";
+export { createVolumeGenerationWriteGuard } from "./infrastructure/VolumeGenerationWriteGuard";
 import { isCommittedPlanningRepairDocument } from "./planningRepair/PlanningRepairCoordinator";
 import {
   hasPayoffLedgerRelevantPlanChanges,
@@ -227,6 +229,7 @@ export class NovelVolumeService {
     novelId: string,
     document: VolumePlanDocument,
     options: {
+      writeGuard?: VolumeGenerationWriteGuard;
       emitEvent?: boolean;
       syncPayoffLedger?: boolean;
       volumeUpdateReason?: VolumeUpdateReason;
@@ -249,6 +252,7 @@ export class NovelVolumeService {
       beatSheetCount: document.beatSheets.length,
     });
     const persistedDocument = await runVolumeWorkspaceTransaction(async (tx) => {
+      await options.writeGuard?.(tx);
       const { versionId } = await this.ensureActiveVersionRecord(tx, novelId, document);
       const nextDocument = {
         ...document,
@@ -256,6 +260,7 @@ export class NovelVolumeService {
         source: "volume" as const,
       };
       await persistActiveVolumeWorkspace(tx, novelId, nextDocument, versionId);
+      await options.writeGuard?.(tx);
       return nextDocument;
     });
     logMemoryUsage({
@@ -398,6 +403,7 @@ export class NovelVolumeService {
     novelId: string,
     input: unknown,
     options: {
+      writeGuard?: VolumeGenerationWriteGuard;
       volumeUpdateReason?: VolumeUpdateReason;
       syncPayoffLedger?: boolean;
       syncToChapterExecution?: boolean;
@@ -415,6 +421,7 @@ export class NovelVolumeService {
     }
     const mergedDocument = mergeVolumeWorkspaceInput(novelId, currentDocument, input);
     const persistedDocument = await this.persistWorkspaceDocument(novelId, mergedDocument, {
+      writeGuard: options.writeGuard,
       volumeUpdateReason: options.volumeUpdateReason,
       emitEvent: options.emitEvent,
       syncPayoffLedger: options.syncPayoffLedger
@@ -428,6 +435,7 @@ export class NovelVolumeService {
           preserveContent: true,
           applyDeletes: false,
         }, {
+          writeGuard: options.writeGuard,
           emitEvent: false,
           syncPayoffLedger: false,
         });
@@ -647,6 +655,7 @@ export class NovelVolumeService {
     novelId: string,
     input: VolumeSyncInput,
     options: {
+      writeGuard?: VolumeGenerationWriteGuard;
       emitEvent?: boolean;
       syncPayoffLedger?: boolean;
       volumeUpdateReason?: VolumeUpdateReason;
@@ -694,6 +703,7 @@ export class NovelVolumeService {
   }
 
   async generateVolumes(novelId: string, options: VolumeGenerateOptions = {}): Promise<VolumePlanDocument> {
+    const writeGuard = options.writeGuard ?? await createVolumeGenerationWriteGuard(novelId, options.taskId);
     return withHighMemoryVolumeGenerationGuard(novelId, options, async () => {
       const persistedWorkspace = await this.ensureVolumeWorkspace(novelId);
       const workspace = options.draftWorkspace
@@ -730,6 +740,7 @@ export class NovelVolumeService {
               const shouldPersistIntermediate = event.isFinal !== false || options.persistIntermediateDocuments === true;
               const persistedDocument = shouldPersistIntermediate
                 ? await this.persistWorkspaceDocument(novelId, event.document, {
+                  writeGuard,
                   emitEvent: false,
                   syncPayoffLedger: false,
                   memoryTelemetry: {

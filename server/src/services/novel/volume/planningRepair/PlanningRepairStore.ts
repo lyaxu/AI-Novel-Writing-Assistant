@@ -545,6 +545,74 @@ export class PlanningRepairStore {
     });
   }
 
+  async rebaseCommittedRouteAppend(input: {
+    novelId: string; taskId: string; expectedSeedPayloadJson: string; evidenceDocument: VolumePlanDocument;
+  }): Promise<PlanningRepairState> {
+    return transaction(async (tx) => {
+      const task = await readTask(tx, input.taskId, input.novelId, true);
+      if (task.seedPayloadJson !== input.expectedSeedPayloadJson
+        || task.status === "running" || task.status === "queued"
+        || await tx.generationJob.findFirst({ where: { novelId: input.novelId, status: { in: ["queued", "running"] } } })
+        || await tx.directorRunCommand.findFirst({ where: { taskId: input.taskId, status: { in: ["queued", "leased", "running"] } } })) {
+        conflict("Route append recovery requires an unchanged, inactive task.");
+      }
+      const seed = parseSeed(task.seedPayloadJson);
+      const state = readState(seed);
+      const snapshot = readSnapshot(seed, input.taskId);
+      const source = await readSource(tx, input.novelId, task);
+      const active = source.versions.find((v) => v.status === "active");
+      if (!state || state.phase !== "committed" || state.pendingOperation || !snapshot.committed
+        || !snapshot.committedSourceHash || !snapshot.committedPlanHash
+        || hash(input.evidenceDocument) !== snapshot.candidateHash
+        || committedPlanHash(input.evidenceDocument) !== snapshot.committedPlanHash
+        || !active || active.id !== state.candidateVersionId
+        || source.document.activeVersionId !== state.candidateVersionId) {
+        conflict("Route append evidence does not match the committed review.");
+      }
+      const oldPlans = input.evidenceDocument.volumes.flatMap((v) => v.chapters);
+      const oldIds = new Set(oldPlans.map((c) => c.id));
+      const oldVolume = input.evidenceDocument.volumes.find((v) => v.id === state.volumeId);
+      if (!oldVolume?.chapters.length) conflict("The reviewed route volume is missing.");
+      const lastOrder = Math.max(...oldVolume.chapters.map((c) => c.chapterOrder));
+      const added = source.document.volumes.flatMap((v) => v.chapters.filter((c) => !oldIds.has(c.id)));
+      if (!added.length || added.some((c) => c.volumeId !== state.volumeId || c.chapterOrder <= lastOrder
+        || c.taskSheet?.trim() || c.sceneCards?.trim())) {
+        conflict("Only unwritten route chapters appended after the reviewed volume are allowed.");
+      }
+      const addedIds = new Set(added.map((c) => c.id));
+      const priorDocument = { ...source.document, volumes: source.document.volumes.map((v) => ({
+        ...v, chapters: v.chapters.filter((c) => !addedIds.has(c.id)),
+      })) };
+      if (committedPlanHash(priorDocument) !== snapshot.committedPlanHash
+        || persistedPlanHash(source.document) !== persistedPlanHash(buildVolumeWorkspaceDocument({
+          novelId: input.novelId, source: "volume", volumes: source.volumes.map(mapVolumeRow),
+        }))) {
+        conflict("Existing reviewed fields or persisted route rows changed.");
+      }
+      const mapping = materializedMapping(source.document, source.chapters);
+      const addedChapterIds = new Set<string>();
+      for (const plan of added) {
+        const row = mapping.get(plan.id);
+        if (row && (isLocked(row) || row.taskSheet?.trim() || row.sceneCards?.trim())) {
+          conflict("An appended chapter already has prose, execution, or a detailed contract.");
+        }
+        if (row) addedChapterIds.add(row.id);
+      }
+      const priorSource = { ...source, document: priorDocument,
+        volumes: source.volumes.map((v) => ({ ...v, chapters: v.chapters.filter((c) => !addedIds.has(c.id)) })),
+        chapters: source.chapters.filter((c) => !addedChapterIds.has(c.id)),
+      };
+      if (committedSourceHash(priorSource) !== snapshot.committedSourceHash) {
+        conflict("The reviewed source changed beyond appended route chapters.");
+      }
+      snapshot.candidateHash = hash(JSON.parse(active.contentJson));
+      snapshot.committedPlanHash = committedPlanHash(source.document);
+      snapshot.committedSourceHash = committedSourceHash(source);
+      await casSeed(tx, task, { ...seed, [SNAPSHOT_KEY]: snapshot });
+      return state;
+    });
+  }
+
   async begin(input: BeginPlanningRepairInput): Promise<RepairSession> {
     const result = await transaction(async (tx) => {
       const task = await readTask(tx, input.taskId, input.novelId);

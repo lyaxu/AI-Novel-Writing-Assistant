@@ -16,6 +16,7 @@ import {
   type ExistingChapterRecord,
 } from "./volumePlanUtils";
 import type { VolumeSyncInput } from "./volumeModels";
+import type { VolumeGenerationWriteGuard } from "./infrastructure/VolumeGenerationWriteGuard";
 import {
   mergeVolumeWorkspaceInput,
   serializeVolumeWorkspaceDocument,
@@ -38,6 +39,7 @@ export interface VolumeChapterSyncServiceDeps {
 }
 
 export interface VolumeChapterSyncOptions {
+  writeGuard?: VolumeGenerationWriteGuard;
   emitEvent?: boolean;
   syncPayoffLedger?: boolean;
   volumeUpdateReason?: VolumeUpdateReason;
@@ -105,6 +107,7 @@ export class VolumeChapterSyncService {
     );
 
     await runVolumeWorkspaceTransaction(async (tx) => {
+      await options.writeGuard?.(tx);
       const { versionId } = await this.deps.ensureActiveVersionRecord(tx, novelId, mergedDocument);
       const linkUpdates: Array<{ volumeChapterId: string; chapterId: string }> = [...plan.links];
       for (const item of plan.creates) {
@@ -174,6 +177,7 @@ export class VolumeChapterSyncService {
         },
       });
       await persistActiveVolumeWorkspace(tx, novelId, linkedDocument, versionId);
+      await options.writeGuard?.(tx);
     });
 
     if (options.emitEvent !== false) {

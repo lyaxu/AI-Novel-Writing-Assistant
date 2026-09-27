@@ -1053,3 +1053,63 @@ test("legacy migration compares DB projection while version hash protects extend
  h.db.task.status="running";const v=h.db.versions.find(v=>v.status==="active");const d=JSON.parse(v.contentJson);d.volumes[0].chapters[1].exclusiveEvent="Tampered extension";v.contentJson=JSON.stringify(d);
  await assert.rejects(h.store.begin({...h.input,document}),/committed planning contract changed/);
 });
+
+async function committedRouteAppendFixture() {
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  await h.ready(session);
+  const evidenceDocument = await h.store.commit(session, session.candidate);
+  const active = h.db.versions.find((version) => version.status === "active");
+  const document = JSON.parse(active.contentJson);
+  const appended = { ...copy(document.volumes[0].chapters[4]), id: "p7", chapterId: "c7",
+    chapterOrder: 7, title: "Later route", summary: "Route only", taskSheet: null, sceneCards: null };
+  document.volumes[0].chapters.push(appended);
+  active.contentJson = JSON.stringify(document);
+  h.db.volumes[0].chapters.push({ ...copy(appended), payoffRefsJson: JSON.stringify(appended.payoffRefs) });
+  h.db.chapters.push({ ...copy(h.db.chapters[4]), id: "c7", order: 7, title: appended.title,
+    expectation: appended.summary, taskSheet: null, sceneCards: null });
+  h.db.task.status = "cancelled";
+  h.db.task.cancelRequestedAt = epoch;
+  return { h, document, evidenceDocument, input: { novelId: "n", taskId: "t",
+    expectedSeedPayloadJson: h.db.task.seedPayloadJson, evidenceDocument } };
+}
+
+test("strict route append recovery preserves paid review and leaves new route unapproved", async () => {
+  const { h, document, input } = await committedRouteAppendFixture();
+  const originalState = copy(h.state());
+  const originalData = copy({ chapters: h.db.chapters, volumes: h.db.volumes, versions: h.db.versions });
+  await h.store.rebaseCommittedRouteAppend(input);
+  assert.deepEqual(h.state(), originalState);
+  assert.equal(h.db.task.status, "cancelled");
+  assert.deepEqual({ chapters: h.db.chapters, volumes: h.db.volumes, versions: h.db.versions }, originalData);
+  h.db.task.status = "running";
+  h.db.task.cancelRequestedAt = null;
+  assert.equal((await h.store.begin({ ...h.input, document })).state.phase, "committed");
+  const next = await h.store.begin({ ...h.input, document, chapterId: "p7" });
+  assert.equal(next.state.phase, "assessing");
+  assert.equal(next.state.chapterId, "p7");
+});
+
+for (const change of ["old contract", "old row", "new prose", "new task sheet", "version", "active task", "active job", "active command", "CAS", "evidence", "budget"]) {
+  test(`route append recovery rejects ${change} without changing the seed`, async () => {
+    const { h, input } = await committedRouteAppendFixture();
+    if (change === "old contract") {
+      const active = h.db.versions.find((v) => v.status === "active");
+      const document = JSON.parse(active.contentJson);
+      document.volumes[0].chapters[1].taskSheet = "Tampered";
+      active.contentJson = JSON.stringify(document);
+    }
+    if (change === "old row") h.db.chapters[1].expectation = "Tampered";
+    if (change === "new prose") h.db.chapters.at(-1).content = "Already written";
+    if (change === "new task sheet") h.db.chapters.at(-1).taskSheet = "Unreviewed contract";
+    if (change === "version") h.db.versions.find((v) => v.status === "active").id = "replacement";
+    if (change === "active task") h.db.task.status = "running";
+    if (change === "active job") h.db.activeJob = { status: "running" };
+    if (change === "active command") h.db.activeCommand = { status: "leased" };
+    if (change === "CAS") h.failCAS();
+    if (change === "evidence") input.evidenceDocument.volumes[0].chapters[1].summary = "Tampered";
+    if (change === "budget") h.db.novel.defaultChapterLength = 4000;
+    await assert.rejects(h.store.rebaseCommittedRouteAppend(input));
+    assert.equal(h.db.task.seedPayloadJson, input.expectedSeedPayloadJson);
+  });
+}

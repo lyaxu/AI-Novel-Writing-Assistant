@@ -117,10 +117,7 @@ export class NovelChapterSummaryService {
     const characterStates = joinFacts(facts.filter((item) => item.category === "character").map((item) => item.content), 3);
 
     await prisma.$transaction(async (tx) => {
-      await tx.chapter.update({
-        where: { id: chapterId },
-        data: { expectation: summary },
-      });
+      // Summarizing prose must not replace the approved writing objective.
       await tx.chapterSummary.upsert({
         where: { chapterId },
         update: {
@@ -159,7 +156,7 @@ export class NovelChapterSummaryService {
     return {
       chapterId,
       summary,
-      expectation: summary,
+      expectation: chapter.expectation,
       concreteFactCount: concreteFacts.length,
     };
   }

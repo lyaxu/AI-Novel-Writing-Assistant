@@ -782,10 +782,7 @@ export class ChapterArtifactDeltaService {
       if (!current || buildContentHash(current.content ?? "") !== input.expectedContentHash) {
         throw new ChapterArtifactContentVersionError("章节正文版本已变化，已拒绝写入过期摘要与事实。");
       }
-      await tx.chapter.update({
-        where: { id: input.chapterId },
-        data: { expectation: summary },
-      });
+      // Actual prose facts belong to ChapterSummary; expectation remains the reviewed plan.
       await tx.chapterSummary.upsert({
         where: { chapterId: input.chapterId },
         update: {

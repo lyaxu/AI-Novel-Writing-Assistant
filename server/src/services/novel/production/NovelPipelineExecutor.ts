@@ -402,6 +402,16 @@ export class NovelPipelineExecutor {
         // Autopilot controls how chapters run, not permission to expand the requested range.
         // The director schedules subsequent windows when the selected production scope allows it.
         const autopilotTargetEndOrder = options.endOrder;
+        const chapterControlPolicy = isAutopilotMode && runtimePayload.controlPolicy
+          ? {
+            ...runtimePayload.controlPolicy,
+            autoExecutionRange: {
+              mode: "chapter_range" as const,
+              start: options.startOrder,
+              end: options.endOrder,
+            },
+          }
+          : runtimePayload.controlPolicy;
         let totalCount = isAutopilotMode
           ? Math.max(1, autopilotTargetEndOrder - options.startOrder + 1)
           : Math.max(existingJob?.totalCount ?? 0, chapterCandidates.length, 1);
@@ -505,7 +515,7 @@ export class NovelPipelineExecutor {
                     temperature: runtimePayload.temperature,
                     workflowTaskId: runtimePayload.workflowTaskId,
                     taskStyleProfileId: runtimePayload.taskStyleProfileId,
-                    controlPolicy: runtimePayload.controlPolicy,
+                    controlPolicy: chapterControlPolicy,
                     maxRetries: Math.max(0, chapterRetryBudget - chapterRetryCountUsed),
                     autoReview: runtimePayload.autoReview,
                     autoRepair: runtimePayload.autoRepair,

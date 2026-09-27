@@ -10,6 +10,7 @@ const {
   NovelPipelineExecutor,
 } = require("../../dist/services/novel/production/NovelPipelineExecutor.js");
 const { ChapterRouteWindowService } = require("../../dist/services/novel/planning/ChapterRouteWindowService.js");
+const { ChapterExecutionPreparationService } = require("../../dist/services/novel/production/preparation/ChapterExecutionPreparationService.js");
 
 function createExecutorHarness({
   used = 0,
@@ -20,6 +21,12 @@ function createExecutorHarness({
   executeOptions = options,
   estimatedChapterCount = 1,
   chapterCount = 1,
+  chapterStartOrder = 1,
+  savedControlPolicy = {
+    kickoffMode: "director_start",
+    advanceMode: "full_book_autopilot",
+    reviewCheckpoints: ["chapter_batch"],
+  },
   runChapter,
 }) {
   const originals = {
@@ -61,7 +68,7 @@ function createExecutorHarness({
           skipCompleted: true,
           qualityThreshold: 75,
           repairMode: "light_repair",
-          controlPolicy: { advanceMode: "full_book_autopilot" },
+          controlPolicy: savedControlPolicy,
         }),
       };
     }
@@ -110,7 +117,7 @@ function createExecutorHarness({
   });
   prisma.chapter.findMany = async () => Array.from({ length: chapterCount }, (_, index) => ({
     id: `chapter-${index + 1}`,
-    order: index + 1,
+    order: index + chapterStartOrder,
     title: `第${index + 1}章`,
     content: "已保存草稿",
   }));
@@ -131,7 +138,7 @@ function createExecutorHarness({
     async runPipelineChapter(_novelId, _chapterId, options, hooks) {
       chapterCalls += 1;
       receivedMaxRetries = options.maxRetries;
-      const result = await runChapter({ hooks, chapterCalls });
+      const result = await runChapter({ hooks, chapterCalls, runtimeOptions: options });
       if (cancelAfterChapter) {
         jobState.status = "cancelled";
         jobState.cancelRequestedAt = new Date();
@@ -193,6 +200,57 @@ for (const endOrder of [1, 3]) {
       assert.ok(harness.updates.every(update => update.data.endOrder === undefined || update.data.endOrder <= endOrder));
       assert.deepEqual(harness.routeRequests, Array.from({ length: endOrder - 1 }, (_, index) => index + 2));
     } finally { harness.restore(); }
+  });
+}
+
+for (const savedRange of [undefined, { mode: "book", start: 1, end: 80 }]) {
+  test(`single-chapter job bounds preparation when saved policy range is ${savedRange ? "broader" : "missing"}`, async () => {
+    const originalCount = prisma.chapter.count;
+    const originalEnsureRouteWindow = ChapterRouteWindowService.prototype.ensureRouteWindow;
+    const routeQueries = [];
+    prisma.chapter.count = async ({ where }) => {
+      routeQueries.push(where);
+      return [2, 3].filter(order => order >= where.order.gte && (where.order.lte == null || order <= where.order.lte)).length;
+    };
+    const routeService = new ChapterRouteWindowService({
+      getVolumes: async () => { throw new Error("Existing chapter 2 must not cause route generation"); },
+    });
+    const preparation = new ChapterExecutionPreparationService({
+      chapterPlanJITService: {
+        ensureExecutionReady: async (novelId, _chapterId, routeOptions) => {
+          assert.equal(routeOptions.endOrder, 2);
+          assert.equal(routeOptions.completionProfile.targetChapterCount, 80);
+          await originalEnsureRouteWindow.call(routeService, novelId, 2, routeOptions);
+        },
+      },
+      planner: { ensureChapterPlan: async () => ({ id: "existing-chapter-2-plan" }) },
+      loadEstimatedChapterCount: async () => 80,
+    });
+    const harness = createExecutorHarness({
+      estimatedChapterCount: 80,
+      chapterStartOrder: 2,
+      executeOptions: { ...options, startOrder: 2, endOrder: 2, autoReview: false },
+      savedControlPolicy: {
+        kickoffMode: "director_start", advanceMode: "full_book_autopilot", reviewCheckpoints: ["chapter_batch"],
+        ...(savedRange ? { autoExecutionRange: savedRange } : {}),
+      },
+      runChapter: async ({ runtimeOptions }) => {
+        assert.deepEqual(runtimeOptions.controlPolicy.autoExecutionRange, { mode: "chapter_range", start: 2, end: 2 });
+        assert.deepEqual(runtimeOptions.controlPolicy.reviewCheckpoints, ["chapter_batch"]);
+        await preparation.prepare("novel-1", "chapter-2", runtimeOptions);
+        return { reviewExecuted: false, pass: true, score: { overall: 100 }, issues: [], runtimePackage: null, retryCountUsed: 0 };
+      },
+    });
+    try {
+      await harness.execute();
+      assert.equal(harness.jobState.status, "succeeded");
+      assert.equal(harness.chapterCalls, 1);
+      assert.deepEqual(routeQueries.map(query => query.order), [{ gte: 2, lte: 2 }]);
+      assert.deepEqual(harness.routeRequests, []);
+    } finally {
+      harness.restore();
+      prisma.chapter.count = originalCount;
+    }
   });
 }
 
