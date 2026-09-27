@@ -41,7 +41,7 @@ const worldForceSchema = z.object({
   id: z.string().trim().min(1).optional(),
   name: z.string().trim().min(1).optional(),
   type: z.string().trim().optional(),
-  factionId: z.string().trim().optional(),
+  factionId: z.string().trim().nullish(),
   summary: z.string().trim().optional(),
   baseOfPower: z.string().trim().optional(),
   currentObjective: z.string().trim().optional(),

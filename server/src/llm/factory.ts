@@ -296,11 +296,11 @@ export async function resolveLLMClientOptions(
   const requestProtocol = options.requestProtocol === "anthropic" ? "anthropic" : "openai_compatible";
   const structuredStrategy = options.structuredStrategy;
   const executionMode = options.executionMode ?? "plain";
-  // K3 is thinking-only. Limit effort for book candidates, not for other writing tasks.
+  // Bound K3 preparation calls without changing prose-writing model preferences.
   // https://platform.kimi.com/docs/guide/kimi-k3-quickstart
   const kimiCandidateBudget = requestProtocol === "openai_compatible"
     && executionMode === "structured"
-    && options.promptMeta?.promptId === "novel.director.candidates"
+    && ["novel.director.candidates", "novel.world.generate_from_theme"].includes(options.promptMeta?.promptId ?? "")
     && model.toLowerCase() === "kimi-k3"
     && ["api.moonshot.cn", "api.moonshot.ai"].includes(new URL(baseURL).hostname)
     ? 32_768

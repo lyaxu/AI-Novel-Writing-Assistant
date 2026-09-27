@@ -83,6 +83,34 @@ test("director runtime store records explicit run resume events", async () => {
   });
 });
 
+test("restarting a failed node clears terminal fields and starts a new attempt while heartbeats keep its start", async () => {
+  const store = new DirectorRuntimeStore();
+  let snapshot = buildSnapshot();
+  store.mutateSnapshot = async (_taskId, mutator) => {
+    snapshot = mutator(snapshot, {});
+    return snapshot;
+  };
+  const input = {
+    taskId: "task-1", novelId: "novel-1", nodeKey: "world_setup_phase",
+    label: "准备本书世界", targetType: "novel", targetId: "novel-1",
+  };
+  await store.recordStepStarted(input);
+  snapshot.steps[0] = {
+    ...snapshot.steps[0], status: "failed", error: "old timeout",
+    startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:02:00.000Z",
+  };
+  await store.recordStepStarted(input);
+  const restartedAt = snapshot.steps[0].startedAt;
+  assert.equal(snapshot.steps[0].status, "running");
+  assert.equal(snapshot.steps[0].error, null);
+  assert.equal(snapshot.steps[0].finishedAt, null);
+  assert.notEqual(restartedAt, "2026-01-01T00:00:00.000Z");
+  assert.equal(snapshot.events.at(-1).type, "node_started");
+  await store.recordStepStarted(input);
+  assert.equal(snapshot.steps[0].startedAt, restartedAt);
+  assert.equal(snapshot.events.at(-1).type, "node_heartbeat");
+});
+
 test("director runtime store dual-writes runtime snapshot into persistent ledger tables", async () => {
   const store = new DirectorRuntimeStore();
   const calls = [];

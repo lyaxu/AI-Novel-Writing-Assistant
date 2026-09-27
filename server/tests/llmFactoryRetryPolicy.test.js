@@ -12,8 +12,12 @@ test("official K3 book candidates use low effort and a bounded native completion
     promptMeta: { promptId: "novel.director.candidates", promptVersion: "v3" },
   };
   try {
-    for (const baseURL of ["https://api.moonshot.cn/v1", "https://api.moonshot.ai/v1"]) {
-      const resolved = await resolveLLMClientOptions(provider, { ...options, baseURL });
+    for (const [baseURL, promptId] of [
+      ["https://api.moonshot.cn/v1", "novel.director.candidates"],
+      ["https://api.moonshot.ai/v1", "novel.director.candidates"],
+      ["https://api.moonshot.cn/v1", "novel.world.generate_from_theme"],
+    ]) {
+      const resolved = await resolveLLMClientOptions(provider, { ...options, baseURL, promptMeta: { ...options.promptMeta, promptId } });
       assert.equal(resolved.reasoningEnabled, true);
       assert.equal(resolved.reasoningEffort, "low");
       assert.equal(resolved.maxTokens, 32768);

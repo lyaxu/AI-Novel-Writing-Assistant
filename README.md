@@ -172,7 +172,9 @@ Open-source AI novel writing assistant and long-form production studio.
 
 #### 修复
 
-- Moonshot 官方 K3 的书级候选生成使用低思考强度与32768-token总输出预算；不修改其他阶段的模型设置，额度耗尽仍停止自动重试。
+- 世界准备支持无归属阵营的势力，减少完整结果被误拒后重复生成；K3 世界准备采用低思考强度并延长等待时间。
+- 失败后重试会清理旧步骤错误，避免重新运行时又显示上次失败。
+- Moonshot 官方 K3 的书级候选生成使用低思考强度与32768-token总输出预算；保留正文写作的模型设置，额度耗尽仍停止自动重试。
 - 开书页面在短暂读取失败、切换窗口或任务重试后继续同步状态，避免候选已生成却停在旧进度；读取结果不会重新调用模型。
 - 开书失败后的快速重试使用页面当前选中的模型，保留原任务与创作设定。
 - 明确区分输出额度耗尽与网络故障；模型因 token 上限截断时显示思考用量并停止自动重试，避免重复消耗。
@@ -181,7 +183,7 @@ Open-source AI novel writing assistant and long-form production studio.
 - 修正提示明确要求逐字保留伏笔义务引用，避免改写引用名称后无法对账。
 - 修复部分角色、章节钩子、世界和写法提示词版本登记不一致的问题。
 
-完整历史更新见 [docs/releases/release-notes.md](./docs/releases/release-notes.md)。
+完整历史见 [版本更新说明](docs/releases/release-notes.md)。
 
 ## 功能预览
 ### 功能概览中的95%以上编写都是AI完成

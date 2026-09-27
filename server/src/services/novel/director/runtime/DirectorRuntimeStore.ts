@@ -376,7 +376,9 @@ export class DirectorRuntimeStore {
           status: "running",
           targetType: input.targetType ?? null,
           targetId: input.targetId ?? null,
-          startedAt: existingStep?.startedAt ?? now,
+          startedAt: existingStep?.status === "running" ? existingStep.startedAt ?? now : now,
+          finishedAt: null,
+          error: null,
         }),
         events: [
           ...snapshot.events,

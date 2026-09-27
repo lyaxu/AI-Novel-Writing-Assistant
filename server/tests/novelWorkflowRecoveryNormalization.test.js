@@ -5,14 +5,19 @@ const { NovelWorkflowService } = require("../dist/services/novel/workflow/NovelW
 const { prisma } = require("../dist/db/prisma.js");
 
 const originalTransaction = prisma.$transaction;
+const originalEventFindFirst = prisma.directorEvent.findFirst;
 test.beforeEach(() => {
+  prisma.directorEvent.findFirst = async () => null;
   // Keep the existing row fixtures inside the new atomic read/update boundary.
   prisma.$transaction = async run => run({ novelWorkflowTask: {
     findUniqueOrThrow: async args => ({ seedPayloadJson: null, ...await prisma.novelWorkflowTask.findUnique(args) }),
     update: args => prisma.novelWorkflowTask.update(args),
   } });
 });
-test.afterEach(() => { prisma.$transaction = originalTransaction; });
+test.afterEach(() => {
+  prisma.$transaction = originalTransaction;
+  prisma.directorEvent.findFirst = originalEventFindFirst;
+});
 
 test("healHistoricalAutoDirectorRecoveryFailure restores legacy restart failures back to checkpoint state", async () => {
   const originals = {

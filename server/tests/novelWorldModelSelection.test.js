@@ -5,6 +5,24 @@ const { prisma } = require("../dist/db/prisma.js");
 const { setPromptRunnerStructuredInvokerForTests } = require("../dist/prompting/core/promptRunner.js");
 const { NovelWorldInstanceService } = require("../dist/services/novel/worldContext/NovelWorldInstanceService.js");
 const { novelThemeWorldGenerationPrompt } = require("../dist/prompting/prompts/world/world.prompts.js");
+const { normalizeWorldStructuredData } = require("../dist/services/world/worldStructure.js");
+
+test("unaffiliated forces survive world validation and normalization without another model call", () => {
+  const payload = {
+    title: "试读世界", coverSummary: "开篇舞台", worldType: "冒险",
+    structuredData: {
+      profile: { summary: "开篇舞台" }, rules: { axioms: [] }, factions: [],
+      forces: [{ id: "force-1", name: "独立组织", factionId: null, pressure: "争夺资源" }],
+      locations: [], relations: { forceRelations: [], locationControls: [] },
+    },
+  };
+  const parsed = novelThemeWorldGenerationPrompt.outputSchema.parse(payload);
+  const normalized = normalizeWorldStructuredData(parsed.structuredData);
+  assert.equal(normalized.forces[0].factionId, null);
+  assert.equal(normalized.forces[0].pressure, "争夺资源");
+  payload.structuredData.forces[0].factionId = { invented: true };
+  assert.equal(novelThemeWorldGenerationPrompt.outputSchema.safeParse(payload).success, false);
+});
 
 test("generating a novel world keeps the selected model instead of forcing DeepSeek", async () => {
   const originalNovel = prisma.novel;
@@ -44,7 +62,7 @@ test("generating a novel world keeps the selected model instead of forcing DeepS
     assert.equal(captured[0].model, "qwen3:8b");
     assert.equal(captured[0].temperature, 0.35);
     assert.equal(captured[0].maxTokens, 4_800);
-    assert.equal(captured[0].timeoutMs, 120_000);
+    assert.equal(captured[0].timeoutMs, 300_000);
     assert.equal(captured[0].maxRepairAttempts, 0);
   } finally {
     prisma.novel = originalNovel;
@@ -71,7 +89,7 @@ test("novel theme world prompt stays within a one-shot JSON budget", () => {
     estimatedInputTokens: 0,
   });
 
-  assert.equal(novelThemeWorldGenerationPrompt.version, "v2");
+  assert.equal(novelThemeWorldGenerationPrompt.version, "v3");
   assert.equal(novelThemeWorldGenerationPrompt.repairPolicy.maxAttempts, 0);
   assert.match(String(messages[0].content), /输出容量硬约束/);
   assert.match(String(messages[0].content), /1,800 个汉字以内/);

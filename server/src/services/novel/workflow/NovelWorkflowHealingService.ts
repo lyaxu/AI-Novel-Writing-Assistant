@@ -351,9 +351,21 @@ export class NovelWorkflowHealingService {
         label: true,
         error: true,
         finishedAt: true,
+        updatedAt: true,
       },
     });
     if (!latestStep || latestStep.status !== "failed") {
+      return false;
+    }
+    // A queued command may finish dispatching before the resumed node starts.
+    // The previous attempt's failed step must not undo that explicit recovery.
+    const latestResume = await prisma.directorEvent.findFirst({
+      where: { taskId, type: "run_resumed" },
+      orderBy: { occurredAt: "desc" },
+      select: { occurredAt: true },
+    });
+    const failedAt = latestStep.finishedAt ?? latestStep.updatedAt;
+    if (latestResume && (!failedAt || failedAt <= latestResume.occurredAt)) {
       return false;
     }
     const message = latestStep.error?.trim()
