@@ -1468,6 +1468,26 @@ test("runStructuredPrompt forwards repair policy and context telemetry", async (
   }
 });
 
+test("terminal post-validation failures retain the completed response as non-public evidence", async () => {
+  const data = { value: "received" };
+  setPromptRunnerStructuredInvokerForTests(async () => ({ data, repairUsed: false, repairAttempts: 0 }));
+  try {
+    await assert.rejects(runStructuredPrompt({
+      asset: { ...plannerChapterPlanPrompt,
+        outputSchema: require("zod").z.object({ value: require("zod").z.string() }),
+        semanticRetryPolicy: { maxAttempts: 0 }, render: () => [],
+        postValidate: () => { throw new Error("contract rejected"); } },
+      promptInput: {},
+    }), error => {
+      assert.deepEqual(error.completedPromptResponse, { promptId: plannerChapterPlanPrompt.id, output: data });
+      assert.equal(Object.keys(error).includes("completedPromptResponse"), false);
+      return true;
+    });
+  } finally {
+    setPromptRunnerStructuredInvokerForTests();
+  }
+});
+
 test("runStructuredPrompt retries semantically after postValidate failure", async () => {
   resetPromptQualityTelemetryForTests();
   const originalSemanticRetryPolicy = plannerChapterPlanPrompt.semanticRetryPolicy;

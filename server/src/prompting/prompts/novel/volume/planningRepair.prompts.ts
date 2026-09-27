@@ -30,7 +30,7 @@ const commonRules = [
 // These assets do not resolve models; the coordinator must pass its explicit modelRoute to the runner.
 export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, PlanningRepairOutput> = {
   id: "novel.volume.planning_repair",
-  version: "v2",
+  version: "v3",
   taskType: "replan",
   mode: "structured",
   language: "zh",
@@ -43,6 +43,8 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
       "逐项解决 assessment 中的原始问题，用具体的章节职责和场景变化降低负载，而不是只改措辞。只能在允许窗口内保留、合并或移动职责。",
       "输出 {requiresUserDecision:boolean,reason:string,changes:[{chapterId,summary,purpose,exclusiveEvent,endingState,nextChapterEntryState,conflictLevel:number,revealLevel:number,taskSheet,mustAvoid,payoffRefs:string[],sceneCards:[],readerExperience:{}}],obligationMoves:[{obligation,fromChapterId,toChapterId,action,reason}]}。",
       "changes 必须对每个 allowedChapterIds 恰好返回一次完整的允许字段，包括无需变化的字段。不返回完整替换文档，不新增其他字段。",
+      "payoffRefs 是既有义务的稳定引用，不是可自由改写的问题摘要：原引用必须逐字保留，不可换成近义问句或新名称；仅可按 obligationMoves 在允许窗口内迁移到接收章，不能丢失。",
+      "长度为严格执行合同：taskSheet、summary 各最多600字符；purpose、exclusiveEvent、endingState、nextChapterEntryState、mustAvoid 各最多240字符。taskSheet 只写执行摘要，不重复完整场景卡；具体动作及必达义务保留在 sceneCards 中，不得为压缩文字而删除职责。其他字段严格遵守输出 schema 的长度和数组上限。",
       "sceneCards 沿用章节细纲场景结构，每章 3-8 场；每场包含唯一 key、title、purpose、mustAdvance:string[]、mustPreserve:string[]、entryState、exitState、forbiddenExpansion:string[]、正整数 targetWordCount、resistance、turn、emotionalShift、readerValue。",
       "readerExperience 沿用现有结构：readerQuestion、promisedReward、rewardLevel（只能 setup|partial|major）、protagonistWant、primaryResistance、keyTurn、emotionalShift、informationReveal、netChange、inheritedHookResponsibilities（最多4项）、endingHook。",
       "obligationMoves 记录实际义务的去向并给出具体 reason。action 只能 retain|merge|move：retain 的来源和目标必须是同章；move 必须是窗口内不同章；merge 允许同章、同一场景内合并职责，也允许窗口内跨章合并。账本必须与 changes 一致，不得凭空声称已保留职责。",

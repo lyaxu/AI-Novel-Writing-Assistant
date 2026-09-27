@@ -15,6 +15,13 @@ const STRING_LENGTH_CHECKS = new Set([
 ]);
 
 const relaxedSchemaCache = new WeakMap<AnySchema, AnySchema>();
+const strictContractSchemas = new WeakSet<AnySchema>();
+
+/** Keep executable contracts strict so format repair runs before post-validation. */
+export function preserveGeneratedContentConstraints<T extends AnySchema>(schema: T): T {
+  strictContractSchemas.add(schema);
+  return schema;
+}
 
 function getSchemaDef(schema: AnySchema): Record<string, unknown> | null {
   const candidate = schema as CloneableSchema;
@@ -45,6 +52,7 @@ function relaxStringSchema(schema: AnySchema, definition: Record<string, unknown
 }
 
 function relaxGeneratedContentSchemaInternal(schema: AnySchema): AnySchema {
+  if (strictContractSchemas.has(schema)) return schema;
   const cached = relaxedSchemaCache.get(schema);
   if (cached) {
     return cached;

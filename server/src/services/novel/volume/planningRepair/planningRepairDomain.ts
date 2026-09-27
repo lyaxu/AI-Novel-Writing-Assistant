@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { preserveGeneratedContentConstraints } from "../../../../llm/generatedContentSchema";
 import type { VolumeChapterPlan, VolumePlanDocument } from "@ai-novel/shared/types/novel";
 import { normalizeChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
 import { createChapterTaskSheetSchema } from "../chapterDetail/chapterDetailSchemas";
@@ -23,7 +24,7 @@ export const planningRepairChangeSchema = z.object({
   readerExperience: taskSheetShape.readerExperience,
 }).strict();
 
-export const planningRepairOutputSchema = z.object({
+export const planningRepairOutputSchema = preserveGeneratedContentConstraints(z.object({
   requiresUserDecision: z.boolean(),
   reason: requiredText,
   changes: z.array(planningRepairChangeSchema),
@@ -34,7 +35,7 @@ export const planningRepairOutputSchema = z.object({
     action: z.enum(["retain", "merge", "move"]),
     reason: requiredText,
   }).strict()),
-}).strict();
+}).strict());
 
 export const planningRepairReviewOutputSchema = z.object({
   usable: z.boolean(),

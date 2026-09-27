@@ -572,7 +572,12 @@ async function resolveStructuredOutput<I, O, R = O>(input: {
             postValidateFailureRecovered: true,
           };
         }
-        throw markPromptQualityFailure(error, "post_validate_failed");
+        const failure = error instanceof Error ? error : new Error(String(error));
+        Object.defineProperty(failure, "completedPromptResponse", {
+          value: { promptId: asset.id, output: currentResult.data },
+          configurable: true,
+        });
+        throw markPromptQualityFailure(failure, "post_validate_failed");
       }
 
       semanticRetryAttempts += 1;

@@ -27,6 +27,25 @@ const { PlanningRepairCoordinator, passedPlanningReview } = coordinatorExports;
 const { mapSemanticAssessmentToQualityGate } = require("../../shared/dist/types/chapterTaskSheetQuality.js");
 const incident = require("./fixtures/planningRepair-chapter3.json");
 
+test("completed invalid response is retained without pretending a transport call is pending", async () => {
+  const h = harness({ local: true });
+  const invalid = output(["c3"]);
+  invalid.changes[0].taskSheet = "a".repeat(601);
+  const invoke = async () => {
+    const error = new Error("taskSheet exceeds contract limit");
+    Object.defineProperty(error, "completedPromptResponse", { value: { promptId: "novel.volume.planning_repair", output: invalid } });
+    throw error;
+  };
+  await assert.rejects(new PlanningRepairCoordinator(h.store, h.gate, invoke).run(h.input), { code: "PLANNING_REPAIR_CONFIRMATION_REQUIRED" });
+  assert.equal(h.session.state.phase, "waiting_confirmation");
+  assert.equal(h.session.state.pendingOperation, undefined);
+  assert.equal(h.session.state.rounds, 1);
+  assert.equal(h.session.state.maxRounds, 2);
+  assert.deepEqual(h.session.state.history.at(-1).output, invalid);
+  assert.equal(h.session.state.history.at(-1).kind, "rejected_response");
+  assert.equal(h.commits, 0);
+});
+
 const pass = { status: "passed", verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is", issues: [], summary: "pass", repairGuidance: [], confidence: 0.9 };
 const reject = mapSemanticAssessmentToQualityGate(incident.assessment, "ai_copilot");
 const windowPass = { usable: true, safeToSync: true, requiresUserDecision: false, summary: "pass", issues: [] };

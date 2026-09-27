@@ -172,6 +172,17 @@ export class PlanningRepairCoordinator {
       }
     } catch (error) {
       if ((error as { code?: string })?.code === "PLANNING_REPAIR_CONFIRMATION_REQUIRED") throw error;
+      const completed = (error as { completedPromptResponse?: { promptId: string; output: unknown } })?.completedPromptResponse;
+      if (completed && session.state.pendingOperation) {
+        // A received but rejected response is evidence, never an approved candidate or a lost request.
+        await this.save(session, {
+          phase: "waiting_confirmation", pendingOperation: undefined,
+          technicalError: error instanceof Error ? error.message : String(error),
+          summary: "模型已返回，但规划响应未通过格式或合同校验；已保留响应与轮次，请修复后复核。",
+          history: [...session.state.history, { kind: "rejected_response", round: session.state.rounds, ...completed }],
+        });
+        throw new PlanningRepairConfirmationRequired(session.state.summary!);
+      }
       // Preserve the pending operation: an interrupted HTTP response is not permission to spend again.
       await this.save(session, {
         phase: "technical_failed", technicalError: error instanceof Error ? error.message : String(error),

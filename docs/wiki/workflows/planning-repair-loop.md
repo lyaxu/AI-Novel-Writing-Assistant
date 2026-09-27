@@ -82,3 +82,8 @@
 - 最终离线验证：规划修复、合同/事务、工作流通知/恢复/取消测试160项通过、1项跳过；导演恢复、JIT和章节同步补充回归60项通过。后端 TypeScript 编译与前端类型检查通过。
 - 服务重启后重新读取已提交候选，轮次仍为1/2，无额外模型调用；页面驾驶舱、进度条与修复面板均显示当前复核结论，没有把历史异常当作当前卡点。
 - 扩大检查的已知基线失败未混入通过数：服务端 `novelDirectorStructuredOutlinePersistence` 两项旧 `rebuild_projection` 断言，以及 `novelWorkflowContinue` 一项仍发送旧 `full_book_autopilot` 参数的断言（现行接口只接受 `resume / auto_execute_range / skip_quality_repair`）；客户端全套212项中206通过，6项旧进度面板/移动导航/设置路由契约断言失败。相关既有实现和断言未在本次改动中顺手重构。
+# 2026-09-27 Contract Validation Protection
+
+Planning repair output opts into strict generated-content constraints. The structured parser and post-validator must share the same schema, including the 600-character task sheet limit. Invalid output must enter bounded format repair before application, not silently pass a relaxed schema and fail later. This is not permission to increase chapter word budgets or discard obligations.
+
+A terminal post-validation failure carries a non-enumerable completed response for durable rejected-response history. It is not an approved candidate. Clear the pending operation only for this confirmed response; transport interruptions and persistence failures retain uncertainty safeguards. Preserve repair rounds and never replay rejected-response history as a successful repair.
