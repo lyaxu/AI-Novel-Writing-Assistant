@@ -1,6 +1,6 @@
 import type { ApiResponse } from "@ai-novel/shared/types/api";
 import type { DirectorCommandAcceptedResponse } from "@ai-novel/shared/types/directorRuntime";
-import type { DirectorContinuationMode } from "@ai-novel/shared/types/novelDirector";
+import type { DirectorContinuationMode, DirectorLLMOptions } from "@ai-novel/shared/types/novelDirector";
 import type {
   NovelWorkflowCheckpoint,
   NovelProductionExperience,
@@ -25,6 +25,17 @@ export async function continueNovelWorkflow(directorTaskId: string, payload?: {
   continuationMode?: DirectorContinuationMode;
 }) {
   const { data } = await apiClient.post<ApiResponse<DirectorCommandAcceptedResponse>>(`/novel-workflows/${directorTaskId}/continue`, payload ?? {});
+  return data;
+}
+
+export async function retryNovelWorkflow(
+  directorTaskId: string,
+  llm: Pick<DirectorLLMOptions, "provider" | "model" | "temperature">,
+) {
+  const { data } = await apiClient.post<ApiResponse<DirectorCommandAcceptedResponse>>(
+    `/novels/director/tasks/${directorTaskId}/commands`,
+    { commandType: "retry", payload: llm },
+  );
   return data;
 }
 

@@ -18,7 +18,7 @@ import {
   type DirectorRunMode,
   type DirectorWorldSetupMode,
 } from "@ai-novel/shared/types/novelDirector";
-import { bootstrapNovelWorkflow, continueNovelWorkflow } from "@/api/novelWorkflow";
+import { bootstrapNovelWorkflow, continueNovelWorkflow, retryNovelWorkflow } from "@/api/novelWorkflow";
 import {
   composeDirectorIdeaConstellation,
   confirmDirectorCandidate,
@@ -60,6 +60,7 @@ import {
 import { useNovelAutoDirectorCandidateMutations } from "../components/useNovelAutoDirectorCandidateMutations";
 import { hasCreationFoundationChanged } from "./creationFoundationPickerState";
 import type { AutoDirectorCreateDraft } from "./draft/autoDirectorCreateDraft";
+import { directorTaskPollingOptions } from "./directorTaskPolling";
 
 interface UseAutoDirectorCreateControllerInput {
   marketBriefId?: string;
@@ -293,14 +294,10 @@ export function useAutoDirectorCreateController(input: UseAutoDirectorCreateCont
   });
 
   const directorTaskQuery = useQuery({
+    ...directorTaskPollingOptions,
     queryKey: queryKeys.tasks.detail("novel_workflow", workflowTaskId || "none"),
     queryFn: () => getTaskDetail("novel_workflow", workflowTaskId),
     enabled: Boolean(workflowTaskId),
-    retry: false,
-    refetchInterval: (query) => {
-      const task = query.state.data?.data;
-      return task && ACTIVE_DIRECTOR_TASK_STATUSES.has(task.status) ? 2000 : false;
-    },
   });
 
   const latestBatch = batches.at(-1) ?? null;
@@ -525,10 +522,24 @@ export function useAutoDirectorCreateController(input: UseAutoDirectorCreateCont
       if (!taskId) {
         throw new Error("当前没有可继续的自动导演任务。");
       }
+      if (directorTask?.status === "failed" || directorTask?.status === "cancelled"
+        || (!directorTask?.resumeTarget?.novelId && directorTask?.pendingManualRecovery)) {
+        const currentLlm = useLLMStore.getState();
+        return retryNovelWorkflow(taskId, {
+          provider: currentLlm.provider,
+          model: currentLlm.model,
+          temperature: currentLlm.temperature,
+        });
+      }
       return continueNovelWorkflow(taskId, { continuationMode: "resume" });
     },
     onSuccess: async (response) => {
       const nextWorkflowTaskId = response.data?.taskId ?? directorTask?.id ?? workflowTaskId;
+      // Let the subsequent task refresh choose the final screen, including a
+      // candidate checkpoint that may already have completed.
+      setDialogMode("execution_progress");
+      setExecutionRequested(false);
+      setExecutionError("");
       if (nextWorkflowTaskId && nextWorkflowTaskId !== workflowTaskId) {
         setWorkflowTaskId(nextWorkflowTaskId);
         onWorkflowTaskChange?.(nextWorkflowTaskId);
@@ -550,8 +561,6 @@ export function useAutoDirectorCreateController(input: UseAutoDirectorCreateCont
         );
       }
       await Promise.allSettled(invalidations);
-      setDialogMode("execution_progress");
-      setExecutionError("");
       toast.success("已确认，AI 会继续推进。");
     },
     onError: (error) => {

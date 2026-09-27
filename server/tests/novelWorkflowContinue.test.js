@@ -16,6 +16,30 @@ function listen(server) {
   });
 }
 
+test("source workspace retry command forwards the currently selected custom model", { concurrency: false }, async () => {
+  const original = DirectorCommandService.prototype.enqueueRetryCommand;
+  const calls = [];
+  DirectorCommandService.prototype.enqueueRetryCommand = async function (input) {
+    calls.push(input);
+    return { commandId: "retry-selected", taskId: input.taskId, commandType: "retry", status: "queued" };
+  };
+  const server = http.createServer(createApp());
+  const port = await listen(server);
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/novels/director/tasks/failed-candidates/commands`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commandType: "retry", payload: { provider: "custom_k3", model: "kimi-k3", temperature: 0.7 } }),
+    });
+    assert.equal(response.status, 202);
+    assert.deepEqual(calls, [{ taskId: "failed-candidates", llmOverride: {
+      provider: "custom_k3", model: "kimi-k3", temperature: 0.7,
+    }, batchAlreadyStartedCount: undefined }]);
+  } finally {
+    DirectorCommandService.prototype.enqueueRetryCommand = original;
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test("novel workflow auto director route prefers the active auto director task over stale visible entries", { concurrency: false }, async () => {
   const calls = [];
   const originalFindActive = NovelWorkflowService.prototype.findActiveTaskByNovelAndLane;
@@ -112,7 +136,7 @@ test("novel workflow auto director route returns null when only historical visib
   }
 });
 
-test("novel workflow continue route accepts range and full-book continuation modes", { concurrency: false }, async () => {
+test("novel workflow continue route accepts range mode without silently expanding to a full book", { concurrency: false }, async () => {
   const calls = [];
   const originalEnqueue = DirectorCommandService.prototype.enqueueContinueCommand;
   const originalDetail = NovelWorkflowTaskAdapter.prototype.detail;
@@ -162,18 +186,12 @@ test("novel workflow continue route accepts range and full-book continuation mod
         continuationMode: "full_book_autopilot",
       }),
     });
-    assert.equal(fullBookResponse.status, 202);
+    assert.equal(fullBookResponse.status, 400);
     assert.deepEqual(calls, [
       {
         taskId: "workflow-auto-exec",
         input: {
           continuationMode: "auto_execute_range",
-        },
-      },
-      {
-        taskId: "workflow-auto-exec",
-        input: {
-          continuationMode: "full_book_autopilot",
         },
       },
     ]);

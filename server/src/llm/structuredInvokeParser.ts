@@ -372,6 +372,25 @@ export async function parseStructuredLlmRawContentDetailed<T>(
     fallbackAvailable: input.fallbackAvailable,
     fallbackUsed: input.fallbackUsed,
   });
+  if (reachedOutputLimit({
+    finishReason: input.finishReason,
+    maxTokens: input.maxTokens,
+    completionTokens: input.tokenUsage?.completionTokens,
+  })) {
+    const reasoningUsage = input.tokenUsage?.reasoningTokens;
+    throw buildStructuredError({
+      message: `[${input.label}] 模型输出达到额度上限（${input.maxTokens ?? input.tokenUsage?.completionTokens ?? "未知"} tokens）`
+        + (typeof reasoningUsage === "number" ? `，其中思考消耗 ${reasoningUsage} tokens` : "")
+        + (input.rawContent.trim() ? "，结果被截断。" : "，未返回可用答案。")
+        + "已停止自动重试；请调整输出预算或模型思考设置后手动重试。",
+      category: "output_limit",
+      strategy: input.strategy,
+      profile: input.profile,
+      reasoningForcedOff: input.reasoningForcedOff,
+      fallbackAvailable: input.fallbackAvailable,
+      fallbackUsed: input.fallbackUsed,
+    });
+  }
   if (!input.rawContent.trim()) {
     throw buildStructuredError({
       message: `[${input.label}] 模型没有返回可用内容，无法执行结构校验或 JSON 修复。`,
@@ -387,11 +406,6 @@ export async function parseStructuredLlmRawContentDetailed<T>(
   const initialParse = tryParseStructuredJsonValue(input.rawContent);
   const parseErrorMessage = "error" in initialParse ? initialParse.error : "";
   const parsed = "parsed" in initialParse ? initialParse.parsed : null;
-  const limitHint = reachedOutputLimit({
-    finishReason: input.finishReason,
-    maxTokens: input.maxTokens,
-    completionTokens: input.tokenUsage?.completionTokens,
-  }) ? `模型输出达到额度上限（${input.maxTokens ?? "未知"} tokens），结果被截断。` : "";
 
   const maxRepairAttempts = input.maxRepairAttempts ?? 1;
   if (parseErrorMessage) {
@@ -410,7 +424,7 @@ export async function parseStructuredLlmRawContentDetailed<T>(
       } catch (repairError) {
         if (attempt >= maxRepairAttempts) {
           throw buildStructuredError({
-            message: `[${input.label}] ${limitHint}JSON 解析失败且修复未成功。错误：${repairError instanceof Error ? repairError.message : String(repairError)}`,
+            message: `[${input.label}] JSON 解析失败且修复未成功。错误：${repairError instanceof Error ? repairError.message : String(repairError)}`,
             category: classifyStructuredOutputFailure({
               error: repairError,
               rawContent: input.rawContent,

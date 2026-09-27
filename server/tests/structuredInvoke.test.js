@@ -6,17 +6,17 @@ const factory = require("../dist/llm/factory.js");
 const structuredFallbackSettings = require("../dist/llm/structuredFallbackSettings.js");
 const { buildStructuredResponseFormat, resolveStructuredOutputProfile } = require("../dist/llm/structuredOutput.js");
 const structuredInvoke = require("../dist/llm/structuredInvoke.js");
+const { shouldRetryDirectorIdeaWithOriginalContext } = require("../dist/services/novel/director/idea/ideaContext.js");
 const { plannerOutputSchema } = require("../dist/services/planner/plannerSchemas.js");
 const { normalizePlannerOutput } = require("../dist/services/planner/PlannerService.js");
 
-test("truncated structured output gets bounded repair headroom and explicit limit diagnostics", async () => {
+test("truncated structured output stops without spending on JSON repair", async () => {
   const originalGetLLM = factory.getLLM;
   const budgets = [];
-  let failRepair = false;
   factory.getLLM = async (_provider, options) => {
     budgets.push(options.maxTokens);
     return {stream: async function* () {
-      yield {content: failRepair ? '{"value":"unfinished' : '{"value":"fixed"}', response_metadata: {finish_reason: failRepair ? "length" : "stop"}};
+      yield {content: '{"value":"fixed"}', response_metadata: {finish_reason: "stop"}};
     }};
   };
   const input = {
@@ -26,15 +26,79 @@ test("truncated structured output gets bounded repair headroom and explicit limi
     profile:resolveStructuredOutputProfile({provider:"deepseek"}),
   };
   try {
-    assert.deepEqual((await structuredInvoke.parseStructuredLlmRawContentDetailed(input)).data, {value:"fixed"});
-    failRepair = true;
     await assert.rejects(structuredInvoke.parseStructuredLlmRawContentDetailed(input), error => {
       assert.match(error.message, /3200 tokens/);
-      assert.match(error.message, /6400 tokens/);
-      return error.category === "incomplete_json";
+      return error.category === "output_limit";
     });
-    assert.deepEqual(budgets,[6400,6400]);
+    assert.deepEqual(budgets,[]);
   } finally { factory.getLLM = originalGetLLM; }
+});
+
+test("output limits stop native strategy fallback, transport retries and fallback models", async () => {
+  const originalResolve = factory.resolveLLMClientOptions;
+  const originalCreate = factory.createLLMFromResolvedOptions;
+  const originalFallback = structuredFallbackSettings.getStructuredFallbackSettings;
+  const originalRepair = factory.getLLM;
+  const calls = [];
+  let currentOutput = "";
+  factory.resolveLLMClientOptions = async (provider, options = {}) => ({
+    ...options, provider, providerName: provider, apiKey: "test-key",
+    model: options.model, temperature: 1, baseURL: "https://api.moonshot.cn/v1",
+    structuredProfile: resolveStructuredOutputProfile({ provider, model: options.model, baseURL: "https://api.moonshot.cn/v1" }),
+    reasoningForcedOff: false,
+  });
+  factory.createLLMFromResolvedOptions = (options) => ({
+    stream: async function* () {
+      calls.push({ provider: options.provider, strategy: options.structuredStrategy });
+      yield {
+        content: currentOutput,
+        response_metadata: { finish_reason: "length" },
+        usage_metadata: { input_tokens: 6216, output_tokens: 10000, total_tokens: 16216, output_token_details: { reasoning: 9997 } },
+      };
+    },
+  });
+  factory.getLLM = async () => { throw new Error("must not repair an output limit"); };
+  structuredFallbackSettings.getStructuredFallbackSettings = async () => ({
+    enabled: true, provider: "deepseek", model: "deepseek-chat", retryCount: 3,
+  });
+  try {
+    for (const raw of ["", '{"value":"unfinished']) {
+      currentOutput = raw;
+      calls.length = 0;
+      await assert.rejects(structuredInvoke.invokeStructuredLlmDetailed({
+        provider: "custom_k3", model: "kimi-k3", maxTokens: 10000,
+        label: "test.kimi.reasoning-limit", schema: z.object({ value: z.string() }),
+        systemPrompt: "Return JSON only", userPrompt: "Return a value", maxRepairAttempts: 2,
+      }), error => {
+        assert.equal(error.category, "output_limit", error.message);
+        assert.equal(shouldRetryDirectorIdeaWithOriginalContext(error), false);
+        assert.match(error.message, /10000 tokens/);
+        assert.match(error.message, /9997 tokens/);
+        assert.equal(structuredInvoke.summarizeStructuredOutputFailure({ error: error.message }).category, "output_limit");
+        return true;
+      });
+      assert.deepEqual(calls, [{ provider: "custom_k3", strategy: "json_object" }]);
+    }
+  } finally {
+    factory.resolveLLMClientOptions = originalResolve;
+    factory.createLLMFromResolvedOptions = originalCreate;
+    structuredFallbackSettings.getStructuredFallbackSettings = originalFallback;
+    factory.getLLM = originalRepair;
+  }
+});
+
+test("usage-only output limit detection preserves normal stop and valid results", async () => {
+  const input = {
+    schema: z.object({ value: z.string() }), label: "test.limit-metadata",
+    maxTokens: 10000, tokenUsage: { promptTokens: 10, completionTokens: 10000, totalTokens: 10010 },
+    strategy: "prompt_json", profile: resolveStructuredOutputProfile({ provider: "custom_k3" }),
+  };
+  await assert.rejects(structuredInvoke.parseStructuredLlmRawContentDetailed({ ...input, rawContent: "" }),
+    error => error.category === "output_limit");
+  const result = await structuredInvoke.parseStructuredLlmRawContentDetailed({
+    ...input, finishReason: "stop", rawContent: '{"value":"complete"}',
+  });
+  assert.equal(result.data.value, "complete");
 });
 
 test("parseStructuredLlmRawContentDetailed recovers when repair output is truncated but completable", async () => {

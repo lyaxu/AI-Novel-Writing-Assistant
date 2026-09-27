@@ -53,6 +53,17 @@ test("candidate generation failures expose a quick retry on the current page", (
   assert.match(progressPanel, /isConfirmingAndContinuing \? "重试中\.\.\."/);
 });
 
+test("failed candidate retry sends the live selected model through the retry command", () => {
+  const controller = read("../src/pages/novels/autoDirector/useAutoDirectorCreateController.ts");
+  const api = read("../src/api/novelWorkflow.ts");
+  assert.match(controller, /directorTask\?\.status === "failed" \|\| directorTask\?\.status === "cancelled"/);
+  assert.match(controller, /const currentLlm = useLLMStore\.getState\(\)/);
+  assert.match(controller, /!directorTask\?\.resumeTarget\?\.novelId && directorTask\?\.pendingManualRecovery/);
+  assert.match(controller, /retryNovelWorkflow\(taskId, \{\s*provider: currentLlm.provider,\s*model: currentLlm.model,\s*temperature: currentLlm.temperature/);
+  assert.match(api, /commandType: "retry", payload: llm/);
+  assert.match(controller, /continueNovelWorkflow\(taskId, \{ continuationMode: "resume" \}\)/);
+});
+
 test("director basic setup offers an AI-recommended optional power system", () => {
   assert.match(basicSetupStage, />战力体系<\/FieldLabel>/);
   assert.match(basicSetupStage, /POWER_SYSTEM_OPTIONS/);

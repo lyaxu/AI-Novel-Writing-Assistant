@@ -78,6 +78,7 @@ function createHarness(task = createTask(), pipelineJob = null) {
   const jobUpdates = [];
   const directorEvents = [];
   const taskUpdates = [];
+  const llmOverrides = [];
   const originalDirectorRunCommand = {
     findFirst: prisma.directorRunCommand.findFirst,
     create: prisma.directorRunCommand.create,
@@ -115,7 +116,9 @@ function createHarness(task = createTask(), pipelineJob = null) {
       task.updatedAt = new Date(task.updatedAt.getTime() + 1);
       return task;
     },
-    async applyAutoDirectorLlmOverride() {},
+    async applyAutoDirectorLlmOverride(taskId, options) {
+      llmOverrides.push({ taskId, options, statusBeforeRetry: task.status });
+    },
     async cancelTask() {
       task.status = "cancelled";
       task.cancelRequestedAt = new Date();
@@ -303,6 +306,7 @@ function createHarness(task = createTask(), pipelineJob = null) {
 
   return {
     commands,
+    llmOverrides,
     bootstraps,
     requeued,
     task,
@@ -337,6 +341,19 @@ test("director command service reuses active continue commands", async () => {
   } finally {
     harness.restore();
   }
+});
+
+test("candidate retry persists selected model before requeuing the same task", async () => {
+  const harness = createHarness(createTask({ status: "failed", novelId: null }));
+  const llm = { provider: "custom_k3", model: "kimi-k3", temperature: 0.7 };
+  try {
+    const accepted = await harness.service.enqueueRetryCommand({ taskId: "task-1", llmOverride: llm });
+    assert.deepEqual(harness.llmOverrides, [{ taskId: "task-1", options: llm, statusBeforeRetry: "failed" }]);
+    assert.equal(accepted.commandType, "retry");
+    assert.equal(accepted.taskId, "task-1");
+    assert.equal(harness.commands.length, 1);
+    assert.equal(JSON.parse(harness.commands[0].payloadJson).forceResume, true);
+  } finally { harness.restore(); }
 });
 
 test("director command service queues candidate confirmation as a serialized command", async () => {

@@ -295,6 +295,11 @@ async function invokeStructuredAttempt<T>(input: {
       },
     });
     const rawContent = collected.rawContent;
+    // Keep usage visible even when parsing fails before producing a result.
+    liveSession.usage(collected.tokenUsage ? {
+      ...collected.tokenUsage,
+      reasoningTokens: collected.tokenUsage.reasoningTokens ?? null,
+    } : null);
     logStructuredInvokeEvent({
       event: "invoke_done",
       label: input.baseInput.label,
@@ -409,6 +414,9 @@ async function tryStructuredStrategies<T>(input: {
         fallbackAvailable: input.fallbackAvailable,
         fallbackUsed: input.fallbackUsed,
       });
+      if (lastError.category === "output_limit") {
+        throw lastError;
+      }
       if (lastError.category === "transport_error" && !lastError.retryWithNextStrategy) {
         break;
       }
@@ -500,6 +508,9 @@ export async function invokeStructuredLlmDetailed<T>(input: StructuredInvokeInpu
       retryCount: transportRetryCount,
     });
   } catch (primaryError) {
+    if (primaryError instanceof StructuredOutputError && primaryError.category === "output_limit") {
+      throw primaryError;
+    }
     if (!fallbackEnabled || !fallbackSettings) {
       throw primaryError;
     }
@@ -556,6 +567,7 @@ export function summarizeStructuredOutputFailure(input: {
     ? "模型输出的 JSON 被截断或不完整，可能是输出被截断或 token 上限不足；建议先重试，必要时切换更强模型或启用结构化备用模型。"
     : "模型输出的 JSON 被截断或不完整，可能是输出被截断或 token 上限不足；建议先重试，必要时切换更强模型。";
   const summaryMap: Record<StructuredOutputErrorCategory, string> = {
+    output_limit: "模型输出额度耗尽，已停止自动重试；请调整输出预算或模型思考设置后手动重试。",
     unsupported_native_json: `当前模型端点不兼容原生 JSON 输出${suffix}`,
     thinking_pollution: `当前模型的思考内容污染了结构化输出${suffix}`,
     incomplete_json: incompleteJsonSummary,

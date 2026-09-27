@@ -57,5 +57,7 @@ export function buildDirectorIdeaContextSummary(input: DirectorIdeaContextReques
 }
 
 export function shouldRetryDirectorIdeaWithOriginalContext(error: unknown): error is StructuredOutputError {
-  return error instanceof StructuredOutputError && error.category !== "transport_error";
+  return error instanceof StructuredOutputError
+    && error.category !== "transport_error"
+    && error.category !== "output_limit";
 }

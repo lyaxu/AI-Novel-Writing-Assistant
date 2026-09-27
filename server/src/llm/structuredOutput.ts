@@ -7,6 +7,7 @@ import { isDeepSeekThinkingModeProvider, isGlmThinkingModeProvider } from "./rea
 export type StructuredExecutionMode = "plain" | "structured";
 export type StructuredOutputStrategy = "json_schema" | "json_object" | "prompt_json";
 export type StructuredOutputErrorCategory =
+  | "output_limit"
   | "unsupported_native_json"
   | "thinking_pollution"
   | "incomplete_json"
@@ -434,6 +435,7 @@ export function extractStructuredOutputErrorCategory(message?: string | null): S
   }
   const category = match[1].toLowerCase() as StructuredOutputErrorCategory;
   return [
+    "output_limit",
     "unsupported_native_json",
     "thinking_pollution",
     "incomplete_json",

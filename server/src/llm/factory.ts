@@ -296,6 +296,15 @@ export async function resolveLLMClientOptions(
   const requestProtocol = options.requestProtocol === "anthropic" ? "anthropic" : "openai_compatible";
   const structuredStrategy = options.structuredStrategy;
   const executionMode = options.executionMode ?? "plain";
+  // K3 is thinking-only. Limit effort for book candidates, not for other writing tasks.
+  // https://platform.kimi.com/docs/guide/kimi-k3-quickstart
+  const kimiCandidateBudget = requestProtocol === "openai_compatible"
+    && executionMode === "structured"
+    && options.promptMeta?.promptId === "novel.director.candidates"
+    && model.toLowerCase() === "kimi-k3"
+    && ["api.moonshot.cn", "api.moonshot.ai"].includes(new URL(baseURL).hostname)
+    ? 32_768
+    : undefined;
   const structuredProfile = executionMode === "structured"
     ? resolveStructuredOutputProfile({
       provider: resolvedProvider,
@@ -314,11 +323,12 @@ export async function resolveLLMClientOptions(
       && structuredProfile.supportsReasoningToggle,
   );
   const reasoningEnabled = shouldForceDisableReasoning ? false : requestedReasoningEnabled;
-  let effectiveMaxTokens = resolvedMaxTokens;
+  let effectiveMaxTokens = kimiCandidateBudget ?? resolvedMaxTokens;
   if (structuredProfile && usesNativeStructured && structuredProfile.omitMaxTokensForNativeStructured) {
     effectiveMaxTokens = undefined;
   } else if (
-    structuredProfile
+    !kimiCandidateBudget
+    && structuredProfile
     && typeof structuredProfile.safeStructuredMaxTokens === "number"
     && typeof effectiveMaxTokens === "number"
   ) {
@@ -342,6 +352,10 @@ export async function resolveLLMClientOptions(
   const modelKwargs = {
     ...(reasoningBehavior.modelKwargs ?? {}),
     ...baseModelKwargs,
+    ...(kimiCandidateBudget ? {
+      reasoning_effort: "low",
+      max_completion_tokens: kimiCandidateBudget,
+    } : {}),
   };
 
   return {
@@ -356,8 +370,8 @@ export async function resolveLLMClientOptions(
     timeoutMs,
     concurrencyLimit,
     requestIntervalMs,
-    reasoningEnabled: reasoningBehavior.reasoningEnabled,
-    reasoningEffort: reasoningBehavior.reasoningEffort,
+    reasoningEnabled: kimiCandidateBudget ? true : reasoningBehavior.reasoningEnabled,
+    reasoningEffort: kimiCandidateBudget ? "low" : reasoningBehavior.reasoningEffort,
     modelKwargs: Object.keys(modelKwargs).length > 0 ? modelKwargs : undefined,
     includeRawResponse: reasoningBehavior.includeRawResponse,
     requestProtocol,
@@ -400,7 +414,7 @@ export function createLLMFromResolvedOptions(resolved: ResolvedLLMClientOptions)
       model: resolved.model,
       modelName: resolved.model,
       temperature: resolved.temperature,
-      maxTokens: resolved.maxTokens,
+      maxTokens: resolved.modelKwargs?.max_completion_tokens != null ? undefined : resolved.maxTokens,
       timeout: resolved.timeoutMs,
       maxRetries: 0,
       modelKwargs: resolved.modelKwargs,
