@@ -3,12 +3,12 @@ const assert = require("node:assert/strict");
 
 const { createLLMFromResolvedOptions, resolveLLMClientOptions, setProviderSecretCache } = require("../dist/llm/factory.js");
 
-test("official K3 book candidates use low effort and a bounded native completion budget", async () => {
+test("official K3 structured planning reserves reasoning budget without changing prose calls", async () => {
   const provider = "custom_k3_policy_test";
   setProviderSecretCache(provider, { key: "fake-test-key", reasoningEnabled: false, reasoningEffort: "max" });
   const options = {
     model: "kimi-k3", baseURL: "https://api.moonshot.cn/v1",
-    executionMode: "structured", structuredStrategy: "json_object", maxTokens: 10000,
+    executionMode: "structured", structuredStrategy: "json_object", maxTokens: 1680, taskType: "planner",
     promptMeta: { promptId: "novel.director.candidates", promptVersion: "v3" },
   };
   try {
@@ -16,6 +16,8 @@ test("official K3 book candidates use low effort and a bounded native completion
       ["https://api.moonshot.cn/v1", "novel.director.candidates"],
       ["https://api.moonshot.ai/v1", "novel.director.candidates"],
       ["https://api.moonshot.cn/v1", "novel.world.generate_from_theme"],
+      ["https://api.moonshot.cn/v1", "novel.volume.chapter_list"],
+      ["https://api.moonshot.cn/v1", "novel.volume.chapter_detail"],
     ]) {
       const resolved = await resolveLLMClientOptions(provider, { ...options, baseURL, promptMeta: { ...options.promptMeta, promptId } });
       assert.equal(resolved.reasoningEnabled, true);
@@ -27,9 +29,13 @@ test("official K3 book candidates use low effort and a bounded native completion
       assert.equal(params.max_completion_tokens, 32768);
       assert.equal(params.max_tokens, undefined);
     }
+    const review = await resolveLLMClientOptions(provider, { ...options, taskType: "review", promptMeta: { promptId: "novel.volume.strategy.critique" } });
+    assert.equal(review.maxTokens, 32768);
+    assert.notEqual(review.reasoningEffort, "low");
+    const larger = await resolveLLMClientOptions(provider, { ...options, maxTokens: 65536 });
+    assert.equal(larger.maxTokens, 65536);
     for (const changes of [
-      { promptMeta: { promptId: "novel.chapter.writer" } },
-      { promptMeta: { promptId: "novel.director.candidates.patch" } },
+
       { executionMode: "plain" },
       { model: "kimi-k2.5" },
       { requestProtocol: "anthropic" },

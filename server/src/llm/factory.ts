@@ -296,15 +296,19 @@ export async function resolveLLMClientOptions(
   const requestProtocol = options.requestProtocol === "anthropic" ? "anthropic" : "openai_compatible";
   const structuredStrategy = options.structuredStrategy;
   const executionMode = options.executionMode ?? "plain";
-  // Bound K3 preparation calls without changing prose-writing model preferences.
+  // K3 counts reasoning and answer against one completion budget. Legacy answer-only
+  // budgets must not consume the entire request before structured data is emitted.
   // https://platform.kimi.com/docs/guide/kimi-k3-quickstart
-  const kimiCandidateBudget = requestProtocol === "openai_compatible"
+  const kimiStructuredBudget = requestProtocol === "openai_compatible"
     && executionMode === "structured"
-    && ["novel.director.candidates", "novel.world.generate_from_theme"].includes(options.promptMeta?.promptId ?? "")
     && model.toLowerCase() === "kimi-k3"
     && ["api.moonshot.cn", "api.moonshot.ai"].includes(new URL(baseURL).hostname)
-    ? 32_768
+    ? Math.max(32_768, resolvedMaxTokens ?? 0)
     : undefined;
+  const kimiPlanningCall = kimiStructuredBudget != null && (
+    ["planner", "outline_planning", "replan"].includes(options.taskType ?? "")
+    || ["novel.director.candidates", "novel.world.generate_from_theme"].includes(options.promptMeta?.promptId ?? "")
+  );
   const structuredProfile = executionMode === "structured"
     ? resolveStructuredOutputProfile({
       provider: resolvedProvider,
@@ -323,11 +327,11 @@ export async function resolveLLMClientOptions(
       && structuredProfile.supportsReasoningToggle,
   );
   const reasoningEnabled = shouldForceDisableReasoning ? false : requestedReasoningEnabled;
-  let effectiveMaxTokens = kimiCandidateBudget ?? resolvedMaxTokens;
+  let effectiveMaxTokens = kimiStructuredBudget ?? resolvedMaxTokens;
   if (structuredProfile && usesNativeStructured && structuredProfile.omitMaxTokensForNativeStructured) {
     effectiveMaxTokens = undefined;
   } else if (
-    !kimiCandidateBudget
+    !kimiStructuredBudget
     && structuredProfile
     && typeof structuredProfile.safeStructuredMaxTokens === "number"
     && typeof effectiveMaxTokens === "number"
@@ -352,9 +356,9 @@ export async function resolveLLMClientOptions(
   const modelKwargs = {
     ...(reasoningBehavior.modelKwargs ?? {}),
     ...baseModelKwargs,
-    ...(kimiCandidateBudget ? {
-      reasoning_effort: "low",
-      max_completion_tokens: kimiCandidateBudget,
+    ...(kimiStructuredBudget ? {
+      ...(kimiPlanningCall ? { reasoning_effort: "low" } : {}),
+      max_completion_tokens: kimiStructuredBudget,
     } : {}),
   };
 
@@ -370,8 +374,8 @@ export async function resolveLLMClientOptions(
     timeoutMs,
     concurrencyLimit,
     requestIntervalMs,
-    reasoningEnabled: kimiCandidateBudget ? true : reasoningBehavior.reasoningEnabled,
-    reasoningEffort: kimiCandidateBudget ? "low" : reasoningBehavior.reasoningEffort,
+    reasoningEnabled: kimiStructuredBudget ? true : reasoningBehavior.reasoningEnabled,
+    reasoningEffort: kimiPlanningCall ? "low" : reasoningBehavior.reasoningEffort,
     modelKwargs: Object.keys(modelKwargs).length > 0 ? modelKwargs : undefined,
     includeRawResponse: reasoningBehavior.includeRawResponse,
     requestProtocol,

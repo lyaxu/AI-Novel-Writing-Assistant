@@ -21,16 +21,14 @@ persists the override before requeuing the same task. Ordinary continuation of
 an approval checkpoint retains resume semantics and must not reset planning repair
 budgets or expand the chapter range.
 
-Official Moonshot `kimi-k3` book candidate requests (`novel.director.candidates`)
-use `reasoning_effort=low` and `max_completion_tokens=32768`. This is the total
-reasoning-plus-answer ceiling, not a target prose length or a guarantee of success.
-K3 cannot disable thinking. See the [official model guide](https://platform.kimi.com/docs/guide/kimi-k3-quickstart).
-The adapter recognizes exact official API hosts, not custom gateway names. It
-does not send both `max_tokens` and `max_completion_tokens`. Diagnostics retain
-the effective budget. Format repair and semantic retry with the same prompt ID
-retain the preparation policy; other prompts, models and provider settings are
-unchanged. The earlier generic 10,000-token candidate budget still applies where
-the official K3 policy does not match. Output-limit failures stop after one call.
+Official Moonshot `kimi-k3` structured requests use at least 32768 total completion
+tokens, preserving a larger explicitly requested budget. K3 counts reasoning and
+answer together; legacy answer-only budgets (for example 1680 for a short chapter
+list) can otherwise be exhausted entirely by reasoning. Planning and replanning
+calls use low reasoning effort; review effort preferences and plain prose calls
+remain unchanged. The adapter matches exact official API hosts and never sends
+both `max_tokens` and `max_completion_tokens`. Format repair retains the policy.
+An output-limit response still stops instead of silently starting another call.
 
 ## 世界准备与重试状态
 
