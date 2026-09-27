@@ -1,3 +1,12 @@
+# Local Continuity Entry Point
+
+- Read this entire `AGENTS.md` from disk on takeover; it exceeds the default automatic instruction byte limit, so the injected excerpt alone may omit later rules.
+- On takeover or after losing task context, read `docs/handoffs/PROJECT_CONTEXT.md`, then `docs/handoffs/CURRENT.md` and its linked snapshot before application changes.
+- Verify the actual repository root, branch, HEAD and dirty files against the handoff. Preserve uncommitted work; never switch to `master` or another checkout just because an older note names it.
+- At a completed milestone in this ongoing local optimization work, update the handoff when requested or when preparing a recommended window transition. Keep stable constraints separate from time-sensitive task state; distinguish verified results from prior-session reports.
+- Do not automatically start generation, select a candidate, commit/push, or create a new task when merely receiving a handoff. State the next bounded action and follow the latest user request.
+- Use the global `thread-handoff-packager` skill for packaging/resuming. The linked documents are project continuity records, not guaranteed automatic personal-memory loading.
+
 # Safety Rules
 
 ## Data Protection (Highest Priority)
