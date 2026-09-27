@@ -213,6 +213,69 @@ test("pipeline recovery gives an already-reserved chapter no second automatic at
   }
 });
 
+const pipelineIssueGovernance = require("../../dist/services/novel/production/issueGovernance/PipelineIssueGovernance.js");
+
+test("output exhaustion fails once without AI classification or another writer attempt", async () => {
+  const original = pipelineIssueGovernance.reportPipelineIssue;
+  let reports = 0;
+  pipelineIssueGovernance.reportPipelineIssue = async () => { reports += 1; throw new Error("must not classify output exhaustion"); };
+  const harness = createExecutorHarness({ runChapter: async () => {
+    throw Object.assign(new Error("模型输出额度耗尽，已停止自动重试"), { code: "LLM_OUTPUT_LIMIT" });
+  } });
+  try {
+    await harness.execute();
+    assert.equal(reports, 0);
+    assert.equal(harness.chapterCalls, 1);
+    assert.deepEqual(harness.claims, []);
+    assert.equal(harness.jobState.status, "failed");
+    assert.match(harness.jobState.error, /额度耗尽/);
+  } finally { harness.restore(); pipelineIssueGovernance.reportPipelineIssue = original; }
+});
+
+for (const timing of ["before classification", "during classification"]) {
+  test(`cancellation ${timing} prevents AI classification or its retry action`, async () => {
+    const original = pipelineIssueGovernance.reportPipelineIssue;
+    let reports = 0;
+    let harness;
+    const cancel = () => {
+      harness.jobState.status = "cancelled";
+      harness.jobState.cancelRequestedAt = new Date();
+    };
+    pipelineIssueGovernance.reportPipelineIssue = async input => {
+      reports += 1;
+      cancel();
+      await input.applyAction({ action: "auto_retry" });
+      return { decision: { action: "auto_retry" } };
+    };
+    harness = createExecutorHarness({
+      runChapter: async () => {
+        if (timing === "before classification") cancel();
+        throw new Error("late planning response cannot be saved on a cancelled task");
+      },
+    });
+    try {
+      await harness.execute();
+      assert.equal(reports, timing === "before classification" ? 0 : 1);
+      assert.equal(harness.chapterCalls, 1);
+      assert.deepEqual(harness.claims, []);
+      assert.equal(harness.jobState.status, "cancelled");
+      assert.equal(harness.updates.some(update => ["failed", "succeeded"].includes(update.data.status)), false);
+    } finally { harness.restore(); pipelineIssueGovernance.reportPipelineIssue = original; }
+  });
+}
+
+test("an active failing job still reaches issue governance", async () => {
+  const original = pipelineIssueGovernance.reportPipelineIssue;
+  let reports = 0;
+  pipelineIssueGovernance.reportPipelineIssue = async () => { reports += 1; return null; };
+  const harness = createExecutorHarness({ used: 1, runChapter: async () => { throw new Error("ordinary provider failure"); } });
+  try {
+    await harness.execute();
+    assert.ok(reports > 0);
+    assert.equal(harness.jobState.status, "failed");
+  } finally { harness.restore(); pipelineIssueGovernance.reportPipelineIssue = original; }
+});
+
 test("pipeline does not add an outer retry after repair reserved its attempt and failed", async () => {
   const harness = createExecutorHarness({
     used: 0,

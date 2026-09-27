@@ -342,7 +342,10 @@ export class ChapterWritingGraph {
     return {
       stream: streamed.stream as AsyncIterable<BaseMessageChunk>,
       onDone: async (fullContent: string) => {
-        const completed = await streamed.complete.catch(() => null);
+        const completed = await streamed.complete.catch((error) => {
+          if (error && typeof error === "object" && error.code === "LLM_OUTPUT_LIMIT") throw error;
+          return null;
+        });
         const rawContent = completed?.output ?? fullContent;
         const normalized = await this.continuityNode(
           input.novelId,

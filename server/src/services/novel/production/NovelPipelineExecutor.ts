@@ -275,6 +275,7 @@ export class NovelPipelineExecutor {
       attempt: number;
       onRetry?: () => Promise<void>;
     }): Promise<DirectorIssueAction | null> => {
+      await this.ensurePipelineNotCancelled(jobId);
       let appliedAction: DirectorIssueAction | null = null;
       const result = await reportPipelineIssue({
         governance: issueGovernance,
@@ -293,6 +294,7 @@ export class NovelPipelineExecutor {
         model: runtimePayload.model,
         temperature: runtimePayload.temperature,
         applyAction: async (decision) => {
+          await this.ensurePipelineNotCancelled(jobId);
           appliedAction = decision.action;
           if (decision.action === "auto_retry") {
             if (!input.onRetry) {
@@ -548,6 +550,9 @@ export class NovelPipelineExecutor {
                 );
                 break;
               } catch (error) {
+                if (error && typeof error === "object" && "code" in error && error.code === "LLM_OUTPUT_LIMIT") {
+                  throw error;
+                }
                 if (error instanceof PipelineExecutionLeaseLostError) {
                   throw error;
                 }
@@ -819,6 +824,14 @@ export class NovelPipelineExecutor {
         }).catch(() => {});
       });
     } catch (error) {
+      // A late provider or persistence error may conceal an already cancelled job.
+      try {
+        await this.ensurePipelineNotCancelled(jobId);
+      } catch (stopError) {
+        if (stopError instanceof PipelineExecutionLeaseLostError
+          || (stopError instanceof Error && stopError.message === "PIPELINE_CANCELLED")) error = stopError;
+        else throw stopError;
+      }
       if (error instanceof PipelineExecutionLeaseLostError) {
         logPipelineWarn("任务执行租约已转移，旧执行者停止写入", { jobId, novelId });
         return;
@@ -862,6 +875,14 @@ export class NovelPipelineExecutor {
       }
 
       const message = error instanceof Error ? error.message : "流水线执行失败";
+      if (error && typeof error === "object" && "code" in error && error.code === "LLM_OUTPUT_LIMIT") {
+        await this.updateJobSafe(jobId, {
+          status: "failed", error: message, finishedAt: new Date(),
+          payload: this.stringifyPipelinePayload({ ...runtimePayload, qualityAlertDetails, replanAlertDetails, recoverableRepairDetails }),
+        });
+        void novelEventBus.emit({ type: "pipeline:completed", payload: { novelId, jobId, status: "failed" } }).catch(() => {});
+        return;
+      }
       if (isChapterEmptyContentError(error)) {
         logPipelineError("任务因章节空正文失败", {
           jobId,
@@ -875,7 +896,9 @@ export class NovelPipelineExecutor {
           rawContentLength: error.details.rawLength,
         });
       }
-      const governedAction = await applyGovernedIssue({
+      let governedAction: DirectorIssueAction | null;
+      try {
+        governedAction = await applyGovernedIssue({
         issueCode: error instanceof PipelineIssueFailure
           ? error.issueCode
           : error instanceof ChapterContentPersistenceError
@@ -893,7 +916,13 @@ export class NovelPipelineExecutor {
         chapterId: error instanceof PipelineIssueFailure ? error.chapterId : undefined,
         chapterOrder: error instanceof PipelineIssueFailure ? error.chapterOrder : undefined,
         attempt: issueGovernance?.policy.maxAutomaticRetries ?? maxRetries,
-      });
+        });
+      } catch (stopError) {
+        // Cancellation/lease loss during classification must not publish a failure or retry.
+        if (stopError instanceof PipelineExecutionLeaseLostError
+          || (stopError instanceof Error && stopError.message === "PIPELINE_CANCELLED")) return;
+        throw stopError;
+      }
       if (governedAction) {
         logPipelineError("任务已按问题策略收束", {
           jobId,

@@ -21,14 +21,20 @@ persists the override before requeuing the same task. Ordinary continuation of
 an approval checkpoint retains resume semantics and must not reset planning repair
 budgets or expand the chapter range.
 
-Official Moonshot `kimi-k3` structured requests use at least 32768 total completion
+Official Moonshot `kimi-k3` requests use at least 32768 total completion
 tokens, preserving a larger explicitly requested budget. K3 counts reasoning and
 answer together; legacy answer-only budgets (for example 1680 for a short chapter
 list) can otherwise be exhausted entirely by reasoning. Planning and replanning
-calls use low reasoning effort; review effort preferences and plain prose calls
-remain unchanged. The adapter matches exact official API hosts and never sends
+calls use low reasoning effort. Prose paths explicitly requesting reasoning off
+use low effort because K3 cannot disable reasoning; explicit deep-writing and review
+effort preferences remain unchanged. The adapter matches exact official API hosts and never sends
 both `max_tokens` and `max_completion_tokens`. Format repair retains the policy.
 An output-limit response still stops instead of silently starting another call.
+Text and structured streaming must check the finish reason before treating an empty
+answer as a compatibility failure. Text exhaustion carries `LLM_OUTPUT_LIMIT` through
+writer completion and the pipeline, publishes usage, and fails without AI fault
+classification or an automatic writer retry. A cancelled job must also be checked
+before fault classification and again before applying the returned decision.
 
 ## 世界准备与重试状态
 

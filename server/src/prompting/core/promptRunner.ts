@@ -32,6 +32,8 @@ import {
 } from "./promptQualityTelemetry";
 import { appendStructuredOutputHintMessages } from "./structuredOutputHint";
 import { captureStreamOutput, observeStreamCompletion } from "./streaming/promptStreamCapture";
+import { extractFinishReason } from "../../platform/llm/streaming/responseDiagnostics";
+import { assertPromptOutputWithinLimit } from "./streaming/promptOutputLimit";
 import type {
   PromptAsset,
   PromptExecutionOptions,
@@ -846,6 +848,7 @@ export async function runTextPrompt<I>(input: {
     liveSession.phase("streaming", "模型正在返回内容");
     const stream = await llm.stream(messages, buildPromptCallOptions(input.options));
     let rawOutput = "";
+    let finishReason: string | null = null;
     let tokenUsage: LlmTokenUsageSnapshot | null = null;
     const reasoningCollector = new ReasoningStreamCollector();
     for await (const chunk of stream) {
@@ -854,8 +857,12 @@ export async function runTextPrompt<I>(input: {
       liveSession.delta(content);
       liveSession.reasoning(reasoningCollector.push(chunk, content));
       tokenUsage = mergeStreamTokenUsage(tokenUsage, extractLlmTokenUsage(chunk));
+      finishReason = extractFinishReason(chunk) ?? finishReason;
     }
     liveSession.reasoning(reasoningCollector.flush());
+    liveSession.usage(tokenUsage ? { ...tokenUsage, reasoningTokens: tokenUsage.reasoningTokens ?? null } : null);
+    assertPromptOutputWithinLimit({ finishReason, tokenUsage,
+      maxTokens: getResolvedLLMClientOptionsFromInstance(llm)?.maxTokens ?? input.options?.maxTokens });
     liveSession.phase("validating", "正在整理生成结果");
     const output = applyPromptPostValidate({
       asset: input.asset,
@@ -863,10 +870,6 @@ export async function runTextPrompt<I>(input: {
       context: prepared.context,
       rawOutput,
     });
-    liveSession.usage(tokenUsage ? {
-      ...tokenUsage,
-      reasoningTokens: tokenUsage.reasoningTokens ?? null,
-    } : null);
     liveSession.complete();
     return buildPromptRunResult({
       asset: input.asset as PromptAsset<unknown, unknown, unknown>,
@@ -941,6 +944,7 @@ export async function streamTextPrompt<I>(input: {
     promptText: formatLivePrompt(prepared.messages),
   });
   let captured: ReturnType<typeof captureStreamOutput>;
+  let resolvedMaxTokens = input.options?.maxTokens;
   try {
     const llm = await promptRunnerLLMFactory(input.options?.provider, {
       fallbackProvider: "deepseek",
@@ -953,6 +957,7 @@ export async function streamTextPrompt<I>(input: {
       promptMeta: prepared.invocation,
     });
     liveSession.phase("streaming", "模型正在返回内容");
+    resolvedMaxTokens = getResolvedLLMClientOptionsFromInstance(llm)?.maxTokens ?? resolvedMaxTokens;
     const rawStream = await llm.stream(messages, buildPromptCallOptions(input.options));
     captured = captureStreamOutput(
       rawStream as AsyncIterable<BaseMessageChunk>,
@@ -977,6 +982,9 @@ export async function streamTextPrompt<I>(input: {
   return {
     stream: captured.stream,
     complete: observeStreamCompletion(captured.completedText.then(async (content) => {
+      const tokenUsage = await captured.completedUsage.catch(() => null);
+      liveSession.usage(tokenUsage ? { ...tokenUsage, reasoningTokens: tokenUsage.reasoningTokens ?? null } : null);
+      assertPromptOutputWithinLimit({ finishReason: captured.getFinishReason(), maxTokens: resolvedMaxTokens, tokenUsage });
       liveSession.phase("validating", "正在整理生成结果");
       const output = applyPromptPostValidate({
         asset: input.asset,
@@ -984,7 +992,6 @@ export async function streamTextPrompt<I>(input: {
         context: prepared.context,
         rawOutput: content,
       });
-      const tokenUsage = await captured.completedUsage.catch(() => null);
       const result = buildPromptRunResult({
         asset: input.asset as PromptAsset<unknown, unknown, unknown>,
         output,
@@ -1004,10 +1011,6 @@ export async function streamTextPrompt<I>(input: {
         renderedPromptChars,
         tokenUsage,
       });
-      liveSession.usage(tokenUsage ? {
-        ...tokenUsage,
-        reasoningTokens: tokenUsage.reasoningTokens ?? null,
-      } : null);
       liveSession.complete();
       return result;
     }).catch((error) => {
@@ -1061,6 +1064,7 @@ export async function streamStructuredPrompt<I, O, R = O>(input: {
   });
   let captured: ReturnType<typeof captureStreamOutput>;
   let strategy!: ReturnType<typeof selectStructuredOutputStrategy>;
+  let resolvedMaxTokens = input.options?.maxTokens;
   let profile!: ReturnType<typeof resolveStructuredOutputProfile>;
   try {
     const llm = await promptRunnerLLMFactory(input.options?.provider, {
@@ -1074,6 +1078,7 @@ export async function streamStructuredPrompt<I, O, R = O>(input: {
       executionMode: "structured",
     });
     const resolvedLLM = getResolvedLLMClientOptionsFromInstance(llm);
+    resolvedMaxTokens = resolvedLLM?.maxTokens ?? resolvedMaxTokens;
     profile = resolvedLLM?.structuredProfile ?? resolveStructuredOutputProfile({
       provider: resolvedLLM?.provider ?? input.options?.provider ?? "deepseek",
       model: resolvedLLM?.model ?? input.options?.model,
@@ -1121,6 +1126,8 @@ export async function streamStructuredPrompt<I, O, R = O>(input: {
     complete: observeStreamCompletion(captured.completedText.then(async (rawContent) => {
       liveSession.phase("validating", "正在检查生成结果");
       const capturedUsage = await captured.completedUsage;
+      liveSession.usage(capturedUsage ? { ...capturedUsage, reasoningTokens: capturedUsage.reasoningTokens ?? null } : null);
+      assertPromptOutputWithinLimit({ finishReason: captured.getFinishReason(), maxTokens: resolvedMaxTokens, tokenUsage: capturedUsage });
       let repairStarted = false;
       const parsed = rawContent.trim()
         ? await parseStructuredLlmRawContentDetailed({
@@ -1131,7 +1138,7 @@ export async function streamStructuredPrompt<I, O, R = O>(input: {
           provider: input.options?.provider,
           model: input.options?.model,
           temperature: input.options?.temperature,
-          maxTokens: input.options?.maxTokens,
+          maxTokens: resolvedMaxTokens,
           timeoutMs: input.options?.timeoutMs,
           signal: input.options?.signal,
           taskType: input.asset.taskType,

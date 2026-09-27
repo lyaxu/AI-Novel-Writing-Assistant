@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 
 const { createLLMFromResolvedOptions, resolveLLMClientOptions, setProviderSecretCache } = require("../dist/llm/factory.js");
 
-test("official K3 structured planning reserves reasoning budget without changing prose calls", async () => {
+test("official K3 reserves reasoning and answer budgets and honors fast prose intent", async () => {
   const provider = "custom_k3_policy_test";
   setProviderSecretCache(provider, { key: "fake-test-key", reasoningEnabled: false, reasoningEffort: "max" });
   const options = {
@@ -34,9 +34,15 @@ test("official K3 structured planning reserves reasoning budget without changing
     assert.notEqual(review.reasoningEffort, "low");
     const larger = await resolveLLMClientOptions(provider, { ...options, maxTokens: 65536 });
     assert.equal(larger.maxTokens, 65536);
+    const prose = await resolveLLMClientOptions(provider, { ...options, executionMode: "plain", taskType: "writer",
+      reasoningEnabled: false, maxTokens: 6000, promptMeta: { promptId: "novel.chapter.writer" } });
+    assert.equal(prose.maxTokens, 32768);
+    assert.equal(prose.reasoningEffort, "low");
+    assert.equal(createLLMFromResolvedOptions(prose).invocationParams({}).max_tokens, undefined);
+    const thinkingProse = await resolveLLMClientOptions(provider, { ...options, executionMode: "plain", taskType: "writer",
+      reasoningEnabled: true, promptMeta: { promptId: "novel.chapter.writer" } });
+    assert.notEqual(thinkingProse.reasoningEffort, "low");
     for (const changes of [
-
-      { executionMode: "plain" },
       { model: "kimi-k2.5" },
       { requestProtocol: "anthropic" },
       { baseURL: "https://gateway.example/v1" },

@@ -297,15 +297,15 @@ export async function resolveLLMClientOptions(
   const structuredStrategy = options.structuredStrategy;
   const executionMode = options.executionMode ?? "plain";
   // K3 counts reasoning and answer against one completion budget. Legacy answer-only
-  // budgets must not consume the entire request before structured data is emitted.
+  // budgets must not consume the entire request before an answer is emitted.
   // https://platform.kimi.com/docs/guide/kimi-k3-quickstart
-  const kimiStructuredBudget = requestProtocol === "openai_compatible"
-    && executionMode === "structured"
+  const kimiCompletionBudget = requestProtocol === "openai_compatible"
     && model.toLowerCase() === "kimi-k3"
     && ["api.moonshot.cn", "api.moonshot.ai"].includes(new URL(baseURL).hostname)
     ? Math.max(32_768, resolvedMaxTokens ?? 0)
     : undefined;
-  const kimiPlanningCall = kimiStructuredBudget != null && (
+  const kimiLowEffortCall = kimiCompletionBudget != null && (
+    (executionMode === "plain" && options.reasoningEnabled === false) ||
     ["planner", "outline_planning", "replan"].includes(options.taskType ?? "")
     || ["novel.director.candidates", "novel.world.generate_from_theme"].includes(options.promptMeta?.promptId ?? "")
   );
@@ -327,11 +327,11 @@ export async function resolveLLMClientOptions(
       && structuredProfile.supportsReasoningToggle,
   );
   const reasoningEnabled = shouldForceDisableReasoning ? false : requestedReasoningEnabled;
-  let effectiveMaxTokens = kimiStructuredBudget ?? resolvedMaxTokens;
+  let effectiveMaxTokens = kimiCompletionBudget ?? resolvedMaxTokens;
   if (structuredProfile && usesNativeStructured && structuredProfile.omitMaxTokensForNativeStructured) {
     effectiveMaxTokens = undefined;
   } else if (
-    !kimiStructuredBudget
+    !kimiCompletionBudget
     && structuredProfile
     && typeof structuredProfile.safeStructuredMaxTokens === "number"
     && typeof effectiveMaxTokens === "number"
@@ -356,9 +356,9 @@ export async function resolveLLMClientOptions(
   const modelKwargs = {
     ...(reasoningBehavior.modelKwargs ?? {}),
     ...baseModelKwargs,
-    ...(kimiStructuredBudget ? {
-      ...(kimiPlanningCall ? { reasoning_effort: "low" } : {}),
-      max_completion_tokens: kimiStructuredBudget,
+    ...(kimiCompletionBudget ? {
+      ...(kimiLowEffortCall ? { reasoning_effort: "low" } : {}),
+      max_completion_tokens: kimiCompletionBudget,
     } : {}),
   };
 
@@ -374,8 +374,8 @@ export async function resolveLLMClientOptions(
     timeoutMs,
     concurrencyLimit,
     requestIntervalMs,
-    reasoningEnabled: kimiStructuredBudget ? true : reasoningBehavior.reasoningEnabled,
-    reasoningEffort: kimiPlanningCall ? "low" : reasoningBehavior.reasoningEffort,
+    reasoningEnabled: kimiCompletionBudget ? true : reasoningBehavior.reasoningEnabled,
+    reasoningEffort: kimiLowEffortCall ? "low" : reasoningBehavior.reasoningEffort,
     modelKwargs: Object.keys(modelKwargs).length > 0 ? modelKwargs : undefined,
     includeRawResponse: reasoningBehavior.includeRawResponse,
     requestProtocol,
