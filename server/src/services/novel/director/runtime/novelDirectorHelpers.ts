@@ -57,6 +57,7 @@ export interface DirectorCandidateStageState {
 
 export interface DirectorWorkflowSeedPayload extends Record<string, unknown> {
   productionExperience?: "simple" | "professional";
+  productionScope?: "sample3" | "sample5" | "book";
   startupPreparation?: DirectorConfirmRequest["startupPreparation"];
   completionProfile?: DirectorCompletionProfile;
   novelId?: string | null;
@@ -253,6 +254,7 @@ export function normalizeCandidate(
     hookStrategy: candidate.hookStrategy.trim(),
     progressionLoop: candidate.progressionLoop.trim(),
     whyItFits: candidate.whyItFits.trim(),
+    storyPrototype: candidate.storyPrototype,
     recommendedWritingPlatform: candidate.recommendedWritingPlatform,
     writingPlatformReason: candidate.writingPlatformReason?.trim(),
     toneKeywords: Array.from(
@@ -465,6 +467,7 @@ export function buildStoryInput(input: DirectorConfirmRequest, bookSpec: BookSpe
     powerSystemMode ? `战力体系模式：${powerSystemMode}` : "",
     powerSystem?.reason ? `战力体系说明：${powerSystem.reason}` : "",
     `确认方案：${input.candidate.workingTitle}`,
+    input.candidate.storyPrototype ? `已选故事原型与开篇因果链（后续规划保留其选择、后果与早期回报，不按章数稀释）：${JSON.stringify(input.candidate.storyPrototype)}` : "",
     `作品定位：${bookSpec.positioning}`,
     `核心卖点：${bookSpec.sellingPoint}`,
     `主线冲突：${bookSpec.coreConflict}`,

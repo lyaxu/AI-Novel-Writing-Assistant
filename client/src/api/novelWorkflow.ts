@@ -31,10 +31,11 @@ export async function continueNovelWorkflow(directorTaskId: string, payload?: {
 export async function selectNovelProductionExperience(
   directorTaskId: string,
   experience: NovelProductionExperience,
+  productionScope?: import("@ai-novel/shared/types/novelWorkflow").NovelProductionScope,
 ) {
   const { data } = await apiClient.post<ApiResponse<NovelProductionExperienceSelectionResponse>>(
     `/novel-workflows/${directorTaskId}/production-experience`,
-    { experience },
+    { experience, productionScope },
   );
   return data;
 }

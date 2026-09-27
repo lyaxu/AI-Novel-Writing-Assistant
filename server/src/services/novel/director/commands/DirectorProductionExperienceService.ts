@@ -1,5 +1,6 @@
 import type {
   NovelProductionExperience,
+  NovelProductionScope,
   NovelProductionExperienceSelectionResponse,
 } from "@ai-novel/shared/types/novelWorkflow";
 import { buildFullBookAutopilotExecutionPlan } from "@ai-novel/shared/types/novelDirector";
@@ -22,6 +23,7 @@ export function parseSelectedExperience(seed: DirectorWorkflowSeedPayload): Nove
 export function buildProductionExperienceSeed(
   seed: DirectorWorkflowSeedPayload,
   experience: NovelProductionExperience,
+  scope: NovelProductionScope = seed.productionScope ?? "book",
 ): DirectorWorkflowSeedPayload {
   const directorInput = seed.directorInput;
   if (!directorInput) {
@@ -30,12 +32,16 @@ export function buildProductionExperienceSeed(
   const nextInput = applyDirectorRunModeContract({
     ...directorInput,
     runMode: "full_book_autopilot" as const,
-    autoExecutionPlan: buildFullBookAutopilotExecutionPlan(),
+    autoExecutionPlan: scope === "book" ? buildFullBookAutopilotExecutionPlan() : {
+      mode: "chapter_range", startOrder: 1, endOrder: scope === "sample3" ? 3 : 5,
+      autoReview: true, autoRepair: true,
+    },
     autoApproval: buildFullDirectorAutoApprovalConfig(),
   });
   return {
     ...seed,
     productionExperience: experience,
+    productionScope: scope,
     runMode: nextInput.runMode,
     autoExecutionPlan: nextInput.autoExecutionPlan,
     autoApproval: nextInput.autoApproval,
@@ -49,6 +55,7 @@ export class DirectorProductionExperienceService {
   async select(
     taskId: string,
     experience: NovelProductionExperience,
+    scope?: NovelProductionScope,
   ): Promise<NovelProductionExperienceSelectionResponse> {
     const task = await prisma.novelWorkflowTask.findUnique({ where: { id: taskId } });
     if (!task || task.lane !== "auto_director") {
@@ -60,19 +67,27 @@ export class DirectorProductionExperienceService {
 
     const seed = parseSeedPayload<DirectorWorkflowSeedPayload>(task.seedPayloadJson) ?? {};
     const selected = parseSelectedExperience(seed);
+    if (selected && scope && scope !== (seed.productionScope ?? "book")) {
+      throw new AppError("请从章节执行范围中确认后续写作范围；切换界面不会扩大试写范围。", 409);
+    }
+    const productionScope = scope ?? seed.productionScope ?? "book";
     if (selected && selected !== experience) {
-      const nextSeed = buildProductionExperienceSeed(seed, experience);
-      await prisma.$transaction([
-        prisma.novelWorkflowTask.update({
-          where: { id: task.id },
+      const nextSeed = { ...seed, productionExperience: experience };
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.novelWorkflowTask.updateMany({
+          where: { id: task.id, seedPayloadJson: task.seedPayloadJson },
           data: { seedPayloadJson: JSON.stringify(nextSeed) },
-        }),
-        prisma.novel.update({
-          where: { id: task.novelId },
+        });
+        if (updated.count === 0) {
+          throw new AppError("写作任务刚刚发生变化，请刷新后再切换界面。", 409);
+        }
+        await tx.novel.update({
+          where: { id: task.novelId! },
           data: { creationExperience: experience },
-        }),
-      ]);
+        });
+      });
       return {
+        productionScope,
         experience,
         workflowTaskId: task.id,
         novelId: task.novelId,
@@ -85,22 +100,23 @@ export class DirectorProductionExperienceService {
       if (task.checkpointType !== "production_experience_required") {
         throw new AppError("自动导演还没有完成正文生产前的准备。", 409);
       }
-      const nextSeed = buildProductionExperienceSeed(seed, experience);
+      const nextSeed = buildProductionExperienceSeed(seed, experience, productionScope);
 
       const claimed = await prisma.$transaction(async (tx) => {
         const updated = await tx.novelWorkflowTask.updateMany({
           where: {
             id: task.id,
             checkpointType: "production_experience_required",
+            seedPayloadJson: task.seedPayloadJson,
           },
           data: {
             seedPayloadJson: JSON.stringify(nextSeed),
             status: "waiting_approval",
             currentStage: "chapter_execution",
             currentItemKey: "chapter_batch_ready",
-            currentItemLabel: "已选择创作界面，准备开始全书生产",
+            currentItemLabel: productionScope === "book" ? "准备开始全书生产" : "准备生成开篇样章",
             checkpointType: "chapter_batch_ready",
-            checkpointSummary: "章节执行资源已准备完成，AI 将开始全书生产。",
+            checkpointSummary: productionScope === "book" ? "章节执行资源已准备完成，AI 将开始全书生产。" : `仅试写前${productionScope === "sample3" ? 3 : 5}章，完成后等待试读，不自动扩写整本。`,
             pendingManualRecovery: false,
           },
         });
@@ -115,7 +131,7 @@ export class DirectorProductionExperienceService {
       });
 
       if (!claimed) {
-        return this.select(taskId, experience);
+        return this.select(taskId, experience, scope);
       }
     }
 
@@ -130,6 +146,7 @@ export class DirectorProductionExperienceService {
       })
       : null;
     return {
+      productionScope,
       experience,
       workflowTaskId: task.id,
       novelId: task.novelId,

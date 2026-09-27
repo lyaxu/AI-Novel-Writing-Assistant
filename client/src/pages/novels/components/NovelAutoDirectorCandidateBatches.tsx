@@ -51,6 +51,14 @@ function resolveCandidateTitleOptions(candidate: DirectorCandidate): TitleFactor
 }
 
 function renderPrimaryCandidateDetails(candidate: DirectorCandidate) {
+  if (candidate.storyPrototype) return [
+    { label: "主角想要什么", value: candidate.storyPrototype.protagonistWant },
+    { label: "谁在阻止他", value: candidate.storyPrototype.opposition },
+    { label: "两难选择", value: candidate.storyPrototype.difficultChoice },
+    { label: "独特看点", value: candidate.storyPrototype.distinctiveEngine },
+    { label: "开篇回报", value: candidate.storyPrototype.earlyPayoff },
+    { label: "可能无聊在哪里", value: candidate.storyPrototype.appealRisk },
+  ];
   return [
     { label: "核心卖点", value: candidate.sellingPoint },
     { label: "主线冲突", value: candidate.coreConflict },
@@ -216,6 +224,17 @@ export default function NovelAutoDirectorCandidateBatches(props: NovelAutoDirect
                           </div>
                         ))}
                       </dl>
+                      {candidate.storyPrototype && <details className="mt-5 border-t pt-4">
+                        <summary className="cursor-pointer text-sm font-medium">开篇事件链</summary>
+                        <ol className="mt-3 space-y-4">
+                          {candidate.storyPrototype.openingChain.map(chapter => <li key={chapter.chapterOrder} className="space-y-1 text-sm leading-6 break-words [overflow-wrap:anywhere]">
+                            <h4 className="font-semibold">第{chapter.chapterOrder}章 · {chapter.action}</h4>
+                            <p>阻力：{chapter.resistance}</p><p>选择：{chapter.choice}</p>
+                            <p>后果：{chapter.consequence}</p><p>兑现：{chapter.payoff}</p>
+                            <p className="text-muted-foreground">下一步：{chapter.nextQuestion}</p>
+                          </li>)}
+                        </ol>
+                      </details>}
                     </div>
 
                     <aside className="flex min-w-0 flex-col gap-4 lg:pl-2">

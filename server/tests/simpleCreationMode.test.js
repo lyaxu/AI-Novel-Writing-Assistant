@@ -10,6 +10,19 @@ const {
   parseSelectedExperience,
 } = require("../dist/services/novel/director/commands/DirectorProductionExperienceService.js");
 const { prisma } = require("../dist/db/prisma.js");
+const { isCompletedStorySample } = require("../dist/modules/novel/setup/application/simpleCreationShelfProgress.js");
+
+test("shelf distinguishes a completed sample from a failure or a later expanded batch", () => {
+  const input = { status: "succeeded", checkpointType: "workflow_completed", seed: {
+    productionScope: "sample3", directorInput: { autoExecutionPlan: { mode: "chapter_range", startOrder: 1, endOrder: 3 } },
+  } };
+  assert.equal(isCompletedStorySample(input), true);
+  assert.equal(isCompletedStorySample({ ...input, status: "failed" }), false);
+  assert.equal(isCompletedStorySample({ ...input, checkpointType: "step_review_required" }), false);
+  assert.equal(isCompletedStorySample({ ...input, seed: {} }), false);
+  input.seed.directorInput.autoExecutionPlan.endOrder = 8;
+  assert.equal(isCompletedStorySample(input), false);
+});
 
 const confirmRuntimeSource = fs.readFileSync(
   path.resolve(__dirname, "../src/services/novel/director/runtime/novelDirectorConfirmRuntime.ts"),
@@ -37,6 +50,12 @@ function candidate(title) {
     writingPlatformReason: "适合高冲突、快推进的移动端长篇阅读。",
     toneKeywords: ["紧张", "成长"],
     targetChapterCount: 120,
+    storyPrototype: {
+      protagonistWant: "保住家人", opposition: "封城者", difficultChoice: "救人暴露自己或隐藏线索",
+      distinctiveEngine: "救援导致敌人改变布防", earlyPayoff: "救出第一个被困者", appealRisk: "避免重复逃亡",
+      openingChain: [1, 2, 3].map(chapterOrder => ({ chapterOrder, action: "主动救援", resistance: "封锁",
+        choice: "冒险暴露", consequence: "身份被记录", payoff: "救出人质", nextQuestion: "谁出卖了他" })),
+    },
   };
 }
 
@@ -84,6 +103,26 @@ test("production interface selection keeps the same full-book automation", () =>
   }
 });
 
+test("sample scopes survive serialization and interface switching without changing novel length", () => {
+  for (const [scope, end] of [["sample3", 3], ["sample5", 5]]) {
+    const seed = directorSeed();
+    const next = buildProductionExperienceSeed(seed, "simple", scope);
+    const reopened = buildProductionExperienceSeed(JSON.parse(JSON.stringify(next)), "professional");
+    assert.equal(reopened.productionScope, scope);
+    assert.deepEqual(reopened.directorInput.autoExecutionPlan, { mode: "chapter_range", startOrder: 1, endOrder: end, autoReview: true, autoRepair: true });
+    assert.equal(reopened.directorInput.candidate.targetChapterCount, 120);
+    assert.equal(reopened.runMode, "full_book_autopilot");
+  }
+});
+
+test("interface endpoint cannot silently expand an existing sample scope", async (t) => {
+  const seed = buildProductionExperienceSeed(directorSeed(), "simple", "sample3");
+  const original = prisma.novelWorkflowTask.findUnique;
+  prisma.novelWorkflowTask.findUnique = async () => ({ id: "t", lane: "auto_director", novelId: "n", status: "succeeded", seedPayloadJson: JSON.stringify(seed) });
+  try { await assert.rejects(new DirectorProductionExperienceService().select("t", "professional", "book"), /不会扩大试写范围/); }
+  finally { prisma.novelWorkflowTask.findUnique = original; }
+});
+
 test("complete-workspace selection starts the same chapter execution", async () => {
   const originals = {
     findUnique: prisma.novelWorkflowTask.findUnique,
@@ -125,6 +164,38 @@ test("complete-workspace selection starts the same chapter execution", async () 
   } finally {
     prisma.novelWorkflowTask.findUnique = originals.findUnique;
     prisma.$transaction = originals.transaction;
+  }
+});
+
+test("switching interface preserves a later explicitly expanded range and rejects concurrent edits", async () => {
+  const seed = buildProductionExperienceSeed(directorSeed(), "simple", "sample3");
+  seed.autoExecutionPlan = { mode: "chapter_range", startOrder: 4, endOrder: 8, autoReview: true, autoRepair: true };
+  seed.directorInput.autoExecutionPlan = seed.autoExecutionPlan;
+  const originalFind = prisma.novelWorkflowTask.findUnique;
+  const originalTransaction = prisma.$transaction;
+  const serialized = JSON.stringify(seed);
+  let affected = 1;
+  let novelUpdates = 0;
+  let written;
+  prisma.novelWorkflowTask.findUnique = async () => ({ id: "t", novelId: "n", lane: "auto_director", status: "running", seedPayloadJson: serialized });
+  prisma.$transaction = async (run) => run({
+    novelWorkflowTask: { updateMany: async (args) => {
+      assert.equal(args.where.seedPayloadJson, serialized);
+      written = JSON.parse(args.data.seedPayloadJson);
+      return { count: affected };
+    } },
+    novel: { update: async () => { novelUpdates += 1; } },
+  });
+  try {
+    const service = new DirectorProductionExperienceService({ enqueueContinueCommand: () => assert.fail("Switching must not enqueue") });
+    await service.select("t", "professional");
+    assert.deepEqual(written, { ...seed, productionExperience: "professional" });
+    affected = 0;
+    await assert.rejects(service.select("t", "professional"), /发生变化/);
+    assert.equal(novelUpdates, 1);
+  } finally {
+    prisma.novelWorkflowTask.findUnique = originalFind;
+    prisma.$transaction = originalTransaction;
   }
 });
 

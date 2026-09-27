@@ -42,7 +42,7 @@ export default function SecondReaderButton({ novelId, maxOrder }: { novelId: str
     </Button>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-h-[85vh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto">
-        <DialogHeader><DialogTitle>第二读者 · 独立阅读意见</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>第二读者 · 故事试读</DialogTitle></DialogHeader>
         <div className="flex flex-wrap items-end gap-3">
           <label className="min-w-0 text-sm">起始章
             <Input className="mt-1 w-24" type="number" min={1} max={maxOrder || undefined} value={start}
@@ -55,7 +55,7 @@ export default function SecondReaderButton({ novelId, maxOrder }: { novelId: str
           <Button type="button" disabled={review.isPending || !Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > maxOrder}
             onClick={() => review.mutate({ startOrder: start, endOrder: end })}>
             {review.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BookOpen className="mr-2 h-4 w-4" />}
-            {review.isPending ? "复核中" : "生成阅读意见"}
+            {review.isPending ? "试读中" : "评估是否值得展开"}
           </Button>
         </div>
         {review.isError && <p role="alert" className="text-sm text-destructive">复核失败，已有阅读意见保留。</p>}

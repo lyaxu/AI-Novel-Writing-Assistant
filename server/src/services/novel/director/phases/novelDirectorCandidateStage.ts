@@ -214,6 +214,7 @@ export class NovelDirectorCandidateStageService {
         taskId: context.workflowTaskId,
         stage: "auto_director",
         itemKey: "candidate_direction_batch",
+        maxTokens: 10000,
         entrypoint: "auto_director_create",
       },
     });
@@ -516,6 +517,7 @@ export class NovelDirectorCandidateStageService {
         provider: input.provider,
         model: input.model,
         temperature: clampTemperature(input.temperature, 0.4),
+        maxTokens: 6000,
         taskId: input.workflowTaskId,
         stage: "auto_director",
         itemKey: "candidate_direction_batch",

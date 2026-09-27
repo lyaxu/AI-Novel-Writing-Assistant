@@ -109,8 +109,9 @@ export async function generateChapterTaskSheetDetail(params: {
       exclusiveEvent: existingChapter.exclusiveEvent?.trim() || existingChapter.summary.trim(),
       endingState: existingChapter.endingState?.trim() || "本章完成当前章节任务，并为下一章留下明确入口。",
       nextChapterEntryState: existingChapter.nextChapterEntryState?.trim() || existingChapter.endingState?.trim() || "下一章承接本章结果继续推进。",
-      conflictLevel: existingChapter.conflictLevel ?? 3,
-      revealLevel: existingChapter.revealLevel ?? 2,
+      // Reuse is allowed only after the shape guard verified both numeric levels.
+      conflictLevel: existingChapter.conflictLevel!,
+      revealLevel: existingChapter.revealLevel!,
       targetWordCount: existingChapter.targetWordCount ?? 2200,
       mustAvoid: existingChapter.mustAvoid?.trim() || "避免偏离本章任务单和卷节奏。",
       payoffRefs: existingChapter.payoffRefs,

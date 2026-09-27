@@ -41,6 +41,31 @@ function buildRequest(overrides = {}) {
   };
 }
 
+test("sample range remains bounded after completion and restart despite unwritten later chapters", async () => {
+  for (const endOrder of [3, 5]) {
+    const checkpoints = [];
+    const plan = { mode: "chapter_range", startOrder: 1, endOrder, autoReview: true, autoRepair: true };
+    const runtime = new NovelDirectorAutoExecutionRuntime({
+      novelContextService: { listChapters: async () => Array.from({ length: 9 }, (_, i) => ({ id: `c${i + 1}`, order: i + 1, generationState: i < endOrder ? "approved" : "planned" })) },
+      novelService: {
+        startPipelineJob: async () => { throw new Error("Sample must not start another chapter"); },
+        findActivePipelineJobForRange: async () => null,
+      },
+      workflowService: {
+        bootstrapTask: async () => {}, getTaskById: async () => ({ status: "waiting_approval" }),
+        recordCheckpoint: async (_id, value) => checkpoints.push(value),
+      },
+      buildDirectorSeedPayload: (_request, _novelId, extra) => extra ?? {},
+    });
+    for (let restart = 0; restart < 2; restart++) await runtime.runFromReady({
+      taskId: "sample", novelId: "sample-novel", request: buildRequest({ runMode: "full_book_autopilot", autoExecutionPlan: plan }),
+      existingState: JSON.parse(JSON.stringify({ ...plan, enabled: true })),
+    });
+    assert.equal(checkpoints.length, 2);
+    assert.ok(checkpoints.every(c => c.checkpointType === "workflow_completed" && c.seedPayload.autoExecution.remainingChapterCount === 0));
+  }
+});
+
 test("full-book autopilot keeps a bounded target while future chapters are still being planned", async () => {
   const result = await resolveAutoExecutionRangeAndState({
     novelId: "novel-1",

@@ -30,7 +30,7 @@ export const volumeBeatSheetPrompt: PromptAsset<
   ReturnType<typeof createVolumeBeatSheetSchema>["_output"]
 > = {
   id: "novel.volume.beat_sheet",
-  version: "v3",
+  version: "v4",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -56,6 +56,8 @@ export const volumeBeatSheetPrompt: PromptAsset<
       "【任务边界】",
       "当前阶段只生成单卷 beat sheet，不展开具体章节，不写场景细纲，不补人物小传，不写对白。",
       "每个 beat 必须服务于后续拆章，强调‘这段章节要完成什么节奏任务’，而不是罗列细碎事件。",
+      "优先承接作者选定的故事原型和开篇事件链。分配章节前先列具体行动、阻力、两难选择和后果：同一工作流程失败、口头催促、查档与代价日志不得反复占据多个 beat 的主体。早期至少兑现一个重要疑问或行动回报，答案必须改变处境并推动下一步，不把所有真正对抗推迟到卷中后。",
+      "章数分配按有效事件的承载量，而非平均摊分槽位。开篇不为建立职业质感连写数章同一流程。细腻叙事可以安静，但人物关系、目标、局势或理解必须因行动而改变；不得靠强行提高冲突评分制造节奏。",
       "只输出严格 JSON，不要输出 Markdown、解释、注释或额外字段。",
       "",
       "【输出格式】",

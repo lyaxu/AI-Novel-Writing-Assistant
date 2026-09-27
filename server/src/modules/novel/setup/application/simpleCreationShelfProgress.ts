@@ -4,6 +4,22 @@ interface SimpleCreationChapterFact {
   content?: string | null;
 }
 
+export function isCompletedStorySample(input: {
+  status?: string;
+  checkpointType?: string | null;
+  seed: Record<string, unknown> | null;
+}): boolean {
+  if (input.status !== "succeeded" || input.checkpointType !== "workflow_completed") return false;
+  const scope = input.seed?.productionScope;
+  if (scope !== "sample3" && scope !== "sample5") return false;
+  const directorInput = input.seed?.directorInput as { autoExecutionPlan?: unknown } | undefined;
+  const plan = directorInput?.autoExecutionPlan ?? input.seed?.autoExecutionPlan;
+  if (!plan || typeof plan !== "object" || Array.isArray(plan)) return false;
+  const range = plan as Record<string, unknown>;
+  return range.mode === "chapter_range" && range.startOrder === 1
+    && range.endOrder === (scope === "sample3" ? 3 : 5);
+}
+
 export interface SimpleCreationRemainingRange {
   startOrder: number;
   endOrder: number;

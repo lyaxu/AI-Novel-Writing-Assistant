@@ -408,6 +408,23 @@ export interface DirectorCandidate {
   toneKeywords: string[];
   targetChapterCount: number;
   productionFoundation?: NovelCreateResourceRecommendation;
+  storyPrototype?: {
+    protagonistWant: string;
+    opposition: string;
+    difficultChoice: string;
+    distinctiveEngine: string;
+    earlyPayoff: string;
+    appealRisk: string;
+    openingChain: Array<{
+      chapterOrder: number;
+      action: string;
+      resistance: string;
+      choice: string;
+      consequence: string;
+      payoff: string;
+      nextQuestion: string;
+    }>;
+  };
 }
 
 export interface DirectorStartupPreparation {

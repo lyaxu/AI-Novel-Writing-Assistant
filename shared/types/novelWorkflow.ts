@@ -88,8 +88,10 @@ export function getNovelWorkflowLaneDescriptor(lane: NovelWorkflowLane): NovelWo
 }
 
 export type NovelProductionExperience = "simple" | "professional";
+export type NovelProductionScope = "sample3" | "sample5" | "book";
 
 export interface NovelProductionExperienceSelectionResponse {
+  productionScope?: NovelProductionScope;
   experience: NovelProductionExperience;
   workflowTaskId: string;
   novelId: string;

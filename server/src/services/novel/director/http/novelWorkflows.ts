@@ -61,6 +61,7 @@ const repairChapterTitlesBodySchema = z.object({
 
 const productionExperienceBodySchema = z.object({
   experience: z.enum(["simple", "professional"]),
+  productionScope: z.enum(["sample3", "sample5", "book"]).optional(),
 });
 
 const novelParamsSchema = z.object({
@@ -140,14 +141,12 @@ router.post(
   async (req, res, next) => {
     try {
       const { id } = req.params as z.infer<typeof continueParamsSchema>;
-      const { experience } = req.body as z.infer<typeof productionExperienceBodySchema>;
-      const data = await productionExperienceService.select(id, experience);
+      const { experience, productionScope } = req.body as z.infer<typeof productionExperienceBodySchema>;
+      const data = await productionExperienceService.select(id, experience, productionScope);
       res.status(experience === "simple" ? 202 : 200).json({
         success: true,
         data,
-        message: experience === "simple"
-          ? "简易创作已启动，AI 将继续完成整本书。"
-          : "已进入专业创作工作台。",
+        message: "已按所选范围准备创作。",
       } satisfies ApiResponse<typeof data>);
     } catch (error) {
       next(error);

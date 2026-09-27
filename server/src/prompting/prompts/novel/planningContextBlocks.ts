@@ -101,6 +101,7 @@ function formatCandidateDigest(candidate: DirectorCandidate): string {
     `protagonist path: ${candidate.protagonistPath}`,
     `hook strategy: ${candidate.hookStrategy}`,
     `progression loop: ${candidate.progressionLoop}`,
+    candidate.storyPrototype ? `Selected story prototype and opening causal chain: ${JSON.stringify(candidate.storyPrototype)}` : "",
     `ending direction: ${candidate.endingDirection}`,
   ].join("\n");
 }

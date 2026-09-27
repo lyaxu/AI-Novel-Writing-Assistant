@@ -31,6 +31,7 @@ import { toast } from "@/components/ui/toast";
 import SimpleCreationMaterialsPanel from "./SimpleCreationMaterialsPanel";
 import OnboardingTip from "@/components/onboarding/OnboardingTip";
 import SimpleCreationIssueGovernancePanel from "./SimpleCreationIssueGovernancePanel";
+import SecondReaderButton from "../components/SecondReaderButton";
 
 const STATUS_LABELS: Record<SimpleCreationShelfChapterStatus, string> = {
   waiting_planning: "等待规划",
@@ -193,7 +194,7 @@ export default function SimpleNovelShelfPage() {
                       <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{shelf.novel.title}</h1>
                       <Badge variant="outline">简易模式 · 阅读书架</Badge>
                     </div>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">这里优先展示这本书的正文和进度。AI 会在后台继续规划、写作和审校；需要查看完整资料时可随时切换工作台。</p>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{shelf.progress.sampleCompleted ? "先读样章，再决定是否继续这条故事方向。" : "这里优先展示这本书的正文和进度。AI 会在后台继续规划、写作和审校；需要查看完整资料时可随时切换工作台。"}</p>
                   </div>
                 </div>
               </div>
@@ -217,7 +218,7 @@ export default function SimpleNovelShelfPage() {
           <div className="grid grid-cols-2 divide-x border-t border-border sm:grid-cols-4">
             <div className="p-4 sm:px-6"><div className="text-xs text-muted-foreground">稳定成稿</div><div className="mt-1 text-xl font-semibold text-foreground">{stableChapterCount}<span className="ml-1 text-sm font-normal text-muted-foreground">/ {totalChapterCount || "—"} 章</span></div></div>
             <div className="p-4 sm:px-6"><div className="text-xs text-muted-foreground">已保存正文</div><div className="mt-1 text-xl font-semibold text-foreground">{savedDraftCount}<span className="ml-1 text-sm font-normal text-muted-foreground">章可阅读</span></div></div>
-            <div className="p-4 sm:px-6"><div className="text-xs text-muted-foreground">当前任务</div><div className="mt-1 truncate text-sm font-medium text-foreground">{shelf.progress.status === "paused" ? "已暂停，等待恢复" : shelf.progress.currentAction}</div></div>
+            <div className="p-4 sm:px-6"><div className="text-xs text-muted-foreground">当前任务</div><div className="mt-1 truncate text-sm font-medium text-foreground">{shelf.progress.sampleCompleted ? "样章完成，等待试读" : shelf.progress.status === "paused" ? "已暂停，等待恢复" : shelf.progress.currentAction}</div></div>
             <div className="p-4 sm:px-6"><div className="text-xs text-muted-foreground">待跟进质量项</div><div className="mt-1 text-xl font-semibold text-foreground">{shelf.materials.openQualityDebtCount}<span className="ml-1 text-sm font-normal text-muted-foreground">条</span></div></div>
           </div>
 
@@ -234,6 +235,7 @@ export default function SimpleNovelShelfPage() {
               </Button>
             ) : null}
             <div className="flex-1" />
+            {readableChapters.length > 0 ? <SecondReaderButton key={id} novelId={id} maxOrder={Math.max(...readableChapters.map((chapter) => chapter.order))} /> : null}
             <Button variant="outline" size="sm" onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}><Download className="h-4 w-4" /> 导出已完成章节</Button>
             <Button variant="ghost" size="sm" onClick={() => switchExperienceMutation.mutate()} disabled={switchExperienceMutation.isPending}><Settings2 className="h-4 w-4" /> 专业模式</Button>
           </div>

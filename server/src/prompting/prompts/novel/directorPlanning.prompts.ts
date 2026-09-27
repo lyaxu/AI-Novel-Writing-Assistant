@@ -20,6 +20,7 @@ import {
   directorCandidateSchema,
   directorCandidateResponseSchema,
   directorPlanBlueprintSchema,
+  storyPrototypeSchema,
 } from "../../../services/novel/director/runtime/novelDirectorSchemas";
 import { NOVEL_PROMPT_BUDGETS } from "./promptBudgetProfiles";
 
@@ -79,6 +80,7 @@ function formatCandidateDigest(candidate: DirectorCandidate, index: number): str
     `protagonist path: ${candidate.protagonistPath}`,
     `hook strategy: ${candidate.hookStrategy}`,
     `progression loop: ${candidate.progressionLoop}`,
+    candidate.storyPrototype ? `story prototype: ${JSON.stringify(candidate.storyPrototype)}` : "",
     `ending direction: ${candidate.endingDirection}`,
   ].join("\n");
 }
@@ -99,7 +101,7 @@ export const directorCandidatePrompt: PromptAsset<
   typeof directorCandidateResponseSchema._output
 > = {
   id: "novel.director.candidates",
-  version: "v2",
+  version: "v3",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -116,7 +118,7 @@ export const directorCandidatePrompt: PromptAsset<
       "你的任务不是展开大纲，也不是写章节，而是基于种子想法生成一批现在就可以继续推进整本书规划的候选方向卡片。",
       "",
       "【任务边界】",
-      "当前阶段只生成书级候选卡片，不展开大纲、不进入章节、不进入场景细节、不补人物小传。",
+      "当前阶段生成可比较的故事原型与开篇3-5章事件链，不展开全书大纲、不写正文、不补人物小传。",
       `必须精准输出 ${input.count} 套候选，数量不得多也不得少。`,
       "只输出严格 JSON，不要输出 Markdown、解释、注释或额外文本。",
       "",
@@ -124,11 +126,18 @@ export const directorCandidatePrompt: PromptAsset<
       "每个候选必须完整包含：workingTitle、logline、positioning、sellingPoint、coreConflict、protagonistPath、endingDirection、hookStrategy、progressionLoop、whyItFits、recommendedWritingPlatform、writingPlatformReason、toneKeywords、targetChapterCount。",
       "可选字段 titleOptions（最多 4 条）：为封面与点击向的书名备选。每条必须含 title、clickRate（35-99 的整数）、style。",
       "style 只能是以下四个英文小写值之一：literary、conflict、suspense、high_concept（与标题工坊一致），不得使用中文标签、同义词或其它拼写。",
-      "angle、reason 可选；不要输出 titleOptions 以外的额外字段。",
+      "angle、reason 可选；只能输出 schema 定义的字段。",
       "若不需要书名备选，可省略 titleOptions 或置为空数组。",
       "不得缺漏字段，不得改名，不得新增 schema 之外字段。",
       "",
       "【核心要求】",
+      "每套方案必须含 storyPrototype：protagonistWant（眼下具体想得到什么）、opposition（谁或什么力量有理由阻止他）、difficultChoice（两条路各自的代价）、distinctiveEngine（这个故事独有的行动与后果循环）、earlyPayoff（前3章兑现什么）、appealRisk（最可能无聊之处与改进方向）、openingChain。",
+      "openingChain 为连续第1章起的3-5项，每项包含 chapterOrder、action、resistance、choice、consequence、payoff、nextQuestion。写具体事件而非‘冲突升级’等标签。前章选择的后果必须推动后章行动；至少有一个早期问题得到实质回答，而非一直欠答案。",
+      "同批候选在主角欲望、对抗关系、两难选择、早期回报上实质不同，不得只换背景、职业、名字。普通人也要主动试探、做选择并承受后果，不仅被主管催促或等线索上门。",
+      "不要把一段事件拆成多章凑体量；连续重复查资料、工作受阻、口头催促、记日志不算升级。细节须改变决策、关系、局面或读者理解，不能用职业操作填满章节。安静章允许存在，不强求打斗、惊吓或每章大反转。",
+      "先在内部构思不同的矛盾与人物关系，再选出最值得试读的两套；不要先填字段再拼成故事。职业是人物经历、手段和关系的来源，不是必须每章重做一次的工作流程。distinctiveEngine 不得只写接任务→解决→升级→接更难任务，而要说明什么选择持续改变谁与谁的关系、利益或处境。",
+      "openingChain 必须是因果链：后一章处理前章选择造成的具体后果，而不是重开一件类似小事。前三章应兑现至少一个引入的核心疑问或阶段目标，earlyPayoff 与实际章节对应；不能把威胁暂退、知道还有秘密或领到下一单当作全部回报。",
+      "每次解围须能追溯到已介绍的条件、人物本领或付出的代价，不能临时赋予道具新用途、新权限或让对手突然失智。突破必须同时带来真实收益与后续局面的变化，不用凭空扩大阴谋或人物苦难掩盖事件空转。",
       "1. workingTitle 必须是可读的暂定书名，适合封面展示，不要写成策划案口号、世界观概念短语或陈旧套壳名。",
       "2. logline 必须清晰说明：这是谁，在什么处境下，面临什么核心冲突，会朝什么方向展开。",
       "3. positioning 必须说明这本书在题材、阅读满足或读者感知上的定位，而不是泛泛写“爽文”“成长文”。",
@@ -154,7 +163,7 @@ export const directorCandidatePrompt: PromptAsset<
       "1. 优先生成对新手用户友好的清晰方向，不要故作复杂。",
       "2. 不要脱离上下文臆造庞杂设定块。",
       "3. 如果上一轮候选已有明显不合适方向，应主动避开重复。",
-      "4. 信息不足时可以保守补全，但必须保证每个候选完整、可执行、可区分。",
+      "4. 信息不足时可以创造有因果依据的新情境，不必退回最常见的模板；保持设定精简。输出前以读者视角检查两套是否只是换皮、前3章有没有实际回报、难题是否被新规则轻易化解。发现这些问题先改方案，不要只把问题写进 appealRisk 后照交原案。",
     ].join("\n")),
     new HumanMessage([
       "请基于以下上下文，生成书级候选方向。",
@@ -188,7 +197,7 @@ export const directorCandidatePatchPrompt: PromptAsset<
   typeof directorCandidateSchema._output
 > = {
   id: "novel.director.candidate_patch",
-  version: "v1",
+  version: "v2",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -198,7 +207,7 @@ export const directorCandidatePatchPrompt: PromptAsset<
     preferredGroups: ["project_context", "preset_hints", "freeform_feedback", "latest_batch"],
     dropOrder: ["latest_batch"],
   },
-  outputSchema: directorCandidateSchema,
+  outputSchema: directorCandidateSchema.extend({ storyPrototype: storyPrototypeSchema }),
   render: (input, context) => [
     new SystemMessage([
       "你是长篇小说书级方向修正导演，服务对象是不懂写作流程的新手用户。",
@@ -206,6 +215,7 @@ export const directorCandidatePatchPrompt: PromptAsset<
       "",
       "【任务边界】",
       "本次只输出 1 套修正后的完整候选卡片。",
+      "必须返回 storyPrototype 及连续第1章起的3-5章 openingChain，遵守输出 schema。已有原型须按反馈同步调整行动、选择、后果与早期回报；旧方案没有该字段时补齐。不得把原型删掉或让它与修正后的主线相矛盾。",
       "必须保留原候选的核心方向，不要把它改成另一套完全不同的书。",
       "只输出严格 JSON，不要输出 Markdown、解释、注释或额外文本。",
       "",

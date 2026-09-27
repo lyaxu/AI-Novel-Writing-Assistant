@@ -14,6 +14,7 @@ import { validate } from "../../../../middleware/validate";
 import { KnowledgeService } from "../../../../services/knowledge/KnowledgeService";
 import { novelCreateResourceRecommendationService } from "../../../../services/novel/NovelCreateResourceRecommendationService";
 import type { NovelApplicationServices } from "../../../../services/novel/application/NovelApplicationContracts";
+import { isCompletedStorySample } from "../application/simpleCreationShelfProgress";
 
 const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -374,8 +375,9 @@ export function registerNovelBaseRoutes(input: RegisterNovelBaseRoutesInput): vo
         completedChapters,
       );
       const taskStatus = task?.status;
+      const sampleCompleted = isCompletedStorySample({ status: taskStatus, checkpointType: task?.checkpointType, seed: seedPayload });
       const progressStatus: SimpleCreationShelfProjection["progress"]["status"] =
-        taskStatus === "failed" ? "failed"
+        sampleCompleted ? "paused" : taskStatus === "failed" ? "failed"
           : taskStatus === "succeeded" ? "completed"
             : task?.pendingManualRecovery || taskStatus === "waiting_approval" ? "paused"
               : taskStatus === "running" ? "running"
@@ -422,12 +424,15 @@ export function registerNovelBaseRoutes(input: RegisterNovelBaseRoutesInput): vo
         },
         progress: {
           directorTaskId: task?.id ?? null,
-          percent: task ? Math.max(0, Math.min(100, Math.round(task.progress))) : 0,
+          percent: sampleCompleted ? Math.round(completedChapters / Math.max(1, totalChapters) * 100)
+            : task ? Math.max(0, Math.min(100, Math.round(task.progress))) : 0,
           completedChapters,
           totalChapters,
-          currentAction: task?.currentItemLabel ?? (progressStatus === "completed" ? "整本书已完成" : "等待 AI 开始处理"),
+          currentAction: sampleCompleted ? "样章已完成，等待试读；续写请在专业模式中选择 AI 接管范围。"
+            : task?.currentItemLabel ?? (progressStatus === "completed" ? "整本书已完成" : "等待 AI 开始处理"),
           status: progressStatus,
-          canRetry: progressStatus === "failed" || progressStatus === "paused",
+          canRetry: !sampleCompleted && (progressStatus === "failed" || progressStatus === "paused"),
+          sampleCompleted,
           recoveryAction: task?.checkpointType === "replan_required" ? "replan_and_continue" : "continue",
           safetyMessage: task?.lastError ?? null,
           latestRiskAssessment: riskHistory[0] ?? null,

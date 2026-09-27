@@ -60,7 +60,7 @@ function buildRevealDirective(level: number | null): string {
   if (level >= 40) {
     return `本章信息揭示强度中等（${level}/100）：释放一到两条关键线索，让读者更接近真相，但保留核心谜底。给一点甜头，钓住胃口。`;
   }
-  return `本章信息揭示强度低（${level}/100）：以设悬和埋钩为主，制造“我必须知道接下来怎样”的牵引。严格信息节流，不要提前抖出底牌。`;
+  return `本章信息揭示强度低（${level}/100）：不要提前抖出后续底牌，但本章已约定的答案、阶段回报与行动结果仍须兑现，不能把低分理解为只许设问、不许回答。`;
 }
 
 function buildHookStrengthDirective(level: number | null, nextLevel: number | null): string {
@@ -91,7 +91,7 @@ function buildPaceDirective(pace: string | null | undefined): string {
 
 export const chapterWriterPrompt: PromptAsset<ChapterWriterPromptInput, string, string> = {
   id: "novel.chapter.writer",
-  version: "v6",
+  version: "v7",
   taskType: "writer",
   mode: "text",
   language: "zh",
@@ -315,6 +315,7 @@ export const chapterWriterPrompt: PromptAsset<ChapterWriterPromptInput, string, 
         "【核心约束】",
         "0. 以本章任务、人物状态、伏笔指令和连续性上下文为准，避免提前揭示未来答案或写到后续章节事件。",
         "1. 必须推进新的剧情动作，本章必须发生实质变化（局面、关系、信息、风险、决策至少一项）。",
+        "1c. 冲突分数只是0-100的辅助参数，不得因为分数低而削弱任务单已有的对抗、选择和后果。职业操作、感官代价、催促、查资料等若前文已展示，本章只写其新后果，不逐步重演。阶段线索须促成行动或回答旧问题，不能只换一种问法再留到下一章。",
         "1a. reader_experience 是本章读者体验硬合同：必须让 promisedReward、keyTurn 与 netChange 在正文中可见，主角必须围绕 protagonistWant 主动行动并面对 primaryResistance。",
         "1b. inheritedHookResponsibilities 必须优先得到回应、触达或部分兑现；不得只制造新钩子而不给旧问题任何回报。",
         "2. 必须严格服从 chapter mission、mustAdvance、mustPreserve 与 ending hook。",
@@ -324,6 +325,7 @@ export const chapterWriterPrompt: PromptAsset<ChapterWriterPromptInput, string, 
         "5. payoff directives 只能按 operation 执行：seed/touch 只铺垫或轻触，pressure 只施压，partial_reveal/payoff 才允许揭示或兑现，forbid 必须避开。",
         "6. 不得引入新的核心角色、世界规则或与上下文冲突的重大设定。",
         "7. 不得写成总结、复盘、解释性段落为主的章节，正文必须以「正在发生」的内容为主。",
+        "8. 任务单与场景卡约束的是必达结果、关键因果和人物状态，不是需要逐句扩写的操作清单。在不改变这些边界与必要先后关系的前提下，自主选择切入点、对话、细节与叙述详略；赶路、手续、重复试验等例行动作可压缩带过，把篇幅留给真正改变选择或关系的现场。不得借自由发挥遗漏必达项、提前执行后章事件或增设救场规则。",
         "",
         "【本章张力与节奏】",
         tensionBlock,

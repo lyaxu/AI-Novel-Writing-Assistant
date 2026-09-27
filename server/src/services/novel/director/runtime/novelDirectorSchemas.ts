@@ -107,6 +107,28 @@ const productionFoundationSchema = z.object({
   recommendedAt: nonEmptyString,
 });
 
+export const storyPrototypeSchema = z.object({
+  protagonistWant: nonEmptyString,
+  opposition: nonEmptyString,
+  difficultChoice: nonEmptyString,
+  distinctiveEngine: nonEmptyString,
+  earlyPayoff: nonEmptyString,
+  appealRisk: nonEmptyString,
+  openingChain: z.array(z.object({
+    chapterOrder: z.number().int().min(1).max(5),
+    action: nonEmptyString,
+    resistance: nonEmptyString,
+    choice: nonEmptyString,
+    consequence: nonEmptyString,
+    payoff: nonEmptyString,
+    nextQuestion: nonEmptyString,
+  })).min(3).max(5),
+}).superRefine((value, ctx) => {
+  if (value.openingChain.some((chapter, index) => chapter.chapterOrder !== index + 1)) {
+    ctx.addIssue({ code: "custom", path: ["openingChain"], message: "Opening chapters must be consecutive from chapter 1." });
+  }
+});
+
 export const directorCandidateSchema = z.object({
   id: nonEmptyString.optional(),
   workingTitle: nonEmptyString,
@@ -131,6 +153,7 @@ export const directorCandidateSchema = z.object({
   toneKeywords: keywordArraySchema,
   targetChapterCount: chapterCountSchema,
   productionFoundation: productionFoundationSchema.optional(),
+  storyPrototype: storyPrototypeSchema.optional(),
 });
 
 export const directorPersistedCandidateSchema = directorCandidateSchema.extend({
@@ -139,6 +162,7 @@ export const directorPersistedCandidateSchema = directorCandidateSchema.extend({
 
 export const directorCandidateResponseSchema = z.object({
   candidates: z.array(directorCandidateSchema.extend({
+    storyPrototype: storyPrototypeSchema,
     recommendedWritingPlatform: z.enum(["fanqie_free", "qidian_male", "jinjiang_female"]),
     writingPlatformReason: nonEmptyString,
   })).length(2),

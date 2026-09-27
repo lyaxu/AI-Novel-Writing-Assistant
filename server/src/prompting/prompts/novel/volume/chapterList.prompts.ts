@@ -289,7 +289,7 @@ export function createVolumeChapterListPrompt(
 
   return {
     id: "novel.volume.chapter_list",
-    version: "v9",
+    version: "v10",
     taskType: "planner",
     mode: "structured",
     language: "zh",
@@ -370,7 +370,8 @@ export function createVolumeChapterListPrompt(
           `1. 你当前只能为「${targetBeatLabel}」生成 ${targetChapterCount} 章，数量不得多也不得少。`,
           "2. 只允许覆盖当前目标 beat，不得越界生成相邻 beat 的章节。",
           "3. 不得把两个章节合并成一章摘要，也不得用空泛占位章来凑数。",
-          "4. 若 beat 信息不足，也必须补齐到精确章数，但只能做保守过渡，不得发明重大新设定。",
+          "4. 在精确章数内，从已有矛盾发展具体行动及其后果，不得以保守过渡或重复工作流程填空，也不得发明重大新设定。",
+          "每章摘要呈现主角主动做什么、阻力如何回应、选择付出什么、局面具体如何改变。连续章节不能只是重复催促、失误、查资料或增加疑问；至少一次早期回报兑现旧问题并促成新行动。若承接已选开篇事件链，保持其核心选择、后果与回报，不稀释成多章氛围铺垫。",
           "5. 本任务只生成章节列表，不写正文，不写详细场景，不写完整对白。",
           "",
           "二、硬性输出约束",
