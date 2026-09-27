@@ -232,6 +232,22 @@ test("output exhaustion fails once without AI classification or another writer a
   } finally { harness.restore(); pipelineIssueGovernance.reportPipelineIssue = original; }
 });
 
+for (const code of ["PLANNING_REPAIR_CONFLICT", "PLANNING_REPAIR_CONFIRMATION_REQUIRED"]) {
+  test(`${code} stops without purchasing an AI diagnosis or retry`, async () => {
+    const original = pipelineIssueGovernance.reportPipelineIssue;
+    let reports = 0;
+    pipelineIssueGovernance.reportPipelineIssue = async () => { reports += 1; return null; };
+    const harness = createExecutorHarness({ runChapter: async () => { throw Object.assign(new Error("规划需确认"), { code }); } });
+    try {
+      await harness.execute();
+      assert.equal(reports, 0);
+      assert.equal(harness.chapterCalls, 1);
+      assert.deepEqual(harness.claims, []);
+      assert.equal(harness.jobState.status, "failed");
+    } finally { harness.restore(); pipelineIssueGovernance.reportPipelineIssue = original; }
+  });
+}
+
 for (const timing of ["before classification", "during classification"]) {
   test(`cancellation ${timing} prevents AI classification or its retry action`, async () => {
     const original = pipelineIssueGovernance.reportPipelineIssue;

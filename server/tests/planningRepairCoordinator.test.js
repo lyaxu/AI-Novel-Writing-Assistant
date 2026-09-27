@@ -393,3 +393,13 @@ test("persisting inherited targets invalidates changed chapter reviews and aggre
   assert.equal(h.session.state.quality.window, undefined);
   assert.deepEqual(h.session.candidate.volumes[0].chapters.map(chapter => chapter.targetWordCount), [3000, 2800, 3000]);
 });
+
+test("store-approved committed neighboring chapter returns without paid review",async()=>{
+ const h=harness();h.session.state.phase="committed";h.session.state.affectedChapterIds=["c3","c4"];h.session.candidate=document();
+ const result=await h.coordinator.run({...h.input,chapterId:"c4"});
+ assert.equal(result,h.session.candidate);assert.deepEqual(h.calls,[]);assert.equal(h.commits,0);
+});
+test("uncommitted neighboring chapter still cannot bypass owner guard",async()=>{
+ const h=harness();await assert.rejects(h.coordinator.run({...h.input,chapterId:"c4"}),{code:"PLANNING_REPAIR_CONFIRMATION_REQUIRED"});
+ assert.deepEqual(h.calls,[]);
+});

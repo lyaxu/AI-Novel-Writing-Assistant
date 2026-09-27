@@ -76,12 +76,12 @@ export class PlanningRepairCoordinator {
       novelId: input.document.novelId, taskId: input.options.taskId,
       document: input.document, volumeId: input.volumeId, chapterId: input.chapterId,
     });
-    if (session.state.chapterId !== input.chapterId) {
-      throw new PlanningRepairConfirmationRequired("请先处理本书上一个未完成的规划修正，再推进其他章节。");
-    }
     if (session.state.phase === "committed") {
       committedDocuments.add(session.candidate ?? input.document);
       return session.candidate ?? input.document;
+    }
+    if (session.state.chapterId !== input.chapterId) {
+      throw new PlanningRepairConfirmationRequired("请先处理本书上一个未完成的规划修正，再推进其他章节。");
     }
     if (["waiting_confirmation", "uncertain"].includes(session.state.phase)) {
       throw new PlanningRepairConfirmationRequired(session.state.summary ?? "规划修正需要确认。");

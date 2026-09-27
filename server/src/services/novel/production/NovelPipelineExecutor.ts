@@ -550,7 +550,7 @@ export class NovelPipelineExecutor {
                 );
                 break;
               } catch (error) {
-                if (error && typeof error === "object" && "code" in error && error.code === "LLM_OUTPUT_LIMIT") {
+                if (error && typeof error === "object" && "code" in error && ["LLM_OUTPUT_LIMIT", "PLANNING_REPAIR_CONFLICT", "PLANNING_REPAIR_CONFIRMATION_REQUIRED"].includes(String(error.code))) {
                   throw error;
                 }
                 if (error instanceof PipelineExecutionLeaseLostError) {
@@ -875,7 +875,7 @@ export class NovelPipelineExecutor {
       }
 
       const message = error instanceof Error ? error.message : "流水线执行失败";
-      if (error && typeof error === "object" && "code" in error && error.code === "LLM_OUTPUT_LIMIT") {
+      if (error && typeof error === "object" && "code" in error && ["LLM_OUTPUT_LIMIT", "PLANNING_REPAIR_CONFLICT", "PLANNING_REPAIR_CONFIRMATION_REQUIRED"].includes(String(error.code))) {
         await this.updateJobSafe(jobId, {
           status: "failed", error: message, finishedAt: new Date(),
           payload: this.stringifyPipelinePayload({ ...runtimePayload, qualityAlertDetails, replanAlertDetails, recoverableRepairDetails }),

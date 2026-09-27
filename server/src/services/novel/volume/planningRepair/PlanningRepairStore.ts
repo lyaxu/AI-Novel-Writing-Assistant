@@ -86,6 +86,8 @@ interface StoredSnapshot {
   effectiveDefaultChapterLength?: number;
   candidateHash?: string;
   committed?: boolean;
+  committedPlanHash?: string;
+  committedSourceHash?: string;
 }
 
 type Seed = Record<string, unknown>;
@@ -296,6 +298,36 @@ function semanticDocument(document: VolumePlanDocument): unknown {
   return { ...normalized, derivedOutline: undefined, derivedStructuredOutline: undefined, readiness: undefined };
 }
 
+function committedPlanHash(document: VolumePlanDocument): string {
+  return hash(semanticDocument(document));
+}
+
+function persistedPlanHash(document: VolumePlanDocument): string {
+  const normalized = buildVolumeWorkspaceDocument(document);
+  // These fields live only in version JSON; mapVolumeRow returns null for them.
+  // committedPlanHash independently protects the complete reviewed document.
+  return hash(normalized.volumes.map((volume) => ({
+    ...volume, sourceVersionId: undefined, openingHook: null, primaryPressureSource: null,
+    coreSellingPoint: null, midVolumeRisk: null, payoffType: null,
+    chapters: volume.chapters.map((chapter) => ({
+      ...chapter, beatKey: null, exclusiveEvent: null, endingState: null,
+      nextChapterEntryState: null, styleContract: null,
+      conflictLevelSource: chapter.conflictLevel != null ? chapter.conflictLevelSource ?? "ai" : null,
+    })),
+  })));
+}
+
+function committedSourceHash(source: Source): string {
+  // Execution status, prose and timestamps are outputs, not the reviewed plan.
+  const rows = buildVolumeWorkspaceDocument({ novelId: source.document.novelId,
+    volumes: source.volumes.map(mapVolumeRow), source: "volume" });
+  const contracts = source.chapters.map((chapter) => Object.fromEntries([
+    "id", "order", "title", "expectation", "taskSheet", "sceneCards", "targetWordCount",
+    "conflictLevel", "revealLevel", "mustAvoid",
+  ].map((key) => [key, (chapter as unknown as Seed)[key] ?? null])));
+  return hash({ plan: semanticDocument(rows), contracts, defaultLength: source.effectiveDefaultChapterLength });
+}
+
 function validateCandidate(snapshot: StoredSnapshot, candidate: VolumePlanDocument): string[] {
   const baseline = snapshot.baselineDocument;
   const allowed = new Set(snapshot.eligibleChapterIds);
@@ -470,6 +502,49 @@ export class PlanningRepairStore {
     });
   }
 
+  async migrateCommittedSnapshot(input: {
+    novelId: string; taskId: string; expectedSeedPayloadJson: string; evidenceDocument: VolumePlanDocument;
+  }): Promise<PlanningRepairState> {
+    return transaction(async (tx) => {
+      const task = await readTask(tx, input.taskId, input.novelId, true);
+      if (task.seedPayloadJson !== input.expectedSeedPayloadJson
+        || task.status === "running" || task.status === "queued"
+        || await tx.generationJob.findFirst({ where: { novelId: input.novelId, status: { in: ["queued", "running"] } } })
+        || await tx.directorRunCommand.findFirst({ where: { taskId: input.taskId, status: { in: ["queued", "leased", "running"] } } })) {
+        conflict("Committed snapshot migration requires an unchanged, inactive task.");
+      }
+      const seed = parseSeed(task.seedPayloadJson);
+      const state = readState(seed);
+      const snapshot = readSnapshot(seed, input.taskId);
+      const source = await readSource(tx, input.novelId, task);
+      if (!state || state.phase !== "committed" || state.pendingOperation || !snapshot.committed
+        || snapshot.committedPlanHash || snapshot.committedSourceHash
+        || hash(input.evidenceDocument) !== snapshot.candidateHash
+        || source.document.activeVersionId !== state.candidateVersionId
+        || !source.versions.some((v) => v.id === state.candidateVersionId && v.status === "active")
+        || committedPlanHash(input.evidenceDocument) !== committedPlanHash(source.document)
+        || persistedPlanHash(input.evidenceDocument) !== persistedPlanHash(buildVolumeWorkspaceDocument({
+          novelId: input.novelId, source: "volume", volumes: source.volumes.map(mapVolumeRow),
+        }))
+        || snapshot.effectiveDefaultChapterLength !== source.effectiveDefaultChapterLength) {
+        conflict("Committed snapshot evidence does not match the saved review and active plan.");
+      }
+      const mapping = materializedMapping(input.evidenceDocument, source.chapters);
+      for (const id of state.affectedChapterIds ?? []) {
+        const plan = input.evidenceDocument.volumes.flatMap((v) => v.chapters).find((c) => c.id === id);
+        const row = mapping.get(id);
+        if (!plan || (row && Object.entries(this.chapterContract(plan)).some(([key, value]) =>
+          hash((row as unknown as Seed)[key] ?? null) !== hash(value ?? null)))) {
+          conflict("Materialized execution contract differs from the reviewed evidence.");
+        }
+      }
+      snapshot.committedPlanHash = committedPlanHash(input.evidenceDocument);
+      snapshot.committedSourceHash = committedSourceHash(source);
+      await casSeed(tx, task, { ...seed, [SNAPSHOT_KEY]: snapshot });
+      return state;
+    });
+  }
+
   async begin(input: BeginPlanningRepairInput): Promise<RepairSession> {
     const result = await transaction(async (tx) => {
       const task = await readTask(tx, input.taskId, input.novelId);
@@ -480,12 +555,30 @@ export class PlanningRepairStore {
       const sameChapter = previous && previous.volumeId === input.volumeId
         && (previous.chapterId === input.chapterId
           || source.chapters.some((row) => row.id === input.chapterId && row.order === previous.chapterOrder));
-      if (previous && (previous.phase !== "committed" || sameChapter)) {
+      const requestedPlan = source.document.volumes.find((v) => v.id === input.volumeId)?.chapters
+        .find((chapter) => chapter.id === input.chapterId || chapter.chapterId === input.chapterId);
+      const reviewedWindowChapter = previous?.phase === "committed" && previous.volumeId === input.volumeId
+        && requestedPlan && previous.affectedChapterIds?.includes(requestedPlan.id);
+      if (previous && (previous.phase !== "committed" || sameChapter || reviewedWindowChapter)) {
         const snapshot = readSnapshot(seed, input.taskId);
         let state = previous;
         const upgradeBudget = snapshot.effectiveDefaultChapterLength === undefined && snapshot.snapshotToken === source.token;
         if (upgradeBudget) snapshot.effectiveDefaultChapterLength = source.effectiveDefaultChapterLength;
-        if (snapshot.snapshotToken !== source.token) {
+        const committed = previous.phase === "committed" && snapshot.committed;
+        if (reviewedWindowChapter && !sameChapter) {
+          if (!snapshot.committedPlanHash || !snapshot.committedSourceHash) {
+            conflict("The committed window requires verified snapshot migration before reuse.");
+          }
+          this.assertReviewedContracts(previous, source.document, [requestedPlan.id]);
+        }
+        if (committed && snapshot.committedPlanHash && snapshot.committedSourceHash) {
+          if (source.document.activeVersionId !== previous.candidateVersionId
+            || !source.versions.some((v) => v.id === previous.candidateVersionId && v.status === "active")
+            || committedPlanHash(source.document) !== snapshot.committedPlanHash
+            || committedSourceHash(source) !== snapshot.committedSourceHash) {
+            conflict("The committed planning contract changed; explicit confirmation is required.");
+          }
+        } else if (snapshot.snapshotToken !== source.token) {
           state = { ...previous, phase: "waiting_confirmation", summary: "Planning source changed; explicit confirmation is required." };
         }
         const candidate = await this.loadCandidate(tx, previous, snapshot);
@@ -659,7 +752,10 @@ export class PlanningRepairStore {
         affectedChapterIds: affected, summary: `第${previous.chapterOrder}章起的规划已通过复核并保存（${affected.length}章）。` };
       snapshot.candidateHash = hash(document);
       snapshot.committed = true;
-      snapshot.snapshotToken = (await readSource(tx, previous.novelId, task)).token;
+      const committedSource = await readSource(tx, previous.novelId, task);
+      snapshot.snapshotToken = committedSource.token;
+      snapshot.committedPlanHash = committedPlanHash(document);
+      snapshot.committedSourceHash = committedSourceHash(committedSource);
       const raw = await casSeed(tx, task, { ...seed, planningRepair: state, [SNAPSHOT_KEY]: snapshot });
       return { stale: false as const, state, snapshot, raw, document };
     });
@@ -701,7 +797,11 @@ export class PlanningRepairStore {
     const row = await tx.volumePlanVersion.findFirst({ where: { id: state.candidateVersionId, novelId: state.novelId } });
     if (!row || (row.status !== "draft" && !snapshot.committed)) conflict("Saved repair candidate is no longer a draft.");
     const candidate = JSON.parse(row.contentJson) as VolumePlanDocument;
-    if (hash(candidate) !== snapshot.candidateHash) conflict("Saved repair candidate was changed outside this session.");
+    if (snapshot.committed && snapshot.committedPlanHash) {
+      if (row.status !== "active" || committedPlanHash(candidate) !== snapshot.committedPlanHash) {
+        conflict("Saved repair candidate was changed outside this session.");
+      }
+    } else if (hash(candidate) !== snapshot.candidateHash) conflict("Saved repair candidate was changed outside this session.");
     return candidate;
   }
 

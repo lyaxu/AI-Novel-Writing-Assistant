@@ -35,6 +35,9 @@ answer as a compatibility failure. Text exhaustion carries `LLM_OUTPUT_LIMIT` th
 writer completion and the pipeline, publishes usage, and fails without AI fault
 classification or an automatic writer retry. A cancelled job must also be checked
 before fault classification and again before applying the returned decision.
+Planning-repair conflicts and confirmation-required signals are deterministic safety
+boundaries. They stop the pipeline without another AI diagnosis or retry; the director
+projects the saved planning recovery checkpoint where applicable.
 
 ## 世界准备与重试状态
 
@@ -70,6 +73,14 @@ before fault classification and again before applying the returned decision.
 如果取消后初始任务单完整返回，只能在校验响应来源、格式及边界合同后保存待复核候选。
 技术重放须匹配原调用时间和精确任务快照、来源指纹，保留取消状态和 0/2 次预算；
 后续显式重试进入语义与窗口审查，不能把日志响应直接视为审查通过，也不重复请求初始任务单。
+
+规划提交后采用受审合同和活动版本的稳定指纹复用，不能继续把正文生成状态与更新时间
+纳入待审来源比较。序列化、章节关联和状态推进可能更新元数据，实际规划和物化合同仍须一致。
+旧提交缺少稳定指纹时，必须用原始响应与修正历史还原出精确匹配旧指纹的证据文档，
+再与当前受审合同核验后迁移；不能直接信任任意现存活动版本或删除旧指纹放行。
+运行时 StoryPlan 的细化建议不能覆盖已有章节执行合同；其输入指纹须绑定实际保留的合同。
+场景建议的数量不能反向增加受审字数预算。已在同一窗口逐章审查且联合复核通过的章节，
+只要活动版本及合同仍一致，就复用批准记录；窗口外章节仍需自己的规划审查。
 
 ## Upgrade Guards
 

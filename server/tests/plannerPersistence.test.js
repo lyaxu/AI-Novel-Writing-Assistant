@@ -7,7 +7,7 @@ const {
   readPlanExecutionContractHash,
   STORY_PLAN_PERSISTENCE_TRANSACTION_TIMEOUT_MS,
 } = require("../dist/services/planner/plannerPersistence.js");
-const { parseChapterScenePlan } = require("../../shared/dist/types/chapterLengthControl.js");
+const { normalizeChapterScenePlan, parseChapterScenePlan } = require("../../shared/dist/types/chapterLengthControl.js");
 
 test("persistStoryPlan uses an explicit timeout for planning writes", async () => {
   const original = {
@@ -445,4 +445,129 @@ test("persistStoryPlan keeps chapter status unchanged when正文 already exists"
     prisma.storyPlan.findUnique = original.findUnique;
     prisma.$transaction = original.transaction;
   }
+});
+
+async function captureChapterPlanPersistence(baseExecutionContract) {
+  const original = {
+    findFirst: prisma.storyPlan.findFirst,
+    findUnique: prisma.storyPlan.findUnique,
+    transaction: prisma.$transaction,
+  };
+  const captured = { chapterUpdate: null, plan: null, scenes: null };
+  prisma.storyPlan.findFirst = async () => null;
+  prisma.$transaction = async (callback) => callback({
+    storyPlan: {
+      create: async ({ data }) => {
+        captured.plan = data;
+        return { id: "runtime-suggestion" };
+      },
+    },
+    chapterPlanScene: {
+      deleteMany: async () => undefined,
+      createMany: async ({ data }) => { captured.scenes = data; },
+    },
+    chapter: {
+      findUnique: async () => ({ content: "", chapterStatus: "unplanned" }),
+      update: async ({ data }) => { captured.chapterUpdate = data; },
+    },
+  });
+  prisma.storyPlan.findUnique = async () => ({
+    id: "runtime-suggestion",
+    ...captured.plan,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    scenes: [],
+  });
+  try {
+    await persistStoryPlan({
+      novelId: "novel-1",
+      chapterId: "chapter-1",
+      level: "chapter",
+      title: "运行时建议",
+      objective: "运行时另拟章节目标",
+      targetWordCount: 2800,
+      participants: ["新角色"],
+      reveals: ["新揭示"],
+      riskNotes: ["新风险"],
+      mustAdvance: ["另行推进冲突"],
+      mustPreserve: ["新保留事项"],
+      sourceIssueIds: [],
+      replannedFromPlanId: null,
+      hookTarget: "运行时另拟钩子",
+      baseExecutionContract,
+      scenes: Array.from({ length: 5 }, (_, index) => ({
+        title: `建议场景 ${index + 1}`,
+        objective: `建议行动 ${index + 1}`,
+        conflict: "新冲突",
+        reveal: "新发现",
+      })),
+    });
+    return captured;
+  } finally {
+    prisma.storyPlan.findFirst = original.findFirst;
+    prisma.storyPlan.findUnique = original.findUnique;
+    prisma.$transaction = original.transaction;
+  }
+}
+
+test("runtime story plan preserves the complete chapter contract and hashes the preserved assets", async () => {
+  const baseExecutionContract = {
+    expectation: "已审章节目标",
+    targetWordCount: 2800,
+    conflictLevel: 2,
+    revealLevel: 1,
+    mustAvoid: "不得提前揭密",
+    taskSheet: "已审任务单：保留唯一事件和明确结果",
+    sceneCards: JSON.stringify(normalizeChapterScenePlan(Array.from({ length: 4 }, (_, index) => ({
+      key: `approved-${index + 1}`,
+      title: `已审场景 ${index + 1}`,
+      purpose: "推进已审事件",
+      entryState: "保留原始局势",
+      exitState: "完成规定结果",
+      targetWordCount: 700,
+    })), 2800)),
+    hook: "已审收尾钩子",
+  };
+  const captured = await captureChapterPlanPersistence(baseExecutionContract);
+
+  // The new objective/scenes remain readable as StoryPlan suggestions.
+  assert.equal(captured.plan.objective, "运行时另拟章节目标");
+  assert.equal(captured.scenes.length, 5);
+  assert.equal(captured.scenes[0].title, "建议场景 1");
+  // No execution field may be overwritten, including the 2,800-word budget.
+  assert.deepEqual(captured.chapterUpdate, { chapterStatus: "pending_generation" });
+  const preserved = { ...baseExecutionContract, ...captured.chapterUpdate };
+  assert.equal(preserved.targetWordCount, 2800);
+  assert.equal(JSON.parse(preserved.sceneCards).targetWordCount, 2800);
+  const hash = readPlanExecutionContractHash(captured.plan.rawPlanJson);
+  assert.equal(hash, buildChapterExecutionContractHash(baseExecutionContract));
+  assert.notEqual(hash, buildChapterExecutionContractHash({
+    ...baseExecutionContract,
+    expectation: captured.plan.objective,
+    hook: captured.plan.hookTarget,
+  }));
+});
+
+test("runtime story plan can initialize missing chapter assets and hashes those initialized assets", async () => {
+  const baseExecutionContract = {
+    expectation: "待完善章节目标",
+    targetWordCount: 2800,
+    conflictLevel: 2,
+    revealLevel: 1,
+    mustAvoid: "不得提前揭密",
+    taskSheet: null,
+    sceneCards: null,
+    hook: null,
+  };
+  const captured = await captureChapterPlanPersistence(baseExecutionContract);
+  assert.equal(captured.chapterUpdate.expectation, "运行时另拟章节目标");
+  assert.match(captured.chapterUpdate.taskSheet, /另行推进冲突/);
+  const scenes = parseChapterScenePlan(captured.chapterUpdate.sceneCards);
+  assert.equal(scenes.scenes.length, 5);
+  assert.equal(scenes.scenes[0].title, "建议场景 1");
+  assert.equal(captured.chapterUpdate.hook, "运行时另拟钩子");
+  assert.equal(
+    readPlanExecutionContractHash(captured.plan.rawPlanJson),
+    buildChapterExecutionContractHash({ ...baseExecutionContract, ...captured.chapterUpdate }),
+  );
 });

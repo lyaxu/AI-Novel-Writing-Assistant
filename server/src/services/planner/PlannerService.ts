@@ -445,9 +445,6 @@ export class PlannerService {
         conflictLevelSource: item.conflictLevelSource,
       })),
     }));
-    const anchoredVolumeChapter = mappedVolumes
-      .flatMap((volume) => volume.chapters)
-      .find((item) => item.chapterOrder === chapter.order && item.conflictLevelSource === "user");
     const defaultMetadata = buildDefaultPlanMetadata("chapter", {
       chapterOrder: chapter.order,
       totalChapters: novel.estimatedChapterCount ?? null,
@@ -607,7 +604,7 @@ export class PlannerService {
       baseExecutionContract: {
         expectation: chapter.expectation,
         targetWordCount: chapter.targetWordCount,
-        conflictLevel: anchoredVolumeChapter?.conflictLevel ?? chapter.conflictLevel,
+        conflictLevel: chapter.conflictLevel,
         revealLevel: chapter.revealLevel,
         mustAvoid: chapter.mustAvoid,
         taskSheet: chapter.taskSheet,

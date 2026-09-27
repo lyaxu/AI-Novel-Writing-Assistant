@@ -987,3 +987,69 @@ test("legacy snapshots without a frozen default upgrade only against unchanged s
   assert.equal(resumed.effectiveDefaultChapterLength, 3100);
   assert.equal(JSON.parse(h.db.task.seedPayloadJson).planningRepairSnapshot.effectiveDefaultChapterLength, 3100);
 });
+
+test("committed same-chapter resume tolerates execution progress and canonical derived refresh", async () => {
+  const h = fixture(); const s = await h.store.begin(h.input); await h.ready(s);
+  const document = await h.store.commit(s, s.candidate);
+  h.db.chapters[1].chapterStatus = "generating"; h.db.chapters[1].content = "saved prose";
+  h.db.chapters[1].updatedAt = new Date().toISOString();
+  h.db.versions.find(v => v.status === "active").contentJson = JSON.stringify(workspace.buildVolumeWorkspaceDocument(document));
+  const resumed = await h.store.begin({ ...h.input, document });
+  assert.equal(resumed.state.phase, "committed"); assert.equal(resumed.state.rounds, s.state.rounds);
+});
+for (const changed of ["version", "plan", "row", "contract", "budget"]) test(`committed reuse rejects changed ${changed}`, async () => {
+  const h = fixture(); const s = await h.store.begin(h.input); await h.ready(s);
+  const document = await h.store.commit(s, s.candidate);
+  if (changed === "version") h.db.versions.find(v => v.status === "active").id = "other";
+  if (changed === "plan") { const v=h.db.versions.find(v => v.status === "active");const d=JSON.parse(v.contentJson);d.volumes[0].chapters[1].taskSheet="tampered";v.contentJson=JSON.stringify(d); }
+  if (changed === "row") h.db.volumes[0].chapters[1].taskSheet="tampered";
+  if (changed === "contract") h.db.chapters[1].taskSheet="tampered";
+  if (changed === "budget") h.db.novel.defaultChapterLength=4000;
+  await assert.rejects(h.store.begin({ ...h.input, document }), /committed planning contract changed|Saved repair candidate|Saved candidate/);
+});
+test("legacy committed migration requires exact evidence and preserves lifecycle and budget", async () => {
+  const h=fixture();const s=await h.store.begin(h.input);await h.ready(s);const document=await h.store.commit(s,s.candidate);
+  const seed=JSON.parse(h.db.task.seedPayloadJson);delete seed.planningRepairSnapshot.committedPlanHash;delete seed.planningRepairSnapshot.committedSourceHash;
+  h.db.task.seedPayloadJson=JSON.stringify(seed);h.db.task.status="cancelled";h.db.task.cancelRequestedAt=epoch;
+  const before=copy(h.db.chapters);const state=await h.store.migrateCommittedSnapshot({novelId:"n",taskId:"t",expectedSeedPayloadJson:h.db.task.seedPayloadJson,evidenceDocument:document});
+  assert.deepEqual(state,seed.planningRepair);assert.deepEqual(h.db.chapters,before);assert.equal(h.db.task.status,"cancelled");
+  assert.ok(JSON.parse(h.db.task.seedPayloadJson).planningRepairSnapshot.committedPlanHash);
+});
+for(const changed of ["evidence","active plan","budget","contract","active job","CAS"])test(`legacy committed migration rejects ${changed}`,async()=>{
+  const h=fixture();const s=await h.store.begin(h.input);await h.ready(s);const document=await h.store.commit(s,s.candidate);
+  const seed=JSON.parse(h.db.task.seedPayloadJson);delete seed.planningRepairSnapshot.committedPlanHash;delete seed.planningRepairSnapshot.committedSourceHash;h.db.task.seedPayloadJson=JSON.stringify(seed);
+  h.db.task.status="cancelled";h.db.task.cancelRequestedAt=epoch;
+  if(changed==="evidence")document.volumes[0].chapters[1].taskSheet="tampered";
+  if(changed==="active plan"){const v=h.db.versions.find(v=>v.status==="active");const d=JSON.parse(v.contentJson);d.volumes[0].chapters[1].taskSheet="tampered";v.contentJson=JSON.stringify(d);}
+  if(changed==="budget")h.db.novel.defaultChapterLength=4000;
+  if(changed==="contract")h.db.chapters[1].taskSheet="tampered";
+  if(changed==="active job")h.db.activeJob={status:"running"};
+  if(changed==="CAS")h.failCAS();
+  await assert.rejects(h.store.migrateCommittedSnapshot({novelId:"n",taskId:"t",expectedSeedPayloadJson:h.db.task.seedPayloadJson,evidenceDocument:document}));
+});
+
+
+test("committed reviewed window reuses approved neighbor by plan or materialized id", async () => {
+  const h=fixture(); const s=await h.store.begin(h.input);const candidate=h.candidate();
+  candidate.volumes[0].chapters[2].taskSheet="Reviewed neighbor";
+  await h.ready(s,candidate);const document=await h.store.commit(s,s.candidate);
+  for(const chapterId of ["p3","c3"]){const resumed=await h.store.begin({...h.input,document,chapterId});
+    assert.equal(resumed.state.phase,"committed");assert.equal(resumed.state.chapterId,"p2");assert.equal(resumed.state.rounds,s.state.rounds);}
+});
+test("unapproved neighbor opens its own planning gate instead of reusing committed window",async()=>{
+  const h=fixture();const s=await h.store.begin(h.input);await h.ready(s);const document=await h.store.commit(s,s.candidate);
+  const next=await h.store.begin({...h.input,document,chapterId:"p3"});
+  assert.equal(next.state.chapterId,"p3");assert.equal(next.state.phase,"assessing");
+});
+
+test("legacy migration compares DB projection while version hash protects extended planning fields",async()=>{
+ const h=fixture();const s=await h.store.begin(h.input);const candidate=h.candidate();
+ candidate.volumes[0].chapters[1].exclusiveEvent="Reviewed exclusive event";
+ candidate.volumes[0].chapters[1].endingState="Reviewed ending";
+ await h.ready(s,candidate);const document=await h.store.commit(s,s.candidate);
+ const seed=JSON.parse(h.db.task.seedPayloadJson);delete seed.planningRepairSnapshot.committedPlanHash;delete seed.planningRepairSnapshot.committedSourceHash;h.db.task.seedPayloadJson=JSON.stringify(seed);h.db.task.status="cancelled";
+ for(const v of h.db.volumes){for(const key of ["openingHook","primaryPressureSource","coreSellingPoint","midVolumeRisk","payoffType"])v[key]=null;for(const c of v.chapters)for(const key of ["beatKey","exclusiveEvent","endingState","nextChapterEntryState","styleContract"])c[key]=null;}
+ await h.store.migrateCommittedSnapshot({novelId:"n",taskId:"t",expectedSeedPayloadJson:h.db.task.seedPayloadJson,evidenceDocument:document});
+ h.db.task.status="running";const v=h.db.versions.find(v=>v.status==="active");const d=JSON.parse(v.contentJson);d.volumes[0].chapters[1].exclusiveEvent="Tampered extension";v.contentJson=JSON.stringify(d);
+ await assert.rejects(h.store.begin({...h.input,document}),/committed planning contract changed/);
+});

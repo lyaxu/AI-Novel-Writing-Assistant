@@ -162,10 +162,17 @@ function buildPlanSceneCards(input: PersistPlanInput): string | undefined {
 }
 
 export async function persistStoryPlan(input: PersistPlanInput) {
+  // Runtime plans are suggestions once chapter-detail planning owns the execution
+  // contract. Only the reviewed planning path may replace those saved assets.
+  // Presence is a write guard, not a substitute for the planning quality gate.
+  const preserveExecutionContract = input.level === "chapter" && Boolean(
+    input.baseExecutionContract?.taskSheet?.trim()
+    && input.baseExecutionContract?.sceneCards?.trim(),
+  );
   const taskSheet = buildPlanTaskSheet(input);
   const sceneCards = buildPlanSceneCards(input);
   const executionContractHash = input.level === "chapter"
-    ? buildChapterExecutionContractHash({
+    ? buildChapterExecutionContractHash(preserveExecutionContract ? input.baseExecutionContract! : {
       ...(input.baseExecutionContract ?? {}),
       expectation: sanitizePlanText(input.objective) || null,
       targetWordCount: input.targetWordCount ?? input.baseExecutionContract?.targetWordCount ?? null,
@@ -285,10 +292,12 @@ export async function persistStoryPlan(input: PersistPlanInput) {
         await tx.chapter.update({
           where: { id: input.chapterId },
           data: {
-            expectation: sanitizePlanText(input.objective) || undefined,
-            taskSheet,
-            sceneCards,
-            hook: sanitizePlanText(input.hookTarget) || undefined,
+            ...(!preserveExecutionContract ? {
+              expectation: sanitizePlanText(input.objective) || undefined,
+              taskSheet,
+              sceneCards,
+              hook: sanitizePlanText(input.hookTarget) || undefined,
+            } : {}),
             chapterStatus: nextChapterStatus,
           },
         });
