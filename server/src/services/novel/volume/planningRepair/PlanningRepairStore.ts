@@ -66,11 +66,13 @@ export interface BeginPlanningRepairInput {
 export interface RebasePlanningRepairInput extends BeginPlanningRepairInput {
   /** Exact seed reserved by the recovery command, checked before any rebase work. */
   expectedSeedPayloadJson?: string | null;
+  /** Advice selection must still refer to the same canonical source inside the transaction. */
+  expectedSourceToken?: string;
 }
 
 export class PlanningRepairConflictError extends Error {
   readonly code = "PLANNING_REPAIR_CONFLICT";
-  constructor(message: string) {
+  constructor(message: string, readonly reason?: "advice_source_changed") {
     super(message);
     this.name = "PlanningRepairConflictError";
   }
@@ -693,6 +695,9 @@ export class PlanningRepairStore {
       }
       const snapshot = readSnapshot(seed, task.id);
       const source = await readSource(tx, input.novelId, task);
+      if (input.expectedSourceToken !== undefined && input.expectedSourceToken !== source.token) {
+        throw new PlanningRepairConflictError("规划来源已变化，请重新获取推荐方案。", "advice_source_changed");
+      }
       if (hash(semanticDocument(input.document)) !== hash(semanticDocument(source.document))) {
         return conflict("Explicit recovery requires a fresh canonical workspace document.");
       }

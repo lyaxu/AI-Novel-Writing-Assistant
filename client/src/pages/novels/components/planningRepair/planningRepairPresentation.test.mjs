@@ -27,9 +27,11 @@ test("quality displays three distinct concrete issues safely", () => {
   assert.deepEqual(planningRepairIssues(null), []);
 });
 
-test("only new paid grants require confirmation and the panel stays on source workspace", () => {
+test("paid repair actions explain their scope and remain on the source workspace", () => {
   const panel = readFileSync(new URL("./PlanningRepairPanel.tsx", import.meta.url), "utf8");
-  assert.match(panel, /!status\.recoveryRequest && !window\.confirm/);
-  assert.match(panel, /模型调用费用/);
+  const actions = readFileSync(new URL("./RepairActions.tsx", import.meta.url), "utf8");
+  assert.match(actions, /追加 1 轮规划修复/);
+  assert.match(actions, /模型调用费用/);
+  assert.match(actions, /采用此方案并修复/);
   assert.doesNotMatch(panel, /workspaceTaskId/);
 });

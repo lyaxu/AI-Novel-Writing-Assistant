@@ -6,7 +6,8 @@ const { guardPlanningRepairWorkflowUpdate: guard, updateWorkflowTaskWithPlanning
 function row(phase = "repairing", extra = {}) {
   return { id: "task", status: "running", cancelRequestedAt: null,
     seedPayloadJson: JSON.stringify({ planningRepair: { version: 1, key: "repair", phase, rounds: 2, maxRounds: 2, history: [] },
-      planningRepairSnapshot: { token: "new" }, planningRepairRecoveryRequests: ["grant"],
+      planningRepairSnapshot: { token: "new" }, planningRepairRecoveryRequests: ["grant"], planningRepairAdvice: { adviceId: "saved", status: "ready" },
+      planningRepairAdviceRequests: ["paid-request"],
       resumeTarget: "planning" }), ...extra };
 }
 
@@ -18,6 +19,8 @@ test("stale progress preserves repair-owned fields and accepts unrelated progres
   assert.equal(result.planningRepair.rounds, 2);
   assert.equal(result.planningRepairSnapshot.token, "new");
   assert.deepEqual(result.planningRepairRecoveryRequests, ["grant"]);
+  assert.deepEqual(result.planningRepairAdvice, { adviceId: "saved", status: "ready" });
+  assert.deepEqual(result.planningRepairAdviceRequests, ["paid-request"]);
   assert.equal(result.planningRepairRecovery, undefined);
   assert.equal(result.autoExecution.progress, 70);
   assert.equal(JSON.parse(desired.seedPayloadJson).planningRepair.rounds, 0);

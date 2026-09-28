@@ -10,6 +10,10 @@ export interface PromptAssetLoaderEntry {
 
 export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
   {
+    key: "novel.planning_repair.advice@v1",
+    load: () => require("../prompts/novel/volume/recovery/planningRepairAdvice.prompts").planningRepairAdvicePrompt as UnknownPromptAsset,
+  },
+  {
     key: "director.issue.assessment@v1",
     load: () => require("../prompts/director/directorIssueAssessment.prompts").directorIssueAssessmentPrompt as UnknownPromptAsset,
   },
@@ -338,7 +342,7 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/novel/volume/chapterDetail.prompts").volumeChapterExecutionContractPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.chapter_task_sheet_quality@v3",
+    key: "novel.volume.chapter_task_sheet_quality@v4",
     load: () => require("../prompts/novel/volume/chapterTaskSheetQuality.prompts").chapterTaskSheetQualityPrompt as UnknownPromptAsset,
   },
   {

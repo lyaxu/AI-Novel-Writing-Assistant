@@ -272,7 +272,8 @@ test("authorized recovery resumes original phase and never invokes replan or ass
   for (const resumePhase of ["structured_outline", "chapter_execution"]) {
     const repair = state({ phase: "reviewing", maxRounds: 3 });
     const input = { runMode: "full_book_autopilot", candidate: { workingTitle: "Book", targetChapterCount: 30 } };
-    const seed = { planningRepair: repair, directorInput: input,
+    // This recovery case starts after the author chose the production experience.
+    const seed = { planningRepair: repair, directorInput: input, productionExperience: "professional",
       planningRepairRecovery: { repairKey: repair.key, resumePhase, idempotencyKey: "grant", grantedAtRound: 2 },
       autoExecution: { enabled: true, pipelineJobId: "old-failed-job" },
       resumeTarget: { stage: "structured", volumeId: "volume-1", chapterId: "plan-1" } };
@@ -333,5 +334,30 @@ test("HTTP handlers validate guidance and idempotency, GET is read-only, pause n
     assert.equal(calls.filter(c => c[0] === "dispatch").length, 0);
     assert.equal((await post({ action: "retry", repairKey: "repair-1", guidance: "Valid", idempotencyKey: "id" })).status, 202);
     assert.deepEqual(calls.at(-1), ["dispatch", "task-1", "repair-1", "id"]);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test("advice HTTP separates read, paid request and adoption and dispatches the server-owned recovery key", async () => {
+  const calls = [];
+  const advice = {
+    status: async id => { calls.push(["read", id]); return { status: "none" }; },
+    request: async (id, input) => { calls.push(["request", id, input]); return { status: "running", adviceId: "a" }; },
+    select: async (id, input) => { calls.push(["select", id, input]); return { granted: true, idempotencyKey: "advice:a:option" }; },
+  };
+  const commands = { enqueuePlanningRepairRecoveryCommand: async (...args) => { calls.push(["dispatch", ...args]); return { commandId: "c" }; } };
+  const app = express(); app.use(express.json()); app.use(createPlanningRepairRouter({}, commands, advice)); app.use(errorHandler);
+  const server = http.createServer(app);
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${server.address().port}/task-1/planning-repair/advice`;
+  const post = (suffix, body) => fetch(`${url}${suffix}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  try {
+    assert.equal((await fetch(url)).status, 200);
+    assert.deepEqual(calls, [["read", "task-1"]]);
+    assert.equal((await post("", { repairKey: "r", idempotencyKey: "request" })).status, 202);
+    assert.equal(calls.filter(call => call[0] === "dispatch").length, 0);
+    const selection = { repairKey: "r", idempotencyKey: "client-click", adviceId: "a", optionId: "option" };
+    assert.equal((await post("/select", { ...selection, guidance: "tampered" })).status, 400);
+    assert.equal((await post("/select", selection)).status, 202);
+    assert.deepEqual(calls.at(-1), ["dispatch", "task-1", "r", "advice:a:option"]);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });

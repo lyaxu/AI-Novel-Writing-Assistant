@@ -623,6 +623,9 @@ async function resolveStructuredOutput<I, O, R = O>(input: {
         maxTokens: input.options?.maxTokens,
         timeoutMs: input.options?.timeoutMs,
         signal: input.options?.signal,
+        disableFallbackModel: input.options?.disableFallbackModel,
+        transportRetryCount: input.options?.transportRetryCount,
+        disableStrategyFallback: input.options?.disableStrategyFallback,
         taskType: input.asset.taskType,
         messages: currentMessages,
         schema: input.outputSchema,
@@ -721,6 +724,9 @@ export async function runStructuredPrompt<I, O, R = O>(input: {
       maxTokens: input.options?.maxTokens,
       timeoutMs: input.options?.timeoutMs,
       signal: input.options?.signal,
+      disableFallbackModel: input.options?.disableFallbackModel,
+      transportRetryCount: input.options?.transportRetryCount,
+      disableStrategyFallback: input.options?.disableStrategyFallback,
       taskType: input.asset.taskType,
       messages,
       schema: outputSchema,
@@ -1129,7 +1135,7 @@ export async function streamStructuredPrompt<I, O, R = O>(input: {
       liveSession.usage(capturedUsage ? { ...capturedUsage, reasoningTokens: capturedUsage.reasoningTokens ?? null } : null);
       assertPromptOutputWithinLimit({ finishReason: captured.getFinishReason(), maxTokens: resolvedMaxTokens, tokenUsage: capturedUsage });
       let repairStarted = false;
-      const parsed = rawContent.trim()
+      const parsed = rawContent.trim() || input.options?.disableStrategyFallback
         ? await parseStructuredLlmRawContentDetailed({
           rawContent,
           tokenUsage: capturedUsage,
@@ -1163,6 +1169,9 @@ export async function streamStructuredPrompt<I, O, R = O>(input: {
           maxTokens: input.options?.maxTokens,
           timeoutMs: input.options?.timeoutMs,
           signal: input.options?.signal,
+          disableFallbackModel: input.options?.disableFallbackModel,
+          transportRetryCount: input.options?.transportRetryCount,
+          disableStrategyFallback: input.options?.disableStrategyFallback,
           taskType: input.asset.taskType,
           messages: prepared.messages,
           schema: outputSchema,

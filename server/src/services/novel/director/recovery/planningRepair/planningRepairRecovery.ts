@@ -25,6 +25,8 @@ export interface PlanningRepairRecovery {
   pendingGrant?: boolean;
   expectedMaxRounds?: number;
   expectedRound?: number;
+  expectedSourceToken?: string;
+  previousRecovery?: PlanningRepairRecovery | null;
 }
 
 export function readPlanningRepairSeed(json: string | null | undefined): {

@@ -3,6 +3,7 @@ import { assertPlanningRepairResumeAllowed } from "../director/recovery/planning
 
 const REPAIR_SEED_KEYS = [
   "planningRepair", "planningRepairSnapshot", "planningRepairRecovery", "planningRepairRecoveryRequests",
+  "planningRepairAdvice", "planningRepairAdviceRequests",
 ] as const;
 
 const REPAIR_LIFECYCLE_FIELDS = [

@@ -66,6 +66,8 @@ export interface StructuredInvokeInput<T> {
   maxRepairAttempts?: number;
   promptMeta?: PromptInvocationMeta;
   disableFallbackModel?: boolean;
+  transportRetryCount?: number;
+  disableStrategyFallback?: boolean;
 }
 
 interface StructuredAttemptTarget {
@@ -393,10 +395,11 @@ async function tryStructuredStrategies<T>(input: {
       ...sequence.filter((strategy) => strategy !== input.target.preferredStrategy),
     ]
     : sequence;
+  const attempts = input.baseInput.disableStrategyFallback ? preferredSequence.slice(0, 1) : preferredSequence;
   let lastError: StructuredOutputError | null = null;
-  for (let index = 0; index < preferredSequence.length; index += 1) {
+  for (let index = 0; index < attempts.length; index += 1) {
     input.baseInput.signal?.throwIfAborted();
-    const strategy = preferredSequence[index]!;
+    const strategy = attempts[index]!;
     try {
       return await invokeStructuredAttempt({
         baseInput: input.baseInput,
@@ -491,7 +494,7 @@ export async function invokeStructuredLlmDetailed<T>(input: StructuredInvokeInpu
     structuredStrategy: input.structuredStrategy,
   });
   const fallbackSettings = input.disableFallbackModel ? null : await getStructuredFallbackSettings();
-  const transportRetryCount = normalizeTransportRetryCount(fallbackSettings?.retryCount);
+  const transportRetryCount = normalizeTransportRetryCount(input.transportRetryCount ?? fallbackSettings?.retryCount);
   const fallbackEnabled = Boolean(
     fallbackSettings?.enabled
     && fallbackSettings.model.trim().length > 0

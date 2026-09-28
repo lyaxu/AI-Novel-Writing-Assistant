@@ -1,4 +1,6 @@
 import type { ApiResponse } from "@ai-novel/shared/types/api";
+import type { PlanningRepairAdviceStatus } from "@ai-novel/shared/types/planningRepair/advice";
+export type { PlanningRepairAdviceStatus, PlanningRepairAdviceOption } from "@ai-novel/shared/types/planningRepair/advice";
 import { apiClient } from "../client";
 
 export interface PlanningRepairStatus {
@@ -30,6 +32,22 @@ export interface PlanningRepairStatus {
 
 export const planningRepairQueryKey = (taskId: string) => ["planning-repair", "task", taskId] as const;
 export const novelPlanningRepairQueryKey = (novelId: string) => ["planning-repair", "novel", novelId] as const;
+export const planningRepairAdviceQueryKey = (taskId: string) => ["planning-repair", "advice", taskId] as const;
+
+export async function getPlanningRepairAdvice(taskId: string) {
+  const { data } = await apiClient.get<ApiResponse<PlanningRepairAdviceStatus>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/advice`);
+  return data.data;
+}
+
+export async function requestPlanningRepairAdvice(taskId: string, payload: { repairKey: string; idempotencyKey: string }) {
+  const { data } = await apiClient.post<ApiResponse<PlanningRepairAdviceStatus>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/advice`, payload);
+  return data.data;
+}
+
+export async function selectPlanningRepairAdvice(taskId: string, payload: { repairKey: string; adviceId: string; optionId: string; idempotencyKey: string }) {
+  const { data } = await apiClient.post<ApiResponse<unknown>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/advice/select`, payload);
+  return data.data;
+}
 
 export async function getPlanningRepairStatus(taskId: string) {
   const { data } = await apiClient.get<ApiResponse<PlanningRepairStatus>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair`);

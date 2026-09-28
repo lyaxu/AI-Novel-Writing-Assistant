@@ -128,6 +128,12 @@ export interface PromptExecutionOptions {
   maxTokens?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Structured calls only: do not switch to the configured fallback model. */
+  disableFallbackModel?: boolean;
+  /** Structured calls only: override transport retries; zero sends no automatic retry. */
+  transportRetryCount?: number;
+  /** Structured calls only: do not request a second response using another JSON strategy. */
+  disableStrategyFallback?: boolean;
   novelId?: string;
   chapterId?: string;
   volumeId?: string;

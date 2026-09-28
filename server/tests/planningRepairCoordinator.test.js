@@ -128,6 +128,24 @@ test("local repair does not expand to neighboring chapters", async () => {
   assert.deepEqual(result.volumes[0].chapters[1], h.input.document.volumes[0].chapters[1]);
 });
 
+test("chapter re-review receives book constraints, current candidate and preceding issue ids", async () => {
+  const h = harness({ local: true });
+  h.input.context = { novel: { genre: "东方玄幻", coreRule: "能力必须有来源" } };
+  const seen = [];
+  const evaluate = h.gate.evaluate;
+  h.gate.evaluate = async (candidate, options) => {
+    seen.push({ candidate, options, context: JSON.parse(options.reviewContextJson) });
+    return evaluate(candidate, options);
+  };
+  await h.coordinator.run(h.input);
+  assert.equal(seen.length, 2);
+  assert.equal(seen[0].context.bookConstraints.novel.coreRule, "能力必须有来源");
+  assert.deepEqual(seen[0].options.previousIssues, []);
+  assert.deepEqual(seen[1].options.previousIssues, reject.issues);
+  assert.equal(seen[1].context.candidateChapters[0].taskSheet, seen[1].candidate.taskSheet);
+  assert.notEqual(seen[1].context.originalChapters[0].taskSheet, seen[1].candidate.taskSheet);
+});
+
 test("two failed rounds pause, and ordinary resume spends nothing", async () => {
   const h = harness({ alwaysReject: true });
   await assert.rejects(h.coordinator.run(h.input), { code: "PLANNING_REPAIR_CONFIRMATION_REQUIRED" });

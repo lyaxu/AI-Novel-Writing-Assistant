@@ -789,6 +789,29 @@ test("explicit rebase with unchanged creative data retains candidate and quota",
   assert.equal(rebased.state.phase, "reviewing");
 });
 
+test("advice selection rebase rejects a source changed after selection validation", async () => {
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  await h.ready(session);
+  h.db.task.status = "waiting_approval";
+  const seed = h.db.task.seedPayloadJson;
+  h.db.novel.title = "Changed after recommendation was selected";
+  await assert.rejects(h.store.rebase({ ...h.input, expectedSourceToken: session.snapshotToken }), {
+    code: "PLANNING_REPAIR_CONFLICT", reason: "advice_source_changed",
+  });
+  assert.equal(h.db.task.seedPayloadJson, seed);
+  assert.equal(h.db.versions.length, 2);
+});
+
+test("advice selection accepts the exact source token without losing the candidate", async () => {
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  await h.ready(session);
+  h.db.task.status = "waiting_approval";
+  const result = await h.store.rebase({ ...h.input, expectedSourceToken: session.snapshotToken });
+  assert.deepEqual(result.candidate, session.candidate);
+});
+
 test("pending repair output survives failed candidate save and begin for replay", async () => {
   const h = fixture();
   const session = await h.store.begin(h.input);

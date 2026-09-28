@@ -3,6 +3,7 @@ import type {
   ChapterExecutionContractQualityCandidate,
   ChapterTaskSheetQualityGateResult,
   ChapterTaskSheetQualityMode,
+  ChapterTaskSheetQualityIssue,
 } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import {
   assessChapterExecutionContractShape,
@@ -23,6 +24,9 @@ export interface ChapterTaskSheetQualityGateOptions {
   taskId?: string;
   entrypoint?: string;
   signal?: AbortSignal;
+  /** Actual book/window evidence, distinct from the candidate's claims. */
+  reviewContextJson?: string;
+  previousIssues?: ChapterTaskSheetQualityIssue[];
 }
 
 export type ChapterTaskSheetSemanticAssessor = (input: {
@@ -92,6 +96,8 @@ export class ChapterTaskSheetQualityGateService {
       promptInput: {
         candidate,
         mode,
+        reviewContextJson: options.reviewContextJson,
+        previousIssues: options.previousIssues,
       },
       options: {
         provider: options.provider,

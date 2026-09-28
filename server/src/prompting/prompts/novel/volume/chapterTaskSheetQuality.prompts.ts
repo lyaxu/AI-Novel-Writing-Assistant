@@ -1,16 +1,21 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { z } from "zod";
 import type {
   AiChapterTaskSheetQualityAssessment,
   ChapterExecutionContractQualityCandidate,
+  ChapterTaskSheetQualityIssue,
 } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import {
   aiChapterTaskSheetQualityAssessmentSchema,
+  chapterPlanningIssueCheckSchema,
 } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import type { PromptAsset } from "../../../core/promptTypes";
 
 export interface ChapterTaskSheetQualityPromptInput {
   candidate: ChapterExecutionContractQualityCandidate;
   mode: "full_book_autopilot" | "ai_copilot" | "manual";
+  reviewContextJson?: string;
+  previousIssues?: ChapterTaskSheetQualityIssue[];
 }
 
 function renderNullable(value: string | number | string[] | null | undefined): string {
@@ -58,6 +63,9 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "你的任务是判断 purpose、章节边界、taskSheet、readerExperience 和 sceneCards 是否足以交给正文生成器执行。",
     modeRule,
     "只评估当前章节合同，不扩写正文，不改写任务单。",
+    "这是写前规划复核：判断已安排的动作与因果桥梁是否可执行，不要求规划提供尚未创作的正文。必须通读 taskSheet、mustAdvance 和 causality；若具体检查、建立或代价动作已安排在使用之前，不得因另一字段未重复描述而判定缺失。",
+    "reviewContext 提供书级约束、原始与当前章节和邻章边界。历史评审只是待核实的意见，不能当作事实；以当前候选原文判断修复效果，不得机械复述上轮问题。未知前文不能自行编造。",
+    "对 previousIssues 的每个 id 输出恰好一条 issueChecks：resolved、partially_resolved、unresolved 或 insufficient_context，引用当前候选原文 candidateEvidence 并解释判断。resolved 必须有至少一条准确原文，不得再把同 id 列入 issues；仍存在的问题沿用原 id。若上下文不足，说明缺的证据，不要把不确定推断写成已发生事实。没有历史问题则 issueChecks=[]。新问题须说明具体的执行或因果缺口，不能把可选文风偏好升级为阻塞。",
     "可用合同必须满足：本章目标清晰、边界不越章、任务单可执行、读者体验合同明确本章问题、可见回报、主角欲望、主要阻力、关键转折、净变化和钩子责任，场景卡覆盖整章推进并为每场提供阻力、转折、情绪位移和读者价值。",
     "readerExperience.rewardLevel 表示本章计划提供的可见回报强度，只能使用 setup、partial、major；它不是正文完成度、承诺兑现比例或事后结果评级。",
     "逐场审查 causality：选择是否出于角色具体动机；前置物品、信息、权限、能力或信任是否有真实来源；阻力方是否合理回应；outcomeMechanism 是否解释了结果怎样发生，而非重述结果；身体、时间、资源及关系限制是否延续并影响后续选择。必须引用 sceneKey 和具体缺口，不以字段齐全代替语义判断。",
@@ -69,7 +77,8 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "如果存在问题，给出面向自动修复器的具体 repairGuidance。",
     "",
     "输出严格 JSON，不要 Markdown、注释、解释或额外字段。",
-    "顶层只能输出 verdict、safeToSync、loadRisk、recommendedHandling、summary、issues、repairGuidance、confidence。",
+    "顶层只能输出 verdict、safeToSync、loadRisk、recommendedHandling、summary、issues、repairGuidance、confidence、issueChecks。",
+    "issueChecks 每项包含 issueId、status、candidateEvidence（最多3条、每条240字以内的准确原文）、explanation（400字以内）。没有可引用的原文时用空数组，不能伪造引用。",
     "verdict 只能使用 usable、repairable、unusable。",
     "loadRisk 只能使用 normal、overloaded。",
     "recommendedHandling 只能使用 use_as_is、repair_contract、replan_window。",
@@ -96,7 +105,8 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "    }",
     "  ],",
     "  \"repairGuidance\": [\"补齐最后一个场景的钩子和离场状态。\"],",
-    "  \"confidence\": 0.82",
+    "  \"confidence\": 0.82,",
+    "  \"issueChecks\": []",
     "}",
   ].join("\n");
 }
@@ -106,14 +116,16 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   AiChapterTaskSheetQualityAssessment
 > = {
   id: "novel.volume.chapter_task_sheet_quality",
-  version: "v3",
+  version: "v4",
   taskType: "review",
   mode: "structured",
   language: "zh",
   contextPolicy: {
     maxTokensBudget: 4200,
   },
-  outputSchema: aiChapterTaskSheetQualityAssessmentSchema,
+  outputSchema: aiChapterTaskSheetQualityAssessmentSchema.extend({
+    issueChecks: z.array(chapterPlanningIssueCheckSchema).max(8),
+  }),
   render: (input) => [
     new SystemMessage(createSystemPrompt(input.mode)),
     new HumanMessage([
@@ -121,6 +133,44 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
       "",
       "chapter execution contract candidate:",
       renderCandidate(input.candidate),
+      "",
+      "reviewContext (current source and repair history):",
+      input.reviewContextJson || "No additional context supplied. Do not invent prior facts.",
+      "previousIssues:",
+      JSON.stringify(input.previousIssues ?? []),
     ].join("\n")),
   ],
+  postValidate: (output, input) => {
+    const expected = new Set((input.previousIssues ?? []).map((issue) => issue.id));
+    const checks = output.issueChecks ?? [];
+    if (checks.length !== expected.size || new Set(checks.map((check) => check.issueId)).size !== checks.length
+      || checks.some((check) => !expected.has(check.issueId))) {
+      throw new Error("issueChecks must cover each previous issue exactly once.");
+    }
+    // Compare quoted text against the actual candidate, including decoded JSON string fields.
+    const strings: string[] = [];
+    const collect = (value: unknown): void => {
+      if (typeof value === "string") {
+        strings.push(value);
+        try { const decoded: unknown = JSON.parse(value); if (typeof decoded !== "string") collect(decoded); } catch { /* Plain text. */ }
+      } else if (Array.isArray(value)) value.forEach(collect);
+      else if (value && typeof value === "object") Object.values(value).forEach(collect);
+    };
+    collect(input.candidate);
+    const normalize = (value: string) => value.replace(/\s+/g, "");
+    const source = strings.map(normalize);
+    for (const check of checks) {
+      if (check.candidateEvidence.some((quote) => !source.some((text) => text.includes(normalize(quote))))) {
+        throw new Error(`issueChecks ${check.issueId} contains evidence absent from the current candidate.`);
+      }
+      if (check.status === "resolved") {
+        if (!check.candidateEvidence.length || output.issues.some((issue) => issue.id === check.issueId)) {
+          throw new Error(`Resolved issue ${check.issueId} requires evidence and must not remain in issues.`);
+        }
+      } else if (!output.issues.some((issue) => issue.id === check.issueId)) {
+        throw new Error(`Unresolved issue ${check.issueId} must retain its id in issues.`);
+      }
+    }
+    return output;
+  },
 };

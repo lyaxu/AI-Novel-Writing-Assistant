@@ -344,6 +344,47 @@ test("chapter task sheet quality service passes usable semantic assessments", as
 });
 
 test("chapter task sheet quality prompt is registered as a product prompt asset", () => {
-  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v2");
+  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v4");
   assert.equal(registered, chapterTaskSheetQualityPrompt);
+});
+
+test("planning re-review sees current evidence, book constraints and previous issues", () => {
+  const previousIssues = [{ id: "missing_check", severity: "high", target: "semantic", summary: "未检查物品", repairHint: "补检查动作" }];
+  const candidate = { ...buildCandidate(), taskSheet: "他趁祭司转身时用被绑的手确认调料瓶仍在。" };
+  const input = { candidate, mode: "ai_copilot", previousIssues, reviewContextJson: JSON.stringify({ bookConstraints: { rule: "食气需要食材" } }) };
+  const messages = chapterTaskSheetQualityPrompt.render(input);
+  assert.match(String(messages[1].content), /食气需要食材/);
+  assert.match(String(messages[1].content), /missing_check/);
+  assert.match(String(messages[0].content), /不得机械复述上轮问题/);
+  const output = {
+    verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is",
+    summary: "检查动作已安排", issues: [], repairGuidance: [], confidence: 0.9,
+    issueChecks: [{ issueId: "missing_check", status: "resolved", candidateEvidence: ["用被绑的手确认调料瓶仍在"], explanation: "已安排具体检查动作" }],
+  };
+  assert.deepEqual(chapterTaskSheetQualityPrompt.postValidate(output, input), output);
+  assert.throws(() => chapterTaskSheetQualityPrompt.postValidate({ ...output, issueChecks: [] }, input), /exactly once/);
+  assert.throws(() => chapterTaskSheetQualityPrompt.postValidate({ ...output, issueChecks: [output.issueChecks[0], output.issueChecks[0]] }, input), /exactly once/);
+  assert.throws(() => chapterTaskSheetQualityPrompt.postValidate({ ...output, issueChecks: [{ ...output.issueChecks[0], candidateEvidence: ["凭空捏造的检查"] }] }, input), /absent/);
+  assert.throws(() => chapterTaskSheetQualityPrompt.postValidate({ ...output, issueChecks: [{ ...output.issueChecks[0], candidateEvidence: [] }] }, input), /requires evidence/);
+  assert.throws(() => chapterTaskSheetQualityPrompt.postValidate({ ...output, issues: previousIssues }, input), /must not remain/);
+  const unresolved = { ...output, verdict: "repairable", safeToSync: false, recommendedHandling: "repair_contract",
+    issues: previousIssues, issueChecks: [{ ...output.issueChecks[0], status: "partially_resolved" }] };
+  assert.equal(chapterTaskSheetQualityPrompt.postValidate(unresolved, input), unresolved);
+  assert.throws(() => chapterTaskSheetQualityPrompt.postValidate({ ...unresolved, issues: [] }, input), /retain its id/);
+  assert.equal(chapterTaskSheetQualityPrompt.outputSchema.safeParse({ ...output, issueChecks: undefined }).success, false);
+  // Existing persisted reviews remain readable while newly generated reviews require evidence.
+  assert.equal(aiChapterTaskSheetQualityAssessmentSchema.safeParse({ ...output, issueChecks: undefined }).success, true);
+});
+
+test("planning re-review can quote decoded scene-card text and retains evidence in gate results", async () => {
+  const quote = '他问："药瓶还在吗？"';
+  const candidate = { ...buildCandidate(), sceneCards: JSON.stringify({ scenes: [{ mustAdvance: [quote] }] }) };
+  const previousIssues = [{ id: "q", severity: "high", target: "semantic", summary: "检查缺失", repairHint: "补检查" }];
+  const output = { verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is", summary: "已补动作",
+    issues: [], repairGuidance: [], confidence: 0.9,
+    issueChecks: [{ issueId: "q", status: "resolved", candidateEvidence: [quote], explanation: "具体动作已安排" }] };
+  chapterTaskSheetQualityPrompt.postValidate(output, { candidate, previousIssues });
+  const service = new ChapterTaskSheetQualityGateService(async () => output);
+  const result = await service.evaluate(buildCandidate(), { mode: "ai_copilot" });
+  assert.deepEqual(result.issueChecks, output.issueChecks);
 });

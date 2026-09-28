@@ -62,7 +62,7 @@ export class PlanningRepairRecoveryService {
     if (changed.count !== 1) throw new AppError("规划修复暂停状态发生并发变更，请刷新状态。", 409);
   }
 
-  async grant(taskId: string, input: { action: "retry" | "pause"; repairKey: string; guidance?: string; idempotencyKey?: string }) {
+  async grant(taskId: string, input: { action: "retry" | "pause"; repairKey: string; guidance?: string; idempotencyKey?: string; expectedSourceToken?: string }) {
     let row = await this.workflow.getTaskByIdWithoutHealing(taskId);
     if (!row || row.lane !== "auto_director") throw new AppError("自动导演任务不存在。", 404);
     const { seed, repair, recovery } = readPlanningRepairSeed(row.seedPayloadJson);
@@ -99,6 +99,8 @@ export class PlanningRepairRecoveryService {
         data: { seedPayloadJson: JSON.stringify({ ...seed, planningRepairRecovery: {
           repairKey: repair.key, resumePhase: recovery?.resumePhase ?? resolvePlanningRepairResumePhase(row),
           idempotencyKey, guidance, pendingGrant: true, expectedMaxRounds: maxRounds, expectedRound: repair.rounds,
+          expectedSourceToken: input.expectedSourceToken,
+          previousRecovery: input.expectedSourceToken ? recovery : undefined,
         } }) },
       });
       if (reserved.count !== 1) throw new AppError("规划修复状态已被更新，请刷新后重试。", 409);
@@ -113,8 +115,36 @@ export class PlanningRepairRecoveryService {
       novelId: repair.novelId, taskId, volumeId: repair.volumeId, chapterId: repair.chapterId,
       document: await this.workflow.volumeService.getVolumes(repair.novelId),
       expectedSeedPayloadJson: row.seedPayloadJson,
+      expectedSourceToken: reservation.expectedSourceToken,
     };
-    await this.repairStore.rebase(rebaseInput);
+    try {
+      await this.repairStore.rebase(rebaseInput);
+    } catch (error) {
+      // Only this transactional pre-write guard proves that no rebase/budget operation occurred.
+      // Unknown failures retain the reservation for explicit reconciliation.
+      if (reservation.expectedSourceToken && error && typeof error === "object"
+        && "reason" in error && error.reason === "advice_source_changed") {
+        const failedRow = await this.workflow.getTaskByIdWithoutHealing(taskId);
+        if (failedRow) {
+          const failed = readPlanningRepairSeed(failedRow.seedPayloadJson);
+          if (failed.repair?.key === repair.key && failed.repair.rounds === reservation.expectedRound
+            && failed.repair.maxRounds === reservation.expectedMaxRounds && failed.recovery?.pendingGrant
+            && failed.recovery.idempotencyKey === idempotencyKey && failed.recovery.guidance === guidance
+            && failed.recovery.expectedSourceToken === reservation.expectedSourceToken) {
+            await this.workflow.updateTaskManyWithRetry({
+              where: { id: taskId, seedPayloadJson: failedRow.seedPayloadJson, updatedAt: failedRow.updatedAt,
+                status: failedRow.status, cancelRequestedAt: null },
+              data: { seedPayloadJson: JSON.stringify({ ...failed.seed,
+                planningRepairRecovery: failed.recovery.previousRecovery ?? {
+                  repairKey: repair.key, resumePhase: failed.recovery.resumePhase,
+                },
+              }) },
+            });
+          }
+        }
+      }
+      throw error;
+    }
     row = await this.workflow.getTaskByIdWithoutHealing(taskId);
     if (!row) throw new AppError("自动导演任务不存在。", 404);
     const current = readPlanningRepairSeed(row.seedPayloadJson);

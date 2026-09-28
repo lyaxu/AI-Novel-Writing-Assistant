@@ -66,7 +66,16 @@ export interface ChapterTaskSheetQualityGateResult {
   summary: string;
   repairGuidance: string[];
   confidence: number;
+  issueChecks?: ChapterPlanningIssueCheck[];
 }
+
+export const chapterPlanningIssueCheckSchema = z.object({
+  issueId: z.string().trim().min(1),
+  status: z.enum(["resolved", "partially_resolved", "unresolved", "insufficient_context"]),
+  candidateEvidence: z.array(z.string().trim().min(1).max(240)).max(3),
+  explanation: z.string().trim().min(1).max(400),
+});
+export type ChapterPlanningIssueCheck = z.infer<typeof chapterPlanningIssueCheckSchema>;
 
 function normalizeAssessmentVerdict(value: unknown): unknown {
   if (typeof value !== "string") {
@@ -157,6 +166,7 @@ export const aiChapterTaskSheetQualityAssessmentSchema = z.object({
   issues: z.array(chapterTaskSheetQualityIssueSchema).max(8).default([]),
   repairGuidance: z.array(z.string().trim().min(1)).max(8).default([]),
   confidence: z.preprocess(normalizeAssessmentConfidence, z.number().min(0).max(1)),
+  issueChecks: z.array(chapterPlanningIssueCheckSchema).max(8).optional(),
 });
 
 export type AiChapterTaskSheetQualityAssessment = z.infer<typeof aiChapterTaskSheetQualityAssessmentSchema>;
@@ -283,6 +293,7 @@ export function mapSemanticAssessmentToQualityGate(
       summary: assessment.summary,
       repairGuidance: assessment.repairGuidance,
       confidence: assessment.confidence,
+      issueChecks: assessment.issueChecks ?? [],
     };
   }
 
@@ -305,6 +316,7 @@ export function mapSemanticAssessmentToQualityGate(
     summary: assessment.summary,
     repairGuidance: assessment.repairGuidance,
     confidence: assessment.confidence,
+    issueChecks: assessment.issueChecks ?? [],
   };
 }
 
