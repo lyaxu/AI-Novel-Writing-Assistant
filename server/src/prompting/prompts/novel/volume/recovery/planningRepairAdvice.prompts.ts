@@ -16,7 +16,7 @@ export const planningRepairAdviceExample: PlanningRepairAdviceOutput = {
 };
 
 export const planningRepairAdvicePrompt: PromptAsset<{ contextJson: string }, PlanningRepairAdviceOutput> = {
-  id: "novel.planning_repair.advice", version: "v4", taskType: "outline_planning", mode: "structured", language: "zh",
+  id: "novel.planning_repair.advice", version: "v5", taskType: "outline_planning", mode: "structured", language: "zh",
   contextPolicy: { maxTokensBudget: 48000 }, outputSchema: preserveGeneratedContentConstraints(planningRepairAdviceOutputSchema),
   repairPolicy: { maxAttempts: 0 },
   semanticRetryPolicy: { maxAttempts: 0 },
@@ -24,6 +24,7 @@ export const planningRepairAdvicePrompt: PromptAsset<{ contextJson: string }, Pl
   render: (input) => [
     new SystemMessage(`你是帮助写作新手选择修复方向的小说编辑。只提供建议，绝不执行修复或批准写作。
 审阅输入的用户原始意图、书级约束、基线、最新候选、历轮修正与审查证据。区分真实缺口、审查争议、资料缺失和创作取舍；不要默认审查结论都正确，也不要靠降低标准放行。
+输入若声明 encoding=exact_source_references_v1，实际资料在context。仅含referenceKey所指定字段的对象是原文引用，字段值指向sources中的完整定义，必须递归展开读取；它不是缺失证据或摘要。展开后的原始路径、候选与基线归属、只读与可写权限均以引用所在位置为准。定义重复使用不表示所有位置具有同一权限，不可因引用就忽略正文、历史评估或后续路线。
 提供1至3个具体、互相有区别的方向，并推荐一个。用新手能理解的中文解释为何这样改、要改什么、保留什么及代价；不要让用户自己发明修复方案。
 可在允许窗口内解决时，优先推荐可直接执行且保留用户已选方向的方案；若所有方向都需要源工作区改动，具体指出缺少什么及应到小说基础信息、章节规划或卷规划确认什么，不能用放宽审查换通过。
 eligibleChapterIds仅限制修改权限，不限制阅读。candidatePlanningHorizon含当前候选真实已保存的同卷只读路线及节奏板，baselinePlanningHorizon是历史基线，不可将基线当当前候选。先查这些后续安排，再判断延期是否缺少落点；已有安排可以直接引用，不必在本章重复抄写，也不能仅因其在修改窗口外就声称无法引用。阅读后续计划不扩大修改范围，不证明事情已发生，也不豁免明确的早期兑现时限。遵守coverage，未拆路线与缺失资料不可编造。

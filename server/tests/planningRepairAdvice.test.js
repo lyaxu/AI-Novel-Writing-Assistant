@@ -15,6 +15,7 @@ function load(file, imports) {
   return exports;
 }
 const schema = load("../../shared/types/planningRepair/advice.ts", { zod: require("zod") });
+const encoding = load("../src/services/novel/director/recovery/planningRepair/advice/AdviceContextEncoding.ts", {});
 const horizon = load("../src/services/novel/volume/planningPromises/planningHorizon.ts", {});
 const adviceContextImports = { "../../../../volume/planningPromises": horizon };
 const structuredOutput = load("../src/llm/structuredOutput.ts", { zod: require("zod"), "./providers": {}, "./reasoning": {} });
@@ -29,7 +30,7 @@ const output = () => ({ summary: "复核后给出可执行方向", recommendedOp
   blockerResolution: { status: "complete", remainingBlockers: [], rationale: "补齐唯一缺失的行动依据" },
   guidance: { intent: "补齐因果", actions: ["使用已有线索"], preserve: ["核心冲突"], verification: ["验证行动前提"] },
 }] });
-function fixture() {
+function fixture(useDefaultGenerator = false) {
   let source = { row: { id: "t", seedPayloadJson: "old", updatedAt: "time" }, seed: {}, repair: { key: "r", novelId: "n", chapterId: "c1" },
     fingerprint: "f", sourceToken: "s", eligibleChapterIds: ["c1", "c2", "c3"], context: { userIntent: "保留设定" } };
   let writes = 0, calls = 0, rejectCas = false, pending;
@@ -48,13 +49,26 @@ function fixture() {
     "../../../../../../prompting/prompts/novel/volume/recovery/planningRepairAdvice.prompts": {},
     "../../../../../../llm/invokeTimeout": {}, "../PlanningRepairRecoveryService": {},
     "./AdviceFailure": failureModule,
+    "./AdviceContextEncoding": encoding,
     "./AdviceSource": { readAdviceSource: async () => structuredClone(source), assertAdvicePaused: async () => {} },
   });
   const service = new mod.PlanningRepairAdviceService({ grant: async (taskId, input) => { grants.push(input); return { granted: true, replayed: grants.length > 1, taskId }; } },
-    async () => { calls++; return new Promise((resolve, reject) => { pending = { resolve, reject }; }); });
+    useDefaultGenerator ? undefined : async () => { calls++; return new Promise((resolve, reject) => { pending = { resolve, reject }; }); });
   return { service, source, grants, modelOptions: mod.adviceModelOptions, calls: () => calls, writes: () => writes, resolve: (value = output()) => pending.resolve(value), fail: (error = new Error("timeout")) => pending.reject(error), casFail: () => { rejectCas = true; } };
 }
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+test("oversized unique context fails before timeout wrapper or any paid model boundary", async () => {
+  const f = fixture(true);
+  f.source.context = { unique: "唯一正文".repeat(50000) };
+  await f.service.request("t", { repairKey: "r", idempotencyKey: "capacity" });
+  await settle();
+  const saved = f.source.seed.planningRepairAdvice;
+  assert.equal(saved.status, "failed");
+  assert.match(saved.failureDiagnostics.detail, /本次未调用模型/);
+  assert.doesNotMatch(saved.failureDiagnostics.detail, /精简/);
+  assert.equal(f.grants.length, 0);
+});
 test("GET never generates or writes; explicit POST is asynchronous and duplicate request does not pay twice", async () => {
   const f = fixture(); assert.equal((await f.service.status("t")).status, "none"); assert.equal(f.writes(), 0);
   assert.equal((await f.service.request("t", { repairKey: "r", idempotencyKey: "req" })).status, "running");
@@ -266,10 +280,10 @@ const parse = (value, contract = prompt.planningRepairAdvicePrompt.outputSchema,
   label: "advice-offline", strategy: "prompt_json", profile: {}, maxRepairAttempts: 0, finishReason: "stop", ...extra,
 });
 
-test("v4 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
+test("v5 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
   const asset = prompt.planningRepairAdvicePrompt;
   const text = asset.render({ contextJson: "{}" })[0].content;
-  assert.equal(asset.version, "v4"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
+  assert.equal(asset.version, "v5"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
   const jsonSchema = JSON.parse(text.split("完整输出契约（minItems/maxItems是数量，minLength/maxLength是字符数）：\n")[1].split("\n输出格式示例")[0]);
   const fields = jsonSchema.properties.options.items.properties;
   assert.deepEqual(fields.diagnosis.enum, schema.planningRepairAdviceDiagnoses);
@@ -279,7 +293,7 @@ test("v4 prompt renders the full shared contract and example, with explicit paid
   assert.equal(schema.planningRepairAdviceOutputSchema.safeParse(prompt.planningRepairAdviceExample).success, true);
   assert.match(text, /不得超过4000字符/); assert.match(text, /采用一个可执行方案即明确授权追加1轮/);
   assert.match(text, /不要让写作新手查询服务器schema/);
-  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v4/);
+  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v5/);
 });
 
 test("real rejected response keeps every action under wider non-safety limits but still rejects invented diagnoses", async () => {

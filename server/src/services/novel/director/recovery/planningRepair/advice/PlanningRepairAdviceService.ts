@@ -8,6 +8,7 @@ import { runWithEnforcedTimeout } from "../../../../../../llm/invokeTimeout";
 import { PlanningRepairRecoveryService } from "../PlanningRepairRecoveryService";
 import { assertAdvicePaused, readAdviceSource, type AdviceSource } from "./AdviceSource";
 import { describeAdviceFailure } from "./AdviceFailure";
+import { AdviceContextCapacityError, prepareAdviceContext } from "./AdviceContextEncoding";
 
 interface SavedAdvice {
   adviceId: string; requestId: string; repairKey: string; fingerprint: string; sourceToken: string;
@@ -61,8 +62,12 @@ export function projectAdvice(source: AdviceSource): PlanningRepairAdviceStatus 
 }
 
 async function generate(source: AdviceSource) {
-  const contextJson = JSON.stringify(source.context);
-  if (contextJson.length > 160000) throw new AppError("相关规划与审查证据超出单次建议容量，请在章节规划中精简重复资料后重新获取建议。", 409);
+  let contextJson: string;
+  try { contextJson = prepareAdviceContext(source.context); }
+  catch (error) {
+    if (error instanceof AdviceContextCapacityError) throw new AppError(error.message, 409);
+    throw error;
+  }
   const result = await runWithEnforcedTimeout({ timeoutMs: 300000, label: "planning-repair-advice", run: (signal) => runStructuredPrompt({
     asset: planningRepairAdvicePrompt, promptInput: { contextJson },
     options: { ...adviceModelOptions(source.seed), signal, timeoutMs: 300000, temperature: 0.2, reasoningEnabled: false, maxTokens: 6000,
