@@ -35,6 +35,7 @@ const CHAPTER_CONTEXT_GROUPS = [
   "chapter_mission",
   "chapter_boundary",
   "reader_experience",
+  "scene_causality",
   "character_hard_facts",
   "obligation_contract",
   "payoff_directives",

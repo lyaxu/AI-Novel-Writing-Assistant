@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { createSceneCausality } = require("./fixtures/sceneCausality.js");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
@@ -68,7 +69,7 @@ function output(ids) {
     mustAvoid: "Do not alter established facts.", payoffRefs: [], conflictLevel: 55, revealLevel: 30,
     sceneCards: [1, 2, 3].map(n => ({ key: `s${n}`, title: `scene ${n}`, purpose: "Move investigation forward", mustAdvance: ["Investigate"], mustPreserve: ["Facts"],
       entryState: "Prior state", exitState: "New state", forbiddenExpansion: ["Other chapters"], targetWordCount: 1000,
-      resistance: "Resistance", turn: "Concrete turn", emotionalShift: "Shift", readerValue: "Value" })),
+      resistance: "Resistance", turn: "Concrete turn", emotionalShift: "Shift", readerValue: "Value", causality: createSceneCausality() })),
     readerExperience: { readerQuestion: "Question", promisedReward: "Reward", rewardLevel: "partial", protagonistWant: "Want", primaryResistance: "Resistance",
       keyTurn: "Turn", emotionalShift: "Shift", informationReveal: "Reveal", netChange: "Change", inheritedHookResponsibilities: [], endingHook: "Hook" },
   })) };

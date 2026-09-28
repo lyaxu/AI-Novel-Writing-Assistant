@@ -16,7 +16,7 @@ import {
 import { openConflictService } from "../../state/OpenConflictService";
 import { normalizeScore, ruleScore } from "../novelP0Utils";
 import { detectProseQuality } from "./proseQuality/ProseQualityDetector";
-import { buildAcceptanceCacheIdentity } from "./acceptance";
+import { acceptanceOutputBudget, buildAcceptanceCacheIdentity, buildAcceptancePromptInput, projectCausalAssessment } from "./acceptance";
 
 export interface ChapterAcceptanceAssessmentInput {
   novelId: string;
@@ -172,7 +172,7 @@ export function normalizeAssessment(
   content: string,
   targetWordCount?: number | null,
 ): ChapterAcceptanceAssessmentOutput {
-  const reconciled = reconcileLengthAssessment(output, content, targetWordCount);
+  const reconciled = projectCausalAssessment(reconcileLengthAssessment(output, content, targetWordCount));
   const score = normalizeScore(reconciled.score ?? ruleScore(content));
   const missingObligations = reconciled.missingObligations ?? [];
   const hasHighRisk = reconciled.blockingIssues.some((issue) => issue.severity === "high" || issue.severity === "critical");
@@ -303,6 +303,7 @@ export class ChapterAcceptanceAssessmentService {
   }
 
   private async invokeAssessment(input: ChapterAcceptanceAssessmentInput): Promise<ChapterAcceptanceAssessmentOutput> {
+    const promptInput = buildAcceptancePromptInput(input);
     const fallbackBlocks = input.contextPackage.chapterReviewContext
       ? buildChapterReviewContextBlocks(input.contextPackage.chapterReviewContext)
       : [];
@@ -320,19 +321,13 @@ export class ChapterAcceptanceAssessmentService {
     });
     const result = await runStructuredPrompt({
       asset: chapterAcceptanceAssessmentPrompt,
-      promptInput: {
-        novelTitle: input.novelTitle,
-        chapterOrder: input.chapterOrder,
-        chapterTitle: input.chapterTitle,
-        targetWordCount: input.targetWordCount ?? null,
-        content: input.content,
-      },
+      promptInput,
       contextBlocks: resolvedContext.blocks,
       options: {
         provider: input.provider,
         model: input.model,
         temperature: Math.min(input.temperature ?? 0.2, 0.35),
-        maxTokens: 3200,
+        maxTokens: acceptanceOutputBudget(promptInput.expectedSceneKeys?.length ?? 0),
         novelId: input.novelId,
         chapterId: input.chapterId,
         stage: "chapter_acceptance",
@@ -380,6 +375,7 @@ export class ChapterAcceptanceAssessmentService {
               riskTags: assessment.riskTags,
               assetSyncRecommendation: assessment.assetSyncRecommendation,
               repairDirectives: assessment.repairDirectives,
+              sceneCausalityVerdicts: assessment.sceneCausalityVerdicts ?? [],
             }),
             issues: {
               create: issues.map((issue, index) => ({
@@ -438,6 +434,7 @@ export class ChapterAcceptanceAssessmentService {
           riskTags: assessment.riskTags,
           assetSyncRecommendation: assessment.assetSyncRecommendation,
           repairDirectives: assessment.repairDirectives,
+          sceneCausalityVerdicts: assessment.sceneCausalityVerdicts ?? [],
         }),
         issues: issues.map((issue, index) => ({
           id: `${reportId}:${issue.code || "issue"}:${index + 1}`,

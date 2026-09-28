@@ -1,0 +1,108 @@
+import type { StoryMacroPlan } from "@ai-novel/shared/types/storyMacro";
+import type { VolumeGenerationNovel } from "../../../../../services/novel/volume/volumeModels";
+
+const MAX_DETAILED_CHARACTERS = 12;
+const MAX_ROSTER_CHARACTERS = 24;
+
+function text(value: string | null | undefined, limit: number): string | undefined {
+  const normalized = value?.replace(/\s+/g, " ").trim();
+  if (!normalized) return undefined;
+  return normalized.length <= limit ? normalized : `${normalized.slice(0, limit)} [excerpt; source continues]`;
+}
+
+function list(values: string[] | undefined, count: number, length: number): string[] {
+  const items = (values ?? []).map(value => text(value, length)).filter((value): value is string => Boolean(value));
+  return [...items.slice(0, count), ...(items.length > count ? [`[${items.length - count} additional source items omitted]`] : [])];
+}
+
+/** Render the source fields once; generated future beats are plans, never established facts. */
+export function renderMacroPlanningFoundation(plan: StoryMacroPlan): string {
+  const expansion = plan.expansion;
+  const decomposition = plan.decomposition;
+  return [
+    "Planning provenance: premise, conflict and constraints guide this plan. Growth, scene seeds, payoffs and ending are future intentions, not events that already happened or permission to reveal secrets early.",
+    JSON.stringify({
+      expansion: expansion ? {
+        expanded_premise: text(expansion.expanded_premise, 900),
+        protagonist_core: text(expansion.protagonist_core, 500),
+        conflict_engine: text(expansion.conflict_engine, 500),
+        conflict_layers: {
+          external: text(expansion.conflict_layers?.external, 280),
+          internal: text(expansion.conflict_layers?.internal, 280),
+          relational: text(expansion.conflict_layers?.relational, 280),
+        },
+        mystery_box: text(expansion.mystery_box, 320),
+        emotional_line: text(expansion.emotional_line, 400),
+        setpiece_seeds: list(expansion.setpiece_seeds, 3, 260),
+        tone_reference: text(expansion.tone_reference, 320),
+      } : undefined,
+      decomposition: decomposition ? {
+        selling_point: text(decomposition.selling_point, 200),
+        core_conflict: text(decomposition.core_conflict, 320),
+        main_hook: text(decomposition.main_hook, 320),
+        progression_loop: text(decomposition.progression_loop, 400),
+        growth_path: text(decomposition.growth_path, 400),
+        major_payoffs: list(decomposition.major_payoffs, 5, 220),
+        ending_flavor: text(decomposition.ending_flavor, 220),
+      } : undefined,
+      constraints: list(plan.constraints, 8, 240),
+    }),
+  ].join("\n");
+}
+
+type PlanningCharacter = VolumeGenerationNovel["characters"][number];
+
+function prohibitions(character: PlanningCharacter): string[] {
+  try {
+    const parsed: unknown = JSON.parse(character.prohibitionsJson ?? "[]");
+    return Array.isArray(parsed) ? list(parsed.filter((value): value is string => typeof value === "string"), 8, 120) : [];
+  } catch {
+    return ["[Saved prohibitions could not be read; do not infer unrestricted capabilities]"];
+  }
+}
+
+export function renderCharacterPlanningFoundation(characters: PlanningCharacter[]): string {
+  if (!characters.length) return "none";
+  // Ranking uses the saved structured role, never name/genre keywords or inferred importance.
+  const ordered = characters.map((character, index) => ({ character, index }))
+    .sort((left, right) => (
+      Number(["protagonist", "antagonist"].includes(right.character.castRole ?? ""))
+      - Number(["protagonist", "antagonist"].includes(left.character.castRole ?? ""))
+      || left.index - right.index
+    ));
+  const detailed = ordered.slice(0, MAX_DETAILED_CHARACTERS);
+  const roster = ordered.slice(MAX_DETAILED_CHARACTERS, MAX_DETAILED_CHARACTERS + MAX_ROSTER_CHARACTERS);
+  return [
+    "Character planning context: current fields are saved state; motivations and misbeliefs describe subjective choices, not objective truth. Private secrets are author-only constraints, not character knowledge or permission to reveal. Development is a future possibility, not accomplished history. Omitted details are unknown, not absence of constraints.",
+    ...detailed.map(({ character }) => JSON.stringify({
+      id: character.id,
+      name: text(character.name, 80),
+      role: text(character.role, 80),
+      castRole: text(character.castRole, 40),
+      storyFunction: text(character.storyFunction, 120),
+      relationToProtagonist: text(character.relationToProtagonist, 120),
+      current: {
+        goal: text(character.currentGoal, 160),
+        state: text(character.currentState, 200),
+        powerLevel: text(character.powerLevel, 80),
+        availability: text(character.availability, 80),
+        prohibitions: prohibitions(character),
+      },
+      motivation: {
+        outerGoal: text(character.outerGoal, 120), innerNeed: text(character.innerNeed, 120),
+        fear: text(character.fear, 120), wound: text(character.wound, 120),
+        misbelief: text(character.misbelief, 120), moralLine: text(character.moralLine, 120),
+      },
+      authorOnlySecret: text(character.secret, 160),
+      futureDevelopment: text(character.development, 160),
+    })),
+    ...roster.map(({ character }) => `Compact roster (other details omitted): ${JSON.stringify({
+      id: character.id, name: text(character.name, 80), castRole: text(character.castRole, 40),
+      role: text(character.role, 80), goal: text(character.currentGoal || character.outerGoal, 120),
+      innerNeed: text(character.innerNeed, 120),
+    })}`),
+    ...(ordered.length > detailed.length + roster.length
+      ? [`[${ordered.length - detailed.length - roster.length} additional characters omitted from this planning projection]`]
+      : []),
+  ].join("\n");
+}

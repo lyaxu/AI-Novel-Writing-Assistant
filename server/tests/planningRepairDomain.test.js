@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { createSceneCausality } = require("./fixtures/sceneCausality.js");
 const {
   applyPlanningRepairCandidate,
   planningRepairOutputSchema,
@@ -37,6 +38,7 @@ function change(id = "plan-1") {
       turn: "The witness offers proof.",
       emotionalShift: "Doubt becomes hope.",
       readerValue: "A concrete clue.",
+      causality: createSceneCausality(),
     })),
     readerExperience: {
       readerQuestion: "Who concealed the clue?",

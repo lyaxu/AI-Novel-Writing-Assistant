@@ -4,6 +4,7 @@ import type { PromptAsset } from "../../core/promptTypes";
 import { renderSelectedContextBlocks } from "../../core/renderContextBlocks";
 import { NOVEL_PROMPT_BUDGETS } from "./promptBudgetProfiles";
 import { CHAPTER_PROSE_QUALITY_AUDIT_RULES } from "@ai-novel/shared/types/chapterProseContract";
+import { sceneCausalityVerdictSchema } from "@ai-novel/shared/types/novel/sceneCausality";
 
 export const chapterAcceptanceIssueCategorySchema = z.enum([
   "continuity",
@@ -179,6 +180,7 @@ export const chapterAcceptanceAssessmentSchema = z.object({
     overall: z.number().min(0).max(100),
   }),
   summary: z.string().trim().min(1),
+  sceneCausalityVerdicts: z.array(sceneCausalityVerdictSchema).max(8).optional(),
   blockingIssues: z.array(z.object({
     severity: z.enum(["low", "medium", "high", "critical"]),
     category: z.preprocess(normalizeAcceptanceCategory, chapterAcceptanceIssueCategorySchema),
@@ -221,12 +223,18 @@ export const chapterAcceptanceAssessmentSchema = z.object({
 
 export type ChapterAcceptanceAssessmentOutput = z.infer<typeof chapterAcceptanceAssessmentSchema>;
 
+/** New model output must explicitly report evidence; old persisted assessments remain readable. */
+export const generatedChapterAcceptanceAssessmentSchema = chapterAcceptanceAssessmentSchema.extend({
+  sceneCausalityVerdicts: z.array(sceneCausalityVerdictSchema).max(8),
+});
+
 export interface ChapterAcceptancePromptInput {
   novelTitle: string;
   chapterOrder: number;
   chapterTitle: string;
   targetWordCount?: number | null;
   content: string;
+  expectedSceneKeys?: string[];
 }
 
 const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
@@ -240,6 +248,7 @@ const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
     overall: 81,
   },
   summary: "本章主线可以成立，但结尾钩子和中段推进需要轻修后再继续。",
+  sceneCausalityVerdicts: [],
   blockingIssues: [
     {
       severity: "medium",
@@ -284,7 +293,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ChapterAcceptanceAssessmentOutput
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v2",
+  version: "v3",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -293,6 +302,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
     preferredGroups: [
       "chapter_mission",
       "reader_experience",
+      "scene_causality",
       "obligation_contract",
       "structure_obligations",
       "local_state",
@@ -309,6 +319,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   contextRequirements: [
     { group: "chapter_mission", required: true, priority: 100 },
     { group: "reader_experience", required: true, priority: 100 },
+    { group: "scene_causality", required: true, priority: 100 },
     { group: "obligation_contract", required: true, priority: 98 },
     { group: "structure_obligations", priority: 94 },
     { group: "local_state", priority: 89 },
@@ -319,7 +330,16 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
     example: CHAPTER_ACCEPTANCE_EXAMPLE,
     note: "一次性判断章节是否可接收、是否需要局部修文、是否需要暂停确认，以及后续资产同步优先级。",
   },
-  outputSchema: chapterAcceptanceAssessmentSchema,
+  outputSchema: generatedChapterAcceptanceAssessmentSchema,
+  postValidate: (output, input) => {
+    const expected = input.expectedSceneKeys ?? [];
+    const actual = (output.sceneCausalityVerdicts ?? []).map((row) => row.sceneKey);
+    if (actual.length !== expected.length || new Set(actual).size !== actual.length
+      || expected.some((key) => !actual.includes(key))) {
+      throw new Error(`sceneCausalityVerdicts 必须逐一覆盖指定场景，不得缺漏或重复：${expected.join(", ") || "无；返回空数组"}`);
+    }
+    return output;
+  },
   render: (input, context) => [
     new SystemMessage([
       "你是中文长篇小说正文接收闸门。",
@@ -345,6 +365,10 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       "15. status 只能使用 accepted、repairable、needs_manual_review、continue_with_risk；不得输出 acceptable、pass、passed、ok、approved 等别名。",
       "16. reader_experience 是本章读者体验合同。检查 promisedReward 是否在正文中可见、主角是否围绕 protagonistWant 主动行动并遭遇 primaryResistance、keyTurn 与 netChange 是否成立、inheritedHookResponsibilities 是否得到回应，以及 endingHook 是否产生追读力。",
       "17. 普通读者体验缺口应输出可执行的 blockingIssues / repairDirectives，并优先使用 repairable 或 continue_with_risk；不得仅因爽点、钩子或情绪强度不足升级为 needs_manual_review 或全局重规划。",
+      "18. sceneCausalityVerdicts 必须逐一覆盖 expectedSceneKeys，每个 sceneKey 只出现一次；没有指定场景时返回空数组。每行包含 outcomeObserved（结果是否实际发生）、verdict、prerequisiteEvidence、choiceAndResistanceEvidence、outcomeMechanismEvidence、constraintEvidence、explanation。不能把‘完成必达结果’当成‘结果有合理成因’。",
+      "19. verdict 只能使用 earned（因果有正文/上下文证据支持）、unearned（结果发生但缺关键成因）、contradicted（与已知条件矛盾）、insufficient_evidence（提供的文本不足以判断）。prerequisiteEvidence 和 constraintEvidence 是简短证据数组；其他证据字段和 explanation 是字符串，各不超过240字符。引用实际短句并说明作用，不能抄合同当正文证据；条件不存在时数组可空，但证据不足必须明确说明缺口，不得编造引文。",
+      "20. 对 scene_causality 的每个前提对照来源核实，检查建立是否早于使用、人物动机是否支持选择、阻力方回应是否符合其能力和利益、outcomeMechanism 是否实际写出、既有及新增代价是否限制后续行动。没有战斗、没有成功、安静的关系变化均可 earned，关键是其机制成立。",
+      "21. 先给逐场证据结论，再汇总分数。unearned/contradicted 必须进入 blockingIssues 和可执行的 repairDirectives；insufficient_evidence 必须保留可追踪风险，不能因总分高而消失。局部缺口优先 repairable/continue_with_risk，遵守既有继续策略，不自行升级为全局停止。",
       "正文退化检测边界：",
       ...CHAPTER_PROSE_QUALITY_AUDIT_RULES.map((rule, index) => `${index + 1}. ${rule}`),
     ].join("\n")),
@@ -352,6 +376,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       `小说：${input.novelTitle}`,
       `章节：第 ${input.chapterOrder} 章 ${input.chapterTitle}`,
       typeof input.targetWordCount === "number" ? `目标长度：约 ${input.targetWordCount} 字` : "目标长度：未指定",
+      `expectedSceneKeys：${JSON.stringify(input.expectedSceneKeys ?? [])}`,
       "",
       "分层上下文：",
       renderSelectedContextBlocks(context),

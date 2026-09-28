@@ -30,7 +30,7 @@ const commonRules = [
 // These assets do not resolve models; the coordinator must pass its explicit modelRoute to the runner.
 export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, PlanningRepairOutput> = {
   id: "novel.volume.planning_repair",
-  version: "v3",
+  version: "v4",
   taskType: "replan",
   mode: "structured",
   language: "zh",
@@ -46,6 +46,7 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
       "payoffRefs 是既有义务的稳定引用，不是可自由改写的问题摘要：原引用必须逐字保留，不可换成近义问句或新名称；仅可按 obligationMoves 在允许窗口内迁移到接收章，不能丢失。",
       "长度为严格执行合同：taskSheet、summary 各最多600字符；purpose、exclusiveEvent、endingState、nextChapterEntryState、mustAvoid 各最多240字符。taskSheet 只写执行摘要，不重复完整场景卡；具体动作及必达义务保留在 sceneCards 中，不得为压缩文字而删除职责。其他字段严格遵守输出 schema 的长度和数组上限。",
       "sceneCards 沿用章节细纲场景结构，每章 3-8 场；每场包含唯一 key、title、purpose、mustAdvance:string[]、mustPreserve:string[]、entryState、exitState、forbiddenExpansion:string[]、正整数 targetWordCount、resistance、turn、emotionalShift、readerValue。",
+      "每个修复场景还须包含 causality:{actor,choice,motive,prerequisites:[{condition,sourceKind,reference}],resistanceResponse,outcomeMechanism,resultingConstraints:[{constraint,persistence}]}。sourceKind 只用 established_in_context、establish_in_scene、unresolved。既有前提必须引用可核对的上下文；本场建立的条件要先获得再使用，缺失来源必须标 unresolved，不能虚构已完成事件。说明人物为何如此选择、阻力如何回应、结果为何发生、代价如何限制后续行动。允许失败、拒绝和安静变化；没有新增条件或代价时相应数组可为空。",
       "readerExperience 沿用现有结构：readerQuestion、promisedReward、rewardLevel（只能 setup|partial|major）、protagonistWant、primaryResistance、keyTurn、emotionalShift、informationReveal、netChange、inheritedHookResponsibilities（最多4项）、endingHook。",
       "obligationMoves 记录实际义务的去向并给出具体 reason。action 只能 retain|merge|move：retain 的来源和目标必须是同章；move 必须是窗口内不同章；merge 允许同章、同一场景内合并职责，也允许窗口内跨章合并。账本必须与 changes 一致，不得凭空声称已保留职责。",
       "修复首章的入口必须承接 readonlyPrevious 的结束态；修复末章的结束态必须保留 readonlyNext 的进入条件，不得提前占用下一章独占事件。",
@@ -66,7 +67,7 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
 
 export const planningRepairReviewPrompt: PromptAsset<PlanningRepairReviewPromptInput, PlanningRepairReviewOutput> = {
   id: "novel.volume.planning_repair_review",
-  version: "v2",
+  version: "v3",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -81,6 +82,7 @@ export const planningRepairReviewPrompt: PromptAsset<PlanningRepairReviewPromptI
       "检查窗口内部以及 readonlyPrevious、readonlyNext 两端的章节边界：独占事件、结束态与入口态、揭露时机、节拍承诺都要连续且不越界。",
       "只要求 candidateChapters 内的章节具有完整执行合同。readonlyPrevious、readonlyNext 是只读边界参照，可能仅有标题与摘要；不得因为未进入本轮的邻章尚无任务单、场景卡或强度字段而拒绝当前窗口。仍须根据其已有信息检查真实的剧情衔接矛盾，并指出具体冲突，不得虚构缺失内容。",
       "检查设定一致性与每条受影响的人物线，包括知情范围、动机、关系和状态迁移；不得擅自变更全书约束。",
+      "逐场核对 causality：前提来源是否真实、场内条件是否先建立再使用、选择是否由人物动机产生、阻力方是否有可信回应、结果是否由动作造成、代价是否约束后续场景。不得把有结果字段当成因果成立；关键 unresolved 前提尚未解决时不能 safeToSync，issues 必须指出具体章节/场景及缺失关系。",
       "逐项对比 assessment 中完整的原始质量结果和 guidance，确认修复确实消除了原问题。仅重述合同、掩盖问题或把缺陷转移到另一章均不能通过。",
       "严格输出 {usable:boolean,safeToSync:boolean,requiresUserDecision:boolean,summary:string,issues:string[]}，不添加其他字段。",
       "issues 列出带章节 ID 的具体未解决问题。仅当 usable=true、requiresUserDecision=false、issues 为空，且原始问题均已实质解决且没有引入新缺陷时，safeToSync 才能为 true。",

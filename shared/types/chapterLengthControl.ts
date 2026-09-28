@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { sanitizeCreativeMustAdvanceItems } from "./chapterCreativeContract.js";
+import { sceneCausalitySchema } from "./novel/sceneCausality.js";
 import {
   EMPTY_READER_EXPERIENCE_CONTRACT,
   generatedReaderExperienceContractSchema,
@@ -46,6 +47,7 @@ export const chapterSceneCardSchema = z.object({
   turn: z.string().trim().default(""),
   emotionalShift: z.string().trim().default(""),
   readerValue: z.string().trim().default(""),
+  causality: sceneCausalitySchema.optional(),
 });
 
 export const generatedChapterSceneCardSchema = chapterSceneCardSchema.extend({
@@ -53,6 +55,7 @@ export const generatedChapterSceneCardSchema = chapterSceneCardSchema.extend({
   turn: z.string().trim().min(1),
   emotionalShift: z.string().trim().min(1),
   readerValue: z.string().trim().min(1),
+  causality: sceneCausalitySchema,
 });
 
 export const chapterScenePlanSchema = z.object({
@@ -225,6 +228,7 @@ function normalizeSceneCardInput(raw: unknown, index: number): ChapterSceneCard 
     turn: turn ?? "",
     emotionalShift: emotionalShift ?? "",
     readerValue: readerValue ?? "",
+    causality: raw.causality,
   });
 }
 

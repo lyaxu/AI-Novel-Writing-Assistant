@@ -60,6 +60,9 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "只评估当前章节合同，不扩写正文，不改写任务单。",
     "可用合同必须满足：本章目标清晰、边界不越章、任务单可执行、读者体验合同明确本章问题、可见回报、主角欲望、主要阻力、关键转折、净变化和钩子责任，场景卡覆盖整章推进并为每场提供阻力、转折、情绪位移和读者价值。",
     "readerExperience.rewardLevel 表示本章计划提供的可见回报强度，只能使用 setup、partial、major；它不是正文完成度、承诺兑现比例或事后结果评级。",
+    "逐场审查 causality：选择是否出于角色具体动机；前置物品、信息、权限、能力或信任是否有真实来源；阻力方是否合理回应；outcomeMechanism 是否解释了结果怎样发生，而非重述结果；身体、时间、资源及关系限制是否延续并影响后续选择。必须引用 sceneKey 和具体缺口，不以字段齐全代替语义判断。",
+    "established_in_context 只是规划者的来源声明，必须对照已给证据核实；若未提供对应原文/事实，不得凭声明认证成立。establish_in_scene 必须安排在使用之前；unresolved 仍是待修缺口，应修正本章方案或补充可验证的建立动作，不能编造前文。",
+    "检查连续场景是否消费上一场的新状态和代价；拒绝、误解、情绪变化和失败也是有效结果，不强求战斗或胜利。不要求每场增加伤亡/损失；但已声明的能力限制不可凭空消失。普通本章因果缺口走 repair_contract，只有影响相邻章节边界才按既有范围规则选择 replan_window。",
     "即使正文完整兑现了 promisedReward，也不要建议把 rewardLevel 改为 full、complete 或其他值；只有本章计划的回报强度本身与章节职责不匹配时，才建议在 setup、partial、major 之间调整。",
     "还要判断本章是否被塞入过多彼此争夺篇幅的必达义务；如果任务单显示当前章职责已经过载，loadRisk=overloaded，recommendedHandling=replan_window。",
     "如果问题仍可在本章合同内收口，recommendedHandling=repair_contract；只有合同已经足够稳时才用 use_as_is。",
@@ -103,7 +106,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   AiChapterTaskSheetQualityAssessment
 > = {
   id: "novel.volume.chapter_task_sheet_quality",
-  version: "v2",
+  version: "v3",
   taskType: "review",
   mode: "structured",
   language: "zh",

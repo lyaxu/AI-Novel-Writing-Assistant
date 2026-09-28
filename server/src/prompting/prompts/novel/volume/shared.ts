@@ -7,6 +7,7 @@ import type {
 } from "@ai-novel/shared/types/novel";
 import { parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
 import type { StoryMacroPlan } from "@ai-novel/shared/types/storyMacro";
+import { renderCharacterPlanningFoundation, renderMacroPlanningFoundation } from "./context/planningFoundations";
 import type {
   ChapterDetailMode,
   VolumeGenerationNovel,
@@ -108,15 +109,7 @@ function parseCommercialTags(commercialTagsJson: string | null | undefined): str
 }
 
 function summarizeCharacters(novel: VolumeGenerationNovel): string {
-  if (novel.characters.length === 0) {
-    return "none";
-  }
-  return novel.characters
-    .slice(0, 6)
-    .map((item) => (
-      `${item.name} | ${item.role} | goal=${item.currentGoal ?? "none"} | state=${item.currentState ?? "none"}`
-    ))
-    .join("\n");
+  return renderCharacterPlanningFoundation(novel.characters);
 }
 
 export function buildCommonNovelContext(novel: VolumeGenerationNovel): string {
@@ -257,15 +250,7 @@ export function buildStoryMacroContext(storyMacroPlan: StoryMacroPlan | null): s
       "uncertainty rule: add uncertainty markers for macro-level selling point, conflict escalation, progression loop, and payoff mapping.",
     ].join("\n");
   }
-  return [
-    storyMacroPlan.decomposition?.selling_point ? `selling point: ${storyMacroPlan.decomposition.selling_point}` : "",
-    storyMacroPlan.decomposition?.core_conflict ? `core conflict: ${storyMacroPlan.decomposition.core_conflict}` : "",
-    storyMacroPlan.decomposition?.main_hook ? `main hook: ${storyMacroPlan.decomposition.main_hook}` : "",
-    storyMacroPlan.decomposition?.progression_loop ? `progression loop: ${storyMacroPlan.decomposition.progression_loop}` : "",
-    storyMacroPlan.decomposition?.growth_path ? `growth path: ${storyMacroPlan.decomposition.growth_path}` : "",
-    storyMacroPlan.decomposition?.ending_flavor ? `ending flavor: ${storyMacroPlan.decomposition.ending_flavor}` : "",
-    storyMacroPlan.constraints.length > 0 ? `constraints: ${storyMacroPlan.constraints.join(" | ")}` : "",
-  ].filter(Boolean).join("\n");
+  return renderMacroPlanningFoundation(storyMacroPlan);
 }
 
 export function buildVolumeCountGuidanceContext(volumeCountGuidance: VolumeCountGuidance): string {

@@ -133,6 +133,7 @@ test("chapter writer runtime path resolves standard broker context groups", asyn
     "book_contract",
     "chapter_mission",
     "reader_experience",
+    "scene_causality",
     "character_hard_facts",
     "obligation_contract",
     "volume_window",

@@ -45,12 +45,15 @@ export function buildVolumeStrategyContextBlocks(input: VolumeStrategyPromptInpu
       group: "book_contract",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Novel contract:\n${buildCommonNovelContext(input.novel)}`,
     }),
     createContextBlock({
       id: "macro_constraints",
       group: "macro_constraints",
       priority: 92,
+      required: true,
+      allowSummary: false,
       content: `Story macro:\n${buildStoryMacroContext(input.storyMacroPlan)}`,
     }),
     createContextBlock({
@@ -64,6 +67,7 @@ export function buildVolumeStrategyContextBlocks(input: VolumeStrategyPromptInpu
       group: "volume_count_guidance",
       priority: 96,
       required: true,
+      allowSummary: false,
       content: `Volume count guidance:\n${buildVolumeCountGuidanceContext(input.volumeCountGuidance)}`,
     }),
     guidanceBlock(input.guidance),
@@ -77,12 +81,15 @@ export function buildVolumeStrategyCritiqueContextBlocks(input: VolumeStrategyCr
       group: "book_contract",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Novel contract:\n${buildCommonNovelContext(input.novel)}`,
     }),
     createContextBlock({
       id: "macro_constraints",
       group: "macro_constraints",
       priority: 92,
+      required: true,
+      allowSummary: false,
       content: `Story macro:\n${buildStoryMacroContext(input.storyMacroPlan)}`,
     }),
     createContextBlock({
@@ -90,6 +97,7 @@ export function buildVolumeStrategyCritiqueContextBlocks(input: VolumeStrategyCr
       group: "strategy_context",
       priority: 98,
       required: true,
+      allowSummary: false,
       content: `Strategy plan:\n${buildStrategyContext(input.strategyPlan)}`,
     }),
     createContextBlock({
@@ -109,12 +117,15 @@ export function buildVolumeSkeletonContextBlocks(input: VolumeSkeletonPromptInpu
       group: "book_contract",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Novel contract:\n${buildCommonNovelContext(input.novel)}`,
     }),
     createContextBlock({
       id: "macro_constraints",
       group: "macro_constraints",
       priority: 92,
+      required: true,
+      allowSummary: false,
       content: `Story macro:\n${buildStoryMacroContext(input.storyMacroPlan)}`,
     }),
     createContextBlock({
@@ -122,6 +133,7 @@ export function buildVolumeSkeletonContextBlocks(input: VolumeSkeletonPromptInpu
       group: "strategy_context",
       priority: 98,
       required: true,
+      allowSummary: false,
       content: `Strategy plan:\n${buildStrategyContext(input.strategyPlan)}`,
     }),
     createContextBlock({
@@ -135,6 +147,7 @@ export function buildVolumeSkeletonContextBlocks(input: VolumeSkeletonPromptInpu
       group: "volume_count_guidance",
       priority: 96,
       required: true,
+      allowSummary: false,
       content: `Volume count guidance:\n${buildVolumeCountGuidanceContext(input.volumeCountGuidance)}`,
     }),
     createContextBlock({
@@ -142,6 +155,7 @@ export function buildVolumeSkeletonContextBlocks(input: VolumeSkeletonPromptInpu
       group: "chapter_budget",
       priority: 94,
       required: true,
+      allowSummary: false,
       content: `Chapter budget: ${input.chapterBudget}`,
     }),
     guidanceBlock(input.guidance),
@@ -155,12 +169,15 @@ export function buildVolumeBeatSheetContextBlocks(input: VolumeBeatSheetPromptIn
       group: "book_contract",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Novel contract:\n${buildCommonNovelContext(input.novel)}`,
     }),
     createContextBlock({
       id: "macro_constraints",
       group: "macro_constraints",
       priority: 92,
+      required: true,
+      allowSummary: false,
       content: `Story macro:\n${buildStoryMacroContext(input.storyMacroPlan)}`,
     }),
     createContextBlock({
@@ -174,6 +191,7 @@ export function buildVolumeBeatSheetContextBlocks(input: VolumeBeatSheetPromptIn
       group: "target_volume",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Target volume:\n${buildCompactVolumeCard(input.targetVolume)}`,
     }),
     createContextBlock({
@@ -181,6 +199,7 @@ export function buildVolumeBeatSheetContextBlocks(input: VolumeBeatSheetPromptIn
       group: "target_chapter_count",
       priority: 96,
       required: true,
+      allowSummary: false,
       content: `Target chapter count: ${input.targetChapterCount}`,
     }),
     createContextBlock({
@@ -206,12 +225,15 @@ export function buildVolumeChapterListContextBlocks(input: VolumeChapterListProm
       group: "book_contract",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Novel contract:\n${buildCommonNovelContext(input.novel)}`,
     }),
     createContextBlock({
       id: "macro_constraints",
       group: "macro_constraints",
       priority: 92,
+      required: true,
+      allowSummary: false,
       content: `Story macro:\n${buildStoryMacroContext(input.storyMacroPlan)}`,
     }),
     createContextBlock({
@@ -225,6 +247,7 @@ export function buildVolumeChapterListContextBlocks(input: VolumeChapterListProm
       group: "target_volume",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Target volume:\n${buildCompactVolumeCard(input.targetVolume)}`,
     }),
     createContextBlock({
@@ -232,6 +255,7 @@ export function buildVolumeChapterListContextBlocks(input: VolumeChapterListProm
       group: "target_beat_contract",
       priority: 98,
       required: true,
+      allowSummary: false,
       content: [
         `Target beat:\n${buildBeatCard(input.targetBeat)}`,
         `Beat chapter contract:\n${buildBeatChapterRangeContext({
@@ -269,6 +293,7 @@ export function buildVolumeChapterListContextBlocks(input: VolumeChapterListProm
       group: "conflict_level_curve",
       priority: 96,
       required: true,
+      allowSummary: false,
       content: `Conflict level anchors and curve:\n${buildConflictLevelCurveContext(input.targetVolume, undefined, { includeChapterTitles: false })}`,
     }),
     guidanceBlock(input.guidance),
@@ -282,12 +307,15 @@ export function buildVolumeChapterDetailContextBlocks(input: VolumeChapterDetail
       group: "book_contract",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Novel contract:\n${buildCommonNovelContext(input.novel)}`,
     }),
     createContextBlock({
       id: "macro_constraints",
       group: "macro_constraints",
       priority: 92,
+      required: true,
+      allowSummary: false,
       content: `Story macro:\n${buildStoryMacroContext(input.storyMacroPlan)}`,
     }),
     createContextBlock({
@@ -295,6 +323,7 @@ export function buildVolumeChapterDetailContextBlocks(input: VolumeChapterDetail
       group: "target_volume",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Target volume:\n${buildCompactVolumeCard(input.targetVolume)}`,
     }),
     createContextBlock({
@@ -308,6 +337,7 @@ export function buildVolumeChapterDetailContextBlocks(input: VolumeChapterDetail
       group: "chapter_neighbors",
       priority: 98,
       required: true,
+      allowSummary: false,
       content: `Chapter neighbors:\n${buildChapterNeighborContext(input.targetVolume, input.targetChapter.id)}`,
     }),
     createContextBlock({
@@ -315,6 +345,7 @@ export function buildVolumeChapterDetailContextBlocks(input: VolumeChapterDetail
       group: "conflict_level_curve",
       priority: 99,
       required: true,
+      allowSummary: false,
       content: `Conflict level anchors and curve:\n${buildConflictLevelCurveContext(input.targetVolume, input.targetChapter.id)}`,
     }),
     createContextBlock({
@@ -328,6 +359,7 @@ export function buildVolumeChapterDetailContextBlocks(input: VolumeChapterDetail
       group: "chapter_detail_draft",
       priority: 96,
       required: true,
+      allowSummary: false,
       content: `Existing draft:\n${buildChapterDetailDraft(input.targetChapter, input.detailMode)}`,
     }),
     createContextBlock({
@@ -347,12 +379,15 @@ export function buildVolumeRebalanceContextBlocks(input: VolumeRebalancePromptIn
       group: "book_contract",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Novel contract:\n${buildCommonNovelContext(input.novel)}`,
     }),
     createContextBlock({
       id: "macro_constraints",
       group: "macro_constraints",
       priority: 92,
+      required: true,
+      allowSummary: false,
       content: `Story macro:\n${buildStoryMacroContext(input.storyMacroPlan)}`,
     }),
     createContextBlock({
@@ -366,6 +401,7 @@ export function buildVolumeRebalanceContextBlocks(input: VolumeRebalancePromptIn
       group: "anchor_volume",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Anchor volume:\n${buildCompactVolumeCard(input.anchorVolume)}`,
     }),
     createContextBlock({

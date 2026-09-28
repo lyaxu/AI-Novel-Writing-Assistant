@@ -7,6 +7,7 @@ import { chapterAcceptanceAssessmentPrompt } from "../../../../prompting/prompts
 import { promptSlotOverrideService } from "../../../../prompting/slots/PromptSlotOverrideService";
 import { resolveAdvancedPromptMessages } from "../../../../prompting/templates/templateRuntime";
 import type { ChapterAcceptanceAssessmentInput } from "../ChapterAcceptanceAssessmentService";
+import { acceptanceOutputBudget, buildAcceptancePromptInput } from "./causalAssessment";
 
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -32,10 +33,7 @@ export async function buildAcceptanceCacheIdentity(input: ChapterAcceptanceAsses
   const overlays = asset.slots?.length
     ? await promptSlotOverrideService.resolveForRuntime({ promptId: asset.id, novelId: input.novelId })
     : null;
-  const promptInput = {
-    novelTitle: input.novelTitle, chapterTitle: input.chapterTitle, chapterOrder: input.chapterOrder,
-    targetWordCount: input.targetWordCount ?? null, content: input.content,
-  };
+  const promptInput = buildAcceptancePromptInput(input);
   const prepared = preparePromptExecution({
     asset, promptInput, contextBlocks: [...context.blocks, ...(overlays?.appendBlocks ?? [])],
     resolvedSlots: overlays?.inlineSlots,
@@ -45,7 +43,7 @@ export async function buildAcceptanceCacheIdentity(input: ChapterAcceptanceAsses
   });
   const resolved = await resolveLLMClientOptions(input.provider, {
     model: input.model, temperature: Math.min(input.temperature ?? 0.2, 0.35),
-    maxTokens: 3200, taskType: asset.taskType, executionMode: "structured",
+    maxTokens: acceptanceOutputBudget(promptInput.expectedSceneKeys?.length ?? 0), taskType: asset.taskType, executionMode: "structured",
   });
   const identity = {
     version: 2, promptId: asset.id, promptVersion: asset.version,

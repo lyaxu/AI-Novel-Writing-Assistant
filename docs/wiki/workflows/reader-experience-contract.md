@@ -22,6 +22,8 @@
 
 场景卡同时维护 `resistance / turn / emotionalShift / readerValue`，保证场景不只是信息搬运或状态过渡。
 
+场景的 `causality` 进一步约束前提来源、人物选择、阻力回应、结果机制和持续代价；它与读者体验合同配合，用来区分“规定的结果出现了”和“结果有可信成因”。字段、证据审查与旧数据边界见 [场景因果与质量证据](scene-causality-and-quality-evidence.md)。
+
 ## Current Rule
 
 - 新章节执行合同必须由 AI 返回完整读者体验合同和场景体验字段。

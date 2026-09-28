@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { createSceneCausality } = require("./fixtures/sceneCausality.js");
 
 const {
   chapterAcceptanceAssessmentSchema,
@@ -34,6 +35,7 @@ test("chapter execution contract requires reader experience and scene experience
     turn: "主角改变策略并夺回一步主动。",
     emotionalShift: "压迫转为反击期待。",
     readerValue: "读者获得推进和局部回报。",
+    causality: createSceneCausality(),
   });
   const base = {
     purpose: "完成第一次反压。",

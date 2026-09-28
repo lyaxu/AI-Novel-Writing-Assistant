@@ -212,6 +212,13 @@ function validateAdjacentChapterBoundary<T extends {
 
 const intensityScaleRule = "conflictLevel 与 revealLevel 统一采用 0-100 整数尺度，不是 1-5 星级。0 表示无冲突或无新增揭示，20 表示低强度铺垫，50 表示中等阻力或实质线索，80 表示高压对抗或重大揭示，100 表示本书极限。按实际场景的阻力、代价和信息变化评分，不为曲线好看硬造高潮；用户已固定的数值必须保留。";
 
+const sceneCausalityRules = [
+  "每个 sceneCard 必须包含 causality：actor（作出关键选择的人）、choice（具体选择）、motive（为什么如此选择）、prerequisites、resistanceResponse（他人/环境如何回应）、outcomeMechanism（回应如何导致结果）、resultingConstraints。不能把目的或预定结果冒充发生机制。",
+  "prerequisites 每项包含 condition、sourceKind、reference。sourceKind 只能是 established_in_context（上下文已建立，reference 指向具体来源）、establish_in_scene（本章先建立再使用，reference 指明建立场景与动作）、unresolved（缺少支持，reference 说明缺口）。没有上下文证据不能声称前文已获得物品、信息、信任、能力或通行条件。",
+  "resultingConstraints 每项包含 constraint、persistence：写明行动带来的身体、资源、时间、关系或认知限制，以及持续至何时/什么可见事件才能解除；既有伤势或消耗必须实际限制可选行动，不能只作装饰。没有新增限制可返回空数组，不能强行添加伤亡。",
+  "因果合同适用于各种题材：拒绝、等待、误解、认知或情绪变化、失败都可以是结果，不要求每场战斗、获胜或反转。对手也应按自身利益和已知能力回应，不能只为预定结果降智。前提最多6项、后续限制最多6项，各文本字段不超过120汉字；无必要前提可用空数组。",
+];
+
 function createVolumeDetailSystemPrompt(detailMode: VolumeChapterDetailPromptInput["detailMode"]): string {
   if (detailMode === "purpose") {
     return [
@@ -246,6 +253,7 @@ function createVolumeDetailSystemPrompt(detailMode: VolumeChapterDetailPromptInp
     "promisedReward 与 netChange 必须是读者在正文中能看见的回报和变化，不能写成作者意图或抽象主题。",
     "sceneCards 必须是 3-8 个场景卡数组，每个场景卡都必须包含 key、title、purpose、mustAdvance、mustPreserve、entryState、exitState、forbiddenExpansion、targetWordCount、resistance、turn、emotionalShift、readerValue。",
     "每个场景都必须有具体阻力和转折；readerValue 要说明该场景给读者带来的推进、揭示、情绪或关系价值。",
+    ...sceneCausalityRules,
     "sceneCards 必须完整覆盖整章推进和结尾 hook，不要把整章压成一个场景。",
     "当前章节的 title、summary、purpose、exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、mustAvoid、payoffRefs 共同组成了本章硬边界合同。taskSheet 和 sceneCards 只能执行当前章合同，不能改写或覆盖它。",
     "你必须把 chapter_neighbors 视为相邻章边界提示：上一章已经完成的关键首次事件不能在本章重写一次，下一章标题或摘要中的关键首次事件也不能提前写进本章。",
@@ -285,6 +293,7 @@ function createExecutionContractSystemPrompt(): string {
     "readerExperience 是本章唯一的读者体验合同，必须完整包含 readerQuestion、promisedReward、rewardLevel、protagonistWant、primaryResistance、keyTurn、emotionalShift、informationReveal、netChange、inheritedHookResponsibilities、endingHook。",
     "rewardLevel 只能使用 setup、partial、major；promisedReward 和 netChange 必须能在正文中被读者直接感知。",
     "sceneCards 除原字段外还必须包含 resistance、turn、emotionalShift、readerValue，确保每个场景都有阻力、转折和读者价值。",
+    ...sceneCausalityRules,
     "taskSheet 和 sceneCards 只能执行当前章的合同，不得提前占用相邻章的一次性事件，也不得重写上一章已经完成的里程碑。",
     "如果 conflict_level_curve 标出用户锚定的 conflictLevel，该数值是硬约束，不得改写。",
     "如果最近章节已经连续使用相同开场、相同推进路数或同类钩子，本章必须通过 sceneCards 主动做出差异化。",
@@ -358,7 +367,7 @@ export const volumeChapterTaskSheetPrompt: PromptAsset<
   ReturnType<typeof createChapterTaskSheetSchema>["_output"]
 > = {
   id: "novel.volume.chapter_task_sheet",
-  version: "v3",
+  version: "v4",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -379,7 +388,7 @@ export const volumeChapterExecutionContractPrompt: PromptAsset<
   ReturnType<typeof createChapterExecutionContractSchema>["_output"]
 > = {
   id: "novel.volume.chapter_execution_contract",
-  version: "v4",
+  version: "v5",
   taskType: "planner",
   mode: "structured",
   language: "zh",

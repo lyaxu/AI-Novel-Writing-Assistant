@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { createSceneCausality } = require("./fixtures/sceneCausality.js");
 const {
   createChapterBoundarySchema,
   createChapterTaskSheetSchema,
@@ -689,6 +690,7 @@ test("chapter task sheet schema parses taskSheet plus aliased scene cards", () =
         turningPoint: "主角用旧线索证明自己已经掌握关键缺口。",
         emotionShift: "戒备转为有限信任。",
         readerReward: "情报链正式接通。",
+        causality: createSceneCausality(),
       },
       {
         id: "first_counterattack",
@@ -704,6 +706,7 @@ test("chapter task sheet schema parses taskSheet plus aliased scene cards", () =
         turn: "主角利用时间差迫使敌方临时改线。",
         emotionalShift: "紧张压迫转为反击快感。",
         readerValue: "看到主角把信息优势兑现成实际收益。",
+        causality: createSceneCausality(),
       },
       {
         key: "end_hook",
@@ -719,6 +722,7 @@ test("chapter task sheet schema parses taskSheet plus aliased scene cards", () =
         turn: "阶段性胜利暴露出主角的位置。",
         emotionalShift: "胜利余韵转为迫近危机。",
         readerValue: "本章收益落袋，同时获得明确追读悬念。",
+        causality: createSceneCausality(),
       },
     ],
   });

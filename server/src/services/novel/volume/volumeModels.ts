@@ -70,8 +70,23 @@ export interface VolumeGenerationNovel {
     name: string;
   } | null;
   characters: Array<{
+    id?: string;
     name: string;
     role: string;
+    castRole?: string | null;
+    storyFunction?: string | null;
+    relationToProtagonist?: string | null;
+    powerLevel?: string | null;
+    availability?: string | null;
+    prohibitionsJson?: string | null;
+    outerGoal?: string | null;
+    innerNeed?: string | null;
+    fear?: string | null;
+    wound?: string | null;
+    misbelief?: string | null;
+    moralLine?: string | null;
+    secret?: string | null;
+    development?: string | null;
     currentGoal: string | null;
     currentState: string | null;
   }>;

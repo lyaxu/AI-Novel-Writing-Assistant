@@ -216,6 +216,36 @@ function buildChapterBoundaryContextBlock(writeContext: ChapterWriteContext): Pr
   });
 }
 
+function buildSceneCausalityContextBlock(writeContext: ChapterWriteContext): PromptContextBlock | null {
+  const scenes = writeContext.scenePlan?.scenes;
+  if (!scenes?.length) {
+    return null;
+  }
+  return createContextBlock({
+    id: "scene_causality",
+    group: "scene_causality",
+    priority: 100,
+    required: true,
+    allowSummary: false,
+    content: [
+      "场景因果合同（规划意图，不是已经发生的事实；写作、验收、修复共用）：",
+      "来源必须对照实际上下文；establish_in_scene 必须先建立再使用，unresolved 不能当成已知事实。结果出现不等于因果成立。",
+      ...scenes.map((scene) => JSON.stringify({
+        sceneKey: scene.key,
+        title: scene.title,
+        entryState: scene.entryState,
+        exitState: scene.exitState,
+        resistance: scene.resistance,
+        turn: scene.turn,
+        causality: scene.causality ?? null,
+      })),
+      scenes.some((scene) => !scene.causality)
+        ? "旧场景未登记 causality：这是证据缺项，不能宣称已通过因果审查；仍需对照正文和现有事实判断，不得编造前置来源。"
+        : "",
+    ].filter(Boolean).join("\n"),
+  });
+}
+
 export function buildChapterWriterContextBlocks(
   writeContext: ChapterWriteContext,
   options: ChapterWriterBlockOptions = {},
@@ -235,6 +265,7 @@ export function buildChapterWriterContextBlocks(
   const includeContinuationConstraints = mode === "full" && writeContext.continuationConstraints.length > 0;
   const wordRange = resolveTargetWordRange(writeContext.chapterMission.targetWordCount);
   const blocks: Array<PromptContextBlock | null> = [
+    buildSceneCausalityContextBlock(writeContext),
     writeContext.productionFoundationPrompt
       ? createContextBlock({
         id: "production_foundation",
