@@ -11,6 +11,8 @@ import { type VolumeChapterDetailPromptInput } from "./shared";
 import { buildVolumeChapterDetailContextBlocks } from "./contextBlocks";
 import { NOVEL_PROMPT_BUDGETS } from "../promptBudgetProfiles";
 
+const selectedDirectionRule = "selectedPlanningDirection是用户确认的创作承诺，writtenEvidence的实际已写事实高于计划。细化必须承接原选卖点、人物路径、openingChain的关系变化与earlyPayoff；可改编动作或调整拆章，但须保留同等关系/回报价值，在purpose、mustAdvance、readerExperience或继承钩子写明具体承接。不能把关系建立或可见回报静默换成重复追逃/受压，也不能因后来生成的摘要遗漏而认定用户放弃。全书长期承诺不要求本章全部兑现；开篇承诺延期须有明确落点。来源缺失时标明未知，不编造原始选择；若与已写事实或受保护边界冲突，交由现有规划审查修复，不擅改事实。";
+
 const TITLE_EVENT_ANCHOR_HINTS = [
   "激活",
   "入手",
@@ -224,6 +226,7 @@ function createVolumeDetailSystemPrompt(detailMode: VolumeChapterDetailPromptInp
     return [
       "你是资深网文章节编辑。",
       "当前任务是收束单章 purpose。",
+      selectedDirectionRule,
       "只输出严格 JSON，且只包含 purpose 字段。",
       "purpose 必须说明这一章要推进什么，不要复述摘要。",
     ].join("\n");
@@ -232,6 +235,7 @@ function createVolumeDetailSystemPrompt(detailMode: VolumeChapterDetailPromptInp
     return [
       "你是资深网文章节编辑。",
       "当前任务是为单章定义执行边界。",
+      selectedDirectionRule,
       intensityScaleRule,
       "只输出严格 JSON，且只包含 exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、targetWordCount、mustAvoid、payoffRefs。",
       "exclusiveEvent 表示只能由本章承担的一次性里程碑事件，必须具体，不能写成空泛主题。",
@@ -247,6 +251,7 @@ function createVolumeDetailSystemPrompt(detailMode: VolumeChapterDetailPromptInp
     "当前任务是生成可直接交给正文生成器的章节执行合同。",
     "只输出严格 JSON，且只包含 taskSheet、readerExperience、sceneCards 三个字段。",
     "taskSheet 是给用户读的简洁执行摘要，需要覆盖情绪基调、冲突对象、关键推进和收尾要求。",
+    selectedDirectionRule,
     "readerExperience 是本章唯一的读者体验合同，必须包含 readerQuestion、promisedReward、rewardLevel、protagonistWant、primaryResistance、keyTurn、emotionalShift、informationReveal、netChange、inheritedHookResponsibilities、endingHook。",
     "rewardLevel 只能是 setup、partial、major；由本章在卷节奏中的职责决定，不要每章都写成 major。",
     "inheritedHookResponsibilities 必须优先承接相邻章已经提出的问题；没有明确旧钩子时返回空数组，不要编造。",
@@ -285,6 +290,7 @@ function createExecutionContractSystemPrompt(): string {
   return [
     "你是资深网文章节编辑。",
     "当前任务是一次性生成可直接交给写作器的章节执行合同。",
+    selectedDirectionRule,
     intensityScaleRule,
     "只输出严格 JSON，必须同时包含 purpose、exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、targetWordCount、mustAvoid、payoffRefs、taskSheet、readerExperience、sceneCards。",
     "purpose 用一句话说明本章到底要推进什么，不要写成摘要复述。",
@@ -325,7 +331,7 @@ export const volumeChapterPurposePrompt: PromptAsset<
   ReturnType<typeof createChapterPurposeSchema>["_output"]
 > = {
   id: "novel.volume.chapter_purpose",
-  version: "v3",
+  version: "v4",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -346,7 +352,7 @@ export const volumeChapterBoundaryPrompt: PromptAsset<
   ReturnType<typeof createChapterBoundarySchema>["_output"]
 > = {
   id: "novel.volume.chapter_boundary",
-  version: "v2",
+  version: "v3",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -367,7 +373,7 @@ export const volumeChapterTaskSheetPrompt: PromptAsset<
   ReturnType<typeof createChapterTaskSheetSchema>["_output"]
 > = {
   id: "novel.volume.chapter_task_sheet",
-  version: "v4",
+  version: "v5",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -388,7 +394,7 @@ export const volumeChapterExecutionContractPrompt: PromptAsset<
   ReturnType<typeof createChapterExecutionContractSchema>["_output"]
 > = {
   id: "novel.volume.chapter_execution_contract",
-  version: "v5",
+  version: "v6",
   taskType: "planner",
   mode: "structured",
   language: "zh",

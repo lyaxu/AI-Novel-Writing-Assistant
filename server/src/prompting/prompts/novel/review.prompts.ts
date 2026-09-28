@@ -171,7 +171,7 @@ export const chapterReviewPrompt: PromptAsset<
 
 export const chapterRepairPrompt: PromptAsset<ChapterRepairPromptInput, string, string> = {
   id: "novel.review.repair",
-  version: "v2",
+  version: "v3",
   taskType: "repair",
   mode: "text",
   language: "zh",

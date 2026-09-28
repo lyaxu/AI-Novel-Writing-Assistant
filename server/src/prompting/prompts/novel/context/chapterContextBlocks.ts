@@ -18,6 +18,7 @@ import {
   toListBlock,
 } from "../chapterLayeredContextShared";
 import { normalizeChapterWriteContext } from "./chapterContextPolicies";
+import { buildWrittenEvidenceContextBlock } from "./writtenEvidence";
 
 export const WRITER_FORBIDDEN_GROUPS = [
   "full_outline",
@@ -122,8 +123,9 @@ function buildResourceItemLine(item: NonNullable<ChapterWriteContext["characterR
   const window = item.expectedUseStartChapterOrder || item.expectedUseEndChapterOrder
     ? `window=${item.expectedUseStartChapterOrder ?? "?"}-${item.expectedUseEndChapterOrder ?? "?"}`
     : "";
-  const constraints = item.constraints.length > 0 ? `constraints=${item.constraints.slice(0, 2).join(" / ")}` : "";
-  return `${item.name} [${item.status}; ${holder}; ${item.narrativeFunction}] ${item.summary}${window ? ` | ${window}` : ""}${constraints ? ` | ${constraints}` : ""}`;
+  const constraints = item.constraints.length > 0 ? `constraints=${item.constraints.join(" / ")}` : "";
+  const sources = (item.sourceRefs ?? []).map((source) => `${source.kind}:${source.chapterId ?? source.refId ?? "unknown"}`).join(" / ");
+  return `${item.name} [${item.status}; ${holder}; ${item.narrativeFunction}] ${item.summary}${window ? ` | ${window}` : ""}${constraints ? ` | ${constraints}` : ""} | holderKnows=${item.holderKnows} | readerKnows=${item.readerKnows} | sources=${sources || "unknown"}`;
 }
 
 function buildResourceProposalLine(item: NonNullable<ChapterWriteContext["characterResourceContext"]>["pendingProposalItems"][number]): string {
@@ -138,12 +140,14 @@ function buildCharacterResourceContextBlock(writeContext: ChapterWriteContext): 
   }
   return [
     `Resource ledger summary: ${context.summary}`,
-    toListBlock("Available resources", context.availableItems.slice(0, 6).map(buildResourceItemLine)),
-    toListBlock("Needs setup before use", context.setupNeededItems.slice(0, 5).map(buildResourceItemLine)),
-    toListBlock("Unavailable or risky to reuse", context.blockedItems.slice(0, 5).map(buildResourceItemLine)),
-    toListBlock("High-risk committed resources", context.highRiskCommittedItems.slice(0, 4).map(buildResourceItemLine)),
-    toListBlock("Pending resource proposals (not committed)", context.pendingProposalItems.slice(0, 4).map(buildResourceProposalLine)),
-    toListBlock("Resource risk signals", context.riskSignals.slice(0, 5).map((item) => `${item.severity}: ${item.summary}`)),
+    "这是已筛选的资源记录，不是正文事实的替代品；chapter_plan 来源表示计划，摘要和推测须对照 written_evidence 原文。未列出的资源不等于不存在，更不等于可以直接使用；关键解法须有获得、保留或建立依据。",
+    "物品持有、可用、人物知情是不同状态。损坏、消耗、受限或未知的资源不得因规划需要而自动恢复；来源冲突优先依据实际正文并保留不确定性。",
+    toListBlock("Available resources", context.availableItems.map(buildResourceItemLine)),
+    toListBlock("Needs setup before use", context.setupNeededItems.map(buildResourceItemLine)),
+    toListBlock("Unavailable or risky to reuse", context.blockedItems.map(buildResourceItemLine)),
+    toListBlock("High-risk committed resources", context.highRiskCommittedItems.map(buildResourceItemLine)),
+    toListBlock("Pending resource proposals (not committed)", context.pendingProposalItems.map(buildResourceProposalLine)),
+    toListBlock("Resource risk signals", context.riskSignals.map((item) => `${item.severity}: ${item.summary}`)),
   ].filter(Boolean).join("\n");
 }
 
@@ -257,7 +261,7 @@ export function buildChapterWriterContextBlocks(
   const includePayoffLedger = mode === "full" && hasLedgerPressure(writeContext);
   const includePayoffDirectives = writeContext.payoffDirectives.length > 0;
   const hasObligationContract = Object.values(writeContext.obligationContract).some((items) => items.length > 0);
-  const includeCharacterResources = !isIncremental && hasCharacterResourcePressure(writeContext);
+  const includeCharacterResources = hasCharacterResourcePressure(writeContext);
   const includeCharacterDynamics = shouldIncludeCharacterDynamics(writeContext, mode);
   const includeOpenConflicts = !isIncremental && writeContext.openConflictSummaries.length > 0;
   const includeRecentChapters = mode === "full" && writeContext.recentChapterSummaries.length > 0;
@@ -265,6 +269,7 @@ export function buildChapterWriterContextBlocks(
   const includeContinuationConstraints = mode === "full" && writeContext.continuationConstraints.length > 0;
   const wordRange = resolveTargetWordRange(writeContext.chapterMission.targetWordCount);
   const blocks: Array<PromptContextBlock | null> = [
+    buildWrittenEvidenceContextBlock(writeContext),
     buildSceneCausalityContextBlock(writeContext),
     writeContext.productionFoundationPrompt
       ? createContextBlock({
@@ -481,8 +486,9 @@ export function buildChapterWriterContextBlocks(
       ? createContextBlock({
         id: "character_resource_context",
         group: "character_resource_context",
-        priority: 90,
-        required: mode === "review" || mode === "repair",
+        priority: 99,
+        required: true,
+        allowSummary: false,
         content: buildCharacterResourceContextBlock(writeContext),
       })
       : null,

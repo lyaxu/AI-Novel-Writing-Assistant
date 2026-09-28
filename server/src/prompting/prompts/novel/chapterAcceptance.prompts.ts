@@ -4,7 +4,8 @@ import type { PromptAsset } from "../../core/promptTypes";
 import { renderSelectedContextBlocks } from "../../core/renderContextBlocks";
 import { NOVEL_PROMPT_BUDGETS } from "./promptBudgetProfiles";
 import { CHAPTER_PROSE_QUALITY_AUDIT_RULES } from "@ai-novel/shared/types/chapterProseContract";
-import { sceneCausalityVerdictSchema } from "@ai-novel/shared/types/novel/sceneCausality";
+import { actionStateCheckSchema, sceneCausalityVerdictSchema } from "@ai-novel/shared/types/novel/sceneCausality";
+import { ACTION_STATE_AUDIT_RULES, reconcileSceneActionVerdicts, validateActionStateEvidence } from "./acceptance/actionStateEvidence";
 
 export const chapterAcceptanceIssueCategorySchema = z.enum([
   "continuity",
@@ -181,6 +182,8 @@ export const chapterAcceptanceAssessmentSchema = z.object({
   }),
   summary: z.string().trim().min(1),
   sceneCausalityVerdicts: z.array(sceneCausalityVerdictSchema).max(8).optional(),
+  actionStateChecks: z.array(actionStateCheckSchema).max(8).optional(),
+  actionStateAuditIssues: z.array(z.string()).optional(),
   blockingIssues: z.array(z.object({
     severity: z.enum(["low", "medium", "high", "critical"]),
     category: z.preprocess(normalizeAcceptanceCategory, chapterAcceptanceIssueCategorySchema),
@@ -224,17 +227,20 @@ export const chapterAcceptanceAssessmentSchema = z.object({
 export type ChapterAcceptanceAssessmentOutput = z.infer<typeof chapterAcceptanceAssessmentSchema>;
 
 /** New model output must explicitly report evidence; old persisted assessments remain readable. */
-export const generatedChapterAcceptanceAssessmentSchema = chapterAcceptanceAssessmentSchema.extend({
+export const generatedChapterAcceptanceAssessmentSchema = chapterAcceptanceAssessmentSchema.omit({ actionStateAuditIssues: true }).extend({
   sceneCausalityVerdicts: z.array(sceneCausalityVerdictSchema).max(8),
+  actionStateChecks: z.array(actionStateCheckSchema.omit({ validationIssues: true })).min(1).max(8),
 });
 
 export interface ChapterAcceptancePromptInput {
+  chapterId?: string;
   novelTitle: string;
   chapterOrder: number;
   chapterTitle: string;
   targetWordCount?: number | null;
   content: string;
   expectedSceneKeys?: string[];
+  establishedProse?: Array<{ chapterId: string; order: number; content: string }>;
 }
 
 const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
@@ -249,6 +255,14 @@ const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
   },
   summary: "本章主线可以成立，但结尾钩子和中段推进需要轻修后再继续。",
   sceneCausalityVerdicts: [],
+  actionStateChecks: [{
+    sceneKey: "chapter", actor: "她", action: "拒绝签字", actionEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她把笔放下，没有签字。" }],
+    states: [{ dimension: "knowledge", entity: "她对欠款的知情", before: "已经读到欠款条款", requiredForAction: "了解合同条款", after: "知情但拒绝承担欠款",
+      beforeEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她读完了欠款条款。" }],
+      afterEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她把笔放下，没有签字。" }],
+      transitionEvidence: [], enablingTransitionRequired: false, stateChanged: false, transitionStatus: "not_needed" }],
+    verdict: "earned", explanation: "知情后拒绝签字，未发生无来源的知识变化。",
+  }],
   blockingIssues: [
     {
       severity: "medium",
@@ -293,7 +307,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ChapterAcceptanceAssessmentOutput
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v3",
+  version: "v4",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -338,7 +352,16 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       || expected.some((key) => !actual.includes(key))) {
       throw new Error(`sceneCausalityVerdicts 必须逐一覆盖指定场景，不得缺漏或重复：${expected.join(", ") || "无；返回空数组"}`);
     }
-    return output;
+    const audit = validateActionStateEvidence(output.actionStateChecks ?? [], input);
+    return {
+      ...output,
+      actionStateChecks: audit.checks,
+      actionStateAuditIssues: audit.coverageIssues,
+      sceneCausalityVerdicts: reconcileSceneActionVerdicts(output.sceneCausalityVerdicts ?? [], audit.checks).map((row) =>
+        row.verdict === "earned" && audit.coverageIssues.some((issue) => issue.endsWith(`:${row.sceneKey}`))
+          ? { ...row, verdict: "insufficient_evidence" as const, explanation: "关键行动状态核验缺失或重复，不能认证因果已成立。" }
+          : row),
+    };
   },
   render: (input, context) => [
     new SystemMessage([
@@ -369,6 +392,8 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       "19. verdict 只能使用 earned（因果有正文/上下文证据支持）、unearned（结果发生但缺关键成因）、contradicted（与已知条件矛盾）、insufficient_evidence（提供的文本不足以判断）。prerequisiteEvidence 和 constraintEvidence 是简短证据数组；其他证据字段和 explanation 是字符串，各不超过240字符。引用实际短句并说明作用，不能抄合同当正文证据；条件不存在时数组可空，但证据不足必须明确说明缺口，不得编造引文。",
       "20. 对 scene_causality 的每个前提对照来源核实，检查建立是否早于使用、人物动机是否支持选择、阻力方回应是否符合其能力和利益、outcomeMechanism 是否实际写出、既有及新增代价是否限制后续行动。没有战斗、没有成功、安静的关系变化均可 earned，关键是其机制成立。",
       "21. 先给逐场证据结论，再汇总分数。unearned/contradicted 必须进入 blockingIssues 和可执行的 repairDirectives；insufficient_evidence 必须保留可追踪风险，不能因总分高而消失。局部缺口优先 repairable/continue_with_risk，遵守既有继续策略，不自行升级为全局停止。",
+      "关键行动状态审查：",
+      ...ACTION_STATE_AUDIT_RULES,
       "正文退化检测边界：",
       ...CHAPTER_PROSE_QUALITY_AUDIT_RULES.map((rule, index) => `${index + 1}. ${rule}`),
     ].join("\n")),
@@ -377,6 +402,8 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       `章节：第 ${input.chapterOrder} 章 ${input.chapterTitle}`,
       typeof input.targetWordCount === "number" ? `目标长度：约 ${input.targetWordCount} 字` : "目标长度：未指定",
       `expectedSceneKeys：${JSON.stringify(input.expectedSceneKeys ?? [])}`,
+      `chapterId（current_prose来源ID）：${input.chapterId ?? "current"}`,
+      `established_context可用已写正文来源：${JSON.stringify((input.establishedProse ?? []).map(({ chapterId, order }) => ({ chapterId, order })))}`,
       "",
       "分层上下文：",
       renderSelectedContextBlocks(context),

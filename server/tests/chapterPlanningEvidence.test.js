@@ -16,13 +16,18 @@ function load(file, imports) {
 }
 const evidence = load("../src/prompting/prompts/novel/volume/evidence/chapterEvidence.ts", {});
 const schema = load("../../shared/types/chapterTaskSheetQuality.ts", { zod: require("zod"), "./chapterLengthControl.js": require("../../shared/dist/types/chapterLengthControl.js") });
+const promiseEvidence = load("../src/prompting/prompts/novel/volume/evidence/planningPromiseEvidence.ts", {
+  "./chapterEvidence": evidence,
+  "@ai-novel/shared/types/novel/planningPromises": load("../../shared/types/novel/planningPromises.ts", { zod: require("zod") }),
+});
 const { chapterTaskSheetQualityPrompt: prompt } = load("../src/prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts.ts", {
   "@langchain/core/messages": require("@langchain/core/messages"), zod: require("zod"),
   "@ai-novel/shared/types/chapterTaskSheetQuality": schema, "./evidence/chapterEvidence": evidence,
+  "./evidence/planningPromiseEvidence": promiseEvidence,
 });
 const fixture = require("./fixtures/planningEvidenceLabeledQuotes.json");
 const output = () => ({ verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is",
-  summary: "已复核", issues: [], repairGuidance: [], confidence: 0.9, issueChecks: structuredClone(fixture.issueChecks) });
+  summary: "已复核", issues: [], repairGuidance: [], confidence: 0.9, issueChecks: structuredClone(fixture.issueChecks), promiseChecks: [] });
 const input = () => ({ candidate: fixture.candidate, previousIssues: fixture.issueChecks.map((c) => ({ id: c.issueId })) });
 
 test("eight saved field-labeled citations verify against the same candidate without paid recovery", () => {

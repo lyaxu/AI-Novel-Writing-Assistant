@@ -58,6 +58,7 @@ import {
 } from "./context/chapterSourceText";
 import { resolveChapterResourceCharacterIds } from "./context/chapterParticipantSelection";
 import { evaluateChapterContextProviderContracts } from "./context/chapterContextProviderContracts";
+import { loadPlanningWrittenEvidence } from "../volume/writtenEvidence";
 
 export { buildBlockingPendingReviewProposalWhere } from "./context/pendingReviewContext";
 export { resolveChapterResourceCharacterIds } from "./context/chapterParticipantSelection";
@@ -165,6 +166,7 @@ export class GenerationContextAssembler {
       styleContext,
       payoffLedger,
       characterResourceContext,
+      writtenEvidence,
     ] = await Promise.all([
       this.worldContextGateway.getWorldContextBlock(novelId, { purpose: "chapter" }),
       pendingReviewProposalCountPromise,
@@ -256,6 +258,7 @@ export class GenerationContextAssembler {
         chapterOrder: chapter.order,
         ...(resourceCharacterIds.length > 0 ? { characterIds: resourceCharacterIds } : {}),
       }).catch(() => null),
+      loadPlanningWrittenEvidence(novelId, chapter.order),
     ]);
 
     const resolvedStateDrivenContext = await contextAssemblyService.build({
@@ -531,6 +534,7 @@ export class GenerationContextAssembler {
       // Phase 2 缺陷5：timelineContext 停止构建，写作路径已不消费
       timelineContext: null,
       characterResourceContext,
+      writtenEvidence,
       contextGatingDecisions: [] as GenerationContextPackage["contextGatingDecisions"],
       chapterChangeFlags: {
         introducedPayoff: false,

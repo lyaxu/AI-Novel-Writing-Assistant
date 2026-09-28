@@ -131,6 +131,7 @@ test("local repair does not expand to neighboring chapters", async () => {
 test("chapter re-review receives book constraints, current candidate and preceding issue ids", async () => {
   const h = harness({ local: true });
   h.input.context = { novel: { genre: "东方玄幻", coreRule: "能力必须有来源" } };
+  h.input.writtenEvidence = { version: 1, sourceFingerprint: "prose-hash", chapters: [{ chapterId: "prior", order: 2, contentHash: "hash", content: "刀具已收缴，烙印位于胸口。" }] };
   const seen = [];
   const evaluate = h.gate.evaluate;
   h.gate.evaluate = async (candidate, options) => {
@@ -140,6 +141,8 @@ test("chapter re-review receives book constraints, current candidate and precedi
   await h.coordinator.run(h.input);
   assert.equal(seen.length, 2);
   assert.equal(seen[0].context.bookConstraints.novel.coreRule, "能力必须有来源");
+  assert.deepEqual(seen[0].context.writtenEvidence, h.input.writtenEvidence);
+  assert.deepEqual(seen[1].context.writtenEvidence, h.input.writtenEvidence);
   assert.deepEqual(seen[0].options.previousIssues, []);
   assert.deepEqual(seen[1].options.previousIssues, reject.issues);
   assert.equal(seen[1].context.candidateChapters[0].taskSheet, seen[1].candidate.taskSheet);

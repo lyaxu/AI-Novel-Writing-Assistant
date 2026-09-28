@@ -9,9 +9,11 @@ import {
   aiChapterTaskSheetQualityAssessmentSchema,
   chapterPlanningIssueCheckSchema,
   chapterPlanningEvidenceQuoteSchema,
+  chapterPlanningPromiseCheckSchema,
 } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import type { PromptAsset } from "../../../core/promptTypes";
 import { buildChapterEvidenceIndex, matchesChapterEvidence } from "./evidence/chapterEvidence";
+import { planningPromiseEvidenceContext, validatePlanningPromiseEvidence } from "./evidence/planningPromiseEvidence";
 
 export interface ChapterTaskSheetQualityPromptInput {
   candidate: ChapterExecutionContractQualityCandidate;
@@ -67,6 +69,13 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "只评估当前章节合同，不扩写正文，不改写任务单。",
     "这是写前规划复核：判断已安排的动作与因果桥梁是否可执行，不要求规划提供尚未创作的正文。必须通读 taskSheet、mustAdvance 和 causality；若具体检查、建立或代价动作已安排在使用之前，不得因另一字段未重复描述而判定缺失。",
     "reviewContext 提供书级约束、原始与当前章节和邻章边界。历史评审只是待核实的意见，不能当作事实；以当前候选原文判断修复效果，不得机械复述上轮问题。未知前文不能自行编造。",
+    "writtenEvidence中的实际已写正文与可核验事实高于计划描述。selectedPlanningDirection来自用户确认的候选，是尚待履行的创作承诺，不是已经发生的事实，也不能用后来生成的大纲替代原始确认来源。",
+    "逐项检查 selectedPromiseSourceIds：原选卖点、人物路径、开篇关系推进、earlyPayoff与openingChain中的回报价值是否贯穿当前细化。为每个sourceId输出一条promiseChecks。preserved=有证据保留，adapted=表现手段/落点改写但关系及回报价值等效，deferred=有理由延期且给出具体承接，dropped=承诺被丢弃，insufficient=证据不足。不要把纯追逃、重复受压当成原先关系变化或阶段回报的等价替代。",
+    "scope区分current_chapter、opening_sequence、book_arc，由原始来源与实际安排判断，不按某个固定章序强锁动作。开篇原型允许合理拆合与移动，但延期须引用contextEvidence中实际承接章节的具体内容并说明回报何时如何落实；不能仅说后面再写。全书或前30章承诺不是本章必须全部兑现的清单；尚未到期的book_arc可以deferred并说明范围，不能据此无故阻塞当前章。",
+    "promiseChecks字段：sourceId、scope、status、sourceEvidence、candidateEvidence、contextEvidence、explanation（600字以内）、repairHint（600字以内，无缺口可为空）。三组Evidence均用{sourcePath,quote}，每组最多3条；sourceEvidence至少1条且引用对应原始来源叶路径；candidateEvidence引用当前候选；contextEvidence引用promiseContextEvidenceIndex中的已提供前文或承接计划，原选承诺本身不能当兑现证据。",
+    "为完整覆盖所有承诺，每组证据优先选1条20至80字的最短充分引用，explanation与repairHint各用1句说明；只有确实需多条证据时才增加，不能将上限当目标铺满或重复整段原文。",
+    "dropped、insufficient及开篇/本章无具体承接的deferred是待修缺口，应输出repair_contract和具体repairGuidance；可在当前授权窗口补齐的交给自动修复器，不要求新手手写。若只能牺牲用户硬约束或改窗口外章节，明确冲突交给既有方向确认，不能静默降低承诺。按实际selectedPromiseSourceIds完整覆盖；列表为空才promiseChecks=[]。旧数据有卖点而无原型时仍检查已有卖点，不补造开篇。",
+    "openingChain与earlyPayoff的scope不能降为book_arc来免除承接检查。openingChain只要求逐项审查原型当前及过去的节点，未来节点保留供边界参考而不提前索取兑现。earlyPayoff可能覆盖整个开篇，当前章只需贡献相应进展；未到期的部分可通过readonlyOpeningRoutes中的实际安排说明承接，不强求当前章完成所有回报。",
     "对 previousIssues 的每个 id 输出恰好一条 issueChecks：resolved、partially_resolved、unresolved 或 insufficient_context，引用当前候选原文 candidateEvidence 并解释判断。resolved 必须有至少一条准确原文，不得再把同 id 列入 issues；仍存在的问题沿用原 id。若上下文不足，说明缺的证据，不要把不确定推断写成已发生事实。没有历史问题则 issueChecks=[]。新问题须说明具体的执行或因果缺口，不能把可选文风偏好升级为阻塞。",
     "可用合同必须满足：本章目标清晰、边界不越章、任务单可执行、读者体验合同明确本章问题、可见回报、主角欲望、主要阻力、关键转折、净变化和钩子责任，场景卡覆盖整章推进并为每场提供阻力、转折、情绪位移和读者价值。",
     "readerExperience.rewardLevel 表示本章计划提供的可见回报强度，只能使用 setup、partial、major；它不是正文完成度、承诺兑现比例或事后结果评级。",
@@ -79,8 +88,8 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "如果存在问题，给出面向自动修复器的具体 repairGuidance。",
     "",
     "输出严格 JSON，不要 Markdown、注释、解释或额外字段。",
-    "顶层只能输出 verdict、safeToSync、loadRisk、recommendedHandling、summary、issues、repairGuidance、confidence、issueChecks。",
-    "issueChecks 每项包含 issueId、status、candidateEvidence（最多3个对象，每个包含sourcePath和quote）、explanation（400字以内）。sourcePath必须逐字选择candidateEvidenceIndex的一个叶路径；quote为该路径值中240字以内的连续准确原文，不带路径标签，不拼接多个字段。没有可引用的原文时用空数组，不能伪造引用。最多覆盖8项原问题和1项合成职责过载问题，必须逐项覆盖全部previousIssues。",
+    "顶层只能输出 verdict、safeToSync、loadRisk、recommendedHandling、summary、issues、repairGuidance、confidence、issueChecks、promiseChecks。",
+    "issueChecks 每项包含 issueId、status、candidateEvidence（最多3个对象，每个包含sourcePath和quote）、explanation（400字以内）。sourcePath必须逐字选择candidateEvidenceIndex的一个叶路径；quote为该路径值中240字以内的连续准确原文，不带路径标签，不拼接多个字段。没有可引用的原文时用空数组，不能伪造引用。最多覆盖8项原问题及contract_overloaded、selected_direction_drift两项合成问题，必须逐项覆盖全部previousIssues。",
     "verdict 只能使用 usable、repairable、unusable。",
     "loadRisk 只能使用 normal、overloaded。",
     "recommendedHandling 只能使用 use_as_is、repair_contract、replan_window。",
@@ -108,7 +117,8 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "  ],",
     "  \"repairGuidance\": [\"补齐最后一个场景的钩子和离场状态。\"],",
     "  \"confidence\": 0.82,",
-    "  \"issueChecks\": []",
+    "  \"issueChecks\": [],",
+    "  \"promiseChecks\": []",
     "}",
   ].join("\n");
 }
@@ -118,7 +128,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   AiChapterTaskSheetQualityAssessment
 > = {
   id: "novel.volume.chapter_task_sheet_quality",
-  version: "v5",
+  version: "v6",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -126,9 +136,10 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
     maxTokensBudget: 4200,
   },
   outputSchema: aiChapterTaskSheetQualityAssessmentSchema.extend({
+    promiseChecks: z.array(chapterPlanningPromiseCheckSchema).max(10),
     issueChecks: z.array(chapterPlanningIssueCheckSchema.extend({
       candidateEvidence: z.array(chapterPlanningEvidenceQuoteSchema).max(3),
-    })).max(9),
+    })).max(10),
   }),
   render: (input) => [
     new SystemMessage(createSystemPrompt(input.mode)),
@@ -139,6 +150,12 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
       renderCandidate(input.candidate),
       "candidateEvidenceIndex (valid leaf sourcePath; quote its corresponding exact text in the candidate above):",
       JSON.stringify([...buildChapterEvidenceIndex(input.candidate).leaves.keys()]),
+      "selectedPromiseSourceIds (each requires one check):",
+      JSON.stringify(planningPromiseEvidenceContext(input.reviewContextJson, input.candidate.chapterOrder).sourceIds),
+      "selectedPromiseSourceEvidenceIndex:",
+      JSON.stringify([...planningPromiseEvidenceContext(input.reviewContextJson).sourceIndex.leaves.keys()]),
+      "promiseContextEvidenceIndex (facts or other chapter plans; distinguish their provenance):",
+      JSON.stringify([...planningPromiseEvidenceContext(input.reviewContextJson).contextIndex.leaves.keys()]),
       "",
       "reviewContext (current source and repair history):",
       input.reviewContextJson || "No additional context supplied. Do not invent prior facts.",
@@ -147,6 +164,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
     ].join("\n")),
   ],
   postValidate: (output, input) => {
+    validatePlanningPromiseEvidence(output.promiseChecks ?? [], input.candidate, input.reviewContextJson);
     const expected = new Set((input.previousIssues ?? []).map((issue) => issue.id));
     const checks = output.issueChecks ?? [];
     if (checks.length !== expected.size || new Set(checks.map((check) => check.issueId)).size !== checks.length

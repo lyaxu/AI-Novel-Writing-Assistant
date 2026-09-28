@@ -54,6 +54,8 @@ import type {
 } from "./volumeModels";
 import { buildVolumeWorkspaceDocument } from "./volumeWorkspaceDocument";
 import { PlanningRepairCoordinator } from "./planningRepair/PlanningRepairCoordinator";
+import { loadPlanningWrittenEvidence } from "./writtenEvidence";
+import { loadSelectedPlanningDirection } from "./planningPromises";
 import { formatChapterDetailModeLabel } from "./chapterDetailModeLabel";
 import {
   generateBeatSheet,
@@ -509,12 +511,14 @@ async function generateChapterDetail(params: {
   const { document, novel, workspace, storyMacroPlan, options } = params;
   const targetVolume = getTargetVolume(document, options.targetVolumeId);
   const targetChapter = getTargetChapter(targetVolume, options.targetChapterId);
+  const writtenEvidence = await loadPlanningWrittenEvidence(document.novelId, targetChapter.chapterOrder);
   const detailMode = options.detailMode;
   if (!detailMode) {
     throw new Error("生成章节细化时必须指定 detailMode。");
   }
 
   const promptInput = {
+    writtenEvidence,
     novel,
     workspace,
     storyMacroPlan,
@@ -529,7 +533,7 @@ async function generateChapterDetail(params: {
     return new PlanningRepairCoordinator().run({
       document, volumeId: targetVolume.id, chapterId: targetChapter.id,
       options: { ...options, taskId: options.taskId },
-      context: { novel, storyMacroPlan },
+      context: { novel, storyMacroPlan }, writtenEvidence,
         generateInitial: (beforeModelCall) => generateChapterTaskSheetDetail({
           onBeforeModelCall: beforeModelCall,
           promptInput: { ...promptInput, detailMode: "task_sheet", targetChapter: {
@@ -651,6 +655,7 @@ export async function generateVolumePlanDocument(params: {
     workspace,
     storyMacroPlanService,
   });
+  novel.selectedPlanningDirection = await loadSelectedPlanningDirection(novelId, options.taskId);
   const currentWorkspace: VolumeWorkspace = {
     ...workspace,
     ...baseDocument,

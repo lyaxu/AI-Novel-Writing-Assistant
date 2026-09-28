@@ -102,7 +102,7 @@ function buildFactLedgerGuidance(
   const stateChanged = facts.filter((f) => f.category === "state_changed");
 
   const lines: string[] = [
-    "【已发生事实 / Fact Ledger — 请将以下事实纳入 task sheet 设计，避免重复或矛盾】",
+    "【压缩事实索引 / Fact Ledger — 非逐字原文证据，可能遗漏或误记；必须对照 writtenEvidence 正文核验，不能证明未提及的资源或知识已经存在】",
   ];
   if (completed.length > 0) {
     lines.push("已完成目标：");

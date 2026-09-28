@@ -113,16 +113,25 @@ function verdict(sceneKey) {
     constraintEvidence: ["她保留自己的账户"], explanation: "未和解的结果来自双方选择与理解差异" };
 }
 
+function actionCheck(sceneKey) {
+  const quote = (text) => ({ source: "current_prose", sourceId: "current", quote: text });
+  return { sceneKey, actor: "她", action: "收信", actionEvidence: [quote("她把信收好。")], verdict: "earned", explanation: "读信后收好信件",
+    states: [{ dimension: "knowledge", entity: "信件内容", before: "已读信", requiredForAction: "已知道信的内容", after: "仍知道信的内容",
+      beforeEvidence: [quote("她读完信。")], afterEvidence: [quote("她把信收好。")], transitionEvidence: [],
+      enablingTransitionRequired: false, stateChanged: false, transitionStatus: "not_needed" }] };
+}
+
 test("fresh acceptance requires evidence rows and validates exact expected-scene coverage", () => {
   assert.equal(chapterAcceptanceAssessmentSchema.safeParse(assessment()).success, true);
   assert.equal(generatedChapterAcceptanceAssessmentSchema.safeParse(assessment()).success, false);
-  const complete = generatedChapterAcceptanceAssessmentSchema.parse({ ...assessment(), sceneCausalityVerdicts: [verdict("scene_1"), verdict("scene_2")] });
-  const input = { expectedSceneKeys: ["scene_1", "scene_2"] };
-  assert.equal(chapterAcceptanceAssessmentPrompt.postValidate(complete, input), complete);
+  const complete = generatedChapterAcceptanceAssessmentSchema.parse({ ...assessment(), sceneCausalityVerdicts: [verdict("scene_1"), verdict("scene_2")],
+    actionStateChecks: [actionCheck("scene_1"), actionCheck("scene_2")] });
+  const input = { chapterOrder: 1, content: "她读完信。她把信收好。", expectedSceneKeys: ["scene_1", "scene_2"] };
+  assert.deepEqual(chapterAcceptanceAssessmentPrompt.postValidate(complete, input).sceneCausalityVerdicts, complete.sceneCausalityVerdicts);
   for (const rows of [[], [verdict("scene_1")], [verdict("scene_1"), verdict("scene_1")], [verdict("scene_1"), verdict("wrong")]]) {
     assert.throws(() => chapterAcceptanceAssessmentPrompt.postValidate({ ...complete, sceneCausalityVerdicts: rows }, input), /逐一覆盖/);
   }
-  assert.doesNotThrow(() => chapterAcceptanceAssessmentPrompt.postValidate({ ...complete, sceneCausalityVerdicts: [] }, {}));
+  assert.doesNotThrow(() => chapterAcceptanceAssessmentPrompt.postValidate({ ...complete, sceneCausalityVerdicts: [] }, { ...input, expectedSceneKeys: [] }));
   const brokenEvidence = verdict("scene_1");
   brokenEvidence.outcomeMechanismEvidence = "";
   assert.equal(generatedChapterAcceptanceAssessmentSchema.safeParse({ ...assessment(), sceneCausalityVerdicts: [brokenEvidence] }).success, false);

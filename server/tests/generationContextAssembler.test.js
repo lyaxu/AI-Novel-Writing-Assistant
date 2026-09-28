@@ -14,6 +14,7 @@ const { novelReferenceService } = require("../dist/services/novel/NovelReference
 const { characterDynamicsQueryService } = require("../dist/services/novel/dynamics/CharacterDynamicsQueryService.js");
 const { payoffLedgerSyncService } = require("../dist/services/payoff/PayoffLedgerSyncService.js");
 const { characterResourceLedgerService } = require("../dist/services/novel/characterResource/CharacterResourceLedgerService.js");
+const writtenEvidenceSource = require("../dist/services/novel/volume/writtenEvidence/index.js");
 
 test("blocking pending-review proposals are scoped to the current chapter plus global proposals", () => {
   const where = buildBlockingPendingReviewProposalWhere("novel-1", "chapter-2");
@@ -161,9 +162,15 @@ test("assembler only reads planning artifacts prepared before context assembly",
     buildRagContext: ragServices.hybridRetrievalService.buildContextBlock,
     getPayoffLedger: payoffLedgerSyncService.getPayoffLedger,
     buildCharacterResourceContext: characterResourceLedgerService.buildContext,
+    loadWrittenEvidence: writtenEvidenceSource.loadPlanningWrittenEvidence,
   };
 
   try {
+    writtenEvidenceSource.loadPlanningWrittenEvidence = async (novelId, order) => {
+      assert.equal(novelId, "novel-1");
+      assert.equal(order, 1);
+      return writtenEvidenceSource.buildPlanningWrittenEvidence({ chapters: [], targetChapterOrder: order });
+    };
     prisma.novel.findUnique = async () => ({
       id: "novel-1",
       title: "测试小说",
@@ -288,6 +295,8 @@ test("assembler only reads planning artifacts prepared before context assembly",
     assert.equal(assembled.chapter.taskSheet, "新任务单");
     assert.equal(assembled.contextPackage.chapter.sceneCards, freshSceneCards);
     assert.equal(assembled.contextPackage.storyWorldSlice, storyWorldSlice);
+    assert.equal(assembled.contextPackage.chapterWriteContext.writtenEvidence.authority, "written_prose_not_planning");
+    assert.equal(assembled.contextPackage.chapterWriteContext.writtenEvidence.targetChapterOrder, 1);
     assert.equal(assembled.contextPackage.chapterWriteContext.chapterBoundary.entryState, "新合同入口1");
     assert.ok(assembled.contextPackage.chapterWriteContext.chapterBoundary.doNotCross.includes("新禁止"));
   } finally {
@@ -310,5 +319,6 @@ test("assembler only reads planning artifacts prepared before context assembly",
     ragServices.hybridRetrievalService.buildContextBlock = originals.buildRagContext;
     payoffLedgerSyncService.getPayoffLedger = originals.getPayoffLedger;
     characterResourceLedgerService.buildContext = originals.buildCharacterResourceContext;
+    writtenEvidenceSource.loadPlanningWrittenEvidence = originals.loadWrittenEvidence;
   }
 });

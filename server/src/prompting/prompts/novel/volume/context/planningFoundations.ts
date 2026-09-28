@@ -1,5 +1,13 @@
 import type { StoryMacroPlan } from "@ai-novel/shared/types/storyMacro";
 import type { VolumeGenerationNovel } from "../../../../../services/novel/volume/volumeModels";
+import type { SelectedPlanningDirection } from "@ai-novel/shared/types/novel/planningPromises";
+
+export function renderSelectedPlanningDirection(source?: SelectedPlanningDirection): string {
+  return [
+    "用户确认方向（规划来源，不是已写事实）：保留原选卖点、人物关系推进和开篇回报的叙事价值。可合理改编或调整落点，但须明确承接；不得静默删除。earlyPayoff与openingChain是开篇承诺，全书长期目标不必在本章全部兑现。实际已写原文高于计划描述，不能把原型中的未来动作当成已经发生。",
+    JSON.stringify(source ?? { status: "missing", reason: "未提供用户确认方向来源，不得从当前大纲反推。" }),
+  ].join("\n");
+}
 
 const MAX_DETAILED_CHARACTERS = 12;
 const MAX_ROSTER_CHARACTERS = 24;

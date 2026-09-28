@@ -186,6 +186,8 @@ function fixture({ active = true, materialized = true, realPersistence = false }
     "../../runtime/BatchContextCache": { batchContextCache: { invalidate: (novelId) => events.push({ invalidated: novelId }) } },
     "../volumeWorkspaceDocument": workspace,
     "../volumeModels": { mapVolumeRow: (row) => copy(row) },
+    "../writtenEvidence": load("writtenEvidence/evidencePolicy.ts", { "node:crypto": require("node:crypto") }),
+    "@ai-novel/shared/types/novel/planningPromises": { selectedPlanningCandidateSchema: require("zod").z.object({ id: require("zod").z.string() }).passthrough() },
     "../volumeGenerationHelpers": volumeStatus,
     "../volumeWorkspacePersistence": {
       VOLUME_WORKSPACE_TRANSACTION_TIMEOUT_MS: 60000,
@@ -1019,6 +1021,54 @@ test("committed same-chapter resume tolerates execution progress and canonical d
   h.db.versions.find(v => v.status === "active").contentJson = JSON.stringify(workspace.buildVolumeWorkspaceDocument(document));
   const resumed = await h.store.begin({ ...h.input, document });
   assert.equal(resumed.state.phase, "committed"); assert.equal(resumed.state.rounds, s.state.rounds);
+});
+
+test("new written facts invalidate committed review while preserving candidate, history and repair budget", async () => {
+  const h = fixture(); const session = await h.store.begin(h.input); await h.ready(session);
+  const document = await h.store.commit(session, session.candidate);
+  const before = h.state(); h.db.chapters[0].content = "原文：刀具已收缴，烙印位于胸口。";
+  const evidence = load("writtenEvidence/evidencePolicy.ts", { "node:crypto": require("node:crypto") });
+  const resumed = await h.store.begin({ ...h.input, document,
+    expectedWrittenSourceFingerprint: evidence.writtenSourceFingerprint(h.db.chapters, 2) });
+  assert.equal(resumed.state.phase, "reviewing"); assert.ok(resumed.candidate);
+  assert.equal(resumed.state.rounds, before.rounds); assert.equal(resumed.state.maxRounds, before.maxRounds);
+  assert.deepEqual(resumed.state.history.slice(0, -1), before.history); assert.equal(resumed.state.history.at(-1).kind, "evidence_refresh");
+  assert.deepEqual(resumed.state.quality, { chapters: {} });
+  assert.equal(resumed.candidate.volumes[0].chapters[1].taskSheet, document.volumes[0].chapters[1].taskSheet);
+  assert.equal(h.db.chapters[0].content, "原文：刀具已收缴，烙印位于胸口。");
+  h.db.chapters[0].content += "并发更改";
+  await assert.rejects(h.store.save(resumed, { ...resumed.state, summary: "late" }), /source changed/i);
+});
+
+test("written evidence changed before begin cannot authorize a stale review", async () => {
+  const h = fixture();
+  await assert.rejects(h.store.begin({ ...h.input, expectedWrittenSourceFingerprint: "stale" }), /Written chapter evidence changed/);
+});
+
+test("edited selected direction invalidates review and a stale loaded promise source is refused", async () => {
+  const h = fixture(); let seed = JSON.parse(h.db.task.seedPayloadJson);
+  seed.candidate = { id: "choice", sellingPoint: "original" }; h.db.task.seedPayloadJson = JSON.stringify(seed);
+  const selected = { status: "available", sourceTaskId: "t", candidate: seed.candidate, fingerprint: "source" };
+  const session = await h.store.begin({ ...h.input, selectedPlanningDirection: selected }); await h.ready(session);
+  const document = await h.store.commit(session, session.candidate);
+  seed = JSON.parse(h.db.task.seedPayloadJson); seed.candidate.sellingPoint = "updated"; h.db.task.seedPayloadJson = JSON.stringify(seed);
+  await assert.rejects(h.store.begin({ ...h.input, document, selectedPlanningDirection: selected }), /Selected planning direction changed/);
+  const resumed = await h.store.begin({ ...h.input, document, selectedPlanningDirection: { ...selected, candidate: seed.candidate } });
+  assert.equal(resumed.state.phase, "reviewing"); assert.equal(resumed.state.rounds, session.state.rounds);
+  assert.deepEqual(resumed.state.quality, { chapters: {} });
+});
+
+test("normally completed preceding chapter re-reviews an approved neighbor with no extra repair round", async () => {
+  const h = fixture(); const session = await h.store.begin(h.input); const candidate = h.candidate();
+  candidate.volumes[0].chapters[2].taskSheet = "Reviewed neighbor";
+  await h.ready(session, candidate); const document = await h.store.commit(session, session.candidate);
+  h.db.chapters[1].content = "前章完整正文"; h.db.chapters[1].chapterStatus = "completed";
+  const evidence = load("writtenEvidence/evidencePolicy.ts", { "node:crypto": require("node:crypto") });
+  const next = await h.store.begin({ ...h.input, chapterId: "p3", document,
+    expectedWrittenSourceFingerprint: evidence.writtenSourceFingerprint(h.db.chapters, 3) });
+  assert.equal(next.state.phase, "reviewing"); assert.equal(next.state.chapterId, "p3");
+  assert.equal(next.state.rounds, session.state.rounds); assert.equal(next.state.maxRounds, session.state.maxRounds);
+  assert.equal(next.candidate.volumes[0].chapters[2].taskSheet, "Reviewed neighbor");
 });
 for (const changed of ["version", "plan", "row", "contract", "budget"]) test(`committed reuse rejects changed ${changed}`, async () => {
   const h = fixture(); const s = await h.store.begin(h.input); await h.ready(s);

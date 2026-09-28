@@ -26,6 +26,7 @@ interface ReviewSet {
 }
 
 export interface PlanningRepairInput {
+  writtenEvidence?: import("@ai-novel/shared/types/novel/writtenEvidence").PlanningWrittenEvidence;
   document: VolumePlanDocument;
   volumeId: string;
   chapterId: string;
@@ -48,6 +49,14 @@ function refreshDerived(document: VolumePlanDocument): VolumePlanDocument {
   const derived = buildVolumeWorkspaceDocument(document);
   return { ...document, readiness: derived.readiness, derivedOutline: derived.derivedOutline,
     derivedStructuredOutline: derived.derivedStructuredOutline };
+}
+
+function currentEvidenceHistory(session: RepairSession): unknown[] {
+  let boundary = -1;
+  for (let index = session.state.history.length - 1; index >= 0; index -= 1) {
+    if ((session.state.history[index] as { kind?: string }).kind === "evidence_refresh") { boundary = index; break; }
+  }
+  return session.state.history.slice(boundary + 1);
 }
 
 // This service owns draft/review/commit; neither the model nor a warning may bypass the gate.
@@ -75,6 +84,8 @@ export class PlanningRepairCoordinator {
     const session = await this.store.begin({
       novelId: input.document.novelId, taskId: input.options.taskId,
       document: input.document, volumeId: input.volumeId, chapterId: input.chapterId,
+      expectedWrittenSourceFingerprint: input.writtenEvidence?.sourceFingerprint,
+      selectedPlanningDirection: (input.context as { novel?: { selectedPlanningDirection?: import("@ai-novel/shared/types/novel/planningPromises").SelectedPlanningDirection } } | null)?.novel?.selectedPlanningDirection,
     });
     if (session.state.phase === "committed") {
       committedDocuments.add(session.candidate ?? input.document);
@@ -128,7 +139,7 @@ export class PlanningRepairCoordinator {
       }
       while (true) {
         const reviews = await this.review(input, session);
-        if (!session.state.history.some(entry => {
+        if (!currentEvidenceHistory(session).some(entry => {
           const item = entry as { kind?: string; round?: number };
           return item.kind === "assessment" && item.round === session.state.rounds;
         })) {
@@ -247,7 +258,7 @@ export class PlanningRepairCoordinator {
     for (const id of session.state.affectedChapterIds ?? [input.chapterId]) {
       if (review.chapters[id]) continue;
       const chapter = chaptersOf(session.candidate!, input.volumeId).find(c => c.id === id)!;
-      const previousAssessment = session.state.history.slice().reverse().find(entry => {
+      const previousAssessment = currentEvidenceHistory(session).slice().reverse().find(entry => {
         const item = entry as { kind?: string; result?: ReviewSet };
         return item.kind === "assessment" && Boolean(item.result?.chapters?.[id]);
       }) as { result?: ReviewSet } | undefined;
@@ -285,8 +296,15 @@ export class PlanningRepairCoordinator {
     const target = all.find(c => c.id === input.chapterId)!;
     const last = all.filter(c => ids.includes(c.id)).at(-1) ?? target;
     const original = baseline.volumes.find(v => v.id === input.volumeId)!;
-    const firstAssessment = session.state.history.find(entry => (entry as { kind?: string }).kind === "assessment") as { result?: unknown } | undefined;
+    const firstAssessment = currentEvidenceHistory(session).find(entry => (entry as { kind?: string }).kind === "assessment") as { result?: unknown } | undefined;
+    const direction = (input.context as { novel?: { selectedPlanningDirection?: import("@ai-novel/shared/types/novel/planningPromises").SelectedPlanningDirection } })?.novel?.selectedPlanningDirection;
+    const openingEnd = direction?.status === "available" ? Math.max(0, ...(direction.candidate.storyPrototype?.openingChain.map((item) => item.chapterOrder) ?? [])) : 0;
     return JSON.stringify({
+      readonlyOpeningRoutes: all.filter((chapter) => chapter.chapterOrder <= openingEnd && !ids.includes(chapter.id))
+        .map(({ id, chapterOrder, title, summary, purpose, exclusiveEvent, endingState, nextChapterEntryState }) =>
+          ({ id, chapterOrder, title, summary, purpose, exclusiveEvent, endingState, nextChapterEntryState, authority: "readonly_planning_not_prose" })),
+      writtenEvidence: input.writtenEvidence ?? { coverage: { complete: false, unknown: ["未提供已写正文来源，不能将规划视为历史事实。"] } },
+      selectedPlanningDirection: (input.context as { novel?: { selectedPlanningDirection?: unknown } } | null)?.novel?.selectedPlanningDirection ?? null,
       bookConstraints: input.context, volume: { ...original, chapters: undefined },
       strategyPlan: input.document.strategyPlan,
       beatSheet: input.document.beatSheets.find(b => b.volumeId === input.volumeId),

@@ -380,6 +380,7 @@ export function buildChapterWriteContext(input: {
     ledgerSummary: input.contextPackage.ledgerSummary ?? null,
     timelineContext: input.contextPackage.timelineContext ?? null,
     characterResourceContext: input.contextPackage.characterResourceContext ?? null,
+    writtenEvidence: input.contextPackage.writtenEvidence ?? null,
     recentChapterSummaries: takeUnique(input.contextPackage.previousChaptersSummary.slice(0, 3), 3),
     previousChapterTail: compactText(input.contextPackage.previousChapterTail) || null,
     openingAntiRepeatHint: compactText(input.contextPackage.openingHint, "No recent opening guidance."),

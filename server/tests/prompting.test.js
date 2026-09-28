@@ -164,11 +164,11 @@ test("prompt registry exposes versioned planning assets", () => {
     "novel.character.influence.options@v1",
     "novel.character.dialogue.turn@v1",
     "novel.story_macro.decomposition@v1",
-    "novel.volume.strategy@v2",
-    "novel.volume.strategy.critique@v1",
-    "novel.volume.skeleton@v3",
+    "novel.volume.strategy@v3",
+    "novel.volume.strategy.critique@v2",
+    "novel.volume.skeleton@v4",
     "title.generation@v2",
-    "audit.chapter.full@v2",
+    "audit.chapter.full@v3",
     "bookAnalysis.source.note@v1",
     "character.base.skeleton@v1",
     "novel.continuation.rewrite_similarity@v1",
@@ -525,7 +525,7 @@ test("volume strategy prompt renders volume count guidance and fixed-count const
 });
 
 test("registered volume strategy prompt uses the shared 24-volume ceiling", () => {
-  const asset = getRegisteredPromptAsset("novel.volume.strategy", "v2");
+  const asset = getRegisteredPromptAsset("novel.volume.strategy", "v3");
   assert.ok(asset);
   const messages = asset.render({}, {
     blocks: [],
@@ -674,19 +674,19 @@ test("novel main-chain prompt assets declare explicit non-zero context budgets",
     ["novel.director.blueprint@v1", NOVEL_PROMPT_BUDGETS.directorBlueprint],
     ["novel.story_macro.decomposition@v1", NOVEL_PROMPT_BUDGETS.storyMacroDecomposition],
     ["novel.story_macro.field_regeneration@v1", NOVEL_PROMPT_BUDGETS.storyMacroFieldRegeneration],
-    ["novel.volume.strategy@v2", NOVEL_PROMPT_BUDGETS.volumeStrategy],
-    ["novel.volume.strategy.critique@v1", NOVEL_PROMPT_BUDGETS.volumeStrategyCritique],
-    ["novel.volume.skeleton@v3", NOVEL_PROMPT_BUDGETS.volumeSkeleton],
-    ["novel.volume.beat_sheet@v4", NOVEL_PROMPT_BUDGETS.volumeBeatSheet],
-    ["novel.volume.chapter_list@v10", NOVEL_PROMPT_BUDGETS.volumeChapterList],
-    ["novel.volume.chapter_purpose@v3", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
-    ["novel.volume.chapter_boundary@v2", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
-    ["novel.volume.chapter_task_sheet@v4", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
-    ["novel.volume.rebalance.adjacent@v1", NOVEL_PROMPT_BUDGETS.volumeRebalance],
+    ["novel.volume.strategy@v3", NOVEL_PROMPT_BUDGETS.volumeStrategy],
+    ["novel.volume.strategy.critique@v2", NOVEL_PROMPT_BUDGETS.volumeStrategyCritique],
+    ["novel.volume.skeleton@v4", NOVEL_PROMPT_BUDGETS.volumeSkeleton],
+    ["novel.volume.beat_sheet@v5", NOVEL_PROMPT_BUDGETS.volumeBeatSheet],
+    ["novel.volume.chapter_list@v11", NOVEL_PROMPT_BUDGETS.volumeChapterList],
+    ["novel.volume.chapter_purpose@v4", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
+    ["novel.volume.chapter_boundary@v3", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
+    ["novel.volume.chapter_task_sheet@v5", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
+    ["novel.volume.rebalance.adjacent@v2", NOVEL_PROMPT_BUDGETS.volumeRebalance],
     [promptKey(chapterWriterPrompt), NOVEL_PROMPT_BUDGETS.chapterWriter],
     ["novel.review.chapter@v2", NOVEL_PROMPT_BUDGETS.chapterReview],
-    ["novel.review.repair@v2", NOVEL_PROMPT_BUDGETS.chapterRepair],
-    ["audit.chapter.full@v2", NOVEL_PROMPT_BUDGETS.chapterReview],
+    ["novel.review.repair@v3", NOVEL_PROMPT_BUDGETS.chapterRepair],
+    ["audit.chapter.full@v3", NOVEL_PROMPT_BUDGETS.chapterReview],
   ]);
 
   for (const [key, budget] of expectedBudgets.entries()) {

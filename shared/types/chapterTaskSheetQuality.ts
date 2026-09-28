@@ -67,6 +67,7 @@ export interface ChapterTaskSheetQualityGateResult {
   repairGuidance: string[];
   confidence: number;
   issueChecks?: ChapterPlanningIssueCheck[];
+  promiseChecks?: ChapterPlanningPromiseCheck[];
 }
 
 export const chapterPlanningEvidenceQuoteSchema = z.object({
@@ -80,6 +81,23 @@ export const chapterPlanningIssueCheckSchema = z.object({
   explanation: z.string().trim().min(1).max(400),
 });
 export type ChapterPlanningIssueCheck = z.infer<typeof chapterPlanningIssueCheckSchema>;
+
+export const chapterPlanningPromiseCheckSchema = z.object({
+  sourceId: z.string().trim().min(1),
+  scope: z.enum(["current_chapter", "opening_sequence", "book_arc"]),
+  status: z.enum(["preserved", "adapted", "deferred", "dropped", "insufficient"]),
+  sourceEvidence: z.array(chapterPlanningEvidenceQuoteSchema).min(1).max(3),
+  candidateEvidence: z.array(chapterPlanningEvidenceQuoteSchema).max(3),
+  contextEvidence: z.array(chapterPlanningEvidenceQuoteSchema).max(3),
+  explanation: z.string().trim().min(1).max(600),
+  repairHint: z.string().trim().max(600),
+});
+export type ChapterPlanningPromiseCheck = z.infer<typeof chapterPlanningPromiseCheckSchema>;
+
+export function unresolvedPlanningPromises(checks: ChapterPlanningPromiseCheck[] = []) {
+  return checks.filter(check => check.status === "dropped" || check.status === "insufficient"
+    || (check.status === "deferred" && check.scope !== "book_arc" && !check.contextEvidence.length));
+}
 
 function normalizeAssessmentVerdict(value: unknown): unknown {
   if (typeof value !== "string") {
@@ -167,12 +185,14 @@ export const aiChapterTaskSheetQualityAssessmentSchema = z.object({
   loadRisk: z.enum(["normal", "overloaded"]).default("normal"),
   recommendedHandling: z.enum(["use_as_is", "repair_contract", "replan_window"]).default("use_as_is"),
   summary: z.string().trim().min(1),
-  issues: z.array(chapterTaskSheetQualityIssueSchema).max(9)
-    .refine((issues) => issues.filter((issue) => issue.id !== "contract_overloaded").length <= 8,
-      "At most eight original issues plus the contract overload issue are allowed.").default([]),
+  issues: z.array(chapterTaskSheetQualityIssueSchema).max(10)
+    .refine((issues) => issues.filter((issue) => !["contract_overloaded", "selected_direction_drift"].includes(issue.id)).length <= 8,
+      "At most eight original issues plus contract overload and selected-direction drift are allowed.").default([]),
   repairGuidance: z.array(z.string().trim().min(1)).max(8).default([]),
   confidence: z.preprocess(normalizeAssessmentConfidence, z.number().min(0).max(1)),
-  issueChecks: z.array(chapterPlanningIssueCheckSchema).max(9).optional(),
+  issueChecks: z.array(chapterPlanningIssueCheckSchema).max(10).optional(),
+  // Old saved assessments remain readable; fresh prompt output requires this field.
+  promiseChecks: z.array(chapterPlanningPromiseCheckSchema).max(10).optional(),
 });
 
 export type AiChapterTaskSheetQualityAssessment = z.infer<typeof aiChapterTaskSheetQualityAssessmentSchema>;
@@ -277,6 +297,19 @@ export function mapSemanticAssessmentToQualityGate(
   assessment: AiChapterTaskSheetQualityAssessment,
   mode: ChapterTaskSheetQualityMode,
 ): ChapterTaskSheetQualityGateResult {
+  const promiseGaps = unresolvedPlanningPromises(assessment.promiseChecks);
+  if (promiseGaps.length) {
+    const repairHint = promiseGaps.map(check => `${check.sourceId}: ${check.repairHint || check.explanation}`).join("；");
+    assessment = {
+      ...assessment, verdict: assessment.verdict === "unusable" ? "unusable" : "repairable", safeToSync: false,
+      recommendedHandling: assessment.recommendedHandling === "replan_window" ? "replan_window" : "repair_contract",
+      issues: [...assessment.issues.filter(issue => issue.id !== "selected_direction_drift"), {
+        id: "selected_direction_drift", severity: "high", target: "semantic",
+        summary: "用户确认方向中的关系或回报承诺缺少可核验的承接。", repairHint,
+      }],
+      repairGuidance: [assessment.repairGuidance.join("；"), repairHint].filter(Boolean),
+    };
+  }
   const issues = assessment.recommendedHandling === "replan_window"
     && !assessment.issues.some((issue) => issue.id === "contract_overloaded")
     ? assessment.issues.concat({
@@ -300,6 +333,7 @@ export function mapSemanticAssessmentToQualityGate(
       repairGuidance: assessment.repairGuidance,
       confidence: assessment.confidence,
       issueChecks: assessment.issueChecks ?? [],
+      promiseChecks: assessment.promiseChecks ?? [],
     };
   }
 
@@ -317,12 +351,13 @@ export function mapSemanticAssessmentToQualityGate(
     recommendedHandling: assessment.recommendedHandling,
     // 全书自动执行保留语义审校结果供后续正文验收消费，但不为可写的
     // 任务单重复生成整份合同；结构缺失仍由 shape gate 阻断。
-    canEnterExecution: mode === "full_book_autopilot",
+    canEnterExecution: mode === "full_book_autopilot" && promiseGaps.length === 0,
     issues,
     summary: assessment.summary,
     repairGuidance: assessment.repairGuidance,
     confidence: assessment.confidence,
     issueChecks: assessment.issueChecks ?? [],
+    promiseChecks: assessment.promiseChecks ?? [],
   };
 }
 

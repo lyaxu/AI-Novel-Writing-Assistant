@@ -18,7 +18,7 @@ export const chapterPatchRepairPrompt: PromptAsset<
   ChapterPatchRepairPlan
 > = {
   id: "novel.review.patch",
-  version: "v2",
+  version: "v3",
   taskType: "repair",
   mode: "structured",
   language: "zh",

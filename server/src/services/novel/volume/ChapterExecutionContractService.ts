@@ -18,6 +18,7 @@ import {
 import { serializeVolumeWorkspaceDocument } from "./volumeWorkspaceDocument";
 import { inspectChapterExecutionContractReadiness } from "./chapterDetail/chapterExecutionContractReadiness";
 import { isCommittedPlanningRepairDocument } from "./planningRepair/PlanningRepairCoordinator";
+import { reviewExistingExecutionContract } from "./chapterDetail/chapterExecutionContractGeneration";
 
 export interface ChapterExecutionContractServiceDeps {
   storyMacroPlanService: Pick<StoryMacroPlanService, "getPlan">;
@@ -131,6 +132,7 @@ export class ChapterExecutionContractService {
       })
       : null;
     if (readiness?.canReuse && !options.taskId) {
+      await reviewExistingExecutionContract({ novelId, volumeId: matched.volumeId, chapter: currentRequirement!, workspace, options });
       const styleContract = await this.resolveStyleContract(novelId, chapterId, options.taskStyleProfileId);
       return {
         ...chapter,

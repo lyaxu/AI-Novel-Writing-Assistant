@@ -1,5 +1,6 @@
 import { createContextBlock } from "../../../core/contextBudget";
 import type { PromptContextBlock } from "../../../core/promptTypes";
+import { renderSelectedPlanningDirection } from "./context/planningFoundations";
 import {
   buildBeatCard,
   buildBeatChapterRangeContext,
@@ -40,6 +41,8 @@ function guidanceBlock(guidance?: string): PromptContextBlock | null {
 
 export function buildVolumeStrategyContextBlocks(input: VolumeStrategyPromptInput): PromptContextBlock[] {
   return [
+    createContextBlock({ id: "selected_planning_direction", group: "selected_planning_direction", priority: 108, required: true, allowSummary: false,
+      content: renderSelectedPlanningDirection(input.novel.selectedPlanningDirection) }),
     createContextBlock({
       id: "book_contract",
       group: "book_contract",
@@ -76,6 +79,8 @@ export function buildVolumeStrategyContextBlocks(input: VolumeStrategyPromptInpu
 
 export function buildVolumeStrategyCritiqueContextBlocks(input: VolumeStrategyCritiquePromptInput): PromptContextBlock[] {
   return [
+    createContextBlock({ id: "selected_planning_direction", group: "selected_planning_direction", priority: 108, required: true, allowSummary: false,
+      content: renderSelectedPlanningDirection(input.novel.selectedPlanningDirection) }),
     createContextBlock({
       id: "book_contract",
       group: "book_contract",
@@ -112,6 +117,8 @@ export function buildVolumeStrategyCritiqueContextBlocks(input: VolumeStrategyCr
 
 export function buildVolumeSkeletonContextBlocks(input: VolumeSkeletonPromptInput): PromptContextBlock[] {
   return [
+    createContextBlock({ id: "selected_planning_direction", group: "selected_planning_direction", priority: 108, required: true, allowSummary: false,
+      content: renderSelectedPlanningDirection(input.novel.selectedPlanningDirection) }),
     createContextBlock({
       id: "book_contract",
       group: "book_contract",
@@ -164,6 +171,8 @@ export function buildVolumeSkeletonContextBlocks(input: VolumeSkeletonPromptInpu
 
 export function buildVolumeBeatSheetContextBlocks(input: VolumeBeatSheetPromptInput): PromptContextBlock[] {
   return [
+    createContextBlock({ id: "selected_planning_direction", group: "selected_planning_direction", priority: 108, required: true, allowSummary: false,
+      content: renderSelectedPlanningDirection(input.novel.selectedPlanningDirection) }),
     createContextBlock({
       id: "book_contract",
       group: "book_contract",
@@ -220,6 +229,8 @@ export function buildVolumeBeatSheetContextBlocks(input: VolumeBeatSheetPromptIn
 
 export function buildVolumeChapterListContextBlocks(input: VolumeChapterListPromptInput): PromptContextBlock[] {
   return [
+    createContextBlock({ id: "selected_planning_direction", group: "selected_planning_direction", priority: 108, required: true, allowSummary: false,
+      content: renderSelectedPlanningDirection(input.novel.selectedPlanningDirection) }),
     createContextBlock({
       id: "book_contract",
       group: "book_contract",
@@ -302,6 +313,10 @@ export function buildVolumeChapterListContextBlocks(input: VolumeChapterListProm
 
 export function buildVolumeChapterDetailContextBlocks(input: VolumeChapterDetailPromptInput): PromptContextBlock[] {
   return [
+    createContextBlock({ id: "selected_planning_direction", group: "selected_planning_direction", priority: 108, required: true, allowSummary: false,
+      content: renderSelectedPlanningDirection(input.novel.selectedPlanningDirection) }),
+    createContextBlock({ id: "written_evidence", group: "written_evidence", priority: 110, required: true, allowSummary: false,
+      content: JSON.stringify({ writtenEvidence: input.writtenEvidence ?? { coverage: { complete: false, unknown: ["未提供已写正文来源"] } } }) }),
     createContextBlock({
       id: "book_contract",
       group: "book_contract",
@@ -374,6 +389,8 @@ export function buildVolumeChapterDetailContextBlocks(input: VolumeChapterDetail
 
 export function buildVolumeRebalanceContextBlocks(input: VolumeRebalancePromptInput): PromptContextBlock[] {
   return [
+    createContextBlock({ id: "selected_planning_direction", group: "selected_planning_direction", priority: 108, required: true, allowSummary: false,
+      content: renderSelectedPlanningDirection(input.novel.selectedPlanningDirection) }),
     createContextBlock({
       id: "book_contract",
       group: "book_contract",

@@ -24,13 +24,15 @@ const commonRules = [
   "严格保留每章原始目标字数。允许在原始预算内重新分配场景字数，但 sceneCards.targetWordCount 的总和不得超过本章原始 targetWordCount；优先恰好等于原始预算。不能靠增加目标字数解决职责过载。",
   "保留原始叙事义务、兑现引用和继承钩子，不得靠静默删掉职责或重复兑现一次性事件解决过载。同一全书钩子可被多章合理引用，不能把 payoffRefs 的引用次数直接当作实际义务重复。",
   "遵守全书约束、节拍表和只读上下文，保持世界设定、人物知情范围、动机、关系、人物线与状态变化一致。",
+  "writtenEvidence中的实际已写原文与可核验事实高于计划来源。selectedPlanningDirection是用户原选候选/开篇原型，不能用后来生成的大纲替代。对照assessment.promiseChecks（逐章结果中的同名字段）保留原选卖点、人物关系变化与开篇回报；改编须保留等价叙事价值，延期须在允许窗口给出具体承接和obligationMoves，不能只写后面再补。不能把重复追逃或受压当作关系推进与阶段回报的等价替代。",
+  "openingChain是开篇功能与回报承诺，允许合理拆合与调整章序；earlyPayoff与全书长期承诺要区分，不要求本章完成全书/前30章全部回报。若来源缺失明确未知，不猜测用户原选；若兑现需要改动受保护约束或窗口外内容，交回既有方向确认，不擅自牺牲承诺。",
   "只输出严格 JSON，不输出 Markdown、注释、解释或额外字段。所有叙事文本、reason、summary 和 issues 使用中文；字段名、枚举值、ID 及已有引用标识保持原样。",
 ].join("\n");
 
 // These assets do not resolve models; the coordinator must pass its explicit modelRoute to the runner.
 export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, PlanningRepairOutput> = {
   id: "novel.volume.planning_repair",
-  version: "v4",
+  version: "v5",
   taskType: "replan",
   mode: "structured",
   language: "zh",
@@ -67,7 +69,7 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
 
 export const planningRepairReviewPrompt: PromptAsset<PlanningRepairReviewPromptInput, PlanningRepairReviewOutput> = {
   id: "novel.volume.planning_repair_review",
-  version: "v3",
+  version: "v4",
   taskType: "review",
   mode: "structured",
   language: "zh",

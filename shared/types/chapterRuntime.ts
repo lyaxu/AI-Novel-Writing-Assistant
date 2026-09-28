@@ -10,6 +10,7 @@ import {
   generationNextActionSchema,
 } from "./canonicalState";
 import { characterResourceContextSchema } from "./characterResource";
+import { planningWrittenEvidenceSchema } from "./novel/writtenEvidence";
 import { storyWorldSliceSchema } from "./storyWorldSlice";
 import { timelineCheckResultSchema, timelineContextForChapterSchema } from "./timeline";
 import {
@@ -504,6 +505,7 @@ export const chapterWriteContextSchema = z.object({
   ledgerSummary: runtimePayoffLedgerSummarySchema.nullable().optional(),
   timelineContext: timelineContextForChapterSchema.nullable().optional(),
   characterResourceContext: characterResourceContextSchema.nullable().optional(),
+  writtenEvidence: planningWrittenEvidenceSchema.nullable().optional(),
   recentChapterSummaries: z.array(z.string()).default([]),
   previousChapterTail: z.string().nullable().optional(),
   openingAntiRepeatHint: z.string(),
@@ -552,6 +554,7 @@ export const generationContextPackageSchema = z.object({
   characterHardFacts: z.array(chapterCharacterHardFactSchema).default([]),
   creativeDecisions: z.array(runtimeCreativeDecisionSchema),
   openAuditIssues: z.array(runtimeAuditIssueSchema),
+  writtenEvidence: planningWrittenEvidenceSchema.nullable().optional(),
   previousChaptersSummary: z.array(z.string()),
   previousChapterTail: z.string().nullable().optional(),
   openingHint: z.string(),

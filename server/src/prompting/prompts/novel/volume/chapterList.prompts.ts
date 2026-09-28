@@ -289,7 +289,7 @@ export function createVolumeChapterListPrompt(
 
   return {
     id: "novel.volume.chapter_list",
-    version: "v10",
+    version: "v11",
     taskType: "planner",
     mode: "structured",
     language: "zh",

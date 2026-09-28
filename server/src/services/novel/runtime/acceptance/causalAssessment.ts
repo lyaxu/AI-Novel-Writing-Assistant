@@ -1,9 +1,11 @@
 import type { ChapterAcceptancePromptInput, ChapterAcceptanceAssessmentOutput } from "../../../../prompting/prompts/novel/chapterAcceptance.prompts";
 import type { ChapterAcceptanceAssessmentInput } from "../ChapterAcceptanceAssessmentService";
+import { projectActionStateAssessment } from "./actionStateProjection";
 
 /** Both invocation and cache identity must use the same requested scene coverage. */
 export function buildAcceptancePromptInput(input: ChapterAcceptanceAssessmentInput): ChapterAcceptancePromptInput {
   return {
+    chapterId: input.chapterId,
     novelTitle: input.novelTitle,
     chapterTitle: input.chapterTitle,
     chapterOrder: input.chapterOrder,
@@ -11,16 +13,20 @@ export function buildAcceptancePromptInput(input: ChapterAcceptanceAssessmentInp
     content: input.content,
     expectedSceneKeys: input.contextPackage.chapterReviewContext?.scenePlan?.scenes
       .filter((scene) => scene.causality).map((scene) => scene.key) ?? [],
+    establishedProse: input.contextPackage.chapterReviewContext?.writtenEvidence?.chapters
+      .filter((chapter) => chapter.order < input.chapterOrder && chapter.chapterId !== input.chapterId)
+      .map(({ chapterId, order, content }) => ({ chapterId, order, content })) ?? [],
   };
 }
 
 /** Reserve a bounded evidence allowance; a larger cap does not itself generate more tokens. */
 export function acceptanceOutputBudget(sceneCount: number): number {
-  return 3200 + Math.min(8, Math.max(0, Math.floor(sceneCount))) * 512;
+  return 4224 + Math.min(8, Math.max(0, Math.floor(sceneCount))) * 1536;
 }
 
 /** Deterministic projection of the AI verdict, never a second semantic classifier. */
 export function projectCausalAssessment(output: ChapterAcceptanceAssessmentOutput): ChapterAcceptanceAssessmentOutput {
+  output = projectActionStateAssessment(output);
   const failures = (output.sceneCausalityVerdicts ?? []).filter((row) => row.verdict !== "earned");
   if (!failures.length) return output;
   const blockingIssues = [...output.blockingIssues];

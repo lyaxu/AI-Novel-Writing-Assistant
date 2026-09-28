@@ -698,6 +698,60 @@ function assertNonEmptyBlock(blocks, id) {
   return block;
 }
 
+test("written prose and resource restrictions survive an exhausted context budget in every production mode", () => {
+  const { selectContextBlocks } = require("../dist/prompting/core/contextSelection.js");
+  const contextPackage = createContextPackage();
+  contextPackage.writtenEvidence = {
+    version: 1, targetChapterOrder: 5, authority: "written_prose_not_planning", sourceFingerprint: "source-4",
+    chapters: [{ chapterId: "chapter-4", order: 4, title: "前章", contentHash: "body-4", content: "长剑被收走，右臂仍夹着木板。只有同伴知道渡口暗号。" }],
+    coverage: { policy: "recent_full_chapters", maxChapters: 3, maxCharacters: 24000, omittedWrittenChapterCount: 0,
+      excludedOversizeChapterIds: [], missingPreviousChapter: false, complete: true, unknown: [] },
+    compressedFacts: { authority: "secondary_not_proof", items: [], omittedCount: 0 },
+  };
+  const originalItem = contextPackage.characterResourceContext.availableItems[0];
+  contextPackage.characterResourceContext.availableItems = Array.from({ length: 8 }, (_, index) => ({
+    ...originalItem, id: `resource-${index}`, name: `线索${index}`, holderKnows: false,
+    constraints: ["不得转交", "不得公开", "第三条约束也不得丢失"],
+    sourceRefs: [{ kind: "chapter_plan", refId: "plan-5", refLabel: "待执行规划" }],
+  }));
+  const writeContext = buildChapterWriteContext({ bookContract: contextPackage.bookContract,
+    macroConstraints: contextPackage.macroConstraints, volumeWindow: contextPackage.volumeWindow, contextPackage });
+  const reviewContext = buildChapterReviewContext(writeContext, contextPackage);
+  const repairContext = buildChapterRepairContext({ writeContext, contextPackage, issues: [] });
+  const variants = [
+    buildChapterWriterContextBlocks(writeContext),
+    buildChapterWriterContextBlocks(writeContext, { mode: "incremental" }),
+    buildChapterReviewContextBlocks(reviewContext),
+    buildChapterRepairContextBlocks(repairContext),
+  ];
+  for (const blocks of variants) {
+    const selected = selectContextBlocks(blocks, { maxTokensBudget: 1 });
+    const evidence = assertNonEmptyBlock(selected.selectedBlocks, "written_evidence");
+    assert.match(evidence.content, /长剑被收走，右臂仍夹着木板/);
+    assert.match(evidence.content, /secondary_not_proof/);
+    assert.equal(evidence.required, true);
+    assert.equal(evidence.allowSummary, false);
+    const resources = assertNonEmptyBlock(selected.selectedBlocks, "character_resource_context");
+    assert.match(resources.content, /线索7/);
+    assert.match(resources.content, /第三条约束也不得丢失/);
+    assert.match(resources.content, /holderKnows=false/);
+    assert.match(resources.content, /chapter_plan:plan-5/);
+    assert.equal(resources.required, true);
+    assert.equal(resources.allowSummary, false);
+    assert.ok(!selected.summarizedBlockIds.includes(evidence.id));
+    assert.ok(!selected.droppedBlockIds.includes(resources.id));
+  }
+});
+
+test("legacy context explicitly discloses missing written evidence instead of promoting plans to facts", () => {
+  const contextPackage = createContextPackage();
+  const context = buildChapterWriteContext({ bookContract: contextPackage.bookContract,
+    macroConstraints: contextPackage.macroConstraints, volumeWindow: contextPackage.volumeWindow, contextPackage });
+  assert.equal(context.writtenEvidence, null);
+  const block = assertNonEmptyBlock(buildChapterWriterContextBlocks(context), "written_evidence");
+  assert.match(block.content, /未提供可查证的前文正文/);
+});
+
 test("chapter layered contexts carry volume mission, character duties and repair guardrails", () => {
   const contextPackage = createContextPackage();
   const writeContext = buildChapterWriteContext({

@@ -11,6 +11,7 @@ import {
   mapSemanticAssessmentToQualityGate,
 } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
+import { selectedPlanningPromiseIds, type SelectedPlanningDirection } from "@ai-novel/shared/types/novel/planningPromises";
 import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
 import {
   chapterTaskSheetQualityPrompt,
@@ -91,6 +92,11 @@ export class ChapterTaskSheetQualityGateService {
     mode: ChapterTaskSheetQualityMode,
     options: ChapterTaskSheetQualityGateOptions,
   ): Promise<AiChapterTaskSheetQualityAssessment> {
+    let promiseCount = 0;
+    try {
+      const context = JSON.parse(options.reviewContextJson || "{}");
+      promiseCount = selectedPlanningPromiseIds(context?.selectedPlanningDirection as SelectedPlanningDirection | undefined, candidate.chapterOrder).length;
+    } catch { /* Unknown original direction does not invent checks. */ }
     const generated = await runStructuredPrompt({
       asset: chapterTaskSheetQualityPrompt,
       promptInput: {
@@ -103,6 +109,8 @@ export class ChapterTaskSheetQualityGateService {
         provider: options.provider,
         model: options.model,
         temperature: options.temperature ?? 0.1,
+        // One existing review call; bounded headroom for explicit evidence per selected promise.
+        maxTokens: Math.min(10000, 4000 + promiseCount * 600),
         taskId: options.taskId,
         entrypoint: options.entrypoint,
         novelId: candidate.novelId,

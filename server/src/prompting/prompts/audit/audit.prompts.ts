@@ -74,7 +74,7 @@ export interface AuditChapterPromptInput {
 
 export const auditChapterLightPrompt: PromptAsset<AuditChapterPromptInput, z.infer<typeof lightAuditOutputSchema>> = {
   id: "audit.chapter.light",
-  version: "v1",
+  version: "v2",
   taskType: "light_review",
   mode: "structured",
   language: "zh",
@@ -168,7 +168,7 @@ export const auditChapterLightPrompt: PromptAsset<AuditChapterPromptInput, z.inf
 
 export const auditChapterPrompt: PromptAsset<AuditChapterPromptInput, z.infer<typeof fullAuditOutputSchema>> = {
   id: "audit.chapter.full",
-  version: "v2",
+  version: "v3",
   taskType: "critical_review",
   mode: "structured",
   language: "zh",

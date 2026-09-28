@@ -12,6 +12,8 @@ import {
   serializeVolumeWorkspaceDocument,
 } from "../volumeWorkspaceDocument";
 import { mapVolumeRow } from "../volumeModels";
+import { writtenSourceFingerprint } from "../writtenEvidence";
+import { selectedPlanningCandidateSchema, type SelectedPlanningDirection } from "@ai-novel/shared/types/novel/planningPromises";
 import { isVolumeChapterListPartiallyPersisted, resolveOriginalVolumeStatus } from "../volumeGenerationHelpers";
 import {
   persistActiveVolumeWorkspace,
@@ -56,6 +58,8 @@ export interface RepairSession {
 }
 
 export interface BeginPlanningRepairInput {
+  selectedPlanningDirection?: SelectedPlanningDirection;
+  expectedWrittenSourceFingerprint?: string;
   novelId: string;
   taskId: string;
   document: VolumePlanDocument;
@@ -79,6 +83,8 @@ export class PlanningRepairConflictError extends Error {
 }
 
 interface StoredSnapshot {
+  selectedCandidateFingerprint?: string;
+  writtenSourceFingerprint?: string;
   version: 1;
   taskId: string;
   baselineDocument: VolumePlanDocument;
@@ -621,12 +627,25 @@ export class PlanningRepairStore {
       const seed = parseSeed(task.seedPayloadJson);
       const previous = readState(seed);
       const source = await readSource(tx, input.novelId, task);
+      const selectedCandidateFingerprint = hash(seed.candidate ?? null);
+      if (input.selectedPlanningDirection) {
+        const actual = selectedPlanningCandidateSchema.safeParse(seed.candidate);
+        const expected = input.selectedPlanningDirection;
+        if (actual.success !== (expected.status === "available") || (actual.success && expected.status === "available"
+          && (expected.sourceTaskId !== task.id || hash(actual.data) !== hash(expected.candidate)))) {
+          conflict("Selected planning direction changed before review; reload the source.");
+        }
+      }
       if (previous && previous.novelId !== input.novelId) conflict("Saved repair belongs to another novel.");
       const sameChapter = previous && previous.volumeId === input.volumeId
         && (previous.chapterId === input.chapterId
           || source.chapters.some((row) => row.id === input.chapterId && row.order === previous.chapterOrder));
       const requestedPlan = source.document.volumes.find((v) => v.id === input.volumeId)?.chapters
         .find((chapter) => chapter.id === input.chapterId || chapter.chapterId === input.chapterId);
+      const writtenFingerprint = requestedPlan ? writtenSourceFingerprint(source.chapters, requestedPlan.chapterOrder) : undefined;
+      if (input.expectedWrittenSourceFingerprint !== undefined && input.expectedWrittenSourceFingerprint !== writtenFingerprint) {
+        conflict("Written chapter evidence changed before planning began; reload the source.");
+      }
       const reviewedWindowChapter = previous?.phase === "committed" && previous.volumeId === input.volumeId
         && requestedPlan && previous.affectedChapterIds?.includes(requestedPlan.id);
       if (previous && (previous.phase !== "committed" || sameChapter || reviewedWindowChapter)) {
@@ -648,8 +667,31 @@ export class PlanningRepairStore {
             || committedSourceHash(source) !== snapshot.committedSourceHash) {
             conflict("The committed planning contract changed; explicit confirmation is required.");
           }
-        } else if (snapshot.snapshotToken !== source.token) {
+        } else if (snapshot.snapshotToken !== source.token || (input.selectedPlanningDirection
+          && snapshot.selectedCandidateFingerprint !== selectedCandidateFingerprint)) {
           state = { ...previous, phase: "waiting_confirmation", summary: "Planning source changed; explicit confirmation is required." };
+        }
+        if (committed && requestedPlan && ((input.expectedWrittenSourceFingerprint !== undefined
+          && snapshot.writtenSourceFingerprint !== writtenFingerprint) || (input.selectedPlanningDirection
+          && snapshot.selectedCandidateFingerprint !== selectedCandidateFingerprint))) {
+          // Ordinary forward progress changes the available prose. Re-review the saved contract,
+          // without buying an initial generation, resetting repair rounds, or asking the user to fix it.
+          const { chapter, eligible } = eligibleWindow(source.document, input.volumeId, requestedPlan.id, source);
+          if (!eligible.includes(chapter.id)) conflict("The chapter requiring factual re-review is protected.");
+          const candidate = clone(source.document);
+          const version = await this.createDraft(tx, input.novelId, candidate, "已写事实更新，复核现有章节合同");
+          const next: PlanningRepairState = { ...previous, key: `${input.novelId}:${input.volumeId}:${chapter.id}`,
+            history: [...previous.history, { kind: "evidence_refresh", chapterId: chapter.id,
+              writtenSourceFingerprint: writtenFingerprint, selectedCandidateFingerprint }],
+            chapterId: chapter.id, chapterOrder: chapter.chapterOrder, phase: "reviewing", candidateVersionId: version.id,
+            affectedChapterIds: [chapter.id], quality: { chapters: {} }, pendingOperation: undefined,
+            repairOutputPending: undefined, technicalError: undefined, summary: "已写事实更新，复核现有章节合同" };
+          const renewed: StoredSnapshot = { version: 1, taskId: task.id, baselineDocument: clone(source.document),
+            eligibleChapterIds: eligible, inputFingerprint: hash({ document: semanticDocument(source.document), source: source.token }),
+            snapshotToken: source.token, effectiveDefaultChapterLength: source.effectiveDefaultChapterLength,
+            candidateHash: hash(candidate), writtenSourceFingerprint: writtenFingerprint, selectedCandidateFingerprint };
+          const raw = await casSeed(tx, task, { ...seed, planningRepair: next, [SNAPSHOT_KEY]: renewed });
+          return { session: this.session(next, renewed, candidate), raw, owner: hash(owner(task)) };
         }
         const candidate = await this.loadCandidate(tx, previous, snapshot);
         const raw = state === previous && !upgradeBudget ? task.seedPayloadJson
@@ -669,6 +711,8 @@ export class PlanningRepairStore {
       };
       const snapshot: StoredSnapshot = {
         version: 1, taskId: task.id, baselineDocument: clone(input.document),
+        writtenSourceFingerprint: writtenFingerprint,
+        selectedCandidateFingerprint,
         eligibleChapterIds: eligible, inputFingerprint: hash({ document: semanticDocument(input.document), source: source.token }),
         snapshotToken: source.token,
         effectiveDefaultChapterLength: source.effectiveDefaultChapterLength,
@@ -714,6 +758,8 @@ export class PlanningRepairStore {
         effectiveDefaultChapterLength: source.effectiveDefaultChapterLength,
       } : snapshot;
       nextSnapshot.effectiveDefaultChapterLength ??= source.effectiveDefaultChapterLength;
+      nextSnapshot.writtenSourceFingerprint = writtenSourceFingerprint(source.chapters, previous.chapterOrder);
+      nextSnapshot.selectedCandidateFingerprint = hash(seed.candidate ?? null);
       const state: PlanningRepairState = {
         ...previous, phase: candidate ? "reviewing" : "assessing", pendingOperation: undefined,
         quality: undefined, technicalError: undefined,
@@ -829,6 +875,8 @@ export class PlanningRepairStore {
       snapshot.snapshotToken = committedSource.token;
       snapshot.committedPlanHash = committedPlanHash(document);
       snapshot.committedSourceHash = committedSourceHash(committedSource);
+      snapshot.writtenSourceFingerprint = writtenSourceFingerprint(committedSource.chapters, previous.chapterOrder);
+      snapshot.selectedCandidateFingerprint = hash(seed.candidate ?? null);
       const raw = await casSeed(tx, task, { ...seed, planningRepair: state, [SNAPSHOT_KEY]: snapshot });
       return { stale: false as const, state, snapshot, raw, document };
     });

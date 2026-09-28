@@ -1,4 +1,8 @@
 import { z } from "zod";
+export {
+  actionStateEvidenceSchema, actionStateDimensionCheckSchema, actionStateCheckSchema,
+  type ActionStateEvidence, type ActionStateDimensionCheck, type ActionStateCheck,
+} from "./sceneCausality/actionState.js";
 
 const causalText = z.string().trim().min(1).max(240);
 

@@ -376,6 +376,8 @@ export class ChapterAcceptanceAssessmentService {
               assetSyncRecommendation: assessment.assetSyncRecommendation,
               repairDirectives: assessment.repairDirectives,
               sceneCausalityVerdicts: assessment.sceneCausalityVerdicts ?? [],
+              actionStateChecks: assessment.actionStateChecks ?? [],
+              actionStateAuditIssues: assessment.actionStateAuditIssues ?? [],
             }),
             issues: {
               create: issues.map((issue, index) => ({
@@ -435,6 +437,8 @@ export class ChapterAcceptanceAssessmentService {
           assetSyncRecommendation: assessment.assetSyncRecommendation,
           repairDirectives: assessment.repairDirectives,
           sceneCausalityVerdicts: assessment.sceneCausalityVerdicts ?? [],
+          actionStateChecks: assessment.actionStateChecks ?? [],
+          actionStateAuditIssues: assessment.actionStateAuditIssues ?? [],
         }),
         issues: issues.map((issue, index) => ({
           id: `${reportId}:${issue.code || "issue"}:${index + 1}`,

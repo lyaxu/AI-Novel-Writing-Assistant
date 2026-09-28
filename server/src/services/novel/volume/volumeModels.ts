@@ -52,6 +52,7 @@ export interface VolumeWorkspace {
 }
 
 export interface VolumeGenerationNovel {
+  selectedPlanningDirection?: import("@ai-novel/shared/types/novel/planningPromises").SelectedPlanningDirection;
   title: string;
   description: string | null;
   targetAudience: string | null;

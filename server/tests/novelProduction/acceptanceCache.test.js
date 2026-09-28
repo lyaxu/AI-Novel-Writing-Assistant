@@ -93,7 +93,9 @@ test("cache identity renders effective context, overrides and model without vola
   const state = { context: "original", slot: "default", template: "official", model: "model-a", version: "v1" };
   const asset = { id: "acceptance", get version() { return state.version; }, slots: [{}], taskType: "review" };
   const { buildAcceptanceCacheIdentity } = loadRuntimeSource("acceptance/cacheIdentity.ts", {
-    "./causalAssessment": loadRuntimeSource("acceptance/causalAssessment.ts", {}),
+    "./causalAssessment": loadRuntimeSource("acceptance/causalAssessment.ts", {
+      "./actionStateProjection": loadRuntimeSource("acceptance/actionStateProjection.ts", {}),
+    }),
     "node:crypto": crypto,
     "../../../../llm/factory": { resolveLLMClientOptions: async () => ({ provider: "p", model: state.model, apiKey: "secret", baseURL: "local" }) },
     "../../../../prompting/core/promptRunner": { preparePromptExecution: ({ promptInput, contextBlocks }) => ({ context: {}, messages: [{ getType: () => "human", content: JSON.stringify({ promptInput, contextBlocks }) }] }) },
