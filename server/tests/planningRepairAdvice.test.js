@@ -58,6 +58,23 @@ function fixture(useDefaultGenerator = false) {
 }
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
+test("consumed advice is projected as applied rather than stale without allowing another grant", async () => {
+  const f = fixture();
+  const request = await f.service.request("t", { repairKey: "r", idempotencyKey: "apply" });
+  f.resolve(); await settle();
+  f.source.seed.planningRepairRecoveryRequests = [{ repairKey: "other", idempotencyKey: `advice:${request.adviceId}:a` }];
+  f.source.fingerprint = "changed";
+  assert.equal((await f.service.status("t")).status, "stale");
+  f.source.seed.planningRepairRecoveryRequests[0].repairKey = "r";
+  const before = f.writes();
+  const view = await f.service.status("t");
+  assert.equal(view.status, "applied");
+  assert.equal(view.options, undefined);
+  assert.equal(f.writes(), before);
+  assert.equal(f.calls(), 1);
+  assert.equal(f.grants.length, 0);
+});
+
 test("oversized unique context fails before timeout wrapper or any paid model boundary", async () => {
   const f = fixture(true);
   f.source.context = { unique: "唯一正文".repeat(50000) };
@@ -200,6 +217,7 @@ test("source fingerprint binds candidate, body and user intent; GET source check
     generationJob: { findFirst: async () => null }, directorRunCommand: { findFirst: async () => null } };
   const initial = await sourceModule.readAdviceSource(tx, "t");
   novel.creationExperience = "professional"; novel.updatedAt = new Date(1000);
+  seed.productionExperience = "professional"; row.seedPayloadJson = JSON.stringify(seed);
   assert.equal((await sourceModule.readAdviceSource(tx, "t")).fingerprint, initial.fingerprint);
   chapter.content = "新增正文"; assert.notEqual((await sourceModule.readAdviceSource(tx, "t")).fingerprint, initial.fingerprint); chapter.content = "";
   candidate.contentJson = "changed"; assert.notEqual((await sourceModule.readAdviceSource(tx, "t")).fingerprint, initial.fingerprint); candidate.contentJson = "candidate";
@@ -280,10 +298,10 @@ const parse = (value, contract = prompt.planningRepairAdvicePrompt.outputSchema,
   label: "advice-offline", strategy: "prompt_json", profile: {}, maxRepairAttempts: 0, finishReason: "stop", ...extra,
 });
 
-test("v5 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
+test("v6 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
   const asset = prompt.planningRepairAdvicePrompt;
   const text = asset.render({ contextJson: "{}" })[0].content;
-  assert.equal(asset.version, "v5"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
+  assert.equal(asset.version, "v6"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
   const jsonSchema = JSON.parse(text.split("完整输出契约（minItems/maxItems是数量，minLength/maxLength是字符数）：\n")[1].split("\n输出格式示例")[0]);
   const fields = jsonSchema.properties.options.items.properties;
   assert.deepEqual(fields.diagnosis.enum, schema.planningRepairAdviceDiagnoses);
@@ -293,7 +311,7 @@ test("v5 prompt renders the full shared contract and example, with explicit paid
   assert.equal(schema.planningRepairAdviceOutputSchema.safeParse(prompt.planningRepairAdviceExample).success, true);
   assert.match(text, /不得超过4000字符/); assert.match(text, /采用一个可执行方案即明确授权追加1轮/);
   assert.match(text, /不要让写作新手查询服务器schema/);
-  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v5/);
+  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v6/);
 });
 
 test("real rejected response keeps every action under wider non-safety limits but still rejects invented diagnoses", async () => {

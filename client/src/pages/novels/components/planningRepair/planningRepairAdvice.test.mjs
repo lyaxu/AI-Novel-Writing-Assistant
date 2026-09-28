@@ -43,7 +43,7 @@ test("recommended direction is the default but a non-recommended option remains 
 });
 
 test("stale, failed, uncertain, running, missing and authorized recovery states never permit adoption", () => {
-  for (const state of ["none", "stale", "failed", "uncertain", "running"]) {
+  for (const state of ["none", "stale", "applied", "failed", "uncertain", "running"]) {
     assert.equal(presentation.canAdoptPlanningRepairAdvice({ ...ready, status: state }, "recommended", false), false, state);
   }
   assert.equal(presentation.canAdoptPlanningRepairAdvice(undefined, "", false), false);
@@ -139,6 +139,9 @@ test("existing authorization hides new grants and preserves its original directi
 });
 
 test("expired and uncertain advice show recovery choices without an adoption button", () => {
+  const applied = renderActions({ ...ready, status: "applied" }).html;
+  assert.match(applied, /上次方案已采用/);
+  assert.doesNotMatch(applied, /章节计划或修复范围发生变化|采用此方案并修复/);
   const stale = renderActions({ ...ready, status: "stale" }).html;
   assert.match(stale, /重新获取方案后选择/);
   assert.doesNotMatch(stale, /采用此方案并修复/);

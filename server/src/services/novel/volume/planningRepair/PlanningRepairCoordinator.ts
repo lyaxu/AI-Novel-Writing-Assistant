@@ -8,6 +8,7 @@ import type { VolumeGenerateOptions } from "../volumeModels";
 import { PlanningRepairStore, type RepairSession } from "./PlanningRepairStore";
 import { applyPlanningRepairCandidate, planningRepairOutputSchema } from "./planningRepairDomain";
 import { projectPlanningHorizon } from "../planningPromises";
+import { buildReviewIssueHistory } from "./domain/reviewIssueHistory";
 
 const committedDocuments = new WeakSet<object>();
 const flights = new Map<string, { taskId: string; chapterId: string; promise: Promise<VolumePlanDocument> }>();
@@ -287,17 +288,14 @@ export class PlanningRepairCoordinator {
     for (const id of session.state.affectedChapterIds ?? [input.chapterId]) {
       if (review.chapters[id]) continue;
       const chapter = chaptersOf(session.candidate!, input.volumeId).find(c => c.id === id)!;
-      const previousAssessment = currentEvidenceHistory(session).slice().reverse().find(entry => {
-        const item = entry as { kind?: string; result?: ReviewSet };
-        return item.kind === "assessment" && Boolean(item.result?.chapters?.[id]);
-      }) as { result?: ReviewSet } | undefined;
+      const issueHistory = buildReviewIssueHistory(currentEvidenceHistory(session), id);
       await this.beforeCall(session, `review:${id}`, `正在复核第${chapter.chapterOrder}章，第${session.state.rounds}/${session.state.maxRounds}轮`);
       review.chapters[id] = await this.gate.evaluate({
         ...chapter, novelId: input.document.novelId, volumeId: input.volumeId,
         chapterId: id, chapterOrder: chapter.chapterOrder,
       }, { ...input.options, mode: "ai_copilot", temperature: 0.1,
         reviewContextJson: this.context(input, session, review),
-        previousIssues: previousAssessment?.result?.chapters?.[id]?.issues ?? [],
+        ...issueHistory,
       });
       await this.save(session, { phase: "reviewing", pendingOperation: undefined, quality: review });
     }

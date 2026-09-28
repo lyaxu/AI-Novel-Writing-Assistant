@@ -8,7 +8,7 @@ export const planningRepairAdviceOutputSchema = z.object({
   recommendedOptionId: z.string().min(1),
   options: z.array(z.object({
     id: z.string().min(1).max(60), title: z.string().min(1).max(100), reason: z.string().min(1).max(1000),
-    changes: z.array(z.string().min(1).max(500)).min(1).max(planningRepairAdviceItemLimit),
+    changes: z.array(z.string().min(1).max(500)).max(planningRepairAdviceItemLimit),
     preserves: z.array(z.string().min(1).max(500)).min(1).max(planningRepairAdviceItemLimit),
     tradeoffs: z.array(z.string().min(1).max(500)).max(planningRepairAdviceItemLimit),
     diagnosis: z.enum(planningRepairAdviceDiagnoses),
@@ -32,7 +32,10 @@ export const planningRepairAdviceOutputSchema = z.object({
   if (new Set(ids).size !== ids.length || !ids.includes(value.recommendedOptionId)) {
     ctx.addIssue({ code: "custom", message: "Options must have unique ids and a valid recommendation." });
   }
-  for (const option of value.options) {
+  for (const [index, option] of value.options.entries()) {
+    if (option.executionMode !== "review_existing" && option.changes.length === 0) {
+      ctx.addIssue({ code: "custom", path: ["options", index, "changes"], message: "Repair and source-edit options must describe at least one change." });
+    }
     if (JSON.stringify({ diagnosis: option.diagnosis, affectedChapterIds: option.affectedChapterIds, ...option.guidance }).length > 4000) {
       ctx.addIssue({ code: "custom", message: "Repair guidance exceeds the supported recovery boundary." });
     }
@@ -46,7 +49,7 @@ export interface PlanningRepairAdviceOption {
   executionMode?: "repair_then_review" | "review_existing" | "source_edit";
 }
 export interface PlanningRepairAdviceStatus {
-  status: "none" | "running" | "ready" | "stale" | "failed" | "uncertain";
+  status: "none" | "running" | "ready" | "applied" | "stale" | "failed" | "uncertain";
   adviceId?: string; requestId?: string; summary?: string; recommendedOptionId?: string;
   options?: PlanningRepairAdviceOption[]; error?: string;
 }

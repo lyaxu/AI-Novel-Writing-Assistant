@@ -344,7 +344,7 @@ test("chapter task sheet quality service passes usable semantic assessments", as
 });
 
 test("chapter task sheet quality prompt is registered as a product prompt asset", () => {
-  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v8");
+  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v9");
   assert.equal(registered, chapterTaskSheetQualityPrompt);
 });
 
@@ -376,6 +376,45 @@ test("planning re-review sees current evidence, book constraints and previous is
   assert.equal(chapterTaskSheetQualityPrompt.outputSchema.safeParse({ ...output, issueChecks: undefined }).success, false);
   // Existing persisted reviews remain readable while newly generated reviews require evidence.
   assert.equal(aiChapterTaskSheetQualityAssessmentSchema.safeParse({ ...output, issueChecks: undefined }).success, true);
+});
+
+test("a historical resolved decision is context only and cannot certify changed evidence", () => {
+  const previousIssues = [{ id: "missing_check", severity: "high", target: "semantic", summary: "未检查物品", repairHint: "补检查动作" }];
+  const oldCheck = { issueId: "missing_check", status: "resolved", candidateEvidence: [{ sourcePath: "taskSheet", quote: "旧的检查动作" }], explanation: "当时已解决" };
+  const input = { candidate: { ...buildCandidate(), taskSheet: "当前动作不同。" }, mode: "ai_copilot", previousIssues, priorIssueDecisions: [oldCheck] };
+  const messages = chapterTaskSheetQualityPrompt.render(input);
+  assert.match(String(messages[1].content), /当时已解决/);
+  const output = { verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is", summary: "通过", issues: [], repairGuidance: [], confidence: 0.9, issueChecks: [oldCheck] };
+  assert.throws(() => chapterTaskSheetQualityPrompt.postValidate(output, input), /absent/);
+  assert.throws(() => chapterTaskSheetQualityPrompt.postValidate({ ...output, issueChecks: [] }, input), /exactly once/);
+  const result = chapterTaskSheetQualityPrompt.postValidate({ ...output, issueChecks: [{ ...oldCheck, status: "unresolved", candidateEvidence: [], explanation: "当前合同不含检查动作" }] }, input);
+  assert.equal(result.safeToSync, false);
+  assert.equal(result.issues[0].id, "missing_check");
+});
+
+test("quality gate forwards historical decisions into the registered prompt call", async () => {
+  const runner = require("../dist/prompting/core/promptRunner.js");
+  const originalRun = runner.runStructuredPrompt;
+  const previousIssues = [{ id: "source", severity: "medium", target: "scene_cards", summary: "来源缺失", repairHint: "先建立来源" }];
+  const priorIssueDecisions = [{ issueId: "source", status: "resolved", candidateEvidence: [], explanation: "历史判断" }];
+  let calls = 0;
+  runner.runStructuredPrompt = async request => {
+    calls++;
+    assert.equal(request.asset, chapterTaskSheetQualityPrompt);
+    assert.deepEqual(request.promptInput.previousIssues, previousIssues);
+    assert.deepEqual(request.promptInput.priorIssueDecisions, priorIssueDecisions);
+    assert.equal(request.promptInput.omittedResolvedIssueCount, 4);
+    return { output: { marker: "offline" } };
+  };
+  try {
+    const result = await new ChapterTaskSheetQualityGateService().runSemanticAssessment(buildCandidate(), "ai_copilot", {
+      previousIssues, priorIssueDecisions, omittedResolvedIssueCount: 4,
+    });
+    assert.deepEqual(result, { marker: "offline" });
+    assert.equal(calls, 1);
+  } finally {
+    runner.runStructuredPrompt = originalRun;
+  }
 });
 
 test("planning re-review can quote decoded scene-card text and retains evidence in gate results", async () => {

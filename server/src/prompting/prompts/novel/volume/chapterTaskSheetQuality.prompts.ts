@@ -4,6 +4,7 @@ import type {
   AiChapterTaskSheetQualityAssessment,
   ChapterExecutionContractQualityCandidate,
   ChapterTaskSheetQualityIssue,
+  ChapterPlanningIssueCheck,
 } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import {
   aiChapterTaskSheetQualityAssessmentSchema,
@@ -23,6 +24,8 @@ export interface ChapterTaskSheetQualityPromptInput {
   mode: "full_book_autopilot" | "ai_copilot" | "manual";
   reviewContextJson?: string;
   previousIssues?: ChapterTaskSheetQualityIssue[];
+  priorIssueDecisions?: ChapterPlanningIssueCheck[];
+  omittedResolvedIssueCount?: number;
 }
 
 function renderNullable(value: string | number | string[] | null | undefined): string {
@@ -82,6 +85,7 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "openingChain与earlyPayoff的scope不能降为book_arc来免除承接检查。openingChain只要求逐项审查原型当前及过去的节点，未来节点保留供边界参考而不提前索取兑现。earlyPayoff可能覆盖整个开篇，当前章只需贡献相应进展；未到期的部分可通过readonlyOpeningRoutes中的实际安排说明承接，不强求当前章完成所有回报。",
     "同次确认的hookStrategy、progressionLoop与storyPrototype需一起理解；顺序不同应依据整体叙事功能、已写事实与明确回报窗口判断合理拆合，不把原型章序当同号实际章的硬截止。readonlyPlanningHorizon是实际已有只读节拍，不扩大修改权限。有后续节拍不等于满足期限：前三章等明确时限不得因较后节拍提及事件就判covered；期限冲突用conflicting，部分兑现用partial，保留未兑现部分进入修复。",
     "对 previousIssues 的每个 id 输出恰好一条 issueChecks：resolved、partially_resolved、unresolved 或 insufficient_context，引用当前候选原文并解释判断。只核对该历史问题原有范围，不把另一承诺或新缺口扩进旧问题；新问题单列。resolved必须有至少一条准确原文，不得再把同id列入issues。未解旧问题以issueChecks为准，程序保留原ID及修复方向，issues无需重复；issues只列新问题或额外缺口，不能用新命名替换旧问题状态。上下文不足应明确，不把不确定推断写成事实。没有历史问题则issueChecks=[]。",
+    "previousIssues同时包含当前未解问题和有限条最近已解问题，原问题范围以其首次描述为准。priorIssueDecisions是过去的判断与当时引用，不是当前事实或免审结论；每项仍须重新核对当前候选，不能复制历史resolved。若推翻过去的resolved，须在explanation中指出当前哪项安排退化、出现何种新矛盾，或原判断为何错误，并引用当前相关原文。相同缺口必须复用原issueId，不通过换名作为新问题重报；确有不同缺口仍正常报告。历史引用可能已不存在，不能把其当作当前引用。省略的较旧已解问题不代表豁免当前合同的完整审查。",
     "可用合同必须满足：本章目标清晰、边界不越章、任务单可执行、读者体验合同明确本章问题、可见回报、主角欲望、主要阻力、关键转折、净变化和钩子责任，场景卡覆盖整章推进并为每场提供阻力、转折、情绪位移和读者价值。",
     "readerExperience.rewardLevel 表示本章计划提供的可见回报强度，只能使用 setup、partial、major；它不是正文完成度、承诺兑现比例或事后结果评级。",
     "逐场审查 causality：选择是否出于角色具体动机；前置物品、信息、权限、能力或信任是否有真实来源；阻力方是否合理回应；outcomeMechanism 是否解释了结果怎样发生，而非重述结果；身体、时间、资源及关系限制是否延续并影响后续选择。必须引用 sceneKey 和具体缺口，不以字段齐全代替语义判断。",
@@ -133,7 +137,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   AiChapterTaskSheetQualityAssessment
 > = {
   id: "novel.volume.chapter_task_sheet_quality",
-  version: "v8",
+  version: "v9",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -168,6 +172,9 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
       input.reviewContextJson || "No additional context supplied. Do not invent prior facts.",
       "previousIssues:",
       JSON.stringify(input.previousIssues ?? []),
+      "priorIssueDecisions (historical judgments only; recheck against current candidate):",
+      JSON.stringify(input.priorIssueDecisions ?? []),
+      `omittedResolvedIssueCount: ${input.omittedResolvedIssueCount ?? 0}`,
     ].join("\n")),
   ],
   postValidate: (output, input) => {

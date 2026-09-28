@@ -43,7 +43,7 @@ export function RepairActions({ status }: { status: PlanningRepairStatus }) {
   const generate = useMutation({
     retry: false,
     mutationFn: () => {
-      const observedOutcome = advice && ["failed", "uncertain", "stale", "ready"].includes(advice.status)
+      const observedOutcome = advice && ["failed", "uncertain", "stale", "ready", "applied"].includes(advice.status)
         ? `${advice.requestId ?? advice.adviceId ?? ""}:${advice.status}` : "";
       if (!adviceRequest.current || (observedOutcome && adviceRequest.current.observedOutcome !== observedOutcome)) {
         adviceRequest.current = { key: crypto.randomUUID(), observedOutcome };
@@ -102,6 +102,7 @@ export function RepairActions({ status }: { status: PlanningRepairStatus }) {
         </Button>
         {adviceRunning ? <p role="status" className="text-sm text-muted-foreground">正在分析问题并准备可选方向，任务保持暂停。</p> : null}
         {advice?.status === "stale" ? <p role="status" className="text-sm text-amber-700 dark:text-amber-300">章节计划或修复范围发生变化，请重新获取方案后选择。</p> : null}
+        {advice?.status === "applied" ? <p role="status" className="text-sm text-muted-foreground">上次方案已采用。请查看本轮处理结果；仍有待处理问题时，可获取针对这些问题的新方案。</p> : null}
         {advice?.status === "failed" || advice?.status === "uncertain" ? <p role="alert" className="break-words text-sm text-destructive">
           {advice.error || (advice.status === "uncertain" ? "尚未确认是否取得方案，可刷新状态，或重新获取。" : "未能取得修复方案，可重新获取。")}
         </p> : null}

@@ -111,6 +111,20 @@
 - 最终离线验证：规划修复、合同/事务、工作流通知/恢复/取消测试160项通过、1项跳过；导演恢复、JIT和章节同步补充回归60项通过。后端 TypeScript 编译与前端类型检查通过。
 - 服务重启后重新读取已提交候选，轮次仍为1/2，无额外模型调用；页面驾驶舱、进度条与修复面板均显示当前复核结论，没有把历史异常当作当前卡点。
 - 扩大检查的已知基线失败未混入通过数：服务端 `novelDirectorStructuredOutlinePersistence` 两项旧 `rebuild_projection` 断言，以及 `novelWorkflowContinue` 一项仍发送旧 `full_book_autopilot` 参数的断言（现行接口只接受 `resume / auto_execute_range / skip_quality_repair`）；客户端全套212项中206通过，6项旧进度面板/移动导航/设置路由契约断言失败。相关既有实现和断言未在本次改动中顺手重构。
+## 跨轮问题记忆与重新取证
+
+写前复核不能只接收上一轮未解问题：刚解决的问题会退出评估器视野，下一轮可能换名重报。章节评估输入因此保留当前未解问题和最近八个已解问题，并附各问题最后一次判断及当时引用。原问题的首次描述与修复方向固定，避免后续解释把其他承诺或缺口扩大到旧问题上。重复确认同一已解问题不会更新其解决先后顺序，历史不随修复轮数整包膨胀；当前未解问题不受已解历史上限裁剪。
+
+历史 `resolved` 只用于连续性检查，不自动构成准入。AI 仍须针对当前候选逐项给出 `issueChecks`，引用当前真实原文；推翻过去解决结论时，说明候选退化、新矛盾或旧判断错误。同一缺口沿用原问题 ID，真正不同的问题可以新增。程序只投影已结构化的判断和验证引用，不用关键词判断问题等价，也不替 AI 放行。省略较旧已解记录不免除对当前完整合同的语义审查。
+
+来源变化后的 `evidence_refresh` 截断旧问题和旧引用；不同章节各自组织历史，不能将邻章的解决结论转为本章通过。历史投影由 `volume/planningRepair/domain/reviewIssueHistory` 负责，质量评估器与 Prompt Registry 负责语义复核及引用验证；章节和窗口双层准入、修复预算、确认范围与正文保护继续适用。
+
+## 建议的执行方式与采用状态
+
+建议的结构校验须尊重执行方式：仅复核原候选的 `review_existing` 可以没有修改清单，但必须有复核动作与验证条件；实际修复和来源编辑必须列出修改。结构有效不等于可执行，阻塞覆盖、修改范围、来源一致性与明确授权仍单独检查。
+
+已持久化的建议采用记录投影为 `applied`，表示方向已获采用，不表示模型已完成或审查已通过。未采用方案的来源变更才显示 `stale`。这一区分避免把执行一轮后的正常规划变化说成用户操作失败；读取状态不能追加轮次或自动重新获取建议。切换创作界面的偏好不参与建议的创作来源指纹，实际创作范围与内容仍受保护。
+
 # 2026-09-27 Contract Validation Protection
 
 Planning repair output opts into strict generated-content constraints. The structured parser and post-validator must share the same schema, including the 600-character task sheet limit. Invalid output must enter bounded format repair before application, not silently pass a relaxed schema and fail later. This is not permission to increase chapter word budgets or discard obligations.

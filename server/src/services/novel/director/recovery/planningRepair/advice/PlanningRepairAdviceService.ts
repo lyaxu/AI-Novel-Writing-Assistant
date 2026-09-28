@@ -40,6 +40,12 @@ export function projectAdvice(source: AdviceSource): PlanningRepairAdviceStatus 
   const advice = saved(source);
   if (!advice) return { status: "none" };
   const base = { adviceId: advice.adviceId, requestId: advice.requestId };
+  const requests = Array.isArray(source.seed.planningRepairRecoveryRequests)
+    ? source.seed.planningRepairRecoveryRequests as Array<{ repairKey: string; idempotencyKey: string }> : [];
+  if (advice.status === "ready" && advice.result?.options.some(option => requests.some(request =>
+    request.repairKey === advice.repairKey && request.idempotencyKey === `advice:${advice.adviceId}:${option.id}`))) {
+    return { ...base, status: "applied" };
+  }
   if (advice.fingerprint !== source.fingerprint) return { ...base, status: "stale" };
   if (advice.status === "running") return { ...base, status: active.has(advice.adviceId) ? "running" : "uncertain" };
   if (advice.status === "failed") return { ...base, status: "failed", error: advice.failureDiagnostics

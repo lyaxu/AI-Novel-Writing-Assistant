@@ -16,6 +16,7 @@ const imports = {
   "../volumeWorkspaceDocument": require("../dist/services/novel/volume/volumeWorkspaceDocument.js"),
   "./PlanningRepairStore": { PlanningRepairStore: class { constructor() { throw new Error("Unexpected DB store"); } } },
   "./planningRepairDomain": require("../dist/services/novel/volume/planningRepair/planningRepairDomain.js"),
+  "./domain/reviewIssueHistory": require("../dist/services/novel/volume/planningRepair/domain/reviewIssueHistory.js"),
 };
 const coordinatorExports = {};
 const coordinatorJs = ts.transpileModule(fs.readFileSync(coordinatorSource, "utf8"), {
@@ -228,6 +229,24 @@ test("two failed rounds pause, and ordinary resume spends nothing", async () => 
   const count = h.calls.length;
   await assert.rejects(h.coordinator.run(h.input), { code: "PLANNING_REPAIR_CONFIRMATION_REQUIRED" });
   assert.equal(h.calls.length, count);
+  assert.equal(h.commits, 0);
+});
+
+test("coordinator forwards resolved history for re-review without inheriting its pass", async () => {
+  const h = harness({ alwaysReject: true });
+  const historicalIssue = { id: "establish_source", severity: "medium", target: "scene_cards", summary: "source missing", repairHint: "establish before use" };
+  const historicalCheck = { issueId: historicalIssue.id, status: "resolved", candidateEvidence: [{ sourcePath: "taskSheet", quote: "old action" }], explanation: "old action supplied source" };
+  h.session.candidate = document();
+  Object.assign(h.session.state, { phase: "reviewing", affectedChapterIds: ["c3"], quality: { chapters: {} },
+    history: [{ kind: "assessment", result: { chapters: { c3: { ...reject, issues: [historicalIssue] } } } },
+      { kind: "assessment", result: { chapters: { c3: { ...pass, issueChecks: [historicalCheck] } } } }] });
+  h.gate.evaluate = async (_candidate, options) => {
+    assert.deepEqual(options.previousIssues, [historicalIssue]);
+    assert.deepEqual(options.priorIssueDecisions, [historicalCheck]);
+    return reject;
+  };
+  const result = await h.coordinator.review(h.input, h.session);
+  assert.equal(passedPlanningReview(result.chapters.c3), false);
   assert.equal(h.commits, 0);
 });
 

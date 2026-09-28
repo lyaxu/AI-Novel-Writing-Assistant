@@ -29,6 +29,7 @@ export async function readAdviceSource(tx: Prisma.TransactionClient, taskId: str
   const { creationExperience: _experience, updatedAt: _updatedAt, ...novelSource } = novel;
   const sourceToken = adviceHash({ novel: novelSource, volumes, versions, chapters, macro });
   const { planningRepairAdvice: _advice, planningRepairAdviceRequests: _requests,
+    productionExperience: _productionExperience,
     autoExecution: _executionProgress, pipelineJobId: _pipelineJob, ...intentSeed } = seed;
   const snapshot = seed.planningRepairSnapshot as { eligibleChapterIds?: string[] } | undefined;
   const eligibleChapterIds = snapshot?.eligibleChapterIds;

@@ -4,6 +4,7 @@ import type {
   ChapterTaskSheetQualityGateResult,
   ChapterTaskSheetQualityMode,
   ChapterTaskSheetQualityIssue,
+  ChapterPlanningIssueCheck,
 } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import {
   assessChapterExecutionContractShape,
@@ -28,6 +29,8 @@ export interface ChapterTaskSheetQualityGateOptions {
   /** Actual book/window evidence, distinct from the candidate's claims. */
   reviewContextJson?: string;
   previousIssues?: ChapterTaskSheetQualityIssue[];
+  priorIssueDecisions?: ChapterPlanningIssueCheck[];
+  omittedResolvedIssueCount?: number;
 }
 
 export type ChapterTaskSheetSemanticAssessor = (input: {
@@ -104,6 +107,8 @@ export class ChapterTaskSheetQualityGateService {
         mode,
         reviewContextJson: options.reviewContextJson,
         previousIssues: options.previousIssues,
+        priorIssueDecisions: options.priorIssueDecisions,
+        omittedResolvedIssueCount: options.omittedResolvedIssueCount,
       },
       options: {
         provider: options.provider,
