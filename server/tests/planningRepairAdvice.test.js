@@ -15,6 +15,8 @@ function load(file, imports) {
   return exports;
 }
 const schema = load("../../shared/types/planningRepair/advice.ts", { zod: require("zod") });
+const horizon = load("../src/services/novel/volume/planningPromises/planningHorizon.ts", {});
+const adviceContextImports = { "../../../../volume/planningPromises": horizon };
 const structuredOutput = load("../src/llm/structuredOutput.ts", { zod: require("zod"), "./providers": {}, "./reasoning": {} });
 class TestAppError extends Error {}
 const failureModule = load("../src/services/novel/director/recovery/planningRepair/advice/AdviceFailure.ts", {
@@ -24,6 +26,7 @@ const failureModule = load("../src/services/novel/director/recovery/planningRepa
 const output = () => ({ summary: "复核后给出可执行方向", recommendedOptionId: "a", options: [{
   id: "a", title: "补齐行动因果", reason: "现有合同缺少行动前提", changes: ["补齐已有线索来源"], preserves: ["保留核心冲突"], tradeoffs: ["压缩次要叙述"],
   diagnosis: "real_gap", executionMode: "repair_then_review", affectedChapterIds: ["c1"], changesHardConstraints: false, requiresSourceEdit: false,
+  blockerResolution: { status: "complete", remainingBlockers: [], rationale: "补齐唯一缺失的行动依据" },
   guidance: { intent: "补齐因果", actions: ["使用已有线索"], preserve: ["核心冲突"], verification: ["验证行动前提"] },
 }] });
 function fixture() {
@@ -81,6 +84,46 @@ test("source-edit and legacy untyped advice remain readable but cannot authorize
     assert.equal(f.grants.length, 0);
   }
 });
+
+test("partial fixes, creative-tradeoff review and legacy closure claims cannot be adopted", async () => {
+  for (const patch of [
+    { blockerResolution: { status: "partial", remainingBlockers: ["主要承接缺口仍未解决"], rationale: "只修措辞" } },
+    { executionMode: "review_existing", diagnosis: "creative_tradeoff" },
+    { blockerResolution: undefined },
+    { blockerResolution: { status: "complete", remainingBlockers: ["后续待办"], rationale: "留给正文" } },
+  ]) {
+    const f = fixture(); const request = await f.service.request("t", { repairKey: "r", idempotencyKey: "req" });
+    f.resolve(); await settle();
+    Object.assign(f.source.seed.planningRepairAdvice.result.options[0], patch);
+    assert.equal((await f.service.status("t")).options[0].canResume, false);
+    await assert.rejects(f.service.select("t", { repairKey: "r", adviceId: request.adviceId, optionId: "a", idempotencyKey: "click" }));
+    assert.equal(f.grants.length, 0);
+  }
+});
+
+test("complete evidence-backed review disagreement remains executable without rewriting guidance", async () => {
+  const f = fixture(); const request = await f.service.request("t", { repairKey: "r", idempotencyKey: "req" });
+  const result = output(); Object.assign(result.options[0], { executionMode: "review_existing", diagnosis: "review_disagreement" });
+  f.resolve(result); await settle();
+  assert.equal((await f.service.status("t")).options[0].canResume, true);
+  await f.service.select("t", { repairKey: "r", adviceId: request.adviceId, optionId: "a", idempotencyKey: "click" });
+  assert.equal(f.grants[0].executionMode, "review_existing");
+});
+
+test("candidate horizon preserves saved later routes separately from the baseline and never grants write access", () => {
+  const { buildAdviceContext } = load("../src/services/novel/director/recovery/planningRepair/advice/AdviceContext.ts", adviceContextImports);
+  const chapters = Array.from({ length: 7 }, (_, i) => ({ id: `p${i + 1}`, chapterOrder: i + 1, title: `章${i + 1}`, summary: `真实候选路线${i + 1}` }));
+  const current = { volumes: [{ id: "v", chapters }], beatSheets: [{ volumeId: "v", beats: [{ summary: "后续承接" }] }] };
+  const baseline = { volumes: [{ id: "v", chapters: chapters.slice(0, 3) }], beatSheets: [] };
+  const result = buildAdviceContext({ novel: {}, volumes: baseline.volumes, chapters: [], macro: null,
+    candidate: { contentJson: JSON.stringify(current) }, eligibleChapterIds: ["p2", "p3"],
+    seed: { planningRepair: { volumeId: "v" }, planningRepairSnapshot: { baselineDocument: baseline } } });
+  assert.deepEqual(result.candidatePlanningHorizon.readonlyOpeningRoutes.map(route => route.chapterOrder), [1, 4, 5, 6, 7]);
+  assert.deepEqual(result.baselinePlanningHorizon.readonlyOpeningRoutes.map(route => route.chapterOrder), [1]);
+  assert.equal(result.candidatePlanningHorizon.readonlyOpeningRoutes[3].summary, "真实候选路线6");
+  assert.deepEqual(result.eligibleChapterIds, ["p2", "p3"]);
+  assert.equal(result.candidatePlanningHorizon.readonlyPlanningHorizon.authority, "readonly_planning_not_prose");
+});
 test("source changes invalidate ready advice and late result cannot overwrite source", async () => {
   const f = fixture(); const r = await f.service.request("t", { repairKey: "r", idempotencyKey: "req" });
   f.source.fingerprint = "changed"; f.resolve(); await settle();
@@ -127,7 +170,7 @@ test("advice inherits task provider/model and rejects reused historical generati
 
 test("source fingerprint binds candidate, body and user intent; GET source checks have no side effects", async () => {
   const sourceModule = load("../src/services/novel/director/recovery/planningRepair/advice/AdviceSource.ts", {
-    "./AdviceContext": load("../src/services/novel/director/recovery/planningRepair/advice/AdviceContext.ts", {}),
+    "./AdviceContext": load("../src/services/novel/director/recovery/planningRepair/advice/AdviceContext.ts", adviceContextImports),
     "node:crypto": require("node:crypto"), "../../../../../../middleware/errorHandler": { AppError: Error },
     "../planningRepairRecovery": { readPlanningRepairSeed: (json) => {
       const seed = JSON.parse(json); return { seed, repair: seed.planningRepair, recovery: seed.planningRepairRecovery };
@@ -155,7 +198,7 @@ test("source fingerprint binds candidate, body and user intent; GET source check
 });
 
 test("paid context includes window, adjacent evidence and missing-source markers but omits remote prose and full versions", () => {
-  const { buildAdviceContext } = load("../src/services/novel/director/recovery/planningRepair/advice/AdviceContext.ts", {});
+  const { buildAdviceContext } = load("../src/services/novel/director/recovery/planningRepair/advice/AdviceContext.ts", adviceContextImports);
   const plans = Array.from({ length: 8 }, (_, i) => ({ id: `p${i + 1}`, chapterId: `c${i + 1}`, chapterOrder: i + 1, title: `章${i + 1}`, taskSheet: "合同" }));
   const doc = { beatSheets: [{ volumeId: "v", beats: [{ summary: "只读节奏" }] }, { volumeId: "other", beats: [] }], volumes: [{ id: "v", chapters: plans, escalationMode: "压力递进", protagonistChange: "主动选择", nextVolumeHook: "卷间承诺", resetPoint: "不可重置", openPayoffs: ["待兑现承诺"] }], semanticDocument: "整本衍生数据" };
   const result = buildAdviceContext({ novel: { title: "书", outline: "整本大纲", storyWorldSliceJson: "书约束" },
@@ -169,8 +212,11 @@ test("paid context includes window, adjacent evidence and missing-source markers
   assert.equal(result.candidateWindow[0].escalationMode, "压力递进");
   assert.equal(result.candidateWindow[0].nextVolumeHook, "卷间承诺");
   assert.deepEqual(result.candidateWindow[0].openPayoffs, ["待兑现承诺"]);
-  assert.equal(result.readonlyBeatSheets.baseline.length, 1);
-  assert.equal(result.readonlyBeatSheets.candidate[0].beats[0].summary, "只读节奏");
+  assert.equal(result.baselinePlanningHorizon.readonlyPlanningHorizon.beats.length, 1);
+  assert.equal(result.candidatePlanningHorizon.readonlyPlanningHorizon.beats[0].summary, "只读节奏");
+  assert.deepEqual(result.candidatePlanningHorizon.readonlyOpeningRoutes.map(chapter => chapter.chapterOrder), [1, 5, 6, 7, 8]);
+  assert.equal(result.candidatePlanningHorizon.readonlyPlanningHorizon.coverage.omittedRouteCount, 0);
+  assert.deepEqual(result.candidateWindow[0].chapters.filter(chapter => chapter.writable).map(chapter => chapter.id), ["p2", "p3", "p4"]);
   assert.equal(result.repair.omittedEarlierHistoryCount, 3); assert.ok(result.missingEvidence.length > 0);
 });
 
@@ -220,10 +266,10 @@ const parse = (value, contract = prompt.planningRepairAdvicePrompt.outputSchema,
   label: "advice-offline", strategy: "prompt_json", profile: {}, maxRepairAttempts: 0, finishReason: "stop", ...extra,
 });
 
-test("v2 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
+test("v4 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
   const asset = prompt.planningRepairAdvicePrompt;
   const text = asset.render({ contextJson: "{}" })[0].content;
-  assert.equal(asset.version, "v3"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
+  assert.equal(asset.version, "v4"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
   const jsonSchema = JSON.parse(text.split("完整输出契约（minItems/maxItems是数量，minLength/maxLength是字符数）：\n")[1].split("\n输出格式示例")[0]);
   const fields = jsonSchema.properties.options.items.properties;
   assert.deepEqual(fields.diagnosis.enum, schema.planningRepairAdviceDiagnoses);
@@ -233,17 +279,17 @@ test("v2 prompt renders the full shared contract and example, with explicit paid
   assert.equal(schema.planningRepairAdviceOutputSchema.safeParse(prompt.planningRepairAdviceExample).success, true);
   assert.match(text, /不得超过4000字符/); assert.match(text, /采用一个可执行方案即明确授权追加1轮/);
   assert.match(text, /不要让写作新手查询服务器schema/);
-  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v3/);
+  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v4/);
 });
 
 test("real rejected response keeps every action under wider non-safety limits but still rejects invented diagnoses", async () => {
   const failure = schema.planningRepairAdviceOutputSchema.safeParse(rejectedAdvice);
   assert.equal(failure.success, false);
-  assert.deepEqual(failure.error.issues.map(issue => issue.path.join(".")), ["options.0.executionMode", "options.1.diagnosis", "options.1.executionMode", "options.2.diagnosis", "options.2.executionMode"]);
+  assert.deepEqual(failure.error.issues.map(issue => issue.path.join(".")), ["options.0.executionMode", "options.0.blockerResolution", "options.1.diagnosis", "options.1.executionMode", "options.1.blockerResolution", "options.2.diagnosis", "options.2.executionMode", "options.2.blockerResolution"]);
   const valid = structuredClone(rejectedAdvice);
   // Test fixture variant only: production must never infer or remap a diagnosis.
   valid.options[1].diagnosis = "missing_information"; valid.options[2].diagnosis = "review_disagreement";
-  valid.options.forEach(option => { option.executionMode = "source_edit"; });
+  valid.options.forEach(option => { option.executionMode = "source_edit"; option.blockerResolution = { status: "unknown", remainingBlockers: [], rationale: "需要源工作区确认" }; });
   const result = await parse(valid);
   assert.deepEqual(result.data, valid);
   assert.equal(result.data.options[0].changes.length, 7);

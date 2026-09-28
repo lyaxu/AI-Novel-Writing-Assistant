@@ -75,6 +75,7 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "writtenEvidence中的实际已写正文与可核验事实高于计划描述。selectedPlanningDirection来自用户确认的候选，是尚待履行的创作承诺，不是已经发生的事实，也不能用后来生成的大纲替代原始确认来源。",
     "逐项检查 selectedPromiseSourceIds：原选卖点、人物路径、开篇关系推进、earlyPayoff与openingChain中的回报价值是否贯穿当前细化。为每个sourceId输出一条promiseChecks。preserved=有证据保留，adapted=表现手段/落点改写但关系及回报价值等效，deferred=有理由延期且给出具体承接，dropped=承诺被丢弃，insufficient=证据不足。不要把纯追逃、重复受压当成原先关系变化或阶段回报的等价替代。",
     "scope区分current_chapter、opening_sequence、book_arc，由原始来源与实际安排判断，不按某个固定章序强锁动作。开篇原型允许合理拆合与移动，但延期须引用contextEvidence中实际承接章节的具体内容并说明回报何时如何落实；不能仅说后面再写。全书或前30章承诺不是本章必须全部兑现的清单；尚未到期的book_arc可以deferred并说明范围，不能据此无故阻塞当前章。",
+    "承接证据可直接来自只读后续章节与节奏板，不要求当前章合同重复抄录相同安排。若后续计划实际覆盖该承诺，不能仅因当前章仍写待确认就判承接不存在；另行核对是否有真实冲突或遗漏。读取或引用窗口外已有计划不等于修改窗口外章节。",
     "promiseChecks字段：sourceId、scope、status、handoffStatus、sourceEvidence、candidateEvidence、contextEvidence、explanation（600字以内）、repairHint（600字以内，无缺口可为空）。handoffStatus必填：非deferred只能not_needed；deferred只能covered（所有相关功能与回报有具体承接且符合原期限）、partial（仅覆盖部分）、missing（无承接）、conflicting（承接与期限/已写事实/硬约束冲突）。contextEvidence非空不等于covered，必须判断引用是否真正覆盖该承诺，而不是仅完成前置动作或其他承诺。三组Evidence均用{sourcePath,quote}且每组最多3条；sourceEvidence至少1条引用对应原始来源；candidateEvidence引用当前候选；contextEvidence引用真实已有计划或前文，原选承诺本身不能当兑现证据。",
     "为完整覆盖所有承诺，每组证据优先选1条20至80字的最短充分引用，explanation与repairHint各用1句说明；只有确实需多条证据时才增加，不能将上限当目标铺满或重复整段原文。",
     "dropped、insufficient及开篇/本章无具体承接的deferred是待修缺口，应输出repair_contract和具体repairGuidance；可在当前授权窗口补齐的交给自动修复器，不要求新手手写。若只能牺牲用户硬约束或改窗口外章节，明确冲突交给既有方向确认，不能静默降低承诺。按实际selectedPromiseSourceIds完整覆盖；列表为空才promiseChecks=[]。旧数据有卖点而无原型时仍检查已有卖点，不补造开篇。",
@@ -132,7 +133,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   AiChapterTaskSheetQualityAssessment
 > = {
   id: "novel.volume.chapter_task_sheet_quality",
-  version: "v7",
+  version: "v8",
   taskType: "review",
   mode: "structured",
   language: "zh",

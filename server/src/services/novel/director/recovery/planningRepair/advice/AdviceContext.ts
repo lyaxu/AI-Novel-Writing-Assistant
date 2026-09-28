@@ -1,3 +1,6 @@
+import type { VolumePlanDocument } from "@ai-novel/shared/types/novel";
+import { projectPlanningHorizon } from "../../../../volume/planningPromises";
+
 type Data = Record<string, unknown>;
 const object = (value: unknown): Data => value && typeof value === "object" && !Array.isArray(value) ? value as Data : {};
 const array = (value: unknown): Data[] => Array.isArray(value) ? value.map(object) : [];
@@ -44,6 +47,10 @@ export function buildAdviceContext(input: {
   const baselineWindow = projectVolumes(array(baseline.volumes));
   const candidateWindow = projectVolumes(array(candidateDocument.volumes));
   const currentWindow = projectVolumes(input.volumes.map(object));
+  const horizon = (source: Data) => projectPlanningHorizon({
+    volumes: array(source.volumes) as unknown as VolumePlanDocument["volumes"],
+    beatSheets: array(source.beatSheets) as unknown as VolumePlanDocument["beatSheets"],
+  }, String(repair.volumeId ?? ""), input.eligibleChapterIds);
   return {
     novel: pick(input.novel, ["id", "title", "description", "genreId", "targetAudience", "writingMode", "defaultChapterLength",
       "bookSellingPoint", "competingFeel", "first30ChapterPromise", "commercialTagsJson", "narrativeForm", "writingPlatform",
@@ -54,11 +61,8 @@ export function buildAdviceContext(input: {
       autoExecutionPlan: input.seed.autoExecutionPlan ?? null, startupPreparation: input.seed.startupPreparation ?? null },
     eligibleChapterIds: input.eligibleChapterIds,
     baselineWindow, candidateWindow, currentWindow,
-    readonlyBeatSheets: {
-      authority: "readonly_planning_not_prose",
-      baseline: array(baseline.beatSheets).filter((sheet) => sheet.volumeId === repair.volumeId),
-      candidate: array(candidateDocument.beatSheets).filter((sheet) => sheet.volumeId === repair.volumeId),
-    },
+    baselinePlanningHorizon: horizon(baseline),
+    candidatePlanningHorizon: horizon(candidateDocument),
     chapterEvidence: input.chapters.map(object).filter((c) => materialized.has(String(c.id)) || relevant.has(String(c.id)))
       .map((c) => pick(c, ["id", "order", "title", "expectation", "summary", "content", "taskSheet", "sceneCards", "chapterStatus"])),
     repair: { ...pick(repair, ["key", "rounds", "maxRounds", "phase", "summary", "guidance", "quality", "candidateVersionId"]),
@@ -66,6 +70,6 @@ export function buildAdviceContext(input: {
       omittedEarlierHistoryCount: Array.isArray(repair.history) ? Math.max(0, repair.history.length - 6) : 0 },
     missingEvidence: [!input.seed.directorInput && "缺少用户原始导演输入", !candidate.contentJson && "缺少独立修复候选版本",
       !baselineWindow.length && "缺少窗口基线", !input.macro && "缺少书级宏观规划"].filter(Boolean),
-    scopeNotice: "仅提供可修改窗口与直接相邻只读边界；未提供全书正文。缺失信息不得推断为已知事实。",
+    scopeNotice: "eligibleChapterIds 是修改权限，不是阅读权限。candidatePlanningHorizon 是当前候选中实际已存同卷后续路线与节奏板，baselinePlanningHorizon 是基线，二者不可混用。只读后续安排可证明承接，不需在本章重复抄写；阅读不扩大可修改窗口，也不将计划变为已发生事实。遵守 coverage 的容量边界，未提供全书正文，缺失不得推断为不存在。",
   };
 }

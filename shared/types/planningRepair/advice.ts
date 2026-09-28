@@ -13,6 +13,11 @@ export const planningRepairAdviceOutputSchema = z.object({
     tradeoffs: z.array(z.string().min(1).max(500)).max(planningRepairAdviceItemLimit),
     diagnosis: z.enum(planningRepairAdviceDiagnoses),
     executionMode: z.enum(["repair_then_review", "review_existing", "source_edit"]),
+    blockerResolution: z.object({
+      status: z.enum(["complete", "partial", "unknown"]),
+      remainingBlockers: z.array(z.string().min(1).max(400)).max(8),
+      rationale: z.string().min(1).max(1200),
+    }),
     affectedChapterIds: z.array(z.string().min(1)).min(1).max(3),
     changesHardConstraints: z.boolean(), requiresSourceEdit: z.boolean(),
     guidance: z.object({

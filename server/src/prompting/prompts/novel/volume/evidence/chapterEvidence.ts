@@ -6,6 +6,15 @@ export function buildChapterEvidenceIndex(candidate: unknown) {
   const leaves = new Map<string, string>();
   const groups = new Map<string, string[]>();
   const prerequisites = new Map<string, Node[]>();
+  const aliases = new Map<string, string>();
+  const aliasSubtree = (canonical: string, alias: string) => {
+    for (const leaf of leaves.keys()) {
+      if (leaf !== canonical && !leaf.startsWith(`${canonical}.`) && !leaf.startsWith(`${canonical}[`)) continue;
+      const sourcePath = alias + leaf.slice(canonical.length);
+      if (aliases.has(sourcePath) && aliases.get(sourcePath) !== leaf) throw new Error(`Ambiguous evidence source path: ${sourcePath}`);
+      aliases.set(sourcePath, leaf);
+    }
+  };
   const add = (path: string, value: unknown): void => {
     if (typeof value === "string") {
       try {
@@ -39,18 +48,27 @@ export function buildChapterEvidenceIndex(candidate: unknown) {
         if (key === "causality" && value && typeof value === "object") {
           for (const [field, child] of Object.entries(value)) {
             add(`${scenePath}.${field}`, child);
+            // Both the scene-key projection and the actual scene-card tree name the same leaf.
+            aliasSubtree(`${scenePath}.${field}`, `${scenePath}.causality.${field}`);
+            aliasSubtree(`${scenePath}.${field}`, `sceneCards.scenes[${position}].causality.${field}`);
             if (field === "prerequisites" && Array.isArray(child)) prerequisites.set(`${scenePath}.${field}`, child as Node[]);
           }
-        } else if (key !== "key") add(`${scenePath}.${key}`, value);
+        } else if (key !== "key") {
+          add(`${scenePath}.${key}`, value);
+          aliasSubtree(`${scenePath}.${key}`, `sceneCards.scenes[${position}].${key}`);
+        }
       }
     }
   }
-  return { leaves, groups, prerequisites };
+  for (const [alias, canonical] of aliases) {
+    if (leaves.has(alias) && alias !== canonical) throw new Error(`Ambiguous evidence source path: ${alias}`);
+  }
+  return { leaves, groups, prerequisites, aliases };
 }
 
 export function matchesChapterEvidence(index: ReturnType<typeof buildChapterEvidenceIndex>, evidence: string | EvidenceQuote): boolean {
   const exactAt = (path: string, quote: string) => {
-    const text = index.leaves.get(path);
+    const text = index.leaves.get(index.aliases.get(path) ?? path);
     return Boolean(normalize(quote) && text !== undefined && normalize(text).includes(normalize(quote)));
   };
   if (typeof evidence !== "string") return exactAt(evidence.sourcePath, evidence.quote);

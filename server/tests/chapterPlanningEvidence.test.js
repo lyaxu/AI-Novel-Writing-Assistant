@@ -75,3 +75,54 @@ test("render provides stable scene paths and legacy keyless scenes remain readab
   assert.equal(evidence.matchesChapterEvidence(index, "原句"), true);
   assert.throws(() => evidence.buildChapterEvidenceIndex({ sceneCards: JSON.stringify({ scenes: [{ key: "same", turn: "甲" }, { key: "same", turn: "乙" }] }) }), /Ambiguous/);
 });
+
+test("received review citations retain actual causality paths and exact leaf identity", () => {
+  const candidate = { sceneCards: { scenes: [{ key: "dragged_continue", causality: { prerequisites: [
+    { sourceKind: "established_in_context", reference: "前场已建立" },
+    { sourceKind: "established_in_context", reference: "押送命令" },
+    { sourceKind: "establish_in_scene", reference: "本场由沈砚觉醒后血脉感知被动接收矿区方向微弱同源共鸣，感知来源为觉醒本身，非既有残留" },
+  ] } }] } };
+  for (const cards of [candidate.sceneCards, JSON.stringify(candidate.sceneCards)]) {
+    const current = { ...candidate, sceneCards: cards };
+    const index = evidence.buildChapterEvidenceIndex(current);
+    for (const prefix of ["dragged_continue", "dragged_continue.causality", "sceneCards.scenes[0].causality"]) {
+      assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: `${prefix}.prerequisites[2].sourceKind`, quote: "establish_in_scene" }), true);
+    }
+    const result = { ...output(), issueChecks: [{ issueId: "resume_unresolved_prerequisite", status: "resolved",
+      candidateEvidence: [{ sourcePath: "dragged_continue.causality.prerequisites[2].sourceKind", quote: "establish_in_scene" },
+        { sourcePath: "dragged_continue.causality.prerequisites[2].reference", quote: candidate.sceneCards.scenes[0].causality.prerequisites[2].reference }], explanation: "来源已在场景中建立" }] };
+    assert.equal(prompt.postValidate(result, { candidate: current, previousIssues: [{ id: "resume_unresolved_prerequisite" }] }).safeToSync, true);
+    for (const sourcePath of ["dragged_continue.causality.prerequisites[1].reference", "sceneCards.scenes[1].causality.prerequisites[2].reference", "fake.causality.prerequisites[2].reference"]) {
+      assert.equal(evidence.matchesChapterEvidence(index, { sourcePath, quote: "血脉感知被动接收矿区方向微弱同源共鸣" }), false);
+    }
+    assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: "dragged_continue.causality.prerequisites[2].reference", quote: "血脉感知主动接收" }), false);
+  }
+});
+
+test("actual scene-card aliases cannot collide with another indexed leaf", () => {
+  assert.throws(() => evidence.buildChapterEvidenceIndex({
+    sceneCards: { scenes: [
+      { key: "s", causality: { prerequisites: [{ reference: "真实来源" }] } },
+      { key: "s.causality", prerequisites: [{ reference: "冲突来源" }] },
+    ] },
+  }), /Ambiguous/);
+});
+
+const followupCapturePaths = ["mining-followup-evidence.json", "mining-followup-candidate.json", "mining-followup-review-request.json"]
+  .map(name => path.resolve(__dirname, "../../.codex-run", name));
+test("latest complete rejected review replays against its actual saved input without a model call", {
+  skip: !followupCapturePaths.every(file => fs.existsSync(file)),
+}, () => {
+  const [seed, candidate, request] = followupCapturePaths.map(file => JSON.parse(fs.readFileSync(file, "utf8")));
+  const human = request.payload.find(message => message.role === "human").content;
+  const reviewContextJson = human.split("reviewContext (current source and repair history):\n")[1].split("\npreviousIssues:\n")[0];
+  const previousIssues = JSON.parse(human.split("\npreviousIssues:\n")[1]);
+  const rejected = seed.planningRepair.history.filter(item => item.kind === "rejected_response").at(-1);
+  const received = prompt.outputSchema.parse(rejected.output);
+  const projected = prompt.postValidate(received, { candidate, previousIssues, reviewContextJson });
+  assert.equal(projected.safeToSync, false);
+  assert.equal(projected.verdict, "repairable");
+  assert.equal(projected.issueChecks.find(check => check.issueId === "resume_unresolved_prerequisite").status, "resolved");
+  assert.ok(projected.issues.some(issue => issue.id === "opening_chain_deferred_handoff"));
+  assert.equal(schema.mapSemanticAssessmentToQualityGate(projected, "full_book_autopilot").canEnterExecution, false);
+});

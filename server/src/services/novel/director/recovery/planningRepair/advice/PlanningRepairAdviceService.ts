@@ -26,6 +26,9 @@ export function adviceModelOptions(seed: Record<string, unknown>) {
 function saved(source: AdviceSource): SavedAdvice | undefined { return source.seed.planningRepairAdvice as SavedAdvice | undefined; }
 function canResume(option: PlanningRepairAdviceOutput["options"][number], source: AdviceSource) {
   return ["repair_then_review", "review_existing"].includes(option.executionMode)
+    && option.blockerResolution?.status === "complete"
+    && option.blockerResolution.remainingBlockers.length === 0
+    && (option.executionMode !== "review_existing" || option.diagnosis === "review_disagreement")
     && !option.changesHardConstraints && !option.requiresSourceEdit
     && option.affectedChapterIds.length >= 1 && option.affectedChapterIds.length <= 3
     && new Set(option.affectedChapterIds).size === option.affectedChapterIds.length
@@ -45,10 +48,14 @@ export function projectAdvice(source: AdviceSource): PlanningRepairAdviceStatus 
     options: advice.result.options.map((option) => ({
       id: option.id, title: option.title, reason: option.reason, changes: option.changes,
       preserves: option.preserves, tradeoffs: option.tradeoffs, executionMode: option.executionMode, canResume: canResume(option, source),
-      ...(!canResume(option, source) ? { blockedReason: !option.executionMode ? "此建议缺少执行方式，请重新获取建议。" : option.changesHardConstraints
+      ...(!canResume(option, source) ? { blockedReason: !option.executionMode || !option.blockerResolution ? "此建议缺少执行方式或阻塞核验，请重新获取建议。" : option.changesHardConstraints
         ? "请先到小说基础信息与卷规划确认书级约束，再返回本页获取建议。"
         : option.executionMode === "source_edit" || option.requiresSourceEdit
           ? "请先在本页章节规划或所属卷规划确认窗口外的改动，再获取建议。"
+          : option.blockerResolution.status !== "complete" || option.blockerResolution.remainingBlockers.length > 0
+            ? "此方案仍有未解决的规划缺口，请重新获取能完整解决问题的方案，或到章节规划确认缺少的安排。"
+          : option.executionMode === "review_existing" && option.diagnosis !== "review_disagreement"
+            ? "只复核适用于有证据的审查争议，不能将未解决的问题转成待办后写作。请重新获取修复方案。"
           : "方案的章节范围不符合当前修复窗口，请重新获取建议。" } : {}),
     })) };
 }
