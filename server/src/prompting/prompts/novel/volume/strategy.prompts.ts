@@ -47,7 +47,7 @@ export function createVolumeStrategyPrompt(
 
   return {
     id: "novel.volume.strategy",
-    version: "v3",
+    version: "v4",
     taskType: "planner",
     mode: "structured",
     language: "zh",
@@ -146,7 +146,7 @@ export const volumeStrategyCritiquePrompt: PromptAsset<
   ReturnType<typeof createVolumeStrategyCritiqueSchema>["_output"]
 > = {
   id: "novel.volume.strategy.critique",
-  version: "v2",
+  version: "v3",
   taskType: "review",
   mode: "structured",
   language: "zh",

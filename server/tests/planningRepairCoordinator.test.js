@@ -9,6 +9,7 @@ const ts = require("typescript");
 // Block every DB/model boundary before loading the coordinator; all execution below is in-memory.
 const coordinatorSource = path.resolve(__dirname, "../src/services/novel/volume/planningRepair/PlanningRepairCoordinator.ts");
 const imports = {
+  "../planningPromises": { projectPlanningHorizon: () => ({ readonlyOpeningRoutes: [], readonlyPlanningHorizon: {} }) },
   "../../../../prompting/core/promptRunner": { runStructuredPrompt: () => { throw new Error("Unexpected live model call"); } },
   "../../../../prompting/prompts/novel/volume/planningRepair.prompts": require("../dist/prompting/prompts/novel/volume/planningRepair.prompts.js"),
   "../ChapterTaskSheetQualityGateService": { ChapterTaskSheetQualityGateService: class { constructor() { throw new Error("Unexpected live gate"); } } },
@@ -25,6 +26,77 @@ vm.runInThisContext(`(function(require, exports) { ${coordinatorJs}\n})`, { file
   return imports[id];
 }, coordinatorExports);
 const { PlanningRepairCoordinator, passedPlanningReview } = coordinatorExports;
+
+test("explicit repair direction changes saved candidate before any review", async () => {
+  const h = harness({ local: true });
+  h.session.candidate = document();
+  Object.assign(h.session.state, { phase: "reviewing", affectedChapterIds: ["c3"],
+    recoveryAction: { requestId: "new-direction", mode: "repair_then_review" } });
+  await h.coordinator.run(h.input);
+  assert.equal(h.calls[0], "novel.volume.planning_repair");
+  assert.equal(h.calls[1], "chapter_review");
+  assert.equal(h.session.state.rounds, 1);
+  assert.equal(h.session.state.recoveryAction, undefined);
+});
+
+test("authorized neighboring chapter scope is repaired with inherited frozen budgets", async () => {
+  const h = harness({ local: true });
+  h.session.candidate = document();
+  h.session.candidate.volumes[0].chapters[1].targetWordCount = null;
+  h.session.effectiveDefaultChapterLength = 2800;
+  Object.assign(h.session.state, { phase: "reviewing", affectedChapterIds: ["c3"],
+    recoveryAction: { requestId: "window", mode: "repair_then_review", affectedChapterIds: ["c3", "c4"] } });
+  await h.coordinator.run(h.input);
+  assert.deepEqual(h.session.state.affectedChapterIds, ["c3", "c4"]);
+  assert.equal(h.session.candidate.volumes[0].chapters[1].targetWordCount, 2800);
+  assert.equal(h.session.candidate.volumes[0].chapters[1].summary, "Repaired summary");
+  assert.equal(h.session.candidate.volumes[0].chapters[2].summary, "summary5");
+});
+
+test("review-only direction never modifies or spends a repair round when review fails", async () => {
+  const h = harness({ alwaysReject: true });
+  h.session.candidate = document();
+  const before = JSON.stringify(h.session.candidate);
+  Object.assign(h.session.state, { phase: "reviewing", affectedChapterIds: ["c3"],
+    recoveryAction: { requestId: "review-only", mode: "review_existing" } });
+  await assert.rejects(h.coordinator.run(h.input), { code: "PLANNING_REPAIR_CONFIRMATION_REQUIRED" });
+  assert.deepEqual(h.calls, ["chapter_review"]);
+  assert.equal(h.session.state.rounds, 0);
+  assert.equal(JSON.stringify(h.session.candidate), before);
+});
+
+test("paid repair response is replayed and clears its authorized action without another repair purchase", async () => {
+  const h = harness({ local: true });
+  h.session.candidate = document();
+  Object.assign(h.session.state, { phase: "reviewing", rounds: 1, affectedChapterIds: ["c3"],
+    recoveryAction: { requestId: "paid", mode: "repair_then_review", paidRound: 1 },
+    repairOutputPending: { inputFingerprint: "source-1", round: 1 },
+    history: [{ kind: "repair", round: 1, output: output(["c3"]), recoveryRequestId: "paid" }] });
+  await h.coordinator.run(h.input);
+  assert.equal(h.calls.includes("novel.volume.planning_repair"), false);
+  assert.equal(h.session.state.rounds, 1);
+  assert.equal(h.session.state.recoveryAction, undefined);
+});
+
+test("earlier paid output is applied before a newly authorized direction", async () => {
+  const h = harness({ local: true });
+  h.session.candidate = document();
+  Object.assign(h.session.state, { phase: "reviewing", rounds: 1, maxRounds: 3, affectedChapterIds: ["c3"],
+    recoveryAction: { requestId: "new", mode: "repair_then_review" },
+    repairOutputPending: { inputFingerprint: "source-1", round: 1 },
+    history: [{ kind: "repair", round: 1, output: output(["c3"]) }] });
+  let repairCalls = 0;
+  const invoke = async input => {
+    if (input.asset.id === "novel.volume.planning_repair") {
+      repairCalls++;
+      assert.equal(JSON.parse(input.promptInput.contextJson).candidateChapters[0].summary, "Repaired summary");
+    }
+    return h.invoke(input);
+  };
+  await new PlanningRepairCoordinator(h.store, h.gate, invoke).run(h.input);
+  assert.equal(repairCalls, 1);
+  assert.equal(h.session.state.rounds, 2);
+});
 const { mapSemanticAssessmentToQualityGate } = require("../../shared/dist/types/chapterTaskSheetQuality.js");
 const incident = require("./fixtures/planningRepair-chapter3.json");
 

@@ -331,7 +331,7 @@ export const volumeChapterPurposePrompt: PromptAsset<
   ReturnType<typeof createChapterPurposeSchema>["_output"]
 > = {
   id: "novel.volume.chapter_purpose",
-  version: "v4",
+  version: "v5",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -352,7 +352,7 @@ export const volumeChapterBoundaryPrompt: PromptAsset<
   ReturnType<typeof createChapterBoundarySchema>["_output"]
 > = {
   id: "novel.volume.chapter_boundary",
-  version: "v3",
+  version: "v4",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -373,7 +373,7 @@ export const volumeChapterTaskSheetPrompt: PromptAsset<
   ReturnType<typeof createChapterTaskSheetSchema>["_output"]
 > = {
   id: "novel.volume.chapter_task_sheet",
-  version: "v5",
+  version: "v6",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -394,7 +394,7 @@ export const volumeChapterExecutionContractPrompt: PromptAsset<
   ReturnType<typeof createChapterExecutionContractSchema>["_output"]
 > = {
   id: "novel.volume.chapter_execution_contract",
-  version: "v6",
+  version: "v7",
   taskType: "planner",
   mode: "structured",
   language: "zh",

@@ -23,7 +23,7 @@ const failureModule = load("../src/services/novel/director/recovery/planningRepa
 });
 const output = () => ({ summary: "复核后给出可执行方向", recommendedOptionId: "a", options: [{
   id: "a", title: "补齐行动因果", reason: "现有合同缺少行动前提", changes: ["补齐已有线索来源"], preserves: ["保留核心冲突"], tradeoffs: ["压缩次要叙述"],
-  diagnosis: "real_gap", affectedChapterIds: ["c1"], changesHardConstraints: false, requiresSourceEdit: false,
+  diagnosis: "real_gap", executionMode: "repair_then_review", affectedChapterIds: ["c1"], changesHardConstraints: false, requiresSourceEdit: false,
   guidance: { intent: "补齐因果", actions: ["使用已有线索"], preserve: ["核心冲突"], verification: ["验证行动前提"] },
 }] });
 function fixture() {
@@ -65,13 +65,39 @@ test("selection uses only persisted direction, stable recovery identity and sour
   await f.service.select("t", input); await f.service.select("t", { ...input, idempotencyKey: "click2" });
   assert.equal(f.grants[0].idempotencyKey, f.grants[1].idempotencyKey); assert.equal(f.grants[0].expectedSourceToken, "s");
   assert.match(f.grants[0].guidance, /使用已有线索/);
+  assert.equal(f.grants[0].executionMode, "repair_then_review");
   await assert.rejects(f.service.select("t", { ...input, optionId: "forged" }));
+});
+
+test("source-edit and legacy untyped advice remain readable but cannot authorize execution", async () => {
+  for (const mode of ["source_edit", undefined]) {
+    const f = fixture(); const request = await f.service.request("t", { repairKey: "r", idempotencyKey: "req" });
+    f.resolve(); await settle();
+    f.source.seed.planningRepairAdvice.result.options[0].executionMode = mode;
+    const view = await f.service.status("t");
+    assert.equal(view.options[0].canResume, false);
+    assert.match(view.options[0].blockedReason, mode ? /章节规划/ : /重新获取/);
+    await assert.rejects(f.service.select("t", { repairKey: "r", adviceId: request.adviceId, optionId: "a", idempotencyKey: "click" }));
+    assert.equal(f.grants.length, 0);
+  }
 });
 test("source changes invalidate ready advice and late result cannot overwrite source", async () => {
   const f = fixture(); const r = await f.service.request("t", { repairKey: "r", idempotencyKey: "req" });
   f.source.fingerprint = "changed"; f.resolve(); await settle();
   assert.equal((await f.service.status("t")).status, "stale"); assert.equal(f.writes(), 1);
   await assert.rejects(f.service.select("t", { repairKey: "r", adviceId: r.adviceId, optionId: "a", idempotencyKey: "click" }));
+});
+
+test("advice missing the current chapter or duplicating chapter scope cannot offer executable recovery", async () => {
+  for (const affectedChapterIds of [["c2"], ["c1", "c1"]]) {
+    const f = fixture(); const request = await f.service.request("t", { repairKey: "r", idempotencyKey: "req" });
+    f.resolve(); await settle();
+    f.source.seed.planningRepairAdvice.result.options[0].affectedChapterIds = affectedChapterIds;
+    const view = await f.service.status("t");
+    assert.equal(view.options[0].canResume, false);
+    await assert.rejects(f.service.select("t", { repairKey: "r", adviceId: request.adviceId, optionId: "a", idempotencyKey: "click" }));
+    assert.equal(f.grants.length, 0);
+  }
 });
 test("persisted running after restart is uncertain, no GET rerun; explicit new key can retry", async () => {
   const f = fixture(); f.source.seed.planningRepairAdvice = { adviceId: "old", requestId: "req", fingerprint: "f", status: "running" };
@@ -131,11 +157,11 @@ test("source fingerprint binds candidate, body and user intent; GET source check
 test("paid context includes window, adjacent evidence and missing-source markers but omits remote prose and full versions", () => {
   const { buildAdviceContext } = load("../src/services/novel/director/recovery/planningRepair/advice/AdviceContext.ts", {});
   const plans = Array.from({ length: 8 }, (_, i) => ({ id: `p${i + 1}`, chapterId: `c${i + 1}`, chapterOrder: i + 1, title: `章${i + 1}`, taskSheet: "合同" }));
-  const doc = { volumes: [{ id: "v", chapters: plans, escalationMode: "压力递进", protagonistChange: "主动选择", nextVolumeHook: "卷间承诺", resetPoint: "不可重置", openPayoffs: ["待兑现承诺"] }], semanticDocument: "整本衍生数据" };
+  const doc = { beatSheets: [{ volumeId: "v", beats: [{ summary: "只读节奏" }] }, { volumeId: "other", beats: [] }], volumes: [{ id: "v", chapters: plans, escalationMode: "压力递进", protagonistChange: "主动选择", nextVolumeHook: "卷间承诺", resetPoint: "不可重置", openPayoffs: ["待兑现承诺"] }], semanticDocument: "整本衍生数据" };
   const result = buildAdviceContext({ novel: { title: "书", outline: "整本大纲", storyWorldSliceJson: "书约束" },
     volumes: doc.volumes, chapters: plans.map((p, i) => ({ id: p.chapterId, content: `正文${i + 1}` })), macro: null,
     candidate: { contentJson: JSON.stringify(doc) }, eligibleChapterIds: ["p2", "p3", "p4"],
-    seed: { directorInput: { idea: "原意图" }, planningRepairSnapshot: { baselineDocument: doc }, planningRepair: { quality: { summary: "最新审查结果" }, history: Array.from({ length: 9 }, (_, i) => ({ round: i })) } } });
+    seed: { directorInput: { idea: "原意图" }, planningRepairSnapshot: { baselineDocument: doc }, planningRepair: { volumeId: "v", quality: { summary: "最新审查结果" }, history: Array.from({ length: 9 }, (_, i) => ({ round: i })) } } });
   const text = JSON.stringify(result);
   assert.match(text, /正文1/); assert.match(text, /正文5/); assert.doesNotMatch(text, /正文6|整本大纲|整本衍生数据/);
   assert.match(text, /原意图|书约束/); assert.equal(result.repair.recentHistory.length, 6);
@@ -143,6 +169,8 @@ test("paid context includes window, adjacent evidence and missing-source markers
   assert.equal(result.candidateWindow[0].escalationMode, "压力递进");
   assert.equal(result.candidateWindow[0].nextVolumeHook, "卷间承诺");
   assert.deepEqual(result.candidateWindow[0].openPayoffs, ["待兑现承诺"]);
+  assert.equal(result.readonlyBeatSheets.baseline.length, 1);
+  assert.equal(result.readonlyBeatSheets.candidate[0].beats[0].summary, "只读节奏");
   assert.equal(result.repair.omittedEarlierHistoryCount, 3); assert.ok(result.missingEvidence.length > 0);
 });
 
@@ -195,7 +223,7 @@ const parse = (value, contract = prompt.planningRepairAdvicePrompt.outputSchema,
 test("v2 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
   const asset = prompt.planningRepairAdvicePrompt;
   const text = asset.render({ contextJson: "{}" })[0].content;
-  assert.equal(asset.version, "v2"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
+  assert.equal(asset.version, "v3"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
   const jsonSchema = JSON.parse(text.split("完整输出契约（minItems/maxItems是数量，minLength/maxLength是字符数）：\n")[1].split("\n输出格式示例")[0]);
   const fields = jsonSchema.properties.options.items.properties;
   assert.deepEqual(fields.diagnosis.enum, schema.planningRepairAdviceDiagnoses);
@@ -205,16 +233,17 @@ test("v2 prompt renders the full shared contract and example, with explicit paid
   assert.equal(schema.planningRepairAdviceOutputSchema.safeParse(prompt.planningRepairAdviceExample).success, true);
   assert.match(text, /不得超过4000字符/); assert.match(text, /采用一个可执行方案即明确授权追加1轮/);
   assert.match(text, /不要让写作新手查询服务器schema/);
-  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v2/);
+  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v3/);
 });
 
 test("real rejected response keeps every action under wider non-safety limits but still rejects invented diagnoses", async () => {
   const failure = schema.planningRepairAdviceOutputSchema.safeParse(rejectedAdvice);
   assert.equal(failure.success, false);
-  assert.deepEqual(failure.error.issues.map(issue => issue.path.join(".")), ["options.1.diagnosis", "options.2.diagnosis"]);
+  assert.deepEqual(failure.error.issues.map(issue => issue.path.join(".")), ["options.0.executionMode", "options.1.diagnosis", "options.1.executionMode", "options.2.diagnosis", "options.2.executionMode"]);
   const valid = structuredClone(rejectedAdvice);
   // Test fixture variant only: production must never infer or remap a diagnosis.
   valid.options[1].diagnosis = "missing_information"; valid.options[2].diagnosis = "review_disagreement";
+  valid.options.forEach(option => { option.executionMode = "source_edit"; });
   const result = await parse(valid);
   assert.deepEqual(result.data, valid);
   assert.equal(result.data.options[0].changes.length, 7);

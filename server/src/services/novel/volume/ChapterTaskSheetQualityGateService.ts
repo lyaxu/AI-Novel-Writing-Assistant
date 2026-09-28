@@ -110,7 +110,7 @@ export class ChapterTaskSheetQualityGateService {
         model: options.model,
         temperature: options.temperature ?? 0.1,
         // One existing review call; bounded headroom for explicit evidence per selected promise.
-        maxTokens: Math.min(10000, 4000 + promiseCount * 600),
+        maxTokens: Math.min(16000, 4000 + promiseCount * 600 + (options.previousIssues?.length ?? 0) * 500),
         taskId: options.taskId,
         entrypoint: options.entrypoint,
         novelId: candidate.novelId,

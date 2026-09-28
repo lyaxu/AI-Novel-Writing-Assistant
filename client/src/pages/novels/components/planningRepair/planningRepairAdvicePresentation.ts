@@ -24,5 +24,7 @@ export function authorizedPlanningRepairPayload(status: PlanningRepairStatus) {
     repairKey: status.planningRepair.key,
     guidance: request.guidance,
     idempotencyKey: request.idempotencyKey,
+    ...(request.executionMode ? { executionMode: request.executionMode } : {}),
+    ...(request.affectedChapterIds ? { affectedChapterIds: request.affectedChapterIds } : {}),
   };
 }

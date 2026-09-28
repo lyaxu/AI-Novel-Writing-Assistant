@@ -82,10 +82,13 @@ export const chapterPlanningIssueCheckSchema = z.object({
 });
 export type ChapterPlanningIssueCheck = z.infer<typeof chapterPlanningIssueCheckSchema>;
 
+export const chapterPlanningHandoffStatusSchema = z.enum(["not_needed", "covered", "partial", "missing", "conflicting"]);
+
 export const chapterPlanningPromiseCheckSchema = z.object({
   sourceId: z.string().trim().min(1),
   scope: z.enum(["current_chapter", "opening_sequence", "book_arc"]),
   status: z.enum(["preserved", "adapted", "deferred", "dropped", "insufficient"]),
+  handoffStatus: chapterPlanningHandoffStatusSchema.optional(),
   sourceEvidence: z.array(chapterPlanningEvidenceQuoteSchema).min(1).max(3),
   candidateEvidence: z.array(chapterPlanningEvidenceQuoteSchema).max(3),
   contextEvidence: z.array(chapterPlanningEvidenceQuoteSchema).max(3),
@@ -96,7 +99,9 @@ export type ChapterPlanningPromiseCheck = z.infer<typeof chapterPlanningPromiseC
 
 export function unresolvedPlanningPromises(checks: ChapterPlanningPromiseCheck[] = []) {
   return checks.filter(check => check.status === "dropped" || check.status === "insufficient"
-    || (check.status === "deferred" && check.scope !== "book_arc" && !check.contextEvidence.length));
+    || (check.status === "deferred" && (check.handoffStatus !== "covered" || !check.contextEvidence.some(evidence =>
+      ["originalChapters", "candidateChapters", "readonlyNext", "readonlyOpeningRoutes", "plannedVolume", "readonlyPlanningHorizon", "strategyPlan", "beatSheet"]
+        .some(root => evidence.sourcePath.startsWith(`${root}.`) || evidence.sourcePath.startsWith(`${root}[`))))));
 }
 
 function normalizeAssessmentVerdict(value: unknown): unknown {
@@ -185,12 +190,12 @@ export const aiChapterTaskSheetQualityAssessmentSchema = z.object({
   loadRisk: z.enum(["normal", "overloaded"]).default("normal"),
   recommendedHandling: z.enum(["use_as_is", "repair_contract", "replan_window"]).default("use_as_is"),
   summary: z.string().trim().min(1),
-  issues: z.array(chapterTaskSheetQualityIssueSchema).max(10)
-    .refine((issues) => issues.filter((issue) => !["contract_overloaded", "selected_direction_drift"].includes(issue.id)).length <= 8,
-      "At most eight original issues plus contract overload and selected-direction drift are allowed.").default([]),
+  // Normalized saved assessments can include all unresolved historical issues plus new findings.
+  // The prompt's fresh-output schema separately caps model-authored issues.
+  issues: z.array(chapterTaskSheetQualityIssueSchema).default([]),
   repairGuidance: z.array(z.string().trim().min(1)).max(8).default([]),
   confidence: z.preprocess(normalizeAssessmentConfidence, z.number().min(0).max(1)),
-  issueChecks: z.array(chapterPlanningIssueCheckSchema).max(10).optional(),
+  issueChecks: z.array(chapterPlanningIssueCheckSchema).optional(),
   // Old saved assessments remain readable; fresh prompt output requires this field.
   promiseChecks: z.array(chapterPlanningPromiseCheckSchema).max(10).optional(),
 });
@@ -351,7 +356,8 @@ export function mapSemanticAssessmentToQualityGate(
     recommendedHandling: assessment.recommendedHandling,
     // 全书自动执行保留语义审校结果供后续正文验收消费，但不为可写的
     // 任务单重复生成整份合同；结构缺失仍由 shape gate 阻断。
-    canEnterExecution: mode === "full_book_autopilot" && promiseGaps.length === 0,
+    canEnterExecution: mode === "full_book_autopilot" && promiseGaps.length === 0
+      && !(assessment.issueChecks ?? []).some(check => check.status !== "resolved"),
     issues,
     summary: assessment.summary,
     repairGuidance: assessment.repairGuidance,

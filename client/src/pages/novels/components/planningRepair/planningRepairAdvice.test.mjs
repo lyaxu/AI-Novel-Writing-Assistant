@@ -123,7 +123,8 @@ test("lost generation responses replay the request until polling confirms a term
 });
 
 test("existing authorization hides new grants and preserves its original direction and request key", async () => {
-  const authorized = { ...status, recoveryRequest: { guidance: "原授权方向", idempotencyKey: "original-request" } };
+  const authorized = { ...status, recoveryRequest: { guidance: "原授权方向", idempotencyKey: "original-request",
+    executionMode: "repair_then_review", affectedChapterIds: ["c2", "c3"] } };
   const view = renderActions(ready, authorized);
   assert.equal(view.queries[0].enabled, false);
   assert.match(view.html, /继续已授权修复/);
@@ -131,6 +132,7 @@ test("existing authorization hides new grants and preserves its original directi
   await view.mutations[1].mutationFn("continue");
   assert.deepEqual(view.calls[0], ["action", "task-1", {
     action: "retry", repairKey: "repair-1", guidance: "原授权方向", idempotencyKey: "original-request",
+    executionMode: "repair_then_review", affectedChapterIds: ["c2", "c3"],
   }]);
   await view.mutations[1].mutationFn("pause");
   assert.equal(view.calls[1][2].action, "pause");

@@ -25,7 +25,11 @@ export function adviceModelOptions(seed: Record<string, unknown>) {
 }
 function saved(source: AdviceSource): SavedAdvice | undefined { return source.seed.planningRepairAdvice as SavedAdvice | undefined; }
 function canResume(option: PlanningRepairAdviceOutput["options"][number], source: AdviceSource) {
-  return !option.changesHardConstraints && !option.requiresSourceEdit
+  return ["repair_then_review", "review_existing"].includes(option.executionMode)
+    && !option.changesHardConstraints && !option.requiresSourceEdit
+    && option.affectedChapterIds.length >= 1 && option.affectedChapterIds.length <= 3
+    && new Set(option.affectedChapterIds).size === option.affectedChapterIds.length
+    && option.affectedChapterIds.includes(source.repair.chapterId)
     && option.affectedChapterIds.every((id) => source.eligibleChapterIds.includes(id));
 }
 export function projectAdvice(source: AdviceSource): PlanningRepairAdviceStatus {
@@ -40,10 +44,12 @@ export function projectAdvice(source: AdviceSource): PlanningRepairAdviceStatus 
   return { ...base, status: "ready", summary: advice.result.summary, recommendedOptionId: advice.result.recommendedOptionId,
     options: advice.result.options.map((option) => ({
       id: option.id, title: option.title, reason: option.reason, changes: option.changes,
-      preserves: option.preserves, tradeoffs: option.tradeoffs, canResume: canResume(option, source),
-      ...(!canResume(option, source) ? { blockedReason: option.changesHardConstraints
+      preserves: option.preserves, tradeoffs: option.tradeoffs, executionMode: option.executionMode, canResume: canResume(option, source),
+      ...(!canResume(option, source) ? { blockedReason: !option.executionMode ? "此建议缺少执行方式，请重新获取建议。" : option.changesHardConstraints
         ? "请先到小说基础信息与卷规划确认书级约束，再返回本页获取建议。"
-        : "请先在本页章节规划或所属卷规划确认窗口外的改动，再获取建议。" } : {}),
+        : option.executionMode === "source_edit" || option.requiresSourceEdit
+          ? "请先在本页章节规划或所属卷规划确认窗口外的改动，再获取建议。"
+          : "方案的章节范围不符合当前修复窗口，请重新获取建议。" } : {}),
     })) };
 }
 
@@ -133,7 +139,9 @@ export class PlanningRepairAdviceService {
         await assertAdvicePaused(tx, source);
         if (advice.fingerprint !== source.fingerprint) throw new AppError("规划、正文或修复记录已变化，请重新获取建议。", 409);
       }
-      return { guidance, idempotencyKey, expectedSourceToken: advice.sourceToken };
+      return { guidance, idempotencyKey, expectedSourceToken: advice.sourceToken,
+        affectedChapterIds: option.affectedChapterIds,
+        executionMode: option.executionMode as "repair_then_review" | "review_existing" };
     });
     const grant = await this.recovery.grant(taskId, { action: "retry", repairKey: input.repairKey, ...selection });
     return { ...grant, idempotencyKey: selection.idempotencyKey };

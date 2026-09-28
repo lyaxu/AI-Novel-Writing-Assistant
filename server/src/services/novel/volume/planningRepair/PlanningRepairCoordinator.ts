@@ -7,6 +7,7 @@ import { buildVolumeWorkspaceDocument } from "../volumeWorkspaceDocument";
 import type { VolumeGenerateOptions } from "../volumeModels";
 import { PlanningRepairStore, type RepairSession } from "./PlanningRepairStore";
 import { applyPlanningRepairCandidate, planningRepairOutputSchema } from "./planningRepairDomain";
+import { projectPlanningHorizon } from "../planningPromises";
 
 const committedDocuments = new WeakSet<object>();
 const flights = new Map<string, { taskId: string; chapterId: string; promise: Promise<VolumePlanDocument> }>();
@@ -137,6 +138,29 @@ export class PlanningRepairCoordinator {
           summary: `正在复核第${chapter.chapterOrder}章任务单`,
         }, refreshDerived(candidate));
       }
+      if (session.state.recoveryAction?.mode === "repair_then_review") {
+        if (session.state.recoveryAction.paidRound !== undefined) {
+          return this.pause(session, "已授权修复的保存响应无法确认，请检查保存结果后继续，避免重复调用。");
+        }
+        if (session.state.rounds >= session.state.maxRounds) return this.pause(session, "修复预算不足，请确认修复方向后继续。");
+        const ids = session.state.recoveryAction.affectedChapterIds ?? session.state.affectedChapterIds ?? [input.chapterId];
+        if (!ids.includes(input.chapterId) || ids.some(id => !session.eligibleChapterIds.includes(id))) {
+          return this.pause(session, "已确认方向的可修改窗口已变化，请重新确认方案。");
+        }
+        if (ids.length > 1) await this.inheritWindowBudgets(input, session, ids);
+        const nextRound = session.state.rounds + 1;
+        await this.save(session, { rounds: nextRound, phase: "repairing", affectedChapterIds: ids,
+          recoveryAction: { ...session.state.recoveryAction, paidRound: nextRound } });
+        await this.beforeCall(session, "repair", "正在按已确认方向修改候选，完成后复核");
+        const repaired = await this.invoke({ asset: planningRepairPrompt,
+          promptInput: { contextJson: this.context(input, session, (session.state.quality ?? { chapters: {} }) as ReviewSet) },
+          options: this.modelOptions(input, "planning_repair", 12000) });
+        await this.save(session, { pendingOperation: undefined,
+          repairOutputPending: { inputFingerprint: session.inputFingerprint, round: session.state.rounds },
+          history: [...session.state.history, { round: session.state.rounds, kind: "repair", output: repaired.output,
+            recoveryRequestId: session.state.recoveryAction?.requestId }] });
+        await this.applyRepairOutput(input, session, repaired.output);
+      }
       while (true) {
         const reviews = await this.review(input, session);
         if (!currentEvidenceHistory(session).some(entry => {
@@ -149,10 +173,14 @@ export class PlanningRepairCoordinator {
         const passed = Object.values(reviews.chapters).every(passedPlanningReview)
           && reviews.window?.usable && reviews.window.safeToSync && !reviews.window.requiresUserDecision;
         if (passed) {
-          await this.save(session, { phase: "ready", summary: "规划复核通过，正在提交" });
+          await this.save(session, { phase: "ready", recoveryAction: undefined, summary: "规划复核通过，正在提交" });
           const document = await this.store.commit(session, session.candidate!);
           committedDocuments.add(document);
           return document;
+        }
+        if (session.state.recoveryAction?.mode === "review_existing") {
+          await this.save(session, { recoveryAction: undefined });
+          return this.pause(session, "原候选复核仍未通过，请选择具体修复方向或确认规划来源。");
         }
         if (reviews.window?.requiresUserDecision) {
           return this.pause(session, reviews.window.summary);
@@ -243,6 +271,7 @@ export class PlanningRepairCoordinator {
     });
     await this.save(session, {
       phase: "reviewing", repairOutputPending: undefined, quality: { chapters: {} }, obligationMoves: parsed.data.obligationMoves,
+      ...(session.state.recoveryAction?.paidRound === session.state.rounds ? { recoveryAction: undefined } : {}),
       summary: `正在复核第${session.state.chapterOrder}章起的规划，第${session.state.rounds}/${session.state.maxRounds}轮`,
     }, refreshDerived(candidate));
   }
@@ -297,12 +326,8 @@ export class PlanningRepairCoordinator {
     const last = all.filter(c => ids.includes(c.id)).at(-1) ?? target;
     const original = baseline.volumes.find(v => v.id === input.volumeId)!;
     const firstAssessment = currentEvidenceHistory(session).find(entry => (entry as { kind?: string }).kind === "assessment") as { result?: unknown } | undefined;
-    const direction = (input.context as { novel?: { selectedPlanningDirection?: import("@ai-novel/shared/types/novel/planningPromises").SelectedPlanningDirection } })?.novel?.selectedPlanningDirection;
-    const openingEnd = direction?.status === "available" ? Math.max(0, ...(direction.candidate.storyPrototype?.openingChain.map((item) => item.chapterOrder) ?? [])) : 0;
     return JSON.stringify({
-      readonlyOpeningRoutes: all.filter((chapter) => chapter.chapterOrder <= openingEnd && !ids.includes(chapter.id))
-        .map(({ id, chapterOrder, title, summary, purpose, exclusiveEvent, endingState, nextChapterEntryState }) =>
-          ({ id, chapterOrder, title, summary, purpose, exclusiveEvent, endingState, nextChapterEntryState, authority: "readonly_planning_not_prose" })),
+      ...projectPlanningHorizon(session.candidate ?? input.document, input.volumeId, ids),
       writtenEvidence: input.writtenEvidence ?? { coverage: { complete: false, unknown: ["未提供已写正文来源，不能将规划视为历史事实。"] } },
       selectedPlanningDirection: (input.context as { novel?: { selectedPlanningDirection?: unknown } } | null)?.novel?.selectedPlanningDirection ?? null,
       bookConstraints: input.context, volume: { ...original, chapters: undefined },

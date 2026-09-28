@@ -22,12 +22,12 @@ import type {
   VolumeWorkspace,
 } from "../volumeModels";
 import { loadPlanningWrittenEvidence } from "../writtenEvidence";
-import { loadSelectedPlanningDirection } from "../planningPromises";
+import { loadSelectedPlanningDirection, projectPlanningHorizon } from "../planningPromises";
 
 /** Reusing complete text is not reusing a semantic approval from an unknown source. */
 export async function reviewExistingExecutionContract(input: {
   novelId: string; volumeId: string; chapter: VolumePlan["chapters"][number];
-  workspace: Pick<VolumePlanDocument, "volumes">;
+  workspace: Pick<VolumePlanDocument, "volumes"> & Partial<Pick<VolumePlanDocument, "beatSheets">>;
   options: Pick<VolumeGenerateOptions, "provider" | "model" | "taskId" | "entrypoint" | "signal" | "chapterTaskSheetQualityMode">;
   writtenEvidence?: import("@ai-novel/shared/types/novel/writtenEvidence").PlanningWrittenEvidence;
   selectedPlanningDirection?: import("@ai-novel/shared/types/novel/planningPromises").SelectedPlanningDirection;
@@ -39,7 +39,7 @@ export async function reviewExistingExecutionContract(input: {
     chapterId: input.chapter.id, chapterOrder: input.chapter.chapterOrder,
   }, { ...input.options, mode: input.options.chapterTaskSheetQualityMode,
     reviewContextJson: JSON.stringify({ writtenEvidence, selectedPlanningDirection, planningCandidate: input.chapter,
-      readonlyOpeningRoutes: projectReadonlyOpeningRoutes(input.workspace, input.chapter.id, selectedPlanningDirection),
+      ...projectPlanningHorizon(input.workspace, input.volumeId, [input.chapter.id]),
       planningContext: { targetVolume: input.workspace.volumes.find((volume) => volume.id === input.volumeId) ?? null },
     }) });
   const latestEvidence = await loadPlanningWrittenEvidence(input.novelId, input.chapter.chapterOrder);
@@ -48,19 +48,6 @@ export async function reviewExistingExecutionContract(input: {
     || JSON.stringify(latestDirection) !== JSON.stringify(selectedPlanningDirection)) {
     throw new Error("Written evidence or selected planning direction changed during contract review; reload before execution.");
   }
-}
-
-function projectReadonlyOpeningRoutes(
-  workspace: Pick<VolumePlanDocument, "volumes">,
-  chapterId: string,
-  direction: import("@ai-novel/shared/types/novel/planningPromises").SelectedPlanningDirection | undefined,
-) {
-  const lastOpeningOrder = direction?.status === "available"
-    ? Math.max(0, ...(direction.candidate.storyPrototype?.openingChain.map((item) => item.chapterOrder) ?? [])) : 0;
-  return workspace.volumes.flatMap((volume) => volume.chapters)
-    .filter((chapter) => chapter.id !== chapterId && chapter.chapterOrder <= lastOpeningOrder)
-    .map(({ id, chapterOrder, title, summary, purpose, exclusiveEvent, endingState, nextChapterEntryState }) =>
-      ({ id, chapterOrder, title, summary, purpose, exclusiveEvent, endingState, nextChapterEntryState, authority: "readonly_planning_not_prose" }));
 }
 
 type StoryMacroPlanResult = Awaited<ReturnType<StoryMacroPlanService["getPlan"]>> | null;
@@ -243,7 +230,7 @@ export async function generateChapterTaskSheetDetail(params: {
         signal: params.options.signal,
         reviewContextJson: JSON.stringify({ writtenEvidence: promptInput.writtenEvidence ?? null,
           selectedPlanningDirection: promptInput.novel.selectedPlanningDirection ?? null,
-          readonlyOpeningRoutes: projectReadonlyOpeningRoutes(promptInput.workspace, promptInput.targetChapter.id, promptInput.novel.selectedPlanningDirection),
+          ...projectPlanningHorizon(promptInput.workspace, promptInput.targetVolume.id, [promptInput.targetChapter.id]),
           planningContext: { novel: promptInput.novel, targetVolume: promptInput.targetVolume } }),
       });
       return {

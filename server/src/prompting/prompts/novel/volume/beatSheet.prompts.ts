@@ -30,7 +30,7 @@ export const volumeBeatSheetPrompt: PromptAsset<
   ReturnType<typeof createVolumeBeatSheetSchema>["_output"]
 > = {
   id: "novel.volume.beat_sheet",
-  version: "v5",
+  version: "v6",
   taskType: "planner",
   mode: "structured",
   language: "zh",

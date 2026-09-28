@@ -29,14 +29,15 @@ function fixture({ changed = false, rejected = false } = {}) {
     "../ChapterTaskSheetQualityGateService": { ChapterTaskSheetQualityGateService: class { async assertCanEnterExecution(value, options) {
       reviews++; assert.equal(value.taskSheet, "saved contract"); assert.equal(JSON.parse(options.reviewContextJson).writtenEvidence.chapters[0].content, "刀具收缴，烙印胸口");
       const context = JSON.parse(options.reviewContextJson);
-      assert.deepEqual(context.readonlyOpeningRoutes.map(route => route.id), ["p5"]);
+      assert.deepEqual(context.readonlyOpeningRoutes.map(route => route.id), ["p5", "p6"]);
+      assert.equal(context.readonlyPlanningHorizon.authority, "readonly_planning_not_prose");
       assert.equal(context.readonlyOpeningRoutes[0].summary, "actual saved route");
       assert.equal(context.readonlyOpeningRoutes[0].authority, "readonly_planning_not_prose");
       assert.equal(context.planningContext.targetVolume.id, "v");
       if (rejected) throw new Error("semantic failure");
     } } },
     "../writtenEvidence": { loadPlanningWrittenEvidence: async () => ({ sourceFingerprint: changed && reads++ > 0 ? "changed" : "same", chapters: [{ content: "刀具收缴，烙印胸口" }] }) },
-    "../planningPromises": { loadSelectedPlanningDirection: async () => direction },
+    "../planningPromises": { ...load("../src/services/novel/volume/planningPromises/planningHorizon.ts", {}), loadSelectedPlanningDirection: async () => direction },
   });
   const params = { promptInput: { novel: {}, workspace, targetVolume, targetChapter: candidate }, options: {} };
   return { generation, params, candidate, counts: () => ({ reviews, initial }) };

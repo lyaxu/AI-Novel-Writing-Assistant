@@ -54,6 +54,11 @@ export function buildAdviceContext(input: {
       autoExecutionPlan: input.seed.autoExecutionPlan ?? null, startupPreparation: input.seed.startupPreparation ?? null },
     eligibleChapterIds: input.eligibleChapterIds,
     baselineWindow, candidateWindow, currentWindow,
+    readonlyBeatSheets: {
+      authority: "readonly_planning_not_prose",
+      baseline: array(baseline.beatSheets).filter((sheet) => sheet.volumeId === repair.volumeId),
+      candidate: array(candidateDocument.beatSheets).filter((sheet) => sheet.volumeId === repair.volumeId),
+    },
     chapterEvidence: input.chapters.map(object).filter((c) => materialized.has(String(c.id)) || relevant.has(String(c.id)))
       .map((c) => pick(c, ["id", "order", "title", "expectation", "summary", "content", "taskSheet", "sceneCards", "chapterStatus"])),
     repair: { ...pick(repair, ["key", "rounds", "maxRounds", "phase", "summary", "guidance", "quality", "candidateVersionId"]),

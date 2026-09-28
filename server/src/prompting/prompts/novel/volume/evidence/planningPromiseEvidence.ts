@@ -16,6 +16,7 @@ export function planningPromiseEvidenceContext(reviewContextJson?: string, chapt
     readonlyPrevious: context.readonlyPrevious, readonlyNext: context.readonlyNext,
     writtenEvidence: context.writtenEvidence,
     readonlyOpeningRoutes: context.readonlyOpeningRoutes,
+    readonlyPlanningHorizon: context.readonlyPlanningHorizon,
     plannedVolume: (context.planningContext as { targetVolume?: unknown } | undefined)?.targetVolume,
   });
   return { direction, sourceIndex, contextIndex, sourceIds: selectedPlanningPromiseIds(direction, chapterOrder) };
@@ -27,6 +28,9 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
     || checks.some(check => !sourceIds.includes(check.sourceId))) throw new Error("promiseChecks must cover every selected source exactly once; absent sources must not be invented.");
   const candidateIndex = buildChapterEvidenceIndex(candidate);
   for (const check of checks) {
+    if (check.handoffStatus !== undefined && (check.status === "deferred" ? check.handoffStatus === "not_needed" : check.handoffStatus !== "not_needed")) {
+      throw new Error(`Promise ${check.sourceId} has an incompatible handoffStatus.`);
+    }
     if (isOpeningPlanningPromise(check.sourceId) && check.scope === "book_arc") throw new Error(`Opening promise ${check.sourceId} cannot be reclassified as a book arc.`);
     if (!check.sourceEvidence.length || check.sourceEvidence.some(evidence =>
       !(evidence.sourcePath === check.sourceId || evidence.sourcePath.startsWith(`${check.sourceId}.`))

@@ -96,12 +96,21 @@ function formatLatestBatchDigest(batches: DirectorCandidateBatch[]): string {
   ].join("\n\n");
 }
 
+const CANDIDATE_OPENING_PACING_RULES = [
+  "【开篇兑现节奏自检】",
+  "先在内部确定一份实际拟议的开篇章序，再同步填写 hookStrategy、storyPrototype.earlyPayoff 与 storyPrototype.openingChain；三处必须承诺同一事件、首次发生章次和回报时点，不能一处第1章已获得回报、另一处第3章才首次完成同一任务。",
+  "openingChain.chapterOrder 就是实际拟议章节序号，不是阶段编号或整卷情节摘要。每项的行动、选择、后果和 payoff 必须在该章可容纳的篇幅内成立；尚无字数要求时也须按正常单章容量安排，不能把需数章铺垫的整段故事压成‘第1章’交给后续再拆。",
+  "earlyPayoff 中每项承诺都要能在 openingChain 前3章找到具体兑现事件；hookStrategy 提到的章节也必须逐项对应。总章节数不能成为把已承诺早期回报延后的理由。若容量不够，应精简事件或同步调整这三处承诺，不保留互相冲突的版本。",
+  "允许连续受压、失败或安静场景，不要求主角每章获胜或第一章就启动全部卖点；但相邻场景须有信息、关系、选择或行动后果的实质增量。更多伤势、同义羞辱或重复追逃本身不算新进展；弱势人物也应有符合处境的观察、判断或取舍，不能只有受难程度变化。",
+  "输出前对照三处的同一事件核验章序、触发条件和回报，不只检查字段齐全。修正已有候选时，凡反馈影响开篇时点，必须同步修改这三处；旧候选已有冲突也须在本次候选内消解，不能留给后续细化自行选择一个版本。",
+];
+
 export const directorCandidatePrompt: PromptAsset<
   DirectorCandidatePromptInput,
   typeof directorCandidateResponseSchema._output
 > = {
   id: "novel.director.candidates",
-  version: "v3",
+  version: "v4",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -138,6 +147,7 @@ export const directorCandidatePrompt: PromptAsset<
       "先在内部构思不同的矛盾与人物关系，再选出最值得试读的两套；不要先填字段再拼成故事。职业是人物经历、手段和关系的来源，不是必须每章重做一次的工作流程。distinctiveEngine 不得只写接任务→解决→升级→接更难任务，而要说明什么选择持续改变谁与谁的关系、利益或处境。",
       "openingChain 必须是因果链：后一章处理前章选择造成的具体后果，而不是重开一件类似小事。前三章应兑现至少一个引入的核心疑问或阶段目标，earlyPayoff 与实际章节对应；不能把威胁暂退、知道还有秘密或领到下一单当作全部回报。",
       "每次解围须能追溯到已介绍的条件、人物本领或付出的代价，不能临时赋予道具新用途、新权限或让对手突然失智。突破必须同时带来真实收益与后续局面的变化，不用凭空扩大阴谋或人物苦难掩盖事件空转。",
+      ...CANDIDATE_OPENING_PACING_RULES,
       "1. workingTitle 必须是可读的暂定书名，适合封面展示，不要写成策划案口号、世界观概念短语或陈旧套壳名。",
       "2. logline 必须清晰说明：这是谁，在什么处境下，面临什么核心冲突，会朝什么方向展开。",
       "3. positioning 必须说明这本书在题材、阅读满足或读者感知上的定位，而不是泛泛写“爽文”“成长文”。",
@@ -197,7 +207,7 @@ export const directorCandidatePatchPrompt: PromptAsset<
   typeof directorCandidateSchema._output
 > = {
   id: "novel.director.candidate_patch",
-  version: "v2",
+  version: "v3",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -224,6 +234,7 @@ export const directorCandidatePatchPrompt: PromptAsset<
       "2. 允许调整 workingTitle、logline、positioning、sellingPoint、coreConflict、protagonistPath、endingDirection、hookStrategy、progressionLoop、whyItFits、toneKeywords、targetChapterCount。",
       "3. 如果用户说“我就偏向这套，但有些地方不对”，要把这套修得更准，而不是重新另起炉灶。",
       "4. 修正后仍然必须是完整、清晰、可继续推进整书规划的候选。",
+      ...CANDIDATE_OPENING_PACING_RULES,
       "",
       "【字段要求】",
       "输出字段必须完整包含：workingTitle、logline、positioning、sellingPoint、coreConflict、protagonistPath、endingDirection、hookStrategy、progressionLoop、whyItFits、recommendedWritingPlatform、writingPlatformReason、toneKeywords、targetChapterCount。",

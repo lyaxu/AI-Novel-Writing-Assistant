@@ -12,6 +12,7 @@ export const planningRepairAdviceOutputSchema = z.object({
     preserves: z.array(z.string().min(1).max(500)).min(1).max(planningRepairAdviceItemLimit),
     tradeoffs: z.array(z.string().min(1).max(500)).max(planningRepairAdviceItemLimit),
     diagnosis: z.enum(planningRepairAdviceDiagnoses),
+    executionMode: z.enum(["repair_then_review", "review_existing", "source_edit"]),
     affectedChapterIds: z.array(z.string().min(1)).min(1).max(3),
     changesHardConstraints: z.boolean(), requiresSourceEdit: z.boolean(),
     guidance: z.object({
@@ -37,6 +38,7 @@ export type PlanningRepairAdviceOutput = z.infer<typeof planningRepairAdviceOutp
 export interface PlanningRepairAdviceOption {
   id: string; title: string; reason: string; changes: string[]; preserves: string[]; tradeoffs: string[];
   canResume: boolean; blockedReason?: string;
+  executionMode?: "repair_then_review" | "review_existing" | "source_edit";
 }
 export interface PlanningRepairAdviceStatus {
   status: "none" | "running" | "ready" | "stale" | "failed" | "uncertain";

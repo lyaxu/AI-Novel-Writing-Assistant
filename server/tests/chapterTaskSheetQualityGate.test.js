@@ -344,7 +344,7 @@ test("chapter task sheet quality service passes usable semantic assessments", as
 });
 
 test("chapter task sheet quality prompt is registered as a product prompt asset", () => {
-  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v6");
+  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v7");
   assert.equal(registered, chapterTaskSheetQualityPrompt);
 });
 
@@ -369,8 +369,10 @@ test("planning re-review sees current evidence, book constraints and previous is
   assert.throws(() => chapterTaskSheetQualityPrompt.postValidate({ ...output, issues: previousIssues }, input), /must not remain/);
   const unresolved = { ...output, verdict: "repairable", safeToSync: false, recommendedHandling: "repair_contract",
     issues: previousIssues, issueChecks: [{ ...output.issueChecks[0], status: "partially_resolved" }] };
-  assert.equal(chapterTaskSheetQualityPrompt.postValidate(unresolved, input), unresolved);
-  assert.throws(() => chapterTaskSheetQualityPrompt.postValidate({ ...unresolved, issues: [] }, input), /retain its id/);
+  assert.equal(chapterTaskSheetQualityPrompt.postValidate(unresolved, input).safeToSync, false);
+  const retained = chapterTaskSheetQualityPrompt.postValidate({ ...unresolved, issues: [] }, input);
+  assert.equal(retained.issues[0].id, previousIssues[0].id);
+  assert.equal(retained.safeToSync, false);
   assert.equal(chapterTaskSheetQualityPrompt.outputSchema.safeParse({ ...output, issueChecks: undefined }).success, false);
   // Existing persisted reviews remain readable while newly generated reviews require evidence.
   assert.equal(aiChapterTaskSheetQualityAssessmentSchema.safeParse({ ...output, issueChecks: undefined }).success, true);

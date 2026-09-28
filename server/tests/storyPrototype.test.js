@@ -41,7 +41,7 @@ test("normalization and downstream story inputs retain the chosen opening chain"
 });
 
 test("updated assets resolve through registry and reader remains advisory", () => {
-  for (const key of ["novel.director.candidates@v3", "novel.director.candidate_patch@v2", "novel.volume.beat_sheet@v5", "novel.volume.chapter_list@v11", "novel.chapter.writer@v9", "novel.second_reader@v2"]) assert.ok(getRegisteredPromptAsset(...key.split("@")), key);
+  for (const key of ["novel.director.candidates@v4", "novel.director.candidate_patch@v3", "novel.volume.beat_sheet@v6", "novel.volume.chapter_list@v12", "novel.chapter.writer@v9", "novel.second_reader@v2"]) assert.ok(getRegisteredPromptAsset(...key.split("@")), key);
   const prompt = getRegisteredPromptAsset("novel.second_reader", "v2");
   const text = prompt.render({ title: "Title", description: "", chapters: "Body" }).map(m => m.content).join("\n");
   assert.match(text, /不是工作流通过条件/);

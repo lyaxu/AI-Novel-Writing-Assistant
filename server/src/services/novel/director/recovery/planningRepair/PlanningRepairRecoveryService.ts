@@ -32,7 +32,7 @@ export class PlanningRepairRecoveryService {
     const recoveryRequest = recovery?.idempotencyKey && recovery.guidance
       && repair && (recovery.pendingGrant || !["waiting_confirmation", "uncertain", "committed"].includes(repair.phase))
       && ["waiting_approval", "failed"].includes(row.status)
-      ? { idempotencyKey: recovery.idempotencyKey, guidance: recovery.guidance } : null;
+      ? { idempotencyKey: recovery.idempotencyKey, guidance: recovery.guidance, executionMode: recovery.executionMode, affectedChapterIds: recovery.affectedChapterIds } : null;
     return { taskId, novelId: row.novelId, status: row.status, pendingManualRecovery: row.pendingManualRecovery, planningRepair: repair, recoveryRequest };
   }
 
@@ -62,7 +62,7 @@ export class PlanningRepairRecoveryService {
     if (changed.count !== 1) throw new AppError("规划修复暂停状态发生并发变更，请刷新状态。", 409);
   }
 
-  async grant(taskId: string, input: { action: "retry" | "pause"; repairKey: string; guidance?: string; idempotencyKey?: string; expectedSourceToken?: string }) {
+  async grant(taskId: string, input: { action: "retry" | "pause"; repairKey: string; guidance?: string; idempotencyKey?: string; expectedSourceToken?: string; executionMode?: "repair_then_review" | "review_existing"; affectedChapterIds?: string[] }) {
     let row = await this.workflow.getTaskByIdWithoutHealing(taskId);
     if (!row || row.lane !== "auto_director") throw new AppError("自动导演任务不存在。", 404);
     const { seed, repair, recovery } = readPlanningRepairSeed(row.seedPayloadJson);
@@ -75,14 +75,16 @@ export class PlanningRepairRecoveryService {
     const idempotencyKey = input.idempotencyKey?.trim();
     if (!guidance || !idempotencyKey) throw new AppError("请填写修复方向并提供本次请求标识。", 400);
     const requests = Array.isArray(seed.planningRepairRecoveryRequests)
-      ? seed.planningRepairRecoveryRequests as Array<{ repairKey: string; idempotencyKey: string; guidance: string }> : [];
+      ? seed.planningRepairRecoveryRequests as Array<{ repairKey: string; idempotencyKey: string; guidance: string; executionMode?: string; affectedChapterIds?: string[] }> : [];
     const prior = requests.find((item) => item.repairKey === repair.key && item.idempotencyKey === idempotencyKey);
     if (prior) {
-      if (prior.guidance !== guidance) throw new AppError("同一请求标识不能用于不同修复方向。", 409);
+      if (prior.guidance !== guidance || prior.executionMode !== input.executionMode
+        || JSON.stringify(prior.affectedChapterIds) !== JSON.stringify(input.affectedChapterIds)) throw new AppError("同一请求标识不能用于不同修复方向。", 409);
       return { granted: true, replayed: true, taskId };
     }
     if (repair.novelId !== row.novelId) throw new AppError("规划修复不属于当前小说。", 409);
-    if (recovery?.pendingGrant && (recovery.idempotencyKey !== idempotencyKey || recovery.guidance !== guidance)) {
+    if (recovery?.pendingGrant && (recovery.idempotencyKey !== idempotencyKey || recovery.guidance !== guidance || recovery.executionMode !== input.executionMode
+      || JSON.stringify(recovery.affectedChapterIds) !== JSON.stringify(input.affectedChapterIds))) {
       throw new AppError("另一条修复确认正在处理，请先恢复该请求。", 409);
     }
     if ((!recovery?.pendingGrant && !repair.pendingOperation && !["waiting_confirmation", "uncertain", "technical_failed"].includes(repair.phase))
@@ -90,6 +92,15 @@ export class PlanningRepairRecoveryService {
       throw new AppError("当前规划修复不处于等待确认状态。", 409);
     }
     const maxRounds = repair.maxRounds ?? 2;
+    if (input.affectedChapterIds) {
+      const eligible = (seed.planningRepairSnapshot as { eligibleChapterIds?: string[] } | undefined)?.eligibleChapterIds ?? [];
+      if (!input.affectedChapterIds.length || input.affectedChapterIds.length > 3
+        || new Set(input.affectedChapterIds).size !== input.affectedChapterIds.length
+        || !input.affectedChapterIds.includes(repair.chapterId)
+        || input.affectedChapterIds.some(id => !eligible.includes(id))) {
+        throw new AppError("建议修改范围不属于当前可修复窗口，请重新获取建议。", 409);
+      }
+    }
     if (!Number.isSafeInteger(maxRounds) || maxRounds < 0 || !Number.isSafeInteger(repair.rounds) || repair.rounds < 0) {
       throw new AppError("规划修复轮次无效，无法追加预算。", 409);
     }
@@ -99,6 +110,8 @@ export class PlanningRepairRecoveryService {
         data: { seedPayloadJson: JSON.stringify({ ...seed, planningRepairRecovery: {
           repairKey: repair.key, resumePhase: recovery?.resumePhase ?? resolvePlanningRepairResumePhase(row),
           idempotencyKey, guidance, pendingGrant: true, expectedMaxRounds: maxRounds, expectedRound: repair.rounds,
+          executionMode: input.executionMode,
+          affectedChapterIds: input.affectedChapterIds,
           expectedSourceToken: input.expectedSourceToken,
           previousRecovery: input.expectedSourceToken ? recovery : undefined,
         } }) },
@@ -118,7 +131,10 @@ export class PlanningRepairRecoveryService {
       expectedSourceToken: reservation.expectedSourceToken,
     };
     try {
-      await this.repairStore.rebase(rebaseInput);
+      const rebased = await this.repairStore.rebase(rebaseInput);
+      if (input.affectedChapterIds?.some(id => !rebased.eligibleChapterIds.includes(id))) {
+        throw new AppError("可修复窗口已变化，请重新获取建议。", 409);
+      }
     } catch (error) {
       // Only this transactional pre-write guard proves that no rebase/budget operation occurred.
       // Unknown failures retain the reservation for explicit reconciliation.
@@ -159,11 +175,14 @@ export class PlanningRepairRecoveryService {
       where: { id: taskId, seedPayloadJson: row.seedPayloadJson, updatedAt: row.updatedAt, status: row.status, cancelRequestedAt: null },
       data: { seedPayloadJson: JSON.stringify({
         ...current.seed,
-        planningRepair: { ...current.repair, guidance, maxRounds: maxRounds + 1, pendingOperation: undefined },
-        planningRepairRecoveryRequests: [...currentRequests, { repairKey: repair.key, idempotencyKey, guidance }],
+        planningRepair: { ...current.repair, guidance, maxRounds: input.executionMode === "review_existing" ? maxRounds : maxRounds + 1, pendingOperation: undefined,
+          recoveryAction: input.executionMode ? { requestId: idempotencyKey, mode: input.executionMode, affectedChapterIds: input.affectedChapterIds } : undefined },
+        planningRepairRecoveryRequests: [...currentRequests, { repairKey: repair.key, idempotencyKey, guidance, executionMode: input.executionMode, affectedChapterIds: input.affectedChapterIds }],
         planningRepairRecovery: {
           repairKey: repair.key, resumePhase: current.recovery.resumePhase,
           idempotencyKey, guidance, grantedAtRound: repair.rounds,
+          executionMode: input.executionMode,
+          affectedChapterIds: input.affectedChapterIds,
         },
       }) },
     });

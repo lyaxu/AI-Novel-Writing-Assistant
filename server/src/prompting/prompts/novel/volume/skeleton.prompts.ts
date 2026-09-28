@@ -48,7 +48,7 @@ export function createVolumeSkeletonPrompt(
 > {
   return {
     id: "novel.volume.skeleton",
-    version: "v4",
+    version: "v5",
     taskType: "planner",
     mode: "structured",
     language: "zh",

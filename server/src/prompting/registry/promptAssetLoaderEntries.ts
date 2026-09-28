@@ -10,7 +10,7 @@ export interface PromptAssetLoaderEntry {
 
 export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
   {
-    key: "novel.planning_repair.advice@v2",
+    key: "novel.planning_repair.advice@v3",
     load: () => require("../prompts/novel/volume/recovery/planningRepairAdvice.prompts").planningRepairAdvicePrompt as UnknownPromptAsset,
   },
   {
@@ -218,11 +218,11 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/rag/contextualChunk.prompts").ragContextualChunkPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.director.candidates@v3",
+    key: "novel.director.candidates@v4",
     load: () => require("../prompts/novel/directorPlanning.prompts").directorCandidatePrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.director.candidate_patch@v2",
+    key: "novel.director.candidate_patch@v3",
     load: () => require("../prompts/novel/directorPlanning.prompts").directorCandidatePatchPrompt as UnknownPromptAsset,
   },
   {
@@ -306,55 +306,55 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/helper/titleGeneration.prompt").titleGenerationPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.strategy@v3",
+    key: "novel.volume.strategy@v4",
     load: () => require("../prompts/novel/volume/strategy.prompts").createVolumeStrategyPrompt() as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.strategy.critique@v2",
+    key: "novel.volume.strategy.critique@v3",
     load: () => require("../prompts/novel/volume/strategy.prompts").volumeStrategyCritiquePrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.skeleton@v4",
+    key: "novel.volume.skeleton@v5",
     load: () => require("../prompts/novel/volume/skeleton.prompts").createVolumeSkeletonPrompt(1) as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.beat_sheet@v5",
+    key: "novel.volume.beat_sheet@v6",
     load: () => require("../prompts/novel/volume/beatSheet.prompts").volumeBeatSheetPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.chapter_list@v11",
+    key: "novel.volume.chapter_list@v12",
     load: () => require("../prompts/novel/volume/chapterList.prompts").createVolumeChapterListPrompt(1) as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.chapter_purpose@v4",
+    key: "novel.volume.chapter_purpose@v5",
     load: () => require("../prompts/novel/volume/chapterDetail.prompts").volumeChapterPurposePrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.chapter_boundary@v3",
+    key: "novel.volume.chapter_boundary@v4",
     load: () => require("../prompts/novel/volume/chapterDetail.prompts").volumeChapterBoundaryPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.chapter_task_sheet@v5",
+    key: "novel.volume.chapter_task_sheet@v6",
     load: () => require("../prompts/novel/volume/chapterDetail.prompts").volumeChapterTaskSheetPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.chapter_execution_contract@v6",
+    key: "novel.volume.chapter_execution_contract@v7",
     load: () => require("../prompts/novel/volume/chapterDetail.prompts").volumeChapterExecutionContractPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.chapter_task_sheet_quality@v6",
+    key: "novel.volume.chapter_task_sheet_quality@v7",
     load: () => require("../prompts/novel/volume/chapterTaskSheetQuality.prompts").chapterTaskSheetQualityPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.planning_repair@v5",
+    key: "novel.volume.planning_repair@v6",
     load: () => require("../prompts/novel/volume/planningRepair.prompts").planningRepairPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.planning_repair_review@v4",
+    key: "novel.volume.planning_repair_review@v5",
     load: () => require("../prompts/novel/volume/planningRepair.prompts").planningRepairReviewPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.rebalance.adjacent@v2",
+    key: "novel.volume.rebalance.adjacent@v3",
     load: () => require("../prompts/novel/volume/rebalance.prompts").volumeRebalancePrompt as UnknownPromptAsset,
   },
   {

@@ -41,6 +41,7 @@ export interface PlanningRepairState {
   history: unknown[];
   obligationMoves?: unknown[];
   guidance?: string;
+  recoveryAction?: { requestId: string; mode: "repair_then_review" | "review_existing"; paidRound?: number; affectedChapterIds?: string[] };
   technicalError?: string;
 }
 

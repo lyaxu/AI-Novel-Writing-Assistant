@@ -20,14 +20,16 @@ const chapterEvidence = load("../src/prompting/prompts/novel/volume/evidence/cha
 const promiseEvidence = load("../src/prompting/prompts/novel/volume/evidence/planningPromiseEvidence.ts", {
   "@ai-novel/shared/types/novel/planningPromises": promises, "./chapterEvidence": chapterEvidence,
 });
+const issueProjection = load("../src/prompting/prompts/novel/volume/evidence/issueCheckProjection.ts", { "./chapterEvidence": chapterEvidence });
 const { chapterTaskSheetQualityPrompt: prompt } = load("../src/prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts.ts", {
   "@langchain/core/messages": require("@langchain/core/messages"), zod: require("zod"),
   "@ai-novel/shared/types/chapterTaskSheetQuality": quality,
-  "./evidence/chapterEvidence": chapterEvidence, "./evidence/planningPromiseEvidence": promiseEvidence,
+  "./evidence/chapterEvidence": chapterEvidence, "./evidence/planningPromiseEvidence": promiseEvidence, "./evidence/issueCheckProjection": issueProjection,
 });
 const candidate = { chapterOrder: 2, summary: "通过交换药物赢得初步信任" };
 const source = { status: "available", sourceTaskId: "task", fingerprint: "source-1", candidate: {
   id: "chosen", sellingPoint: "用专业技能建立关系", protagonistPath: "从独行到相互照应",
+  hookStrategy: "先建立冲突，再取得阶段回报", progressionLoop: "选择、代价与回报推进", endingDirection: "建立互信",
   storyPrototype: { protagonistWant: "活下去", opposition: "追赶者", difficultChoice: "是否冒险帮助他人", distinctiveEngine: "付出与互助",
     earlyPayoff: "获得初步信任和必要补给", appealRisk: "避免反复逃跑",
     openingChain: [{ chapterOrder: 2, action: "交换药物", resistance: "彼此不信任", choice: "先交出资源", consequence: "陌生人提供帮助", payoff: "关系从戒备变为互助", nextQuestion: "能否再次合作" }] },
@@ -38,7 +40,7 @@ function checks() {
   const index = chapterEvidence.buildChapterEvidenceIndex(source.candidate);
   return promises.selectedPlanningPromiseIds(source).map(sourceId => {
     const sourcePath = [...index.leaves.keys()].find(key => key === sourceId || key.startsWith(sourceId + "."));
-    return { sourceId, scope: "current_chapter", status: "preserved", sourceEvidence: [{ sourcePath, quote: index.leaves.get(sourcePath) }],
+    return { sourceId, scope: "current_chapter", status: "preserved", handoffStatus: "not_needed", sourceEvidence: [{ sourcePath, quote: index.leaves.get(sourcePath) }],
       candidateEvidence: [{ sourcePath: "summary", quote: candidate.summary }], contextEvidence: [], explanation: "通过资源交换推进信任，保持同等回报价值。", repairHint: "" };
   });
 }
@@ -46,12 +48,14 @@ function checks() {
 test("selected source loads only from the matching director seed and its fingerprint follows user direction", async () => {
   const calls = []; let seed = { candidate: source.candidate, storyMacroPlan: { sellingPoint: "不得替代用户选择" } };
   const facade = load("../src/services/novel/volume/planningPromises/index.ts", {
-    "node:crypto": require("node:crypto"), "@ai-novel/shared/types/novel/planningPromises": promises,
+    "node:crypto": require("node:crypto"), "@ai-novel/shared/types/novel/planningPromises": promises, "./planningHorizon": {},
     "../../../../db/prisma": { prisma: { novelWorkflowTask: { findFirst: async args => { calls.push(args); return { id: "task", seedPayloadJson: JSON.stringify(seed) }; } } } },
   });
   const first = await facade.loadSelectedPlanningDirection("novel", "task");
   assert.deepEqual(calls[0].where, { novelId: "novel", lane: "auto_director", id: "task" });
   assert.equal(first.status, "available"); assert.equal(first.candidate.storyPrototype.openingChain[0].payoff, "关系从戒备变为互助");
+  assert.equal(first.candidate.hookStrategy, source.candidate.hookStrategy);
+  assert.equal(first.candidate.progressionLoop, source.candidate.progressionLoop);
   seed.candidate = { ...source.candidate, sellingPoint: "新的用户确认方向" };
   assert.notEqual((await facade.loadSelectedPlanningDirection("novel", "task")).fingerprint, first.fingerprint);
   seed = { storyMacroPlan: { sellingPoint: "不得反推" } };
@@ -92,7 +96,7 @@ test("lost relationship/payoff and vague opening postponement enter existing aut
 
 test("a concrete opening handoff needs real neighboring evidence; long-term book promise is not due in chapter two", () => {
   const value = checks(); const current = value.at(-1);
-  Object.assign(current, { status: "deferred", scope: "opening_sequence", candidateEvidence: [],
+  Object.assign(current, { status: "deferred", handoffStatus: "covered", scope: "opening_sequence", candidateEvidence: [],
     contextEvidence: [{ sourcePath: "readonlyNext.summary", quote: "完成互助交换并建立信任" }], explanation: "因已写负伤事实改在相邻章完成，当前章先维持接触。" });
   const output = assessment(value);
   const reviewContextJson = context({ readonlyNext: { chapterOrder: 3, summary: "完成互助交换并建立信任" } });
@@ -101,10 +105,10 @@ test("a concrete opening handoff needs real neighboring evidence; long-term book
   assert.throws(() => prompt.postValidate(output, { candidate, reviewContextJson: context() }), /absent/);
   Object.assign(current, { scope: "book_arc", contextEvidence: [], explanation: "试图把开篇降为长期承诺" });
   assert.throws(() => prompt.postValidate(output, { candidate, reviewContextJson }), /cannot be reclassified/);
-  Object.assign(current, { status: "preserved", scope: "opening_sequence", candidateEvidence: [{ sourcePath: "summary", quote: candidate.summary }] });
-  Object.assign(value[0], { status: "deferred", scope: "book_arc", candidateEvidence: [], explanation: "这是全书技能成长方向，开篇只需建立方向而非完成全部目标。" });
+  Object.assign(current, { status: "preserved", handoffStatus: "not_needed", scope: "opening_sequence", candidateEvidence: [{ sourcePath: "summary", quote: candidate.summary }] });
+  Object.assign(value[0], { status: "deferred", handoffStatus: "covered", scope: "book_arc", candidateEvidence: [], explanation: "这是全书技能成长方向，开篇只需建立方向而非完成全部目标。" });
   prompt.postValidate(output, { candidate, reviewContextJson });
-  assert.equal(quality.mapSemanticAssessmentToQualityGate(output, "ai_copilot").status, "passed");
+  assert.equal(quality.mapSemanticAssessmentToQualityGate(output, "ai_copilot").status, "needs_confirmation");
 });
 
 test("not-yet-due opening nodes stay in source context but do not force unplanned chapter five into a chapter two review", () => {
@@ -116,7 +120,7 @@ test("not-yet-due opening nodes stay in source context but do not force unplanne
   assert.equal(evidence.sourceIndex.leaves.get("storyPrototype.openingChain[1].payoff"), "第五章的后续兑现");
   assert.equal(evidence.contextIndex.leaves.get("readonlyOpeningRoutes[0].summary"), "第五章有明确互助回报");
   const value = checks(); const early = value.find(check => check.sourceId === "storyPrototype.earlyPayoff");
-  Object.assign(early, { status: "deferred", scope: "opening_sequence", candidateEvidence: [], contextEvidence: [{ sourcePath: "readonlyOpeningRoutes[0].summary", quote: "第五章有明确互助回报" }] });
+  Object.assign(early, { status: "deferred", handoffStatus: "covered", scope: "opening_sequence", candidateEvidence: [], contextEvidence: [{ sourcePath: "readonlyOpeningRoutes[0].summary", quote: "第五章有明确互助回报" }] });
   prompt.postValidate(assessment(value), { candidate, reviewContextJson });
   early.scope = "book_arc";
   assert.throws(() => prompt.postValidate(assessment(value), { candidate, reviewContextJson }), /cannot be reclassified/);
@@ -153,4 +157,60 @@ test("existing quality call receives bounded output headroom and no additional m
   assert.equal(calls[0].options.maxTokens, 4000 + checks().length * 600);
   assert.ok(calls[0].options.maxTokens <= 10000);
   assert.equal(calls[0].promptInput.reviewContextJson, context());
+  await new ChapterTaskSheetQualityGateService().evaluate(candidate, { reviewContextJson: context(), previousIssues: Array(30).fill({ id: "old" }) });
+  assert.equal(calls.length, 2); assert.equal(calls[1].options.maxTokens, 16000);
+});
+
+test("non-empty citations never turn an explicitly partial, missing or conflicting handoff into covered", () => {
+  for (const handoffStatus of ["partial", "missing", "conflicting"]) {
+    const value = checks(); Object.assign(value.at(-1), { status: "deferred", handoffStatus, scope: "opening_sequence",
+      contextEvidence: [{ sourcePath: "readonlyNext.summary", quote: "取得地图" }], explanation: "前置动作有安排，但回报没有完整安排。" });
+    const result = quality.mapSemanticAssessmentToQualityGate(assessment(value), "full_book_autopilot");
+    assert.equal(result.safeToSync, false); assert.equal(result.canEnterExecution, false);
+  }
+  const value = checks(); Object.assign(value.at(-1), { status: "deferred", handoffStatus: "covered", contextEvidence: [{ sourcePath: "writtenEvidence.chapters[0].content", quote: "之前只取得地图" }] });
+  assert.equal(quality.mapSemanticAssessmentToQualityGate(assessment(value), "full_book_autopilot").safeToSync, false);
+  assert.equal(prompt.outputSchema.safeParse(assessment(checks().map(({ handoffStatus, ...legacy }) => legacy))).success, false);
+  assert.equal(quality.aiChapterTaskSheetQualityAssessmentSchema.safeParse(assessment(checks().map(({ handoffStatus, ...legacy }) => legacy))).success, true);
+});
+
+test("validated unresolved checks retain original IDs and all new findings beyond the fresh-output issue limit", () => {
+  const previous = Array.from({ length: 12 }, (_, i) => ({ id: `old-${i}`, severity: "medium", target: "boundary", summary: "原问题", repairHint: `原指导${i}` }));
+  const value = assessment([]);
+  value.issues = Array.from({ length: 8 }, (_, i) => ({ id: `new-${i}`, severity: "high", target: "semantic", summary: "新问题", repairHint: `新指导${i}` }));
+  value.issueChecks = previous.map(issue => ({ issueId: issue.id, status: "partially_resolved", candidateEvidence: [], explanation: `本轮仍未解决${issue.id}` }));
+  assert.equal(prompt.outputSchema.safeParse(value).success, true);
+  const projected = issueProjection.projectValidatedIssueChecks(value, {}, previous);
+  assert.equal(projected.issues.length, 20); assert.equal(projected.safeToSync, false); assert.equal(projected.verdict, "repairable");
+  for (const issue of previous) assert.deepEqual(projected.issues.find(item => item.id === issue.id), { ...issue, summary: `本轮仍未解决${issue.id}` });
+  assert.deepEqual(projected.issues.slice(0, 8), value.issues);
+  assert.equal(quality.aiChapterTaskSheetQualityAssessmentSchema.safeParse(projected).success, true);
+  assert.equal(prompt.outputSchema.safeParse(projected).success, false);
+  assert.equal(quality.mapSemanticAssessmentToQualityGate(projected, "full_book_autopilot").canEnterExecution, false);
+  assert.throws(() => issueProjection.projectValidatedIssueChecks({ ...value, issueChecks: value.issueChecks.slice(1) }, {}, previous), /exactly once/);
+  const forged = structuredClone(value); forged.issueChecks[0].candidateEvidence = [{ sourcePath: "summary", quote: "伪造原文" }];
+  assert.throws(() => issueProjection.projectValidatedIssueChecks(forged, { summary: "真实原文" }, previous), /absent/);
+});
+
+const capturedPath = path.resolve(__dirname, "../../.codex-run/mining-book-evidence.json");
+test("captured rejected review replays offline as repairable while preserving the unresolved historical issue", { skip: !fs.existsSync(capturedPath) }, () => {
+  // Read local diagnostic capture without adding the user's manuscript or complete output to fixtures.
+  const capture = JSON.parse(fs.readFileSync(capturedPath, "utf8"));
+  const task = capture.tasks.find(item => item.lane === "auto_director");
+  const seed = JSON.parse(task.seedPayloadJson); const repair = seed.planningRepair;
+  const change = repair.history.find(item => item.kind === "repair").output.changes[0];
+  const current = { ...change, chapterOrder: repair.chapterOrder, sceneCards: { scenes: change.sceneCards } };
+  const previousIssues = repair.history.find(item => item.kind === "assessment").result.chapters[repair.chapterId].issues;
+  const all = seed.planningRepairSnapshot.baselineDocument.volumes.flatMap(volume => volume.chapters);
+  const reviewContextJson = JSON.stringify({ selectedPlanningDirection: { status: "available", sourceTaskId: task.id, candidate: seed.candidate },
+    readonlyPrevious: all.find(chapter => chapter.chapterOrder === repair.chapterOrder - 1), readonlyNext: all.find(chapter => chapter.chapterOrder === repair.chapterOrder + 1) });
+  const rejected = repair.history.filter(item => item.kind === "rejected_response");
+  for (const entry of rejected) {
+    const projected = prompt.postValidate(entry.output, { candidate: current, previousIssues, reviewContextJson });
+    assert.equal(projected.safeToSync, false); assert.equal(projected.verdict, "repairable");
+    assert.equal(projected.issues.find(issue => issue.id === "opening_chain_deferred_handoff").severity, "low");
+    assert.ok(entry.output.issues.every(issue => projected.issues.some(saved => saved.id === issue.id)));
+    assert.equal(quality.mapSemanticAssessmentToQualityGate(projected, "full_book_autopilot").canEnterExecution, false);
+  }
+  assert.equal(rejected.length, 3);
 });

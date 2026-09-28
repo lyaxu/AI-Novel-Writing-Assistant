@@ -13,10 +13,13 @@ export interface PlanningRepairState extends Record<string, unknown> {
   summary?: string;
   history: unknown[];
   guidance?: string;
+  recoveryAction?: { requestId: string; mode: "repair_then_review" | "review_existing"; paidRound?: number; affectedChapterIds?: string[] };
   candidateVersionId?: string;
 }
 
 export interface PlanningRepairRecovery {
+  executionMode?: "repair_then_review" | "review_existing";
+  affectedChapterIds?: string[];
   repairKey: string;
   resumePhase: "structured_outline" | "chapter_execution";
   idempotencyKey?: string;

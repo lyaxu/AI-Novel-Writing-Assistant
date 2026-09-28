@@ -6,6 +6,9 @@ export const selectedPlanningCandidateSchema = z.object({
   sellingPoint: sourceText.optional(),
   coreConflict: sourceText.optional(),
   protagonistPath: sourceText.optional(),
+  hookStrategy: sourceText.optional(),
+  progressionLoop: sourceText.optional(),
+  endingDirection: sourceText.optional(),
   storyPrototype: z.object({
     protagonistWant: sourceText, opposition: sourceText, difficultChoice: sourceText,
     distinctiveEngine: sourceText, earlyPayoff: sourceText, appealRisk: sourceText,

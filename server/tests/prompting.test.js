@@ -152,8 +152,8 @@ test("prompt registry exposes versioned planning assets", () => {
     "agent.runtime.setup_guidance@v1",
     "agent.runtime.setup_ideation@v1",
     "planner.chapter.plan@v1",
-    "novel.director.candidates@v3",
-    "novel.director.candidate_patch@v2",
+    "novel.director.candidates@v4",
+    "novel.director.candidate_patch@v3",
     "novel.director.blueprint@v1",
     "novel.character.castOptions@v3",
     "novel.character.castOptions.repair@v1",
@@ -164,9 +164,9 @@ test("prompt registry exposes versioned planning assets", () => {
     "novel.character.influence.options@v1",
     "novel.character.dialogue.turn@v1",
     "novel.story_macro.decomposition@v1",
-    "novel.volume.strategy@v3",
-    "novel.volume.strategy.critique@v2",
-    "novel.volume.skeleton@v4",
+    "novel.volume.strategy@v4",
+    "novel.volume.strategy.critique@v3",
+    "novel.volume.skeleton@v5",
     "title.generation@v2",
     "audit.chapter.full@v3",
     "bookAnalysis.source.note@v1",
@@ -525,7 +525,7 @@ test("volume strategy prompt renders volume count guidance and fixed-count const
 });
 
 test("registered volume strategy prompt uses the shared 24-volume ceiling", () => {
-  const asset = getRegisteredPromptAsset("novel.volume.strategy", "v3");
+  const asset = getRegisteredPromptAsset("novel.volume.strategy", "v4");
   assert.ok(asset);
   const messages = asset.render({}, {
     blocks: [],
@@ -669,20 +669,20 @@ test("chapter writer prompt does not expose scene contract controls", () => {
 
 test("novel main-chain prompt assets declare explicit non-zero context budgets", () => {
   const expectedBudgets = new Map([
-    ["novel.director.candidates@v3", NOVEL_PROMPT_BUDGETS.directorCandidates],
-    ["novel.director.candidate_patch@v2", NOVEL_PROMPT_BUDGETS.directorCandidatePatch],
+    ["novel.director.candidates@v4", NOVEL_PROMPT_BUDGETS.directorCandidates],
+    ["novel.director.candidate_patch@v3", NOVEL_PROMPT_BUDGETS.directorCandidatePatch],
     ["novel.director.blueprint@v1", NOVEL_PROMPT_BUDGETS.directorBlueprint],
     ["novel.story_macro.decomposition@v1", NOVEL_PROMPT_BUDGETS.storyMacroDecomposition],
     ["novel.story_macro.field_regeneration@v1", NOVEL_PROMPT_BUDGETS.storyMacroFieldRegeneration],
-    ["novel.volume.strategy@v3", NOVEL_PROMPT_BUDGETS.volumeStrategy],
-    ["novel.volume.strategy.critique@v2", NOVEL_PROMPT_BUDGETS.volumeStrategyCritique],
-    ["novel.volume.skeleton@v4", NOVEL_PROMPT_BUDGETS.volumeSkeleton],
-    ["novel.volume.beat_sheet@v5", NOVEL_PROMPT_BUDGETS.volumeBeatSheet],
-    ["novel.volume.chapter_list@v11", NOVEL_PROMPT_BUDGETS.volumeChapterList],
-    ["novel.volume.chapter_purpose@v4", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
-    ["novel.volume.chapter_boundary@v3", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
-    ["novel.volume.chapter_task_sheet@v5", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
-    ["novel.volume.rebalance.adjacent@v2", NOVEL_PROMPT_BUDGETS.volumeRebalance],
+    ["novel.volume.strategy@v4", NOVEL_PROMPT_BUDGETS.volumeStrategy],
+    ["novel.volume.strategy.critique@v3", NOVEL_PROMPT_BUDGETS.volumeStrategyCritique],
+    ["novel.volume.skeleton@v5", NOVEL_PROMPT_BUDGETS.volumeSkeleton],
+    ["novel.volume.beat_sheet@v6", NOVEL_PROMPT_BUDGETS.volumeBeatSheet],
+    ["novel.volume.chapter_list@v12", NOVEL_PROMPT_BUDGETS.volumeChapterList],
+    ["novel.volume.chapter_purpose@v5", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
+    ["novel.volume.chapter_boundary@v4", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
+    ["novel.volume.chapter_task_sheet@v6", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
+    ["novel.volume.rebalance.adjacent@v3", NOVEL_PROMPT_BUDGETS.volumeRebalance],
     [promptKey(chapterWriterPrompt), NOVEL_PROMPT_BUDGETS.chapterWriter],
     ["novel.review.chapter@v2", NOVEL_PROMPT_BUDGETS.chapterReview],
     ["novel.review.repair@v3", NOVEL_PROMPT_BUDGETS.chapterRepair],

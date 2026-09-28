@@ -15,6 +15,8 @@ const action = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("retry"), repairKey: z.string().trim().min(1),
     guidance: z.string().trim().min(1).max(4000), idempotencyKey: z.string().trim().min(1).max(128),
+    executionMode: z.enum(["repair_then_review", "review_existing"]).optional(),
+    affectedChapterIds: z.array(z.string().min(1)).min(1).max(3).optional(),
   }).strict(),
 ]);
 

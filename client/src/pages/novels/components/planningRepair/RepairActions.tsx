@@ -75,7 +75,7 @@ export function RepairActions({ status }: { status: PlanningRepairStatus }) {
       }
       if (!guidance.trim()) throw new Error("请填写自定义方向，或选择 AI 推荐的方案。");
       return actOnPlanningRepair(status.taskId, {
-        action: "retry", repairKey: repair.key, guidance: guidance.trim(), idempotencyKey: recoveryRequest.current.key,
+        action: "retry", repairKey: repair.key, guidance: guidance.trim(), idempotencyKey: recoveryRequest.current.key, executionMode: "repair_then_review",
       });
     },
     onSuccess: async (_, action) => { setPaused(action === "pause"); await refresh(); },
@@ -113,9 +113,12 @@ export function RepairActions({ status }: { status: PlanningRepairStatus }) {
       {ready && advice ? <div className="space-y-3">
         {advice.summary ? <p className="break-words text-sm">{advice.summary}</p> : null}
         <RepairAdviceOptions advice={advice} selectedId={selected?.id ?? ""} disabled={busy} onSelect={setSelectedId} />
-        <p className="text-xs text-muted-foreground">采用方案将追加 1 轮规划修复，并进行复核，两者均会产生模型调用费用。</p>
+        <p className="text-xs text-muted-foreground">{selected?.executionMode === "review_existing"
+          ? "采用方案将复核原候选，不修改合同；仍未通过时保持暂停。复核会产生模型调用费用。"
+          : selected?.executionMode === "source_edit" ? "请先按方案说明确认章节规划或卷规划，再获取可执行方案。"
+          : "采用方案将追加 1 轮规划修复，先修改候选再复核，两者均会产生模型调用费用。"}</p>
         <Button type="button" disabled={busy || !canAdoptPlanningRepairAdvice(advice, selectedId, Boolean(status.recoveryRequest))}
-          onClick={() => mutation.mutate("adopt")}>{mutation.isPending ? "正在提交…" : "采用此方案并修复"}</Button>
+          onClick={() => mutation.mutate("adopt")}>{mutation.isPending ? "正在提交…" : selected?.executionMode === "review_existing" ? "按此方向复核原候选" : "采用此方案并修复"}</Button>
       </div> : null}
       <details className="text-sm">
         <summary className="cursor-pointer font-medium">高级：自定义修复方向（可选）</summary>

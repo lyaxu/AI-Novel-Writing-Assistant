@@ -8,7 +8,7 @@ export interface PlanningRepairStatus {
   novelId: string | null;
   status: string;
   pendingManualRecovery: boolean;
-  recoveryRequest?: { idempotencyKey: string; guidance: string } | null;
+  recoveryRequest?: { idempotencyKey: string; guidance: string; executionMode?: "repair_then_review" | "review_existing"; affectedChapterIds?: string[] } | null;
   planningRepair: {
     version: 1;
     key: string;
@@ -61,7 +61,7 @@ export async function getNovelPlanningRepairStatus(novelId: string) {
 
 export async function actOnPlanningRepair(taskId: string, payload:
   | { action: "pause"; repairKey: string }
-  | { action: "retry"; repairKey: string; guidance: string; idempotencyKey: string },
+  | { action: "retry"; repairKey: string; guidance: string; idempotencyKey: string; executionMode?: "repair_then_review" | "review_existing"; affectedChapterIds?: string[] },
 ) {
   const { data } = await apiClient.post<ApiResponse<unknown>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/actions`, payload);
   return data.data;

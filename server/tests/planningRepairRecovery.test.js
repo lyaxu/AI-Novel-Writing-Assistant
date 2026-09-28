@@ -181,6 +181,7 @@ function harness(patch = {}) {
     const seed = JSON.parse(row.seedPayloadJson);
     seed.planningRepair = { ...seed.planningRepair, phase: seed.planningRepair.candidateVersionId ? "reviewing" : "assessing", pendingOperation: undefined, quality: undefined };
     row = { ...row, seedPayloadJson: JSON.stringify(seed) };
+    return { eligibleChapterIds: seed.planningRepairSnapshot?.eligibleChapterIds ?? ["plan-1"] };
   } };
   return { service: new PlanningRepairRecoveryService(workflow, repairStore), workflow, repairStore, rebases, writes, row: () => row };
 }
@@ -223,6 +224,47 @@ test("explicit grant rebases before budget change, preserves candidate and round
   assert.equal(seed.untouched, true);
   assert.doesNotThrow(() => assertPlanningRepairResumeAllowed(row().seedPayloadJson, "request-1"));
   assert.doesNotThrow(() => assertPlanningRepairResumeAllowed(row().seedPayloadJson));
+});
+
+test("typed recovery mode is durable and replay cannot add another round or change operation", async () => {
+  const h = harness({ planningRepair: state({ candidateVersionId: "candidate-1" }) });
+  const input = { action: "retry", repairKey: "repair-1", guidance: "Apply concrete change", idempotencyKey: "typed", executionMode: "repair_then_review" };
+  await h.service.grant("task-1", input);
+  await h.service.grant("task-1", input);
+  const seed = JSON.parse(h.row().seedPayloadJson);
+  assert.equal(seed.planningRepair.maxRounds, 3);
+  assert.deepEqual(seed.planningRepair.recoveryAction, { requestId: "typed", mode: "repair_then_review" });
+  assert.equal(h.rebases.length, 1);
+  await assert.rejects(h.service.grant("task-1", { ...input, executionMode: "review_existing" }));
+});
+
+test("authorized window survives queue failure replay and invalid scopes never reserve a grant", async () => {
+  const h = harness({ planningRepair: state({ chapterId: "plan-1", candidateVersionId: "candidate-1" }),
+    planningRepairSnapshot: { eligibleChapterIds: ["plan-1", "plan-2"] } });
+  const input = { action: "retry", repairKey: "repair-1", guidance: "Repair both", idempotencyKey: "window",
+    executionMode: "repair_then_review", affectedChapterIds: ["plan-1", "plan-2"] };
+  await assert.rejects(h.service.grant("task-1", { ...input, affectedChapterIds: ["plan-1", "written"] }));
+  assert.equal(h.writes.length, 0);
+  await h.service.grant("task-1", input);
+  const recovery = JSON.parse(h.row().seedPayloadJson).planningRepairRecovery;
+  await h.service.grant("task-1", { action: "retry", repairKey: recovery.repairKey,
+    guidance: recovery.guidance, idempotencyKey: recovery.idempotencyKey,
+    executionMode: recovery.executionMode, affectedChapterIds: recovery.affectedChapterIds });
+  assert.equal(h.rebases.length, 1);
+  assert.equal(JSON.parse(h.row().seedPayloadJson).planningRepair.maxRounds, 3);
+  assert.deepEqual(recovery.affectedChapterIds, ["plan-1", "plan-2"]);
+});
+
+test("review-only authorization cannot silently enlarge the repair budget", async () => {
+  const h = harness({ planningRepair: state({ candidateVersionId: "candidate-1" }) });
+  const input = { action: "retry", repairKey: "repair-1", guidance: "Reassess disagreement", idempotencyKey: "review",
+    executionMode: "review_existing" };
+  await h.service.grant("task-1", input);
+  await h.service.grant("task-1", input);
+  const saved = JSON.parse(h.row().seedPayloadJson).planningRepair;
+  assert.equal(saved.maxRounds, 2);
+  assert.equal(saved.rounds, 2);
+  assert.equal(saved.recoveryAction.mode, "review_existing");
 });
 
 test("CAS prevents concurrent grants; replay never grants twice; mismatched key and empty guidance do not write", async () => {

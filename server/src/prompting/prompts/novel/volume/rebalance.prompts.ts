@@ -11,7 +11,7 @@ export const volumeRebalancePrompt: PromptAsset<
   ReturnType<typeof createVolumeRebalanceSchema>["_output"]
 > = {
   id: "novel.volume.rebalance.adjacent",
-  version: "v2",
+  version: "v3",
   taskType: "planner",
   mode: "structured",
   language: "zh",

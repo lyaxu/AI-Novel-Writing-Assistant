@@ -1,6 +1,7 @@
 import { prisma } from "../../../../db/prisma";
 import { createHash } from "node:crypto";
 import { selectedPlanningCandidateSchema, type SelectedPlanningDirection } from "@ai-novel/shared/types/novel/planningPromises";
+export { projectPlanningHorizon } from "./planningHorizon";
 
 export function candidateSourceFingerprint(rawCandidate: unknown): string {
   return createHash("sha256").update(JSON.stringify(rawCandidate ?? null)).digest("hex");
