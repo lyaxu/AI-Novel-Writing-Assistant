@@ -446,6 +446,9 @@ export function extractStructuredOutputErrorCategory(message?: string | null): S
 }
 
 export class StructuredOutputError extends Error {
+  /** Private diagnostic evidence; deliberately non-enumerable when attached by the parser. */
+  declare readonly rejectedOutput?: { rawContent: string; finishReason: string };
+
   readonly category: StructuredOutputErrorCategory;
 
   readonly diagnostics: StructuredOutputDiagnostics;

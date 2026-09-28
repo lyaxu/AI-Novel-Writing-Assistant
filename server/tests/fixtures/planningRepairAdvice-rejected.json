@@ -1,0 +1,155 @@
+{
+  "summary": "第2章《林缘拒斥》的规划响应在格式/合同校验环节被拦下，但审查证据显示：上一轮指出的三处问题（火势逼退食人藤因果不一致、食人藤避火规则未建立、刺激气味干扰魔物嗅探未建立）在当前候选原文中均已修复，且复核判定为 usable/safeToSync。当前真正的缺口不是内容质量，而是修复轮次已用尽（rounds=1/maxRounds=2）且响应未通过格式校验，导致无法自动同步。第2章属于 eligibleChapterIds 内的未写窗口，可在不改变章节目标、义务与字数预算的前提下，通过重新提交一份格式合规的规划响应直接恢复。",
+  "recommendedOptionId": "resubmit_formatted_plan",
+  "options": [
+    {
+      "id": "resubmit_formatted_plan",
+      "title": "按现有修复内容重新提交格式合规的规划响应",
+      "reason": "这是最省事、最贴合用户已选方向的方案。审查证据明确显示三处问题已在候选原文中修复，复核结论为 usable、safeToSync=true、无遗留 issue。当前失败原因是‘规划响应未通过格式或合同校验’，属于提交格式问题，不是内容缺口。只需把已经修好的第2章场景卡、读者体验、义务移动等内容，按服务器要求的 schema 重新组织并提交，即可让第2章进入可执行状态。不需要改剧情、不需要动源工作区、不需要放宽任何质量门槛。",
+      "changes": [
+        "保持第2章标题《林缘拒斥》、summary、purpose、exclusiveEvent、endingState、nextChapterEntryState、conflictLevel=35、revealLevel=40、targetWordCount=2800 不变。",
+        "保持三场场景卡 forest_rejection / smoke_wall / crawl_to_swamp 的 key、title、purpose、mustAdvance、mustPreserve、entryState、exitState、forbiddenExpansion、targetWordCount、resistance、turn、emotionalShift、readerValue、causality、resultingConstraints 不变。",
+        "保持 readerExperience 中 keyTurn 已统一为‘火势逼退食人藤’的表述，不再出现‘毒沼排异环境阻断追兵和魔物’的冲突说法。",
+        "保持 crawl_to_swamp 中‘陈灶观察到火舌舔到食人藤时藤蔓卷缩退避’作为 establish_in_scene 的建立动作，位置在 turn 之前。",
+        "保持 smoke_wall 中‘魔物嗅探声短暂迟疑后退，但无法确认是刺激气味还是火势的偶然效果’的降级表述。",
+        "保持三条 obligationMoves 的 retain 动作与理由不变。",
+        "仅调整提交结构：确保 JSON 字段名、层级、数组/对象位置、必填字段与服务器 schema 完全一致，消除导致校验失败的格式问题。"
+      ],
+      "preserves": [
+        "用户已选的故事方向：祭品厨神、烹饪战斗化、禁忌森林求生、收服小灯、据点建设。",
+        "第1章已建立的所有规则：食气转化代价、烙印灼烫引魔、瓦尔追兵压力、调料瓶来源。",
+        "第2章在卷规划中的位置与功能：从祭坛逃入林缘、被森林排异、发现毒沼食材线索，为第3章灶台与收服小灯做铺垫。",
+        "前30章承诺的兑现节奏：第2章不提前占用毒沼交易、守护者饭局、灶台搭建等后续节点。",
+        "字数预算与节奏：targetWordCount=2800，三场各约934/933/933字，快节奏、高情绪强度。"
+      ],
+      "tradeoffs": [
+        "代价是这一轮不会新增剧情内容，只是把已修好的规划重新提交；如果服务器对格式仍有更细要求，可能还需要再对齐一次字段。",
+        "不解决‘修复轮次已用尽’这一流程状态本身；若重新提交后仍被判格式失败，需要人工确认服务器期望的 schema 版本。",
+        "不触碰任何源工作区文件，因此不会改变卷规划、章节规划或小说基础信息。"
+      ],
+      "diagnosis": "real_gap",
+      "affectedChapterIds": [
+        "cmukqni0l004y9ww0usot67gs-chapter-c8ea10e2-0bc8-4593-9f12-0671bbc42891"
+      ],
+      "changesHardConstraints": false,
+      "requiresSourceEdit": false,
+      "guidance": {
+        "intent": "把已经通过内容复核的第2章规划，按服务器 schema 重新组织并提交，使第2章从 waiting_confirmation 进入可执行状态，不改变任何剧情、规则、义务或字数预算。",
+        "actions": [
+          "以当前 candidateVersionId=cmuksd3ia003aw0w0hqjx0zou 对应的修复内容为唯一内容来源，不新增、不删减剧情节点。",
+          "逐字段核对 JSON 结构：确认 chapterId、chapterOrder、title、summary、purpose、exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、targetWordCount、mustAvoid、taskSheet、sceneCards、readerExperience、payoffRefs、obligationMoves 均存在且类型正确。",
+          "确认 sceneCards 为数组，每项包含 key、title、purpose、mustAdvance、mustPreserve、entryState、exitState、forbiddenExpansion、targetWordCount、resistance、turn、emotionalShift、readerValue、causality、resultingConstraints。",
+          "确认 causality 内 prerequisites 为数组，每项含 condition、sourceKind、reference；resultingConstraints 为数组，每项含 constraint、persistence。",
+          "确认 readerExperience 含 readerQuestion、promisedReward、rewardLevel、protagonistWant、primaryResistance、keyTurn、emotionalShift、informationReveal、netChange、inheritedHookResponsibilities、endingHook。",
+          "确认 obligationMoves 为数组，每项含 obligation、fromChapterId、toChapterId、action、reason。",
+          "提交前做一次自检：JSON 可被解析、无多余注释、无占位符、无未闭合引号或括号。"
+        ],
+        "preserve": [
+          "第2章标题《林缘拒斥》与三场场景卡 key：forest_rejection、smoke_wall、crawl_to_swamp。",
+          "readerExperience.keyTurn 与 crawl_to_swamp.turn 的因果表述完全一致，均为‘火势逼退食人藤’。",
+          "crawl_to_swamp 中食人藤避火规则的 establish_in_scene 建立动作。",
+          "smoke_wall 中刺激气味干扰魔物嗅探的‘无法确认’降级表述。",
+          "三条 obligationMoves 的 retain 动作。",
+          "第2章不写灶台搭建、不写烹饪完成、不与追兵正面交手、不提前揭示守护者或烙印真相的边界。"
+        ],
+        "verification": [
+          "提交后服务器返回格式校验通过，第2章状态从 waiting_confirmation 变为可执行。",
+          "复核再次确认三处历史 issue 状态为 resolved，无新增 issue。",
+          "第2章仍满足：conflictLevel=35、revealLevel=40、targetWordCount=2800、三场字数预算合计约2800。",
+          "第2章仍不越界：未使用食气转化、未搭建灶台、未收服小灯、未接触守护者、未揭示烙印真相。",
+          "第1章已建立的规则在第2章继续生效：精神力透支限制行动、烙印灼烫引魔、瓦尔追兵压力延续。"
+        ]
+      }
+    },
+    {
+      "id": "manual_schema_alignment",
+      "title": "先人工确认服务器期望的规划响应 schema，再提交",
+      "reason": "如果重新提交后仍被判格式失败，说明问题不在内容，而在服务器当前期望的字段结构与你提交的结构不一致。此时最稳妥的做法是先拿到服务器期望的 schema 样例或字段清单，逐字段对齐后再提交。这个方向不改变任何剧情，只是把‘格式对齐’这一步做扎实，避免反复提交失败。适合你希望一次到位、不想反复试错的情况。",
+      "changes": [
+        "保持第2章全部剧情内容与 resubmit_formatted_plan 相同，不新增、不删减。",
+        "先获取服务器当前版本的规划响应 schema 或一份通过校验的样例响应。",
+        "逐字段比对：字段名、层级、数组/对象位置、必填/可选、枚举取值、空数组写法。",
+        "按比对结果调整提交结构，再提交。"
+      ],
+      "preserves": [
+        "第2章全部剧情内容、规则、义务、字数预算。",
+        "用户已选方向与卷规划位置。",
+        "第1章已建立的规则与压力。"
+      ],
+      "tradeoffs": [
+        "需要额外一步获取 schema，可能比直接重新提交慢。",
+        "如果拿不到 schema 样例，这个方向无法推进，只能回到直接重新提交。",
+        "不解决内容层面的任何问题，因为内容层面已无遗留 issue。"
+      ],
+      "diagnosis": "missing_info",
+      "affectedChapterIds": [
+        "cmukqni0l004y9ww0usot67gs-chapter-c8ea10e2-0bc8-4593-9f12-0671bbc42891"
+      ],
+      "changesHardConstraints": false,
+      "requiresSourceEdit": false,
+      "guidance": {
+        "intent": "在重新提交前，先确认服务器当前期望的规划响应 schema，避免因字段结构不一致反复失败。",
+        "actions": [
+          "向服务器或平台确认当前版本规划响应的 schema 定义或通过校验的样例。",
+          "逐字段比对当前候选响应与 schema 的差异。",
+          "按差异调整结构后提交。"
+        ],
+        "preserve": [
+          "第2章全部剧情内容与边界。",
+          "三处已修复问题的修复结果。",
+          "三条 obligationMoves。"
+        ],
+        "verification": [
+          "提交后格式校验通过。",
+          "复核确认无新增 issue。",
+          "第2章进入可执行状态。"
+        ]
+      }
+    },
+    {
+      "id": "hold_and_confirm_rounds",
+      "title": "先确认修复轮次策略，再决定是否重新提交",
+      "reason": "当前 repair 状态显示 rounds=1、maxRounds=2、phase=waiting_confirmation，说明修复轮次已用掉一轮，且响应未通过格式校验。如果你不确定平台是否允许在 waiting_confirmation 状态下重新提交，或是否会自动进入第二轮，建议先确认轮次策略。这个方向不改变剧情，只是把流程状态搞清楚，避免在错误的时机提交。适合你希望先弄明白平台规则、再动手的情况。",
+      "changes": [
+        "保持第2章全部剧情内容不变。",
+        "先确认：waiting_confirmation 状态下是否允许重新提交、是否会消耗第二轮、是否需要人工确认。",
+        "根据确认结果决定是直接重新提交，还是先走人工确认流程。"
+      ],
+      "preserves": [
+        "第2章全部剧情内容、规则、义务、字数预算。",
+        "用户已选方向与卷规划位置。",
+        "第1章已建立的规则与压力。"
+      ],
+      "tradeoffs": [
+        "需要额外确认流程，可能延迟第2章进入执行的时间。",
+        "不解决内容层面的任何问题，因为内容层面已无遗留 issue。",
+        "如果平台不允许重新提交，可能需要走人工确认或调整修复策略。"
+      ],
+      "diagnosis": "review_dispute",
+      "affectedChapterIds": [
+        "cmukqni0l004y9ww0usot67gs-chapter-c8ea10e2-0bc8-4593-9f12-0671bbc42891"
+      ],
+      "changesHardConstraints": false,
+      "requiresSourceEdit": false,
+      "guidance": {
+        "intent": "先确认修复轮次与 waiting_confirmation 状态下的提交规则，再决定是否重新提交第2章规划。",
+        "actions": [
+          "确认 waiting_confirmation 状态下是否允许重新提交规划响应。",
+          "确认重新提交是否消耗第二轮修复轮次。",
+          "确认是否需要人工确认后才能继续。",
+          "根据确认结果选择直接重新提交或走人工确认。"
+        ],
+        "preserve": [
+          "第2章全部剧情内容与边界。",
+          "三处已修复问题的修复结果。",
+          "三条 obligationMoves。"
+        ],
+        "verification": [
+          "流程状态明确后，第2章能进入可执行状态。",
+          "复核确认无新增 issue。",
+          "不因流程问题误改剧情内容。"
+        ]
+      }
+    }
+  ]
+}

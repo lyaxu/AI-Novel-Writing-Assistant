@@ -23,6 +23,10 @@ export function preserveGeneratedContentConstraints<T extends AnySchema>(schema:
   return schema;
 }
 
+export function hasPreservedGeneratedContentConstraints(schema: AnySchema): boolean {
+  return strictContractSchemas.has(schema);
+}
+
 function getSchemaDef(schema: AnySchema): Record<string, unknown> | null {
   const candidate = schema as CloneableSchema;
   return candidate.def ?? candidate._def ?? null;

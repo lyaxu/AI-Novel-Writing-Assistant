@@ -1,0 +1,36 @@
+{
+  "candidate": {
+    "sceneCards": "{\"readerExperience\":{\"keyTurn\":\"陈灶观察到火舌舔到食人藤时藤蔓卷缩退避，判断火势能逼退食人藤，于是放弃向森林深处爬，转而顺着火势蔓延方向爬向毒沼边缘。\"},\"scenes\":[{\"key\":\"smoke_wall\",\"turn\":\"陈灶将辣椒粉撒入火堆产生刺鼻浓烟，烟墙阻断追兵视线；他同时注意到魔物嗅探声在浓烟扩散后短暂迟疑后退，但无法确认这是刺激气味的作用还是火势的偶然效果。\",\"causality\":{\"outcomeMechanism\":\"辣椒粉和干香草在火焰中产生刺鼻浓烟，烟墙阻断追兵视线；魔物嗅探声在浓烟扩散后短暂迟疑后退，但陈灶无法确认这是刺激气味的作用还是火势的偶然效果，且他因吸入烟尘和透支彻底倒地。\"}},{\"key\":\"crawl_to_swamp\",\"turn\":\"陈灶观察到火舌舔到食人藤时藤蔓卷缩退避，判断火势能逼退食人藤，于是放弃向森林深处爬，转而顺着火势蔓延方向爬向毒沼边缘。\",\"mustAdvance\":[\"他观察到火舌舔到食人藤时藤蔓卷缩退避，据此判断火势能逼退食人藤\"],\"causality\":{\"outcomeMechanism\":\"火势逼退食人藤露出窄路，陈灶沿窄路爬到毒沼边缘，在泥地中发现浆果丛和浅水区鱼群游动痕迹，但体力已彻底耗尽。\",\"prerequisites\":[{\"condition\":\"食人藤对火有卷缩退避反应\",\"sourceKind\":\"establish_in_scene\",\"reference\":\"本场景前段陈灶观察到火舌舔到食人藤时藤蔓卷缩退避\"}]}}]}"
+  },
+  "issueChecks": [
+    {
+      "issueId": "causality_fire_repels_vine_inconsistent",
+      "status": "resolved",
+      "candidateEvidence": [
+        "readerExperience.keyTurn：陈灶观察到火舌舔到食人藤时藤蔓卷缩退避，判断火势能逼退食人藤，于是放弃向森林深处爬，转而顺着火势蔓延方向爬向毒沼边缘。",
+        "crawl_to_swamp.turn：陈灶观察到火舌舔到食人藤时藤蔓卷缩退避，判断火势能逼退食人藤，于是放弃向森林深处爬，转而顺着火势蔓延方向爬向毒沼边缘。",
+        "crawl_to_swamp.outcomeMechanism：火势逼退食人藤露出窄路，陈灶沿窄路爬到毒沼边缘，在泥地中发现浆果丛和浅水区鱼群游动痕迹，但体力已彻底耗尽。"
+      ],
+      "explanation": "当前候选原文中 readerExperience.keyTurn 已改为与 crawl_to_swamp.turn 及 outcomeMechanism 完全一致的‘火势逼退食人藤’因果表述，不再出现‘毒沼排异环境阻断追兵和魔物’的冲突说法，两处对同一转折的解释已统一，正文生成器不会再写出互相矛盾的段落。"
+    },
+    {
+      "issueId": "vine_fire_avoidance_not_established",
+      "status": "resolved",
+      "candidateEvidence": [
+        "crawl_to_swamp.mustAdvance：他观察到火舌舔到食人藤时藤蔓卷缩退避，据此判断火势能逼退食人藤",
+        "crawl_to_swamp.prerequisites：食人藤对火有卷缩退避反应，sourceKind=establish_in_scene，reference=本场景前段陈灶观察到火舌舔到食人藤时藤蔓卷缩退避",
+        "crawl_to_swamp.turn：陈灶观察到火舌舔到食人藤时藤蔓卷缩退避，判断火势能逼退食人藤"
+      ],
+      "explanation": "当前候选原文已在 crawl_to_swamp 场景的 mustAdvance 前段和 prerequisites 中安排‘陈灶观察到火舌舔到食人藤时藤蔓卷缩退避’这一可验证的建立动作，且明确标注 sourceKind=establish_in_scene，建立动作发生在 turn 中据此选择爬向毒沼之前，使用前未建立的缺口已闭合。"
+    },
+    {
+      "issueId": "smoke_wall_dual_effect_unestablished",
+      "status": "resolved",
+      "candidateEvidence": [
+        "smoke_wall.turn：他同时注意到魔物嗅探声在浓烟扩散后短暂迟疑后退，但无法确认这是刺激气味的作用还是火势的偶然效果。",
+        "smoke_wall.outcomeMechanism：魔物嗅探声在浓烟扩散后短暂迟疑后退，但陈灶无法确认这是刺激气味的作用还是火势的偶然效果"
+      ],
+      "explanation": "当前候选原文已将‘刺激气味干扰魔物嗅探’从确定规则降级为陈灶无法确认的偶然观察，turn 与 outcomeMechanism 均明确写出‘无法确认这是刺激气味的作用还是火势的偶然效果’，不再作为无前置建立的效果出现，读者与生成器都不会被误导为已确立规则。"
+    }
+  ]
+}

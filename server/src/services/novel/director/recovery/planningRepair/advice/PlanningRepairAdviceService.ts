@@ -7,10 +7,12 @@ import { planningRepairAdvicePrompt } from "../../../../../../prompting/prompts/
 import { runWithEnforcedTimeout } from "../../../../../../llm/invokeTimeout";
 import { PlanningRepairRecoveryService } from "../PlanningRepairRecoveryService";
 import { assertAdvicePaused, readAdviceSource, type AdviceSource } from "./AdviceSource";
+import { describeAdviceFailure } from "./AdviceFailure";
 
 interface SavedAdvice {
   adviceId: string; requestId: string; repairKey: string; fingerprint: string; sourceToken: string;
   status: "running" | "ready" | "failed"; result?: PlanningRepairAdviceOutput; error?: string;
+  failureDiagnostics?: ReturnType<typeof describeAdviceFailure>["failureDiagnostics"];
 }
 const active = new Set<string>();
 const requesting = new Set<string>();
@@ -32,7 +34,8 @@ export function projectAdvice(source: AdviceSource): PlanningRepairAdviceStatus 
   const base = { adviceId: advice.adviceId, requestId: advice.requestId };
   if (advice.fingerprint !== source.fingerprint) return { ...base, status: "stale" };
   if (advice.status === "running") return { ...base, status: active.has(advice.adviceId) ? "running" : "uncertain" };
-  if (advice.status === "failed") return { ...base, status: "failed", error: advice.error };
+  if (advice.status === "failed") return { ...base, status: "failed", error: advice.failureDiagnostics
+    ? advice.error : "上次未能取得可用方案，本次未执行修复。可重新获取方案。" };
   if (!advice.result) return { ...base, status: "uncertain" };
   return { ...base, status: "ready", summary: advice.result.summary, recommendedOptionId: advice.result.recommendedOptionId,
     options: advice.result.options.map((option) => ({
@@ -95,8 +98,11 @@ export class PlanningRepairAdviceService {
 
   private async complete(taskId: string, source: AdviceSource, advice: SavedAdvice) {
     let completed: SavedAdvice;
-    try { completed = { ...advice, status: "ready", result: planningRepairAdviceOutputSchema.parse(await this.generateAdvice(source)) }; }
-    catch (error) { completed = { ...advice, status: "failed", error: error instanceof Error ? error.message : "建议生成未完成，请明确重试。" }; }
+    let receivedOutput: unknown;
+    try {
+      receivedOutput = await this.generateAdvice(source);
+      completed = { ...advice, status: "ready", result: planningRepairAdviceOutputSchema.parse(receivedOutput) };
+    } catch (error) { completed = { ...advice, status: "failed", ...describeAdviceFailure(error, receivedOutput) }; }
     try {
       await prisma.$transaction(async (tx) => {
         const current = await readAdviceSource(tx, taskId);

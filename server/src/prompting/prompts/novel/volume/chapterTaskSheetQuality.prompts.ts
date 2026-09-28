@@ -8,8 +8,10 @@ import type {
 import {
   aiChapterTaskSheetQualityAssessmentSchema,
   chapterPlanningIssueCheckSchema,
+  chapterPlanningEvidenceQuoteSchema,
 } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import type { PromptAsset } from "../../../core/promptTypes";
+import { buildChapterEvidenceIndex, matchesChapterEvidence } from "./evidence/chapterEvidence";
 
 export interface ChapterTaskSheetQualityPromptInput {
   candidate: ChapterExecutionContractQualityCandidate;
@@ -78,7 +80,7 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "",
     "输出严格 JSON，不要 Markdown、注释、解释或额外字段。",
     "顶层只能输出 verdict、safeToSync、loadRisk、recommendedHandling、summary、issues、repairGuidance、confidence、issueChecks。",
-    "issueChecks 每项包含 issueId、status、candidateEvidence（最多3条、每条240字以内的准确原文）、explanation（400字以内）。没有可引用的原文时用空数组，不能伪造引用。",
+    "issueChecks 每项包含 issueId、status、candidateEvidence（最多3个对象，每个包含sourcePath和quote）、explanation（400字以内）。sourcePath必须逐字选择candidateEvidenceIndex的一个叶路径；quote为该路径值中240字以内的连续准确原文，不带路径标签，不拼接多个字段。没有可引用的原文时用空数组，不能伪造引用。最多覆盖8项原问题和1项合成职责过载问题，必须逐项覆盖全部previousIssues。",
     "verdict 只能使用 usable、repairable、unusable。",
     "loadRisk 只能使用 normal、overloaded。",
     "recommendedHandling 只能使用 use_as_is、repair_contract、replan_window。",
@@ -116,7 +118,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   AiChapterTaskSheetQualityAssessment
 > = {
   id: "novel.volume.chapter_task_sheet_quality",
-  version: "v4",
+  version: "v5",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -124,7 +126,9 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
     maxTokensBudget: 4200,
   },
   outputSchema: aiChapterTaskSheetQualityAssessmentSchema.extend({
-    issueChecks: z.array(chapterPlanningIssueCheckSchema).max(8),
+    issueChecks: z.array(chapterPlanningIssueCheckSchema.extend({
+      candidateEvidence: z.array(chapterPlanningEvidenceQuoteSchema).max(3),
+    })).max(9),
   }),
   render: (input) => [
     new SystemMessage(createSystemPrompt(input.mode)),
@@ -133,6 +137,8 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
       "",
       "chapter execution contract candidate:",
       renderCandidate(input.candidate),
+      "candidateEvidenceIndex (valid leaf sourcePath; quote its corresponding exact text in the candidate above):",
+      JSON.stringify([...buildChapterEvidenceIndex(input.candidate).leaves.keys()]),
       "",
       "reviewContext (current source and repair history):",
       input.reviewContextJson || "No additional context supplied. Do not invent prior facts.",
@@ -147,20 +153,9 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
       || checks.some((check) => !expected.has(check.issueId))) {
       throw new Error("issueChecks must cover each previous issue exactly once.");
     }
-    // Compare quoted text against the actual candidate, including decoded JSON string fields.
-    const strings: string[] = [];
-    const collect = (value: unknown): void => {
-      if (typeof value === "string") {
-        strings.push(value);
-        try { const decoded: unknown = JSON.parse(value); if (typeof decoded !== "string") collect(decoded); } catch { /* Plain text. */ }
-      } else if (Array.isArray(value)) value.forEach(collect);
-      else if (value && typeof value === "object") Object.values(value).forEach(collect);
-    };
-    collect(input.candidate);
-    const normalize = (value: string) => value.replace(/\s+/g, "");
-    const source = strings.map(normalize);
+    const source = buildChapterEvidenceIndex(input.candidate);
     for (const check of checks) {
-      if (check.candidateEvidence.some((quote) => !source.some((text) => text.includes(normalize(quote))))) {
+      if (check.candidateEvidence.some((quote) => !matchesChapterEvidence(source, quote))) {
         throw new Error(`issueChecks ${check.issueId} contains evidence absent from the current candidate.`);
       }
       if (check.status === "resolved") {

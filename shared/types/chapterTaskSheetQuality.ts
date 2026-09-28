@@ -69,10 +69,14 @@ export interface ChapterTaskSheetQualityGateResult {
   issueChecks?: ChapterPlanningIssueCheck[];
 }
 
+export const chapterPlanningEvidenceQuoteSchema = z.object({
+  sourcePath: z.string().trim().min(1).max(240),
+  quote: z.string().trim().min(1).max(240),
+});
 export const chapterPlanningIssueCheckSchema = z.object({
   issueId: z.string().trim().min(1),
   status: z.enum(["resolved", "partially_resolved", "unresolved", "insufficient_context"]),
-  candidateEvidence: z.array(z.string().trim().min(1).max(240)).max(3),
+  candidateEvidence: z.array(z.union([z.string().trim().min(1).max(240), chapterPlanningEvidenceQuoteSchema])).max(3),
   explanation: z.string().trim().min(1).max(400),
 });
 export type ChapterPlanningIssueCheck = z.infer<typeof chapterPlanningIssueCheckSchema>;
@@ -163,10 +167,12 @@ export const aiChapterTaskSheetQualityAssessmentSchema = z.object({
   loadRisk: z.enum(["normal", "overloaded"]).default("normal"),
   recommendedHandling: z.enum(["use_as_is", "repair_contract", "replan_window"]).default("use_as_is"),
   summary: z.string().trim().min(1),
-  issues: z.array(chapterTaskSheetQualityIssueSchema).max(8).default([]),
+  issues: z.array(chapterTaskSheetQualityIssueSchema).max(9)
+    .refine((issues) => issues.filter((issue) => issue.id !== "contract_overloaded").length <= 8,
+      "At most eight original issues plus the contract overload issue are allowed.").default([]),
   repairGuidance: z.array(z.string().trim().min(1)).max(8).default([]),
   confidence: z.preprocess(normalizeAssessmentConfidence, z.number().min(0).max(1)),
-  issueChecks: z.array(chapterPlanningIssueCheckSchema).max(8).optional(),
+  issueChecks: z.array(chapterPlanningIssueCheckSchema).max(9).optional(),
 });
 
 export type AiChapterTaskSheetQualityAssessment = z.infer<typeof aiChapterTaskSheetQualityAssessmentSchema>;

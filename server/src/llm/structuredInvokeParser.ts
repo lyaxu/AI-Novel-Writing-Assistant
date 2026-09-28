@@ -2,7 +2,7 @@ import { z, type ZodError, type ZodType } from "zod";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import type { ModelRouteRequestProtocol } from "@ai-novel/shared/types/novel";
 import type { TaskType } from "./modelRouter";
-import { relaxGeneratedContentSchema } from "./generatedContentSchema";
+import { hasPreservedGeneratedContentConstraints, relaxGeneratedContentSchema } from "./generatedContentSchema";
 import { repairWithLlm } from "./structuredInvokeRepair";
 import {
   classifyStructuredOutputFailure,
@@ -188,6 +188,7 @@ function normalizeOversizedArrays<T>(
   error: ZodError,
   schema: ZodType<T>,
 ): { data: T; trimmedPaths: string[] } | null {
+  if (hasPreservedGeneratedContentConstraints(schema)) return null;
   let normalized = cloneJsonValue(parsed);
   const trimmedPaths: string[] = [];
 
@@ -362,6 +363,23 @@ export function shouldUseJsonObjectResponseFormat<T>(
 }
 
 export async function parseStructuredLlmRawContentDetailed<T>(
+  input: StructuredInvokeRawParseInput<T>,
+): Promise<StructuredInvokeResult<T>> {
+  try {
+    return await parseStructuredContent(input);
+  } catch (error) {
+    if (hasPreservedGeneratedContentConstraints(input.schema) && error instanceof StructuredOutputError
+      && input.finishReason === "stop"
+      && ["schema_mismatch", "malformed_json", "incomplete_json", "thinking_pollution"].includes(error.category)) {
+      Object.defineProperty(error, "rejectedOutput", {
+        value: { rawContent: input.rawContent, finishReason: input.finishReason }, enumerable: false,
+      });
+    }
+    throw error;
+  }
+}
+
+async function parseStructuredContent<T>(
   input: StructuredInvokeRawParseInput<T>,
 ): Promise<StructuredInvokeResult<T>> {
   const runtimeSchema: ZodType<T> = relaxGeneratedContentSchema(input.schema);
