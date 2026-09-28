@@ -250,6 +250,50 @@ test("coordinator forwards resolved history for re-review without inheriting its
   assert.equal(h.commits, 0);
 });
 
+test("coordinator does not forget the earliest resolution after more than eight newer resolutions", async () => {
+  const h = harness({ alwaysReject: true });
+  const issues = Array.from({ length: 12 }, (_, n) => ({ id: `resolved_${n}`, severity: "medium", target: "scene_cards", summary: `original ${n}`, repairHint: "establish before use" }));
+  const checks = issues.map(issue => ({ issueId: issue.id, status: "resolved", candidateEvidence: [{ sourcePath: "taskSheet", quote: "old action" }], explanation: "old action supplied source" }));
+  h.session.candidate = document();
+  Object.assign(h.session.state, { phase: "reviewing", affectedChapterIds: ["c3"], quality: { chapters: {} },
+    history: [{ kind: "assessment", result: { chapters: { c3: { ...reject, issues } } } },
+      ...checks.map(check => ({ kind: "assessment", result: { chapters: { c3: { ...pass, issueChecks: [check] } } } }))] });
+  h.gate.evaluate = async (_candidate, options) => {
+    assert.deepEqual(options.previousIssues, issues);
+    assert.deepEqual(options.priorIssueDecisions, checks);
+    assert.equal(options.omittedResolvedIssueCount, 0);
+    const sharedContext = JSON.parse(options.reviewContextJson);
+    assert.deepEqual(sharedContext.issueHistoryByChapter.c3.previousIssues, issues);
+    assert.deepEqual(sharedContext.issueHistoryByChapter.c3.priorIssueDecisions, checks);
+    assert.deepEqual(Object.keys(sharedContext.issueHistoryByChapter), ["c3"]);
+    return reject;
+  };
+  const result = await h.coordinator.review(h.input, h.session);
+  assert.equal(passedPlanningReview(result.chapters.c3), false);
+  assert.equal(h.commits, 0);
+});
+
+test("repair and window context preserves all resolved issues for each authorized chapter only", () => {
+  const h = harness();
+  const old = { id: "old", severity: "medium", target: "semantic", summary: "original scope", repairHint: "original repair" };
+  const resolved = { issueId: "old", status: "resolved", candidateEvidence: [], explanation: "historical finding" };
+  h.session.candidate = document();
+  h.session.state.affectedChapterIds = ["c3", "c4"];
+  h.session.state.history = [
+    { kind: "assessment", result: { chapters: { c3: { ...reject, issues: [old] }, c4: { ...reject, issues: [{ ...old, id: "neighbor" }] }, c5: { ...reject, issues: [{ ...old, id: "outside" }] } } } },
+    { kind: "assessment", result: { chapters: { c3: { ...pass, issueChecks: [resolved] } } } },
+  ];
+  const context = JSON.parse(h.coordinator.context(h.input, h.session, { chapters: {} }));
+  assert.deepEqual(Object.keys(context.issueHistoryByChapter), ["c3", "c4"]);
+  assert.deepEqual(context.issueHistoryByChapter.c3.previousIssues, [old]);
+  assert.deepEqual(context.issueHistoryByChapter.c3.priorIssueDecisions, [resolved]);
+  assert.equal(context.issueHistoryByChapter.c4.previousIssues[0].id, "neighbor");
+  h.session.state.history.push({ kind: "evidence_refresh" });
+  const refreshed = JSON.parse(h.coordinator.context(h.input, h.session, { chapters: {} }));
+  assert.deepEqual(refreshed.issueHistoryByChapter.c3.previousIssues, []);
+  assert.deepEqual(refreshed.issueHistoryByChapter.c4.previousIssues, []);
+});
+
 test("whole-window defects cannot pass just because individual chapters passed", async () => {
   const h = harness({ windowReject: true });
   await assert.rejects(h.coordinator.run(h.input), { code: "PLANNING_REPAIR_CONFIRMATION_REQUIRED" });

@@ -22,7 +22,7 @@ export const planningRepairAdviceExample: PlanningRepairAdviceOutput = {
 };
 
 export const planningRepairAdvicePrompt: PromptAsset<{ contextJson: string }, PlanningRepairAdviceOutput> = {
-  id: "novel.planning_repair.advice", version: "v6", taskType: "outline_planning", mode: "structured", language: "zh",
+  id: "novel.planning_repair.advice", version: "v7", taskType: "outline_planning", mode: "structured", language: "zh",
   contextPolicy: { maxTokensBudget: 48000 }, outputSchema: preserveGeneratedContentConstraints(planningRepairAdviceOutputSchema),
   repairPolicy: { maxAttempts: 0 },
   semanticRetryPolicy: { maxAttempts: 0 },
@@ -30,6 +30,7 @@ export const planningRepairAdvicePrompt: PromptAsset<{ contextJson: string }, Pl
   render: (input) => [
     new SystemMessage(`你是帮助写作新手选择修复方向的小说编辑。只提供建议，绝不执行修复或批准写作。
 审阅输入的用户原始意图、书级约束、基线、最新候选、历轮修正与审查证据。区分真实缺口、审查争议、资料缺失和创作取舍；不要默认审查结论都正确，也不要靠降低标准放行。
+若当前合同明确区分未来潜力与本章兑现、后续悬念与当前可感知事实，并有完整限制而没有相反执行安排，不应仅因担心正文可能误读就建议重复添加同义禁止句。审查仅提出这类可选措辞强化时，应对照原文解释审查争议并考虑review_existing，不能假造真实缺口追加修复；实际矛盾、缺失前提或承诺缺口仍须修复，复核仍需通过所有门槛。
 输入若声明 encoding=exact_source_references_v1，实际资料在context。仅含referenceKey所指定字段的对象是原文引用，字段值指向sources中的完整定义，必须递归展开读取；它不是缺失证据或摘要。展开后的原始路径、候选与基线归属、只读与可写权限均以引用所在位置为准。定义重复使用不表示所有位置具有同一权限，不可因引用就忽略正文、历史评估或后续路线。
 提供1至3个具体、互相有区别的方向，并推荐一个。用新手能理解的中文解释为何这样改、要改什么、保留什么及代价；不要让用户自己发明修复方案。
 可在允许窗口内解决时，优先推荐可直接执行且保留用户已选方向的方案；若所有方向都需要源工作区改动，具体指出缺少什么及应到小说基础信息、章节规划或卷规划确认什么，不能用放宽审查换通过。

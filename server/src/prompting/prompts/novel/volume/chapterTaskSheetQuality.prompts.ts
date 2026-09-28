@@ -13,10 +13,12 @@ import {
   chapterPlanningPromiseCheckSchema,
   chapterPlanningHandoffStatusSchema,
   chapterTaskSheetQualityIssueSchema,
+  chapterPlanningIssueBasisSchema,
 } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import type { PromptAsset } from "../../../core/promptTypes";
 import { buildChapterEvidenceIndex } from "./evidence/chapterEvidence";
 import { projectValidatedIssueChecks } from "./evidence/issueCheckProjection";
+import { validateNewIssueEvidence } from "./evidence/newIssueEvidence";
 import { planningPromiseEvidenceContext, validatePlanningPromiseEvidence } from "./evidence/planningPromiseEvidence";
 
 export interface ChapterTaskSheetQualityPromptInput {
@@ -85,7 +87,9 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "openingChain与earlyPayoff的scope不能降为book_arc来免除承接检查。openingChain只要求逐项审查原型当前及过去的节点，未来节点保留供边界参考而不提前索取兑现。earlyPayoff可能覆盖整个开篇，当前章只需贡献相应进展；未到期的部分可通过readonlyOpeningRoutes中的实际安排说明承接，不强求当前章完成所有回报。",
     "同次确认的hookStrategy、progressionLoop与storyPrototype需一起理解；顺序不同应依据整体叙事功能、已写事实与明确回报窗口判断合理拆合，不把原型章序当同号实际章的硬截止。readonlyPlanningHorizon是实际已有只读节拍，不扩大修改权限。有后续节拍不等于满足期限：前三章等明确时限不得因较后节拍提及事件就判covered；期限冲突用conflicting，部分兑现用partial，保留未兑现部分进入修复。",
     "对 previousIssues 的每个 id 输出恰好一条 issueChecks：resolved、partially_resolved、unresolved 或 insufficient_context，引用当前候选原文并解释判断。只核对该历史问题原有范围，不把另一承诺或新缺口扩进旧问题；新问题单列。resolved必须有至少一条准确原文，不得再把同id列入issues。未解旧问题以issueChecks为准，程序保留原ID及修复方向，issues无需重复；issues只列新问题或额外缺口，不能用新命名替换旧问题状态。上下文不足应明确，不把不确定推断写成事实。没有历史问题则issueChecks=[]。",
-    "previousIssues同时包含当前未解问题和有限条最近已解问题，原问题范围以其首次描述为准。priorIssueDecisions是过去的判断与当时引用，不是当前事实或免审结论；每项仍须重新核对当前候选，不能复制历史resolved。若推翻过去的resolved，须在explanation中指出当前哪项安排退化、出现何种新矛盾，或原判断为何错误，并引用当前相关原文。相同缺口必须复用原issueId，不通过换名作为新问题重报；确有不同缺口仍正常报告。历史引用可能已不存在，不能把其当作当前引用。省略的较旧已解问题不代表豁免当前合同的完整审查。",
+    "previousIssues包含当前来源下按问题ID折叠的全部历史问题，原问题范围以其首次描述为准。priorIssueDecisions是过去的最新判断与当时引用，不是当前事实或免审结论；每项仍须重新核对当前候选，不能复制历史resolved。若推翻过去的resolved，须在explanation中指出当前哪项安排退化、出现何种新矛盾，或原判断为何错误，并引用当前相关原文。相同缺口必须复用原issueId，不通过换名作为新问题重报；确有不同缺口仍正常报告。历史引用可能已不存在，不能把其当作当前引用。",
+    "issues只列导致当前规划无法按既定职责执行的真实缺口。每项新问题必须给出basis：kind为missing_requirement、conflicting_requirements、unsupported_prerequisite或boundary_violation；candidateEvidence引用当前必须执行的动作、要求或矛盾条款，counterEvidence引用其他字段已经提供的限制、来源、承接等反证，executionImpact说明即使遵守这些条款仍会发生的具体执行缺陷，whyExistingConstraintsInsufficient说明已有安排为何不足。没有反证才可counterEvidence=[]，不能只截取能力或行动词而忽略同句后半段及mustAvoid、forbiddenExpansion的约束。conflicting_requirements至少引用两个不同路径的实际冲突要求。缺失问题引用需要该前提的动作，不能伪造不存在的文字。",
+    "获得未来潜力与本章实际兑现、为后续保留悬念与本章人物已经感知必须区分。若当前明确禁止兑现且没有场景要求兑现，这些条款相互限定，不构成矛盾；如果场景明确要求现在兑现，则即使另有禁止条款仍是真实冲突。仅担心正文生成器可能忽略清晰约束、要求多个字段重复同义禁止或建议措辞更强，都归refinements可选润色，不进入issues、repairGuidance或修复轮次。真实缺失、事实冲突、承诺缺口仍必须阻塞，不能用润色分类掩盖。",
     "可用合同必须满足：本章目标清晰、边界不越章、任务单可执行、读者体验合同明确本章问题、可见回报、主角欲望、主要阻力、关键转折、净变化和钩子责任，场景卡覆盖整章推进并为每场提供阻力、转折、情绪位移和读者价值。",
     "readerExperience.rewardLevel 表示本章计划提供的可见回报强度，只能使用 setup、partial、major；它不是正文完成度、承诺兑现比例或事后结果评级。",
     "逐场审查 causality：选择是否出于角色具体动机；前置物品、信息、权限、能力或信任是否有真实来源；阻力方是否合理回应；outcomeMechanism 是否解释了结果怎样发生，而非重述结果；身体、时间、资源及关系限制是否延续并影响后续选择。必须引用 sceneKey 和具体缺口，不以字段齐全代替语义判断。",
@@ -93,16 +97,16 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "检查连续场景是否消费上一场的新状态和代价；拒绝、误解、情绪变化和失败也是有效结果，不强求战斗或胜利。不要求每场增加伤亡/损失；但已声明的能力限制不可凭空消失。普通本章因果缺口走 repair_contract，只有影响相邻章节边界才按既有范围规则选择 replan_window。",
     "即使正文完整兑现了 promisedReward，也不要建议把 rewardLevel 改为 full、complete 或其他值；只有本章计划的回报强度本身与章节职责不匹配时，才建议在 setup、partial、major 之间调整。",
     "还要判断本章是否被塞入过多彼此争夺篇幅的必达义务；如果任务单显示当前章职责已经过载，loadRisk=overloaded，recommendedHandling=replan_window。",
-    "如果问题仍可在本章合同内收口，recommendedHandling=repair_contract；只有合同已经足够稳时才用 use_as_is。",
+    "有真实阻塞且可在本章合同内收口时recommendedHandling=repair_contract；真实问题全部解决、承诺核验通过时使用usable、safeToSync=true、use_as_is，可同时保留refinements。refinements不是未批准计划的质量债务绕过，只记录不改变规划可执行性的可选编辑建议。",
     "如果存在问题，给出面向自动修复器的具体 repairGuidance。",
     "",
     "输出严格 JSON，不要 Markdown、注释、解释或额外字段。",
-    "顶层只能输出 verdict、safeToSync、loadRisk、recommendedHandling、summary、issues、repairGuidance、confidence、issueChecks、promiseChecks。",
+    "顶层只能输出 verdict、safeToSync、loadRisk、recommendedHandling、summary、issues、repairGuidance、confidence、issueChecks、promiseChecks、refinements。refinements必填，为最多8条500字以内的可选润色说明，没有则[]。",
     "issueChecks每项包含issueId、status、candidateEvidence（最多3个{sourcePath,quote}）、explanation（400字以内）。sourcePath须选candidateEvidenceIndex真实叶路径；quote是该值中240字以内连续准确原文，不带标签、不拼接字段。无可引用原文用空数组，不伪造。issueChecks须完整覆盖全部previousIssues，不受新问题上限限制。issues最多8项普通问题加contract_overloaded、selected_direction_drift两项，不重复堆放历史问题。",
     "verdict 只能使用 usable、repairable、unusable。",
     "loadRisk 只能使用 normal、overloaded。",
     "recommendedHandling 只能使用 use_as_is、repair_contract、replan_window。",
-    "issues 每项只能包含 id、severity、target、summary、repairHint。",
+    "issues 每项只能包含 id、severity、target、summary、repairHint、basis。basis必填，candidateEvidence为1至3条、counterEvidence为0至3条{sourcePath,quote}；引用真实叶路径及240字以内连续原文。executionImpact与whyExistingConstraintsInsufficient各600字以内。不要把严重度当成是否阻塞的依据。",
     "issues.severity 只能使用 low、medium、high。",
     "issues.target 只能使用 purpose、boundary、task_sheet、scene_cards、semantic；节奏、重复、职责过载、主动性不足、义务冲突都归入 semantic。",
     "confidence 必须是 0 到 1 之间的小数，不要输出百分制数字。",
@@ -121,13 +125,15 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "      \"severity\": \"medium\",",
     "      \"target\": \"scene_cards\",",
     "      \"summary\": \"场景卡没有覆盖章末阅读牵引。\",",
-    "      \"repairHint\": \"补充最后一个场景的离场状态和下一章入口压力。\"",
+    "      \"repairHint\": \"补充最后一个场景的离场状态和下一章入口压力。\",",
+    "      \"basis\": {\"kind\":\"missing_requirement\",\"candidateEvidence\":[{\"sourcePath\":\"nextChapterEntryState\",\"quote\":\"用实际原文替换\"}],\"counterEvidence\":[],\"executionImpact\":\"下一章需要的进入条件没有安排在任何场景中建立。\",\"whyExistingConstraintsInsufficient\":\"当前结尾与场景离场均未提供这一条件。\"}",
     "    }",
     "  ],",
     "  \"repairGuidance\": [\"补齐最后一个场景的钩子和离场状态。\"],",
     "  \"confidence\": 0.82,",
     "  \"issueChecks\": [],",
-    "  \"promiseChecks\": []",
+    "  \"promiseChecks\": [],",
+    "  \"refinements\": []",
     "}",
   ].join("\n");
 }
@@ -137,7 +143,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   AiChapterTaskSheetQualityAssessment
 > = {
   id: "novel.volume.chapter_task_sheet_quality",
-  version: "v9",
+  version: "v10",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -145,12 +151,13 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
     maxTokensBudget: 4200,
   },
   outputSchema: aiChapterTaskSheetQualityAssessmentSchema.extend({
-    issues: z.array(chapterTaskSheetQualityIssueSchema).max(10)
+    issues: z.array(chapterTaskSheetQualityIssueSchema.extend({ basis: chapterPlanningIssueBasisSchema })).max(10)
       .refine(issues => issues.filter(issue => !["contract_overloaded", "selected_direction_drift"].includes(issue.id)).length <= 8),
     promiseChecks: z.array(chapterPlanningPromiseCheckSchema.extend({ handoffStatus: chapterPlanningHandoffStatusSchema })).max(10),
     issueChecks: z.array(chapterPlanningIssueCheckSchema.extend({
       candidateEvidence: z.array(chapterPlanningEvidenceQuoteSchema).max(3),
     })),
+    refinements: z.array(z.string().trim().min(1).max(500)).max(8),
   }),
   render: (input) => [
     new SystemMessage(createSystemPrompt(input.mode)),
@@ -179,6 +186,8 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   ],
   postValidate: (output, input) => {
     validatePlanningPromiseEvidence(output.promiseChecks ?? [], input.candidate, input.reviewContextJson);
-    return projectValidatedIssueChecks(output, input.candidate, input.previousIssues);
+    const projected = projectValidatedIssueChecks(output, input.candidate, input.previousIssues);
+    validateNewIssueEvidence(output, input.candidate, input.previousIssues);
+    return projected;
   },
 };

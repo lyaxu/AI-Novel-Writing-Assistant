@@ -15,18 +15,22 @@ test("resolved issue remains available after an unrelated review and retains ori
   assert.deepEqual(result.priorIssueDecisions.map(x => x.issueId), ["source", "handoff"]);
 });
 
-test("history budget retains every active issue and only eight most recently resolved issues", () => {
+test("all resolved issues survive beyond eight IDs while repeated rounds fold to the latest decision", () => {
   const old = Array.from({ length: 24 }, (_, i) => issue(`old${i}`));
   const active = Array.from({ length: 12 }, (_, i) => issue(`active${i}`));
   const history = [assessment(old), assessment(active, old.map(x => check(x.id)))];
   const result = buildReviewIssueHistory(history, "c");
-  assert.deepEqual(result.previousIssues.map(x => x.id), [...active, ...old.slice(-8)].map(x => x.id));
-  assert.equal(result.omittedResolvedIssueCount, 16);
-  // Rechecking an old resolution does not displace a newly resolved problem.
-  history.push(assessment(active.slice(1), [check("active0"), ...old.slice(-8).map(x => check(x.id))]));
+  assert.deepEqual(result.previousIssues.map(x => x.id), [...old, ...active].map(x => x.id));
+  assert.equal(result.omittedResolvedIssueCount, 0);
+  for (let round = 0; round < 20; round++) {
+    history.push(assessment(active.slice(1), [check("active0"), ...old.map(x => ({ ...check(x.id), explanation: `review ${round}` }))]));
+  }
   const updated = buildReviewIssueHistory(history, "c");
-  assert.ok(updated.previousIssues.some(x => x.id === "active0"));
-  assert.ok(!updated.previousIssues.some(x => x.id === "old16"));
+  assert.equal(updated.previousIssues.length, 36);
+  assert.equal(updated.priorIssueDecisions.length, 25);
+  assert.equal(updated.priorIssueDecisions.find(x => x.issueId === "old0").explanation, "review 19");
+  assert.equal(updated.previousIssues[0].summary, "original old0");
+  assert.equal(updated.omittedResolvedIssueCount, 0);
 });
 
 test("evidence refresh and chapter identity isolate historical decisions", () => {

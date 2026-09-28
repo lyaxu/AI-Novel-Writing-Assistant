@@ -336,6 +336,8 @@ export class PlanningRepairCoordinator {
       readonlyPrevious: all.find(c => c.chapterOrder === target.chapterOrder - 1) ?? null,
       readonlyNext: all.find(c => c.chapterOrder === last.chapterOrder + 1) ?? null,
       assessment: { original: firstAssessment?.result ?? review, current: review }, obligationMoves: session.state.obligationMoves ?? [],
+      issueHistoryByChapter: Object.fromEntries(ids.map(id => [id,
+        buildReviewIssueHistory(currentEvidenceHistory(session), id)])),
       guidance: [input.options.guidance, session.state.guidance].filter(Boolean).join("\n"),
     });
   }

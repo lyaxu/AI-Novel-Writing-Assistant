@@ -344,8 +344,37 @@ test("chapter task sheet quality service passes usable semantic assessments", as
 });
 
 test("chapter task sheet quality prompt is registered as a product prompt asset", () => {
-  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v9");
+  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v10");
   assert.equal(registered, chapterTaskSheetQualityPrompt);
+});
+
+test("fresh review requires grounded blockers and keeps optional refinements outside unresolved issues", () => {
+  const candidate = buildCandidate();
+  const output = { verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is",
+    summary: "合同可执行，可选精简重复说明", issues: [], repairGuidance: [], confidence: 0.9,
+    issueChecks: [], promiseChecks: [], refinements: ["可选精简重复限制说明"] };
+  assert.equal(chapterTaskSheetQualityPrompt.outputSchema.safeParse(output).success, true);
+  const parsed = chapterTaskSheetQualityPrompt.postValidate(output, { candidate });
+  assert.equal(parsed.safeToSync, true);
+  assert.deepEqual(parsed.refinements, output.refinements);
+  const unsupported = { id: "new", severity: "medium", target: "semantic", summary: "可能误写", repairHint: "再明确一点" };
+  const rejected = { ...output, verdict: "repairable", safeToSync: false, recommendedHandling: "repair_contract", issues: [unsupported] };
+  assert.equal(chapterTaskSheetQualityPrompt.outputSchema.safeParse(rejected).success, false);
+  assert.throws(() => chapterTaskSheetQualityPrompt.postValidate(rejected, { candidate }), /execution-impact basis/);
+  // Saved historical assessments are still readable, but cannot masquerade as fresh output.
+  assert.equal(aiChapterTaskSheetQualityAssessmentSchema.safeParse(rejected).success, true);
+});
+
+test("optional refinements cannot clear a real unresolved planning obligation", () => {
+  const candidate = buildCandidate();
+  const previousIssues = [{ id: "dependency", severity: "high", target: "semantic", summary: "缺行动前提", repairHint: "补前提" }];
+  const output = { verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is",
+    summary: "可精简措辞", issues: [], repairGuidance: [], confidence: 0.9, promiseChecks: [], refinements: ["可简化说明"],
+    issueChecks: [{ issueId: "dependency", status: "unresolved", candidateEvidence: [], explanation: "所需行动前提仍缺失" }] };
+  const result = chapterTaskSheetQualityPrompt.postValidate(output, { candidate, previousIssues });
+  assert.equal(result.safeToSync, false);
+  assert.equal(result.verdict, "repairable");
+  assert.equal(result.issues[0].id, "dependency");
 });
 
 test("planning re-review sees current evidence, book constraints and previous issues", () => {

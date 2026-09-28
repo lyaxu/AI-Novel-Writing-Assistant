@@ -52,6 +52,7 @@ export interface ChapterTaskSheetQualityIssue {
   target: "purpose" | "boundary" | "task_sheet" | "scene_cards" | "semantic";
   summary: string;
   repairHint: string;
+  basis?: ChapterPlanningIssueBasis;
 }
 
 export interface ChapterTaskSheetQualityGateResult {
@@ -68,12 +69,21 @@ export interface ChapterTaskSheetQualityGateResult {
   confidence: number;
   issueChecks?: ChapterPlanningIssueCheck[];
   promiseChecks?: ChapterPlanningPromiseCheck[];
+  refinements?: string[];
 }
 
 export const chapterPlanningEvidenceQuoteSchema = z.object({
   sourcePath: z.string().trim().min(1).max(240),
   quote: z.string().trim().min(1).max(240),
 });
+export const chapterPlanningIssueBasisSchema = z.object({
+  kind: z.enum(["missing_requirement", "conflicting_requirements", "unsupported_prerequisite", "boundary_violation"]),
+  candidateEvidence: z.array(chapterPlanningEvidenceQuoteSchema).min(1).max(3),
+  counterEvidence: z.array(chapterPlanningEvidenceQuoteSchema).max(3),
+  executionImpact: z.string().trim().min(1).max(600),
+  whyExistingConstraintsInsufficient: z.string().trim().min(1).max(600),
+});
+export type ChapterPlanningIssueBasis = z.infer<typeof chapterPlanningIssueBasisSchema>;
 export const chapterPlanningIssueCheckSchema = z.object({
   issueId: z.string().trim().min(1),
   status: z.enum(["resolved", "partially_resolved", "unresolved", "insufficient_context"]),
@@ -182,6 +192,8 @@ export const chapterTaskSheetQualityIssueSchema = z.object({
   ),
   summary: z.string().trim().min(1),
   repairHint: z.string().trim().min(1),
+  // Historical saved findings remain readable; fresh review output requires its basis.
+  basis: chapterPlanningIssueBasisSchema.optional(),
 });
 
 export const aiChapterTaskSheetQualityAssessmentSchema = z.object({
@@ -198,6 +210,7 @@ export const aiChapterTaskSheetQualityAssessmentSchema = z.object({
   issueChecks: z.array(chapterPlanningIssueCheckSchema).optional(),
   // Old saved assessments remain readable; fresh prompt output requires this field.
   promiseChecks: z.array(chapterPlanningPromiseCheckSchema).max(10).optional(),
+  refinements: z.array(z.string().trim().min(1).max(500)).max(8).optional(),
 });
 
 export type AiChapterTaskSheetQualityAssessment = z.infer<typeof aiChapterTaskSheetQualityAssessmentSchema>;
@@ -339,6 +352,7 @@ export function mapSemanticAssessmentToQualityGate(
       confidence: assessment.confidence,
       issueChecks: assessment.issueChecks ?? [],
       promiseChecks: assessment.promiseChecks ?? [],
+      refinements: assessment.refinements ?? [],
     };
   }
 
@@ -364,6 +378,7 @@ export function mapSemanticAssessmentToQualityGate(
     confidence: assessment.confidence,
     issueChecks: assessment.issueChecks ?? [],
     promiseChecks: assessment.promiseChecks ?? [],
+    refinements: assessment.refinements ?? [],
   };
 }
 
