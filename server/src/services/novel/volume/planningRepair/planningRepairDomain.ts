@@ -32,9 +32,17 @@ export const planningRepairOutputSchema = preserveGeneratedContentConstraints(z.
     obligation: requiredText,
     fromChapterId: requiredText,
     toChapterId: requiredText,
-    action: z.enum(["retain", "merge", "move"]),
+    action: z.enum(["retain", "merge", "move", "revise"]),
+    replacement: requiredText.max(160).optional(),
     reason: requiredText,
-  }).strict()),
+  }).strict().superRefine((move, context) => {
+    if (move.action === "revise" && !move.replacement) {
+      context.addIssue({ code: "custom", path: ["replacement"], message: "Revise requires an explicit replacement reference." });
+    }
+    if (move.action !== "revise" && move.replacement !== undefined) {
+      context.addIssue({ code: "custom", path: ["replacement"], message: "Only revise may replace a reference." });
+    }
+  })),
 }).strict());
 
 export const planningRepairReviewOutputSchema = z.object({
@@ -104,9 +112,9 @@ export function applyPlanningRepairCandidate(
     if (!allowed.has(move.fromChapterId) || !allowed.has(move.toChapterId)) {
       throw new Error("Planning repair obligation move cannot touch readonly chapters.");
     }
-    if ((move.action === "retain" && move.fromChapterId !== move.toChapterId)
+    if (((move.action === "retain" || move.action === "revise") && move.fromChapterId !== move.toChapterId)
       || (move.action === "move" && move.fromChapterId === move.toChapterId)) {
-      throw new Error("Retain must stay in the same chapter; move must cross chapters; merge may stay in one chapter.");
+      throw new Error("Retain and revise must stay in the same chapter; move must cross chapters; merge may stay in one chapter.");
     }
     const key = JSON.stringify([comparable(move.obligation), move.fromChapterId]);
     if (seenMoves.has(key)) throw new Error("Planning repair has duplicate or conflicting obligation moves.");
@@ -179,10 +187,36 @@ export function applyPlanningRepairCandidate(
   }
   const beforePayoffs = collectPayoffs(volume.chapters.filter((chapter) => allowed.has(chapter.id)));
   const afterPayoffs = collectPayoffs(chapters.filter((chapter) => allowed.has(chapter.id)));
+  // Exact text locates references; it does not decide their narrative equivalence.
+  // An explicit revision may replace an erroneous description, subject to mandatory AI review.
+  const revisions = parsed.obligationMoves.filter((move) => move.action === "revise");
+  for (const revision of revisions) {
+    const source = volume.chapters.find((chapter) => chapter.id === revision.fromChapterId)!;
+    const destination = chapters.find((chapter) => chapter.id === revision.toChapterId)!;
+    const originalRef = comparable(revision.obligation);
+    const replacementRef = comparable(revision.replacement);
+    if (!source.payoffRefs.some((ref) => comparable(ref) === originalRef)) {
+      throw new Error("Planning repair revision source reference does not exist.");
+    }
+    if (originalRef === replacementRef) throw new Error("Planning repair revision must change its reference.");
+    if (!destination.payoffRefs.some((ref) => comparable(ref) === replacementRef)) {
+      throw new Error("Planning repair revision replacement reference is missing from its chapter.");
+    }
+    if (destination.payoffRefs.some((ref) => comparable(ref) === originalRef)) {
+      throw new Error("Planning repair revision left the obsolete reference in its chapter.");
+    }
+  }
   for (const ref of beforePayoffs) {
-    if (!afterPayoffs.has(ref)) throw new Error(`Planning repair lost payoff obligation: ${ref}`);
+    if (afterPayoffs.has(ref)) continue;
+    const sources = volume.chapters.filter((chapter) => allowed.has(chapter.id)
+      && chapter.payoffRefs.some((item) => comparable(item) === ref));
+    if (!sources.every((chapter) => revisions.some((revision) => revision.fromChapterId === chapter.id
+      && comparable(revision.obligation) === ref))) {
+      throw new Error(`Planning repair lost payoff obligation: ${ref}`);
+    }
   }
   for (const move of parsed.obligationMoves) {
+    if (move.action === "revise") continue;
     const ref = comparable(move.obligation);
     const source = volume.chapters.find((chapter) => chapter.id === move.fromChapterId)!;
     if (!source.payoffRefs.some((item) => comparable(item) === ref)) continue;

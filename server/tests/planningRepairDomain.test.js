@@ -346,7 +346,7 @@ test("registered assets expose the coordinator API without model routing or call
   }
   const instructions = planningRepairReviewPrompt.render({ contextJson: "{}" }, {})[0].content;
   assert.match(instructions, /丢失或重复职责/);
-  assert.match(instructions, /完整的原始质量结果/);
+  assert.match(instructions, /完整.*原始质量/);
   assert.match(instructions, /数字合规不代表负载合理/);
   assert.match(planningRepairPrompt.render({ contextJson: "{}" }, {})[0].content, /同一场景内合并职责/);
 });
@@ -360,4 +360,85 @@ test("boundary and execution prompts explicitly use the curve's 0-100 scale", ()
     assert.match(instructions, /不是 1-5/);
     assert.match(instructions, /不为曲线好看硬造高潮/);
   }
+});
+
+
+function revisionProposal(ids = ["plan-1"]) {
+  const proposal = output(ids);
+  proposal.changes[0].payoffRefs = ["A residual mark reveals that someone disturbed the case."];
+  proposal.obligationMoves = [{ obligation: "clue-plan-1", fromChapterId: "plan-1", toChapterId: "plan-1",
+    action: "revise", replacement: proposal.changes[0].payoffRefs[0],
+    reason: "The object was already delivered; preserve the intrusion clue through a remaining mark." }];
+  return proposal;
+}
+
+test("explicit same-chapter revision corrects a stale implementation while preserving its reference lineage", () => {
+  const doc = document();
+  const proposal = revisionProposal();
+  const candidate = apply(doc, proposal);
+  assert.deepEqual(candidate.volumes[0].chapters[1].payoffRefs, proposal.changes[0].payoffRefs);
+  assert.deepEqual(doc.volumes[0].chapters[1].payoffRefs, ["clue-plan-1"]);
+  assert.equal(candidate.volumes[0].chapters[1].targetWordCount, 3000);
+  assert.equal(candidate.volumes[0].chapters[0], doc.volumes[0].chapters[0]);
+});
+
+test("revision schema requires replacement only for revise and keeps legacy actions compatible", () => {
+  const proposal = revisionProposal();
+  delete proposal.obligationMoves[0].replacement;
+  assert.equal(planningRepairOutputSchema.safeParse(proposal).success, false);
+  for (const action of ["retain", "merge", "move"]) {
+    const extraReplacement = revisionProposal(); extraReplacement.obligationMoves[0].action = action;
+    assert.equal(planningRepairOutputSchema.safeParse(extraReplacement).success, false);
+  }
+  assert.equal(planningRepairOutputSchema.safeParse(output()).success, true);
+});
+
+test("payoff rewording still requires an explicit source-to-replacement mapping", () => {
+  const proposal = revisionProposal(); proposal.obligationMoves = [];
+  assert.throws(() => apply(document(), proposal), /lost payoff obligation/);
+  const unchangedOtherDuty = revisionProposal(); unchangedOtherDuty.changes[0].payoffRefs = [];
+  assert.throws(() => apply(document(), unchangedOtherDuty), /replacement reference is missing/);
+});
+
+test("revision rejects fabricated source, missing destination, unchanged text and obsolete leftovers", () => {
+  const badSource = revisionProposal(); badSource.obligationMoves[0].obligation = "a nonexistent source";
+  assert.throws(() => apply(document(), badSource), /source reference does not exist/);
+  const badTarget = revisionProposal(); badTarget.obligationMoves[0].replacement = "not present in changes";
+  assert.throws(() => apply(document(), badTarget), /replacement reference is missing/);
+  const noChange = revisionProposal(); noChange.obligationMoves[0].replacement = "clue-plan-1";
+  assert.throws(() => apply(document(), noChange), /must change its reference/);
+  const leftover = revisionProposal(); leftover.changes[0].payoffRefs.push("clue-plan-1");
+  assert.throws(() => apply(document(), leftover), /obsolete reference/);
+});
+
+test("revision cannot use readonly or cross-chapter destinations even inside the allowed window", () => {
+  const readonly = revisionProposal(); readonly.obligationMoves[0].toChapterId = "next";
+  assert.throws(() => apply(document(), readonly), /readonly chapters/);
+  const crossChapter = revisionProposal(["plan-1", "plan-2"]); crossChapter.obligationMoves[0].toChapterId = "plan-2";
+  assert.throws(() => apply(document(), crossChapter, ["plan-1", "plan-2"]), /same chapter/);
+  const duplicate = revisionProposal(); duplicate.obligationMoves.push({ ...duplicate.obligationMoves[0] });
+  assert.throws(() => apply(document(), duplicate), /conflicting obligation moves/);
+});
+
+test("one revision cannot erase another chapter's shared reference when none retains it", () => {
+  const doc = document(); doc.volumes[0].chapters[2].payoffRefs = ["clue-plan-1"];
+  const proposal = revisionProposal(["plan-1", "plan-2"]); proposal.changes[1].payoffRefs = [];
+  assert.throws(() => apply(doc, proposal, ["plan-1", "plan-2"]), /lost payoff obligation/);
+});
+
+test("non-payoff obligation ledger entries keep their existing retain behavior", () => {
+  const proposal = output(); proposal.obligationMoves = [{ obligation: "Make the witness face a choice",
+    fromChapterId: "plan-1", toChapterId: "plan-1", action: "retain", reason: "Keep the scene duty" }];
+  assert.doesNotThrow(() => apply(document(), proposal));
+});
+
+test("independent review must judge revised reference semantics against written evidence and actual scenes", () => {
+  const repair = planningRepairPrompt.render({ contextJson: "{}" }, {})[0].content;
+  assert.match(repair, /candidateChapters当前原引用/);
+  assert.match(repair, /不得只修改payoffRefs而漏记映射/);
+  const review = planningRepairReviewPrompt.render({ contextJson: "{}" }, {})[0].content;
+  assert.match(review, /映射通过结构校验不代表语义等价/);
+  assert.match(review, /逐场检查最终候选实际落实/);
+  assert.equal(planningRepairReviewOutputSchema.safeParse({ usable: true, safeToSync: true,
+    requiresUserDecision: false, summary: "Unresolved obligation", issues: ["Narrative function lost"] }).success, false);
 });

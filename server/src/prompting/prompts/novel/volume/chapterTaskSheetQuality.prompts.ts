@@ -18,7 +18,7 @@ import {
 import type { PromptAsset } from "../../../core/promptTypes";
 import { buildChapterEvidenceIndex } from "./evidence/chapterEvidence";
 import { projectValidatedIssueChecks } from "./evidence/issueCheckProjection";
-import { validateNewIssueEvidence } from "./evidence/newIssueEvidence";
+import { newIssueContextEvidenceIndex, validateNewIssueEvidence } from "./evidence/newIssueEvidence";
 import { planningPromiseEvidenceContext, validatePlanningPromiseEvidence } from "./evidence/planningPromiseEvidence";
 
 export interface ChapterTaskSheetQualityPromptInput {
@@ -88,7 +88,8 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "同次确认的hookStrategy、progressionLoop与storyPrototype需一起理解；顺序不同应依据整体叙事功能、已写事实与明确回报窗口判断合理拆合，不把原型章序当同号实际章的硬截止。readonlyPlanningHorizon是实际已有只读节拍，不扩大修改权限。有后续节拍不等于满足期限：前三章等明确时限不得因较后节拍提及事件就判covered；期限冲突用conflicting，部分兑现用partial，保留未兑现部分进入修复。",
     "对 previousIssues 的每个 id 输出恰好一条 issueChecks：resolved、partially_resolved、unresolved 或 insufficient_context，引用当前候选原文并解释判断。只核对该历史问题原有范围，不把另一承诺或新缺口扩进旧问题；新问题单列。resolved必须有至少一条准确原文，不得再把同id列入issues。未解旧问题以issueChecks为准，程序保留原ID及修复方向，issues无需重复；issues只列新问题或额外缺口，不能用新命名替换旧问题状态。上下文不足应明确，不把不确定推断写成事实。没有历史问题则issueChecks=[]。",
     "previousIssues包含当前来源下按问题ID折叠的全部历史问题，原问题范围以其首次描述为准。priorIssueDecisions是过去的最新判断与当时引用，不是当前事实或免审结论；每项仍须重新核对当前候选，不能复制历史resolved。若推翻过去的resolved，须在explanation中指出当前哪项安排退化、出现何种新矛盾，或原判断为何错误，并引用当前相关原文。相同缺口必须复用原issueId，不通过换名作为新问题重报；确有不同缺口仍正常报告。历史引用可能已不存在，不能把其当作当前引用。",
-    "issues只列导致当前规划无法按既定职责执行的真实缺口。每项新问题必须给出basis：kind为missing_requirement、conflicting_requirements、unsupported_prerequisite或boundary_violation；candidateEvidence引用当前必须执行的动作、要求或矛盾条款，counterEvidence引用其他字段已经提供的限制、来源、承接等反证，executionImpact说明即使遵守这些条款仍会发生的具体执行缺陷，whyExistingConstraintsInsufficient说明已有安排为何不足。没有反证才可counterEvidence=[]，不能只截取能力或行动词而忽略同句后半段及mustAvoid、forbiddenExpansion的约束。conflicting_requirements至少引用两个不同路径的实际冲突要求。缺失问题引用需要该前提的动作，不能伪造不存在的文字。",
+    "issues只列导致当前规划无法按既定职责执行的真实缺口。每项新问题必须给出basis：kind为missing_requirement、conflicting_requirements、unsupported_prerequisite或boundary_violation；candidateEvidence引用当前候选必须执行的动作、要求或矛盾条款，counterEvidence引用当前候选其他字段已经提供的限制、来源、承接等反证；contextEvidence引用newIssueContextEvidenceIndex中已提供的正文、只读计划或上位约束。每组最多3条，candidateEvidence至少1条，无相关上下文或反证则相应数组为[]。executionImpact说明即使遵守已有条款仍会发生的执行缺陷，whyExistingConstraintsInsufficient说明已有安排为何不足。不能只截取能力或行动词而忽略同句后半段及mustAvoid、forbiddenExpansion。conflicting_requirements至少引用两个不同来源叶：可以是候选内两项矛盾要求，也可以是候选要求与已写正文事实；后者必须把正文引用放contextEvidence，不能塞counterEvidence。缺失问题引用需要该前提的动作，不能伪造不存在的文字。",
+    "所有Evidence.quote都必须是对应路径的连续准确原文，不能把概括、改写、拼接或解释充当引文；只准省略前后未引用部分，不改引文内部词语或标点。解释含义另写explanation或executionImpact。sourceEvidence可使用selectedPromiseSourceEvidenceIndex的相对路径，或仅加完整前缀selectedPlanningDirection.candidate.；不允许其他猜测前缀。已写正文与只读未来计划必须分别使用其真实路径，不把计划当既成事实。",
     "获得未来潜力与本章实际兑现、为后续保留悬念与本章人物已经感知必须区分。若当前明确禁止兑现且没有场景要求兑现，这些条款相互限定，不构成矛盾；如果场景明确要求现在兑现，则即使另有禁止条款仍是真实冲突。仅担心正文生成器可能忽略清晰约束、要求多个字段重复同义禁止或建议措辞更强，都归refinements可选润色，不进入issues、repairGuidance或修复轮次。真实缺失、事实冲突、承诺缺口仍必须阻塞，不能用润色分类掩盖。",
     "可用合同必须满足：本章目标清晰、边界不越章、任务单可执行、读者体验合同明确本章问题、可见回报、主角欲望、主要阻力、关键转折、净变化和钩子责任，场景卡覆盖整章推进并为每场提供阻力、转折、情绪位移和读者价值。",
     "readerExperience.rewardLevel 表示本章计划提供的可见回报强度，只能使用 setup、partial、major；它不是正文完成度、承诺兑现比例或事后结果评级。",
@@ -143,7 +144,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   AiChapterTaskSheetQualityAssessment
 > = {
   id: "novel.volume.chapter_task_sheet_quality",
-  version: "v10",
+  version: "v11",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -174,6 +175,8 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
       JSON.stringify([...planningPromiseEvidenceContext(input.reviewContextJson).sourceIndex.leaves.keys()]),
       "promiseContextEvidenceIndex (facts or other chapter plans; distinguish their provenance):",
       JSON.stringify([...planningPromiseEvidenceContext(input.reviewContextJson).contextIndex.leaves.keys()]),
+      "newIssueContextEvidenceIndex (read-only source leaves for basis.contextEvidence; plans are not written facts):",
+      JSON.stringify([...newIssueContextEvidenceIndex(input.reviewContextJson).leaves.keys()]),
       "",
       "reviewContext (current source and repair history):",
       input.reviewContextJson || "No additional context supplied. Do not invent prior facts.",
@@ -187,7 +190,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   postValidate: (output, input) => {
     validatePlanningPromiseEvidence(output.promiseChecks ?? [], input.candidate, input.reviewContextJson);
     const projected = projectValidatedIssueChecks(output, input.candidate, input.previousIssues);
-    validateNewIssueEvidence(output, input.candidate, input.previousIssues);
+    validateNewIssueEvidence(output, input.candidate, input.previousIssues, input.reviewContextJson);
     return projected;
   },
 };

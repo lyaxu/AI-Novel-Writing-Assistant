@@ -184,6 +184,43 @@ function harness({ alwaysReject = false, local = false, windowReject = false } =
   return { coordinator, session, input, calls, store, gate, invoke, get commits() { return commits; } };
 }
 
+for (const accepted of [true, false]) {
+  test(`explicit payoff correction still requires chapter and window review (${accepted ? "accepted" : "blocked"})`, async () => {
+    const h = harness({ local: true });
+    const oldRef = "The delivered parcel disappears from the courier's bag.";
+    const newRef = "The delivery trace raises a new unanswered threat.";
+    h.input.document.volumes[0].chapters[0].payoffRefs = [oldRef];
+    const invoke = async (request) => {
+      const result = await h.invoke(request);
+      if (request.asset.id === "novel.volume.planning_repair") {
+        result.output.changes[0].payoffRefs = [newRef];
+        result.output.obligationMoves = [{
+          obligation: oldRef, replacement: newRef, fromChapterId: "c3", toChapterId: "c3",
+          action: "revise", reason: "Correct the impossible parcel location while preserving the unresolved threat.",
+        }];
+      } else {
+        const context = JSON.parse(request.promptInput.contextJson);
+        assert.deepEqual(context.originalChapters[0].payoffRefs, [oldRef]);
+        assert.deepEqual(context.candidateChapters[0].payoffRefs, [newRef]);
+        assert.equal(context.obligationMoves[0].action, "revise");
+        if (!accepted) result.output = {
+          usable: false, safeToSync: false, requiresUserDecision: true,
+          summary: "The proposed replacement changes a protected story promise.", issues: ["c3: unresolved promise"],
+        };
+      }
+      return result;
+    };
+    const run = new PlanningRepairCoordinator(h.store, h.gate, invoke).run(h.input);
+    if (accepted) await run;
+    else await assert.rejects(run, { code: "PLANNING_REPAIR_CONFIRMATION_REQUIRED" });
+    assert.equal(h.session.state.rounds, 1);
+    assert.equal(h.commits, accepted ? 1 : 0);
+    assert.equal(h.calls.filter(call => call === "chapter_review").length, 2);
+    assert.equal(h.calls.filter(call => call === "novel.volume.planning_repair_review").length, 1);
+    assert.equal(h.session.state.phase, accepted ? "committed" : "waiting_confirmation");
+  });
+}
+
 test("chapter 3 overload is repaired as one window, re-reviewed and committed once", async () => {
   const h = harness();
   const result = await h.coordinator.run(h.input);

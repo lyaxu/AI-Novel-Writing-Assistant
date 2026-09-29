@@ -80,6 +80,8 @@ export const chapterPlanningIssueBasisSchema = z.object({
   kind: z.enum(["missing_requirement", "conflicting_requirements", "unsupported_prerequisite", "boundary_violation"]),
   candidateEvidence: z.array(chapterPlanningEvidenceQuoteSchema).min(1).max(3),
   counterEvidence: z.array(chapterPlanningEvidenceQuoteSchema).max(3),
+  // Saved assessments before contextual evidence remain readable.
+  contextEvidence: z.array(chapterPlanningEvidenceQuoteSchema).max(3).optional(),
   executionImpact: z.string().trim().min(1).max(600),
   whyExistingConstraintsInsufficient: z.string().trim().min(1).max(600),
 });

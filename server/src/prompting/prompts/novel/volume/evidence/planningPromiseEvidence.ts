@@ -32,9 +32,13 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
       throw new Error(`Promise ${check.sourceId} has an incompatible handoffStatus.`);
     }
     if (isOpeningPlanningPromise(check.sourceId) && check.scope === "book_arc") throw new Error(`Opening promise ${check.sourceId} cannot be reclassified as a book arc.`);
-    if (!check.sourceEvidence.length || check.sourceEvidence.some(evidence =>
-      !belongsToPlanningPromiseSource(evidence.sourcePath, check.sourceId)
-      || !matchesChapterEvidence(sourceIndex, evidence))) throw new Error(`Promise ${check.sourceId} lacks exact selected-source evidence.`);
+    if (!check.sourceEvidence.length || check.sourceEvidence.some(evidence => {
+      const sourcePath = evidence.sourcePath.startsWith("selectedPlanningDirection.candidate.")
+        ? evidence.sourcePath.slice("selectedPlanningDirection.candidate.".length)
+        : evidence.sourcePath;
+      return !belongsToPlanningPromiseSource(sourcePath, check.sourceId)
+        || !matchesChapterEvidence(sourceIndex, { ...evidence, sourcePath });
+    })) throw new Error(`Promise ${check.sourceId} lacks exact selected-source evidence.`);
     if (check.candidateEvidence.some(evidence => !matchesChapterEvidence(candidateIndex, evidence))
       || check.contextEvidence.some(evidence => !matchesChapterEvidence(contextIndex, evidence))) throw new Error(`Promise ${check.sourceId} cites evidence absent from supplied plans or written facts.`);
     if (["preserved", "adapted"].includes(check.status) && !check.candidateEvidence.length && !check.contextEvidence.length) {

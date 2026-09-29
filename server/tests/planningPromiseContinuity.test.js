@@ -14,17 +14,21 @@ function load(file, imports) {
   }, exports);
   return exports;
 }
-const promises = load("../../shared/types/novel/planningPromises.ts", { zod: require("zod") });
+const promises = load("../../shared/types/novel/planningPromises.ts", { zod: require("zod"),
+  "./bookStoryFoundation.js": load("../../shared/types/novel/bookStoryFoundation.ts", { zod: require("zod") }),
+});
 const quality = load("../../shared/types/chapterTaskSheetQuality.ts", { zod: require("zod"), "./chapterLengthControl.js": require("../../shared/dist/types/chapterLengthControl.js") });
 const chapterEvidence = load("../src/prompting/prompts/novel/volume/evidence/chapterEvidence.ts", {});
 const promiseEvidence = load("../src/prompting/prompts/novel/volume/evidence/planningPromiseEvidence.ts", {
   "@ai-novel/shared/types/novel/planningPromises": promises, "./chapterEvidence": chapterEvidence,
 });
 const issueProjection = load("../src/prompting/prompts/novel/volume/evidence/issueCheckProjection.ts", { "./chapterEvidence": chapterEvidence });
+const newIssueEvidence = load("../src/prompting/prompts/novel/volume/evidence/newIssueEvidence.ts", { "./chapterEvidence": chapterEvidence });
 const { chapterTaskSheetQualityPrompt: prompt } = load("../src/prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts.ts", {
   "@langchain/core/messages": require("@langchain/core/messages"), zod: require("zod"),
   "@ai-novel/shared/types/chapterTaskSheetQuality": quality,
   "./evidence/chapterEvidence": chapterEvidence, "./evidence/planningPromiseEvidence": promiseEvidence, "./evidence/issueCheckProjection": issueProjection,
+  "./evidence/newIssueEvidence": newIssueEvidence,
 });
 const candidate = { chapterOrder: 2, summary: "通过交换药物赢得初步信任" };
 const source = { status: "available", sourceTaskId: "task", fingerprint: "source-1", candidate: {
@@ -35,7 +39,7 @@ const source = { status: "available", sourceTaskId: "task", fingerprint: "source
     openingChain: [{ chapterOrder: 2, action: "交换药物", resistance: "彼此不信任", choice: "先交出资源", consequence: "陌生人提供帮助", payoff: "关系从戒备变为互助", nextQuestion: "能否再次合作" }] },
 } };
 const context = (extra = {}) => JSON.stringify({ selectedPlanningDirection: source, ...extra });
-const assessment = checks => ({ verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is", summary: "通过", issues: [], repairGuidance: [], confidence: 0.9, issueChecks: [], promiseChecks: checks });
+const assessment = checks => ({ verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is", summary: "通过", issues: [], repairGuidance: [], confidence: 0.9, issueChecks: [], promiseChecks: checks, refinements: [] });
 function checks() {
   const index = chapterEvidence.buildChapterEvidenceIndex(source.candidate);
   return promises.selectedPlanningPromiseIds(source).map(sourceId => {
@@ -83,6 +87,18 @@ test("equivalent adaptation can pass without requiring the exact original action
   const value = checks(); value.at(-1).status = "adapted";
   const output = prompt.postValidate(assessment(value), { candidate, reviewContextJson: context() });
   assert.equal(quality.mapSemanticAssessmentToQualityGate(output, "ai_copilot").status, "passed");
+});
+
+test("selected source accepts its exact context prefix but rejects guessed prefixes and paraphrases", () => {
+  const value = checks();
+  for (const check of value) for (const evidence of check.sourceEvidence) evidence.sourcePath = `selectedPlanningDirection.candidate.${evidence.sourcePath}`;
+  assert.doesNotThrow(() => prompt.postValidate(assessment(value), { candidate, reviewContextJson: context() }));
+  for (const prefix of ["candidate.", "context.selectedPlanningDirection.candidate.", "selectedPlanningDirection.candidateExtra."]) {
+    const wrong = checks(); wrong[0].sourceEvidence[0].sourcePath = prefix + wrong[0].sourceEvidence[0].sourcePath;
+    assert.throws(() => prompt.postValidate(assessment(wrong), { candidate, reviewContextJson: context() }), /exact selected-source/);
+  }
+  value[0].sourceEvidence[0].quote = "专业技能促成了人际关系";
+  assert.throws(() => prompt.postValidate(assessment(value), { candidate, reviewContextJson: context() }), /exact selected-source/);
 });
 
 test("lost relationship/payoff and vague opening postponement enter existing automatic repair even if AI says usable", () => {
@@ -177,7 +193,10 @@ test("non-empty citations never turn an explicitly partial, missing or conflicti
 test("validated unresolved checks retain original IDs and all new findings beyond the fresh-output issue limit", () => {
   const previous = Array.from({ length: 12 }, (_, i) => ({ id: `old-${i}`, severity: "medium", target: "boundary", summary: "原问题", repairHint: `原指导${i}` }));
   const value = assessment([]);
-  value.issues = Array.from({ length: 8 }, (_, i) => ({ id: `new-${i}`, severity: "high", target: "semantic", summary: "新问题", repairHint: `新指导${i}` }));
+  value.issues = Array.from({ length: 8 }, (_, i) => ({ id: `new-${i}`, severity: "high", target: "semantic", summary: "新问题", repairHint: `新指导${i}`,
+    basis: { kind: "missing_requirement", candidateEvidence: [{ sourcePath: "summary", quote: candidate.summary }], counterEvidence: [], contextEvidence: [],
+      executionImpact: "缺少可执行来源", whyExistingConstraintsInsufficient: "现有动作未交代来源" },
+  }));
   value.issueChecks = previous.map(issue => ({ issueId: issue.id, status: "partially_resolved", candidateEvidence: [], explanation: `本轮仍未解决${issue.id}` }));
   assert.equal(prompt.outputSchema.safeParse(value).success, true);
   const projected = issueProjection.projectValidatedIssueChecks(value, {}, previous);
@@ -193,7 +212,7 @@ test("validated unresolved checks retain original IDs and all new findings beyon
 });
 
 const capturedPath = path.resolve(__dirname, "../../.codex-run/mining-book-evidence.json");
-test("captured rejected review replays offline as repairable while preserving the unresolved historical issue", { skip: !fs.existsSync(capturedPath) }, () => {
+test("legacy capture preserves unresolved issue projection without pretending to satisfy the fresh basis contract", { skip: !fs.existsSync(capturedPath) }, () => {
   // Read local diagnostic capture without adding the user's manuscript or complete output to fixtures.
   const capture = JSON.parse(fs.readFileSync(capturedPath, "utf8"));
   const task = capture.tasks.find(item => item.lane === "auto_director");
@@ -206,7 +225,11 @@ test("captured rejected review replays offline as repairable while preserving th
     readonlyPrevious: all.find(chapter => chapter.chapterOrder === repair.chapterOrder - 1), readonlyNext: all.find(chapter => chapter.chapterOrder === repair.chapterOrder + 1) });
   const rejected = repair.history.filter(item => item.kind === "rejected_response");
   for (const entry of rejected) {
-    const projected = prompt.postValidate(entry.output, { candidate: current, previousIssues, reviewContextJson });
+    // Historical output predates mandatory fresh-issue basis. Its evidence and
+    // saved projection remain readable, but it must not be certified as fresh output.
+    promiseEvidence.validatePlanningPromiseEvidence(entry.output.promiseChecks, current, reviewContextJson);
+    assert.throws(() => prompt.postValidate(entry.output, { candidate: current, previousIssues, reviewContextJson }), /requires an execution-impact basis/);
+    const projected = issueProjection.projectValidatedIssueChecks(entry.output, current, previousIssues);
     assert.equal(projected.safeToSync, false); assert.equal(projected.verdict, "repairable");
     assert.equal(projected.issues.find(issue => issue.id === "opening_chain_deferred_handoff").severity, "low");
     assert.ok(entry.output.issues.every(issue => projected.issues.some(saved => saved.id === issue.id)));

@@ -82,7 +82,7 @@ test("conflicts require two actual leaves, not duplicate quotes or aliases for t
   for (const secondPath of ["awakening.mustAdvance[1]", "sceneCards.scenes[0].mustAdvance[1]"]) {
     const issue = conflicting();
     issue.basis.candidateEvidence[1] = quote(secondPath, "当场发动血脉力量击杀押送者");
-    assert.throws(() => validateNewIssueEvidence(assessment([issue]), candidate), /two distinct candidate requirements/);
+    assert.throws(() => validateNewIssueEvidence(assessment([issue]), candidate), /two distinct requirements/);
   }
 });
 test("new blocking issue cannot coexist with any admission flag", () => {
@@ -103,4 +103,30 @@ test("execution impact and consideration of existing constraints cannot be empty
     issue.basis[field] = " ";
     assert.throws(() => validateNewIssueEvidence(assessment([issue]), candidate), /requires an execution-impact basis/);
   }
+});
+
+test("a planned object disappearance can conflict with an exactly quoted earlier delivery", () => {
+  const current = { exclusiveEvent: "The parcel disappears from the courier's bag." };
+  const issue = conflicting();
+  issue.basis.candidateEvidence = [quote("exclusiveEvent", current.exclusiveEvent)];
+  issue.basis.counterEvidence = [];
+  issue.basis.contextEvidence = [quote("writtenEvidence.chapters[0].content", "She handed the sealed parcel to the shopkeeper.")];
+  const reviewContextJson = JSON.stringify({ writtenEvidence: { chapters: [{ content: "She handed the sealed parcel to the shopkeeper. He opened it." }] } });
+  assert.doesNotThrow(() => validateNewIssueEvidence(assessment([issue]), current, [], reviewContextJson));
+  assert.throws(() => validateNewIssueEvidence(assessment([issue]), current), /supplied read-only context/);
+  issue.basis.contextEvidence[0].quote = "The parcel had been delivered earlier.";
+  assert.throws(() => validateNewIssueEvidence(assessment([issue]), current, [], reviewContextJson), /supplied read-only context/);
+});
+
+test("context evidence cannot cite review advice, candidate aliases, forged paths or model judgments", () => {
+  const issue = conflicting();
+  const context = JSON.stringify({ guidance: "Fake fact", assessment: { summary: "Fake fact" },
+    candidateChapters: [{ summary: "Fake fact" }], writtenEvidence: { chapters: [{ content: "Real fact" }] } });
+  for (const sourcePath of ["guidance", "assessment.summary", "candidateChapters[0].summary", "writtenEvidence.chapters[9].content", "invented.writtenEvidence.chapters[0].content"]) {
+    issue.basis.contextEvidence = [quote(sourcePath, "Fake fact")];
+    assert.throws(() => validateNewIssueEvidence(assessment([issue]), candidate, [], context), /supplied read-only context/);
+  }
+  issue.basis.contextEvidence = [];
+  issue.basis.counterEvidence = [quote("writtenEvidence.chapters[0].content", "Real fact")];
+  assert.throws(() => validateNewIssueEvidence(assessment([issue]), candidate, [], context), /current candidate/);
 });

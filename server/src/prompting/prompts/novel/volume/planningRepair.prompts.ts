@@ -35,7 +35,7 @@ const commonRules = [
 // These assets do not resolve models; the coordinator must pass its explicit modelRoute to the runner.
 export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, PlanningRepairOutput> = {
   id: "novel.volume.planning_repair",
-  version: "v7",
+  version: "v8",
   taskType: "replan",
   mode: "structured",
   language: "zh",
@@ -45,15 +45,15 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
     new SystemMessage([
       "你是网文规划修复器。只修复限定章节窗口的执行合同，不写正文，不重做全书规划。",
       commonRules,
-      "逐项解决 assessment.current 中仍未解决的问题，参照issueHistoryByChapter保留此前有效修复；原始问题仅用于检查职责没有丢失。用具体的章节职责和场景变化解决真实缺口，不为可选润色反复改写。只能在允许窗口内保留、合并或移动职责。",
-      "输出 {requiresUserDecision:boolean,reason:string,changes:[{chapterId,summary,purpose,exclusiveEvent,endingState,nextChapterEntryState,conflictLevel:number,revealLevel:number,taskSheet,mustAvoid,payoffRefs:string[],sceneCards:[],readerExperience:{}}],obligationMoves:[{obligation,fromChapterId,toChapterId,action,reason}]}。",
+      "逐项解决 assessment.current 中仍未解决的问题，参照issueHistoryByChapter保留此前有效修复；原始问题仅用于检查职责没有丢失。用具体的章节职责和场景变化解决真实缺口，不为可选润色反复改写。只能在允许窗口内保留、合并或移动职责；错误引用可按显式revise账本纠正表述，叙事功能仍须保留。",
+      "输出 {requiresUserDecision:boolean,reason:string,changes:[{chapterId,summary,purpose,exclusiveEvent,endingState,nextChapterEntryState,conflictLevel:number,revealLevel:number,taskSheet,mustAvoid,payoffRefs:string[],sceneCards:[],readerExperience:{}}],obligationMoves:[{obligation,fromChapterId,toChapterId,action,replacement?,reason}]}。",
       "changes 必须对每个 allowedChapterIds 恰好返回一次完整的允许字段，包括无需变化的字段。不返回完整替换文档，不新增其他字段。",
-      "payoffRefs 是既有义务的稳定引用，不是可自由改写的问题摘要：原引用必须逐字保留，不可换成近义问句或新名称；仅可按 obligationMoves 在允许窗口内迁移到接收章，不能丢失。",
+      "payoffRefs承载叙事义务，普通保留或迁移仍须保留原引用。若引用含与已写事实冲突的旧实现方式，或用户已确认纠正其表述，可在同一允许章用obligationMoves的revise显式修订：obligation逐字取自candidateChapters当前原引用（无候选才用originalChapters），replacement逐字对应changes里新引用，reason说明事实依据、保留的叙事功能及本章如何落实。新引用替代旧引用，不同时保留错误原句。不得只修改payoffRefs而漏记映射；也不得把旧错误句继续当作执行目标。只因近义润色不应重写引用。",
       "长度为严格执行合同：taskSheet、summary 各最多600字符；purpose、exclusiveEvent、endingState、nextChapterEntryState、mustAvoid 各最多240字符。taskSheet 只写执行摘要，不重复完整场景卡；具体动作及必达义务保留在 sceneCards 中，不得为压缩文字而删除职责。其他字段严格遵守输出 schema 的长度和数组上限。",
       "sceneCards 沿用章节细纲场景结构，每章 3-8 场；每场包含唯一 key、title、purpose、mustAdvance:string[]、mustPreserve:string[]、entryState、exitState、forbiddenExpansion:string[]、正整数 targetWordCount、resistance、turn、emotionalShift、readerValue。",
       "每个修复场景还须包含 causality:{actor,choice,motive,prerequisites:[{condition,sourceKind,reference}],resistanceResponse,outcomeMechanism,resultingConstraints:[{constraint,persistence}]}。sourceKind 只用 established_in_context、establish_in_scene、unresolved。既有前提必须引用可核对的上下文；本场建立的条件要先获得再使用，缺失来源必须标 unresolved，不能虚构已完成事件。说明人物为何如此选择、阻力如何回应、结果为何发生、代价如何限制后续行动。允许失败、拒绝和安静变化；没有新增条件或代价时相应数组可为空。",
       "readerExperience 沿用现有结构：readerQuestion、promisedReward、rewardLevel（只能 setup|partial|major）、protagonistWant、primaryResistance、keyTurn、emotionalShift、informationReveal、netChange、inheritedHookResponsibilities（最多4项）、endingHook。",
-      "obligationMoves 记录实际义务的去向并给出具体 reason。action 只能 retain|merge|move：retain 的来源和目标必须是同章；move 必须是窗口内不同章；merge 允许同章、同一场景内合并职责，也允许窗口内跨章合并。账本必须与 changes 一致，不得凭空声称已保留职责。",
+      "obligationMoves 记录实际义务的去向并给出具体 reason。action只能retain|merge|move|revise：retain与revise的来源和目标必须是同章；move必须是窗口内不同章；merge允许同章、同一场景内合并职责或窗口内跨章合并。仅revise必须有replacement字段，其他动作不得携带replacement。revise只纠正义务表达与实现方式，不授权删掉义务、改变回报时限、挪到窗口外或降低用户承诺。账本必须与 changes 一致，不得凭空声称已保留职责。",
       "修复首章的入口必须承接 readonlyPrevious 的结束态；修复末章的结束态必须保留 readonlyNext 的进入条件，不得提前占用下一章独占事件。",
       "若必须由作者决定或必须修改窗口外内容，requiresUserDecision=true，在 reason 说明具体决策点，changes 和 obligationMoves 返回空数组。普通可修复质量问题不应升级为用户决策。",
     ].join("\n")),
@@ -72,7 +72,7 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
 
 export const planningRepairReviewPrompt: PromptAsset<PlanningRepairReviewPromptInput, PlanningRepairReviewOutput> = {
   id: "novel.volume.planning_repair_review",
-  version: "v6",
+  version: "v7",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -83,6 +83,7 @@ export const planningRepairReviewPrompt: PromptAsset<PlanningRepairReviewPromptI
       "你是独立的规划修复总审查员。对比 originalChapters 与 candidateChapters，评审整个修复窗口，不改写内容。",
       commonRules,
       "核对原始职责与修复章节及 obligationMoves，检查丢失或重复职责、无人承接的兑现与钩子、无依据的移动，以及只在账本宣称保留却未落实的义务。同章或同场景合并允许，但不能因此吞掉原有叙事功能。",
+      "对revise逐项核对旧引用、新引用、reason、writtenEvidence和guidance：确定是事实纠正或等价承接，而非删除、换掉、延迟或削弱原有叙事义务；逐场检查最终候选实际落实了保留功能。原句中的错误物理状态不得因要求保留而继续执行。映射通过结构校验不代表语义等价，缺乏依据或功能丢失仍不得safeToSync。",
       "检查各章原始字数预算与场景分配，还要判断实际叙事工作量能否在不变预算内完成。归一化后的数字合规不代表负载合理。",
       "检查窗口内部以及 readonlyPrevious、readonlyNext 两端的章节边界：独占事件、结束态与入口态、揭露时机、节拍承诺都要连续且不越界。",
       "只要求 candidateChapters 内的章节具有完整执行合同。readonlyPrevious、readonlyNext 是只读边界参照，可能仅有标题与摘要；不得因为未进入本轮的邻章尚无任务单、场景卡或强度字段而拒绝当前窗口。仍须根据其已有信息检查真实的剧情衔接矛盾，并指出具体冲突，不得虚构缺失内容。",
