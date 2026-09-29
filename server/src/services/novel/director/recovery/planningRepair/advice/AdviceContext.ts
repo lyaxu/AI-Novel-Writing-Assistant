@@ -118,6 +118,22 @@ export function buildAdviceContext(input: {
 }
 
 
+export function adviceCandidateSourceText(context: unknown, path: string): { chapterId: string; text: string } | null {
+  const source = object(context);
+  const match = /^candidateWindow\[(\d+)\]\.chapters\[(\d+)\]\.(summary|purpose|exclusiveEvent|endingState|nextChapterEntryState|mustAvoid|taskSheet|sceneCards|payoffRefs|payoffRefsJson|causalContract)(.*)$/.exec(path);
+  if (!match || !/^(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\d+\])*$/.test(match[4])) return null;
+  const chapter = array(array(source.candidateWindow)[Number(match[1])]?.chapters)[Number(match[2])];
+  if (!chapter) return null;
+  let leaf: unknown = chapter[match[3]];
+  const segments = match[4].match(/[A-Za-z_][A-Za-z0-9_]*|\d+/g) ?? [];
+  for (const segment of segments) {
+    if (typeof leaf === "string") { try { leaf = JSON.parse(leaf); } catch { leaf = undefined; } }
+    if (!leaf || typeof leaf !== "object" || !Object.hasOwn(leaf, segment)) { leaf = undefined; break; }
+    leaf = (leaf as Data)[segment];
+  }
+  return typeof leaf === "string" ? { chapterId: String(chapter.id), text: leaf } : null;
+}
+
 /** Structural provenance guard only; AI must still judge whether cited content resolves the issue. */
 export function adviceCandidateEvidenceError(option: PlanningRepairAdviceOutput["options"][number], context: unknown): string | null {
   if (option.executionMode !== "review_existing") return null;
@@ -129,21 +145,13 @@ export function adviceCandidateEvidenceError(option: PlanningRepairAdviceOutput[
   const witnessed = new Set<string>();
   for (const evidence of option.candidateEvidence) {
     const path = evidence.sourcePath;
-    const match = /^candidateWindow\[(\d+)\]\.chapters\[(\d+)\]\.(summary|purpose|exclusiveEvent|endingState|nextChapterEntryState|mustAvoid|taskSheet|sceneCards|payoffRefs|payoffRefsJson|causalContract)(.*)$/.exec(path);
-    if (!match || !/^(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\d+\])*$/.test(match[4])) return "复核依据必须引用当前候选章节的实际执行内容，请重新获取建议。";
-    const chapter = array(array(source.candidateWindow)[Number(match[1])]?.chapters)[Number(match[2])];
-    if (!chapter || !option.affectedChapterIds.includes(String(chapter.id))) return "复核依据未对应本方案的候选章节，请重新获取建议。";
-    let leaf: unknown = chapter[match[3]];
-    const segments = match[4].match(/[A-Za-z_][A-Za-z0-9_]*|\d+/g) ?? [];
-    for (const segment of segments) {
-      if (typeof leaf === "string") { try { leaf = JSON.parse(leaf); } catch { leaf = undefined; } }
-      if (!leaf || typeof leaf !== "object" || !Object.hasOwn(leaf, segment)) { leaf = undefined; break; }
-      leaf = (leaf as Data)[segment];
-    }
+    const resolved = adviceCandidateSourceText(context, path);
+    if (!resolved || !option.affectedChapterIds.includes(resolved.chapterId)) return "复核依据未对应本方案的候选章节，请重新获取建议。";
+    const leaf = resolved.text;
     if (typeof leaf !== "string" || !evidence.quote.trim() || !leaf.includes(evidence.quote)) {
       return "复核建议引用的内容不在当前已保存候选中，请重新获取建议。";
     }
-    witnessed.add(String(chapter.id));
+    witnessed.add(resolved.chapterId);
   }
   if (!option.affectedChapterIds.every(id => witnessed.has(id))) return "复核依据未覆盖本方案的全部候选章节，请重新获取建议。";
   return null;

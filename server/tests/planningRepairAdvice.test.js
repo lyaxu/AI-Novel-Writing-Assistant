@@ -19,6 +19,7 @@ const encoding = load("../src/services/novel/director/recovery/planningRepair/ad
 const horizon = load("../src/services/novel/volume/planningPromises/planningHorizon.ts", {});
 const adviceContextImports = { "../../../../volume/planningPromises": horizon };
 const contextModule = load("../src/services/novel/director/recovery/planningRepair/advice/AdviceContext.ts", adviceContextImports);
+const semanticReview = require("../dist/services/novel/director/recovery/planningRepair/advice/semanticReview");
 const structuredOutput = load("../src/llm/structuredOutput.ts", { zod: require("zod"), "./providers": {}, "./reasoning": {} });
 class TestAppError extends Error {}
 const failureModule = load("../src/services/novel/director/recovery/planningRepair/advice/AdviceFailure.ts", {
@@ -31,10 +32,14 @@ const output = () => ({ summary: "复核后给出可执行方向", recommendedOp
   blockerResolution: { status: "complete", remainingBlockers: [], rationale: "补齐唯一缺失的行动依据" },
   guidance: { intent: "补齐因果", actions: ["使用已有线索"], preserve: ["核心冲突"], verification: ["验证行动前提"] },
 }] });
-function fixture(useDefaultGenerator = false) {
+function fixture(useDefaultGenerator = false, promptRun) {
   let source = { row: { id: "t", seedPayloadJson: "old", updatedAt: "time" }, seed: {}, repair: { key: "r", novelId: "n", chapterId: "c1" },
     fingerprint: "f", sourceToken: "s", eligibleChapterIds: ["c1", "c2", "c3"], context: { userIntent: "保留设定", candidateAuthority: { versionId: "candidate-v1" }, candidateWindow: [{ chapters: [{ id: "c1", taskSheet: "先核对已经交付的记录，再检查箱内仍存在的痕迹。" }] }] } };
-  let writes = 0, calls = 0, rejectCas = false, pending;
+  let writes = 0, calls = 0, reviews = 0, rejectCas = false, pending;
+  let reviewResult = async (_source, advice) => ({ advice, checks: advice.options.map(option => ({
+    optionId: option.id, verdict: "supported", rationale: "核对当前候选后支持该方向",
+    evidence: [{ sourcePath: "candidateWindow[0].chapters[0].taskSheet", quote: "先核对已经交付的记录", relation: "supports" }],
+  })) });
   const tx = { novelWorkflowTask: { updateMany: async ({ data }) => {
     writes++;
     if (rejectCas) return { count: 0 };
@@ -46,19 +51,101 @@ function fixture(useDefaultGenerator = false) {
     "node:crypto": require("node:crypto"), "@ai-novel/shared/types/planningRepair/advice": schema,
     "../../../../../../db/prisma": { prisma: { $transaction: (fn) => fn(tx) } },
     "../../../../../../middleware/errorHandler": { AppError: Error },
-    "../../../../../../prompting/core/promptRunner": { runStructuredPrompt: () => { throw new Error("Paid calls forbidden"); } },
+    "../../../../../../prompting/core/promptRunner": { runStructuredPrompt: promptRun ?? (() => { throw new Error("Paid calls forbidden"); }) },
     "../../../../../../prompting/prompts/novel/volume/recovery/planningRepairAdvice.prompts": {},
-    "../../../../../../llm/invokeTimeout": {}, "../PlanningRepairRecoveryService": {},
+    "../../../../../../prompting/prompts/novel/volume/recovery/planningRepairAdviceReview.prompts": {},
+    "../../../../../../llm/invokeTimeout": { runWithEnforcedTimeout: ({ run }) => run(new AbortController().signal) }, "../PlanningRepairRecoveryService": {},
     "./AdviceContext": contextModule,
     "./AdviceFailure": failureModule,
     "./AdviceContextEncoding": encoding,
+    "./semanticReview": semanticReview,
     "./AdviceSource": { readAdviceSource: async () => structuredClone(source), assertAdvicePaused: async () => {} },
   });
   const service = new mod.PlanningRepairAdviceService({ grant: async (taskId, input) => { grants.push(input); return { granted: true, replayed: grants.length > 1, taskId }; } },
-    useDefaultGenerator ? undefined : async () => { calls++; return new Promise((resolve, reject) => { pending = { resolve, reject }; }); });
-  return { service, source, grants, modelOptions: mod.adviceModelOptions, calls: () => calls, writes: () => writes, resolve: (value = output()) => pending.resolve(value), fail: (error = new Error("timeout")) => pending.reject(error), casFail: () => { rejectCas = true; } };
+    useDefaultGenerator ? undefined : async () => { calls++; return new Promise((resolve, reject) => { pending = { resolve, reject }; }); },
+    useDefaultGenerator ? undefined : async (s, draft) => { reviews++; return reviewResult(s, draft); });
+  return { service, source, grants, modelOptions: mod.adviceModelOptions, calls: () => calls, reviews: () => reviews, reviewWith: fn => { reviewResult = fn; }, writes: () => writes, resolve: (value = output()) => pending.resolve(value), fail: (error = new Error("timeout")) => pending.reject(error), casFail: () => { rejectCas = true; } };
 }
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+test("old ready advice stays readable but loses recommendation and cannot execute without semantic approval", async () => {
+  const f = fixture();
+  f.source.seed.planningRepairAdvice = { adviceId: "legacy", repairKey: "r", fingerprint: "f", status: "ready", result: output() };
+  const before = f.writes();
+  const view = await f.service.status("t");
+  assert.equal(view.status, "ready"); assert.equal(view.recommendedOptionId, undefined);
+  assert.equal(view.options[0].canResume, false); assert.match(view.options[0].blockedReason, /证据与结论核验/);
+  await assert.rejects(f.service.select("t", { repairKey: "r", adviceId: "legacy", optionId: "a", idempotencyKey: "click" }), /证据与结论核验/);
+  assert.equal(f.grants.length, 0); assert.equal(f.writes(), before); assert.equal(f.calls() + f.reviews(), 0);
+});
+
+test("production generation wiring performs exactly proposal plus review with all hidden retries disabled", async () => {
+  const invocations = [];
+  const f = fixture(true, async request => {
+    invocations.push(request);
+    if (invocations.length === 1) return { output: output() };
+    return { output: { advice: output(), checks: [{ optionId: "a", verdict: "supported", rationale: "核对完成", evidence: [
+      { sourcePath: "candidateWindow[0].chapters[0].taskSheet", quote: "先核对已经交付的记录", relation: "supports" },
+    ] }] } };
+  });
+  await f.service.request("t", { repairKey: "r", idempotencyKey: "two-stage" }); await settle();
+  assert.equal((await f.service.status("t")).status, "ready");
+  assert.deepEqual(invocations.map(r => r.options.stage), ["planning_repair_advice", "planning_repair_advice_review"]);
+  assert.deepEqual(JSON.parse(invocations[1].promptInput.draftAdviceJson), output());
+  for (const { options } of invocations) {
+    assert.equal(options.transportRetryCount, 0); assert.equal(options.disableFallbackModel, true);
+    assert.equal(options.disableStrategyFallback, true); assert.ok(options.signal);
+  }
+  await f.service.request("t", { repairKey: "r", idempotencyKey: "two-stage" }); await settle();
+  assert.equal(invocations.length, 2); assert.equal(f.grants.length, 0);
+});
+
+test("draft is never ready before independent review and only corrected advice is persisted and adopted", async () => {
+  const f = fixture(); let finish;
+  f.reviewWith((_source, draft) => new Promise(resolve => { finish = () => {
+    const advice = structuredClone(draft);
+    advice.options[0].guidance.actions = ["修正真实冲突并为兑现引用提供显式同章修订映射"];
+    resolve({ advice, checks: [{ optionId: "a", verdict: "corrected", rationale: "原结论与原文相反，须先修复", evidence: [
+      { sourcePath: "candidateWindow[0].chapters[0].taskSheet", quote: "先核对已经交付的记录", relation: "contradicts" },
+    ] }] });
+  }; }));
+  const request = await f.service.request("t", { repairKey: "r", idempotencyKey: "review" });
+  f.resolve(); await settle();
+  assert.equal((await f.service.status("t")).status, "running");
+  assert.equal(f.source.seed.planningRepairAdvice.result, undefined);
+  await f.service.request("t", { repairKey: "r", idempotencyKey: "review" });
+  assert.equal(f.calls(), 1); assert.equal(f.reviews(), 1);
+  finish(); await settle();
+  assert.equal((await f.service.status("t")).options[0].canResume, true);
+  await f.service.select("t", { repairKey: "r", adviceId: request.adviceId, optionId: "a", idempotencyKey: "adopt" });
+  assert.match(f.grants[0].guidance, /显式同章修订映射/);
+  f.source.seed.planningRepairAdvice.result.options[0].reason = "核验后的结果被更换";
+  assert.equal((await f.service.status("t")).options[0].canResume, false);
+});
+
+test("review failure does not expose unchecked draft, retry, or grant recovery", async () => {
+  const f = fixture();
+  f.reviewWith(async () => { throw new Error("semantic review unavailable"); });
+  await f.service.request("t", { repairKey: "r", idempotencyKey: "bad-review" });
+  f.resolve(); await settle();
+  const status = await f.service.status("t");
+  assert.equal(status.status, "failed"); assert.equal(status.options, undefined);
+  assert.equal(f.calls(), 1); assert.equal(f.reviews(), 1); assert.equal(f.grants.length, 0);
+  assert.equal(f.source.seed.planningRepairAdvice.result, undefined);
+});
+
+test("source change before review prevents its call; source change during review rejects late completion", async () => {
+  const first = fixture(); await first.service.request("t", { repairKey: "r", idempotencyKey: "before" });
+  first.source.fingerprint = "changed"; first.resolve(); await settle();
+  assert.equal(first.reviews(), 0);
+  const second = fixture(); let finish;
+  second.reviewWith((_source, advice) => new Promise(resolve => { finish = () => resolve({ advice, checks: [{
+    optionId: "a", verdict: "supported", rationale: "checked", evidence: [{ sourcePath: "candidateWindow[0].chapters[0].taskSheet", quote: "先核对已经交付的记录", relation: "supports" }],
+  }] }); }));
+  await second.service.request("t", { repairKey: "r", idempotencyKey: "during" }); second.resolve(); await settle();
+  second.source.fingerprint = "changed"; finish(); await settle();
+  assert.equal((await second.service.status("t")).status, "stale"); assert.equal(second.writes(), 1);
+});
 
 test("consumed advice is projected as applied rather than stale without allowing another grant", async () => {
   const f = fixture();
@@ -136,7 +223,7 @@ test("partial fixes, creative-tradeoff review and legacy closure claims cannot b
 
 test("complete evidence-backed review disagreement remains executable without rewriting guidance", async () => {
   const f = fixture(); const request = await f.service.request("t", { repairKey: "r", idempotencyKey: "req" });
-  const result = output(); Object.assign(result.options[0], { executionMode: "review_existing", diagnosis: "review_disagreement", candidateVersionId: "candidate-v1", candidateEvidence: [{ sourcePath: "candidateWindow[0].chapters[0].taskSheet", quote: "先核对已经交付的记录，再检查箱内仍存在的痕迹。" }] });
+  const result = output(); Object.assign(result.options[0], { changes: [], executionMode: "review_existing", diagnosis: "review_disagreement", candidateVersionId: "candidate-v1", candidateEvidence: [{ sourcePath: "candidateWindow[0].chapters[0].taskSheet", quote: "先核对已经交付的记录，再检查箱内仍存在的痕迹。" }] });
   f.resolve(result); await settle();
   assert.equal((await f.service.status("t")).options[0].canResume, true);
   await f.service.select("t", { repairKey: "r", adviceId: request.adviceId, optionId: "a", idempotencyKey: "click" });
@@ -442,7 +529,7 @@ test("legacy review-only advice remains readable but cannot grant recovery witho
   const view = await f.service.status("t");
   assert.equal(view.status, "ready"); assert.equal(view.options[0].canResume, false);
   assert.match(view.options[0].blockedReason, /当前候选.*原文依据/);
-  await assert.rejects(f.service.select("t", { repairKey: "r", adviceId: request.adviceId, optionId: "a", idempotencyKey: "click" }), /重新获取建议/);
+  await assert.rejects(f.service.select("t", { repairKey: "r", adviceId: request.adviceId, optionId: "a", idempotencyKey: "click" }), /重新获取/);
   assert.equal(f.grants.length, 0);
 });
 

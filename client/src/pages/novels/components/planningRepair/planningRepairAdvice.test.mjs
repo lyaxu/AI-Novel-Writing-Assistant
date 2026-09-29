@@ -80,7 +80,7 @@ test("mount and status polling never request paid advice or resume the task", as
   await view.queries[0].queryFn();
   assert.deepEqual(view.calls.map(call => call[0]), ["get", "get"]);
   assert.match(view.html, /让 AI 推荐修复方案/);
-  assert.match(view.html, /获取方案会调用模型并产生费用/);
+  assert.match(view.html, /生成与独立核验，最多调用模型 2 次并产生费用/);
   assert.match(view.html, /高级：自定义修复方向（可选）/);
   assert.equal(view.queries[0].retry, false);
   assert.equal(view.mutations[0].retry, false);

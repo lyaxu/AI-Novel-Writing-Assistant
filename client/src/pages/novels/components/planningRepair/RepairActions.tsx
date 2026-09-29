@@ -95,7 +95,7 @@ export function RepairActions({ status }: { status: PlanningRepairStatus }) {
     </div> : <>
       <div className="space-y-2">
         <p className="text-sm">让 AI 根据待处理问题给出方案，再由你选择修复方向。</p>
-        <p className="text-xs text-muted-foreground">获取方案会调用模型并产生费用；阅读方案不会启动修复。</p>
+        <p className="text-xs text-muted-foreground">获取方案包含生成与独立核验，最多调用模型 2 次并产生费用；阅读方案不会启动修复。</p>
         <Button type="button" variant={ready ? "secondary" : "default"} disabled={busy || adviceQuery.isPending}
           onClick={() => generate.mutate()}>
           <Sparkles className="h-4 w-4" />{adviceRunning ? "AI 正在准备方案…" : advice && advice.status !== "none" ? "重新获取修复方案" : "让 AI 推荐修复方案"}

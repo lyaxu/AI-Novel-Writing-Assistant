@@ -12,7 +12,7 @@ export function describeAdviceFailure(error: unknown, receivedOutput?: unknown) 
     detail: error instanceof Error ? error.message : String(error),
     ...(error instanceof StructuredOutputError && error.rejectedOutput
       ? { rejectedOutput: error.rejectedOutput }
-      : error instanceof ZodError && receivedOutput !== undefined ? { rejectedOutput: { parsed: receivedOutput } } : {}),
+      : receivedOutput !== undefined ? { rejectedOutput: { parsed: receivedOutput } } : {}),
   };
   let message: string;
   switch (category) {
