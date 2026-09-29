@@ -1,5 +1,6 @@
+import { buildCurrentAdviceReviewIssues } from "./context";
 import { adviceCandidateEvidenceError, adviceCandidateSourceText } from "../AdviceContext";
-import { planningRepairAdviceReviewOutputSchema, type PlanningRepairAdviceReviewOutput } from "./contract";
+import { planningRepairAdviceReviewOutputSchema, assertAdviceIssueCoverage, type PlanningRepairAdviceReviewOutput } from "./contract";
 export { planningRepairAdviceReviewOutputSchema, type PlanningRepairAdviceReviewOutput } from "./contract";
 
 /** Written prose can support a cross-source contradiction, but never stand in for a candidate chapter. */
@@ -13,9 +14,42 @@ function writtenProse(context: unknown, path: string): string | null {
   return typeof content === "string" && content.trim() ? content : null;
 }
 
+/** Later planning may witness a handoff, but remains a plan rather than written fact. */
+function readonlyPlanningText(context: unknown, path: string): string | null {
+  if (!/^candidatePlanningHorizon(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\d+\])+$/.test(path)) return null;
+  let value: unknown = context;
+  for (const segment of path.match(/[A-Za-z_][A-Za-z0-9_]*|\d+/g) ?? []) {
+    if (typeof value === "string") { try { value = JSON.parse(value); } catch { return null; } }
+    if (!value || typeof value !== "object" || !Object.hasOwn(value, segment)) return null;
+    value = (value as Record<string, unknown>)[segment];
+  }
+  return typeof value === "string" ? value : null;
+}
+
 /** AI decides semantic support; this guard only verifies provenance and structured safety. */
 export function validateAdviceSemanticReview(output: PlanningRepairAdviceReviewOutput, context: unknown): void {
   planningRepairAdviceReviewOutputSchema.parse(output);
+  const currentIssues = buildCurrentAdviceReviewIssues(context);
+  const assessments = output.issueAssessments ?? [];
+  const issueIds = new Set(assessments.map(item => item.issueId));
+  if (issueIds.size !== assessments.length || issueIds.size !== currentIssues.length
+    || currentIssues.some(issue => !issueIds.has(issue.issueId))) {
+    throw new Error("语义核验必须完整且不重复地核对当前问题目录，请重新获取建议。");
+  }
+  for (const assessment of assessments) {
+    const issue = currentIssues.find(item => item.issueId === assessment.issueId)!;
+    if (assessment.chapterId !== issue.chapterId
+      || (issue.scope === "window" && (assessment.scope !== "window" || JSON.stringify(assessment.affectedChapterIds) !== JSON.stringify(issue.affectedChapterIds)))) throw new Error("问题核验章节不匹配当前目录。");
+    if (assessment.status !== "insufficient" && !assessment.evidence.length) throw new Error("问题判断缺少本次原文证据。");
+    for (const evidence of assessment.evidence) {
+      const candidate = adviceCandidateSourceText(context, evidence.sourcePath);
+      const text = candidate?.text ?? writtenProse(context, evidence.sourcePath) ?? readonlyPlanningText(context, evidence.sourcePath);
+      if (!text || !text.includes(evidence.quote) || (candidate && !issue.affectedChapterIds.includes(candidate.chapterId))) {
+        throw new Error("问题判断证据必须来自对应当前候选或只读资料的准确原文。");
+      }
+    }
+    assertAdviceIssueCoverage(assessment.status, issue, output.advice.options);
+  }
   const options = output.advice.options;
   const ids = new Set(output.checks.map(check => check.optionId));
   if (ids.size !== output.checks.length || ids.size !== options.length || options.some(option => !ids.has(option.id))) {
@@ -34,9 +68,9 @@ export function validateAdviceSemanticReview(output: PlanningRepairAdviceReviewO
         }
         witnessed.add(source.chapterId);
       } else {
-        const prose = writtenProse(context, evidence.sourcePath);
+        const prose = writtenProse(context, evidence.sourcePath) ?? readonlyPlanningText(context, evidence.sourcePath);
         if (!prose || !prose.includes(evidence.quote)) {
-          throw new Error("语义核验引用须准确对应当前候选或已提供的正文原文。");
+          throw new Error("语义核验引用须准确对应当前候选、只读后续规划或已提供的正文原文。");
         }
       }
     }
@@ -53,3 +87,7 @@ export function validateAdviceSemanticReview(output: PlanningRepairAdviceReviewO
     )) throw new Error("仅复核建议存在反证或未闭合缺口，必须修正方案后再核验。");
   }
 }
+
+export { prepareAdviceSemanticReviewContext, resolveAdviceSemanticReview,
+  type PreparedAdviceSemanticReviewContext, type AdviceReviewEvidence } from "./context";
+export { planningRepairAdviceReviewModelOutputSchema, type PlanningRepairAdviceReviewModelOutput } from "./contract";

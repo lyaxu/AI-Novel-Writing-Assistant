@@ -68,6 +68,15 @@ function fixture(useDefaultGenerator = false, promptRun) {
 }
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
+test("catalog resolution failures preserve the completed review rather than the earlier draft", () => {
+  const review = { invalidEvidence: "unknown-catalog-id" };
+  const error = new Error("Evidence resolution failed");
+  Object.defineProperty(error, "rejectedOutput", { value: { parsed: review }, enumerable: false });
+  const described = failureModule.describeAdviceFailure(error, output());
+  assert.deepEqual(described.failureDiagnostics.rejectedOutput.parsed, review);
+  assert.doesNotMatch(described.error, /unknown-catalog-id/);
+});
+
 test("old ready advice stays readable but loses recommendation and cannot execute without semantic approval", async () => {
   const f = fixture();
   f.source.seed.planningRepairAdvice = { adviceId: "legacy", repairKey: "r", fingerprint: "f", status: "ready", result: output() };
@@ -77,6 +86,19 @@ test("old ready advice stays readable but loses recommendation and cannot execut
   assert.equal(view.options[0].canResume, false); assert.match(view.options[0].blockedReason, /证据与结论核验/);
   await assert.rejects(f.service.select("t", { repairKey: "r", adviceId: "legacy", optionId: "a", idempotencyKey: "click" }), /证据与结论核验/);
   assert.equal(f.grants.length, 0); assert.equal(f.writes(), before); assert.equal(f.calls() + f.reviews(), 0);
+});
+
+test("saved receipt must still satisfy current evidence guards before projection or selection", async () => {
+  const f = fixture();
+  const request = await f.service.request("t", { repairKey: "r", idempotencyKey: "receipt" });
+  f.resolve(); await settle();
+  f.source.seed.planningRepairAdvice.semanticReview.checks[0].evidence[0].quote = "A stale or invented source";
+  const writes = f.writes();
+  const status = await f.service.status("t");
+  assert.equal(status.options[0].canResume, false);
+  assert.equal(status.recommendedOptionId, undefined);
+  await assert.rejects(f.service.select("t", { repairKey: "r", adviceId: request.adviceId, optionId: "a", idempotencyKey: "select" }), /当前问题与证据/);
+  assert.equal(f.writes(), writes); assert.equal(f.grants.length, 0);
 });
 
 test("explicit reacquisition can revalidate saved complete review without model calls, while GET cannot", async () => {
@@ -132,14 +154,16 @@ test("production generation wiring performs exactly proposal plus review with al
   const f = fixture(true, async request => {
     invocations.push(request);
     if (invocations.length === 1) return { output: output() };
-    return { output: { advice: output(), checks: [{ optionId: "a", verdict: "supported", rationale: "核对完成", evidence: [
-      { sourcePath: "candidateWindow[0].chapters[0].taskSheet", quote: "先核对已经交付的记录", relation: "supports" },
+    const prepared = semanticReview.prepareAdviceSemanticReviewContext(f.source.context);
+    return { output: { issueAssessments: [], ...output(), checks: [{ optionId: "a", verdict: "supported", rationale: "核对完成", evidence: [
+      { evidenceId: prepared.evidenceCatalog[0].evidenceId, relation: "supports" },
     ] }] } };
   });
   await f.service.request("t", { repairKey: "r", idempotencyKey: "two-stage" }); await settle();
   assert.equal((await f.service.status("t")).status, "ready");
   assert.deepEqual(invocations.map(r => r.options.stage), ["planning_repair_advice", "planning_repair_advice_review"]);
   assert.deepEqual(JSON.parse(invocations[1].promptInput.draftAdviceJson), output());
+  assert.equal(invocations[1].promptInput.contextJson, semanticReview.prepareAdviceSemanticReviewContext(f.source.context).contextJson);
   for (const { options } of invocations) {
     assert.equal(options.transportRetryCount, 0); assert.equal(options.disableFallbackModel, true);
     assert.equal(options.disableStrategyFallback, true); assert.ok(options.signal);
@@ -214,7 +238,7 @@ test("consumed advice is projected as applied rather than stale without allowing
 
 test("oversized unique context fails before timeout wrapper or any paid model boundary", async () => {
   const f = fixture(true);
-  f.source.context = { unique: "唯一正文".repeat(50000) };
+  f.source.context = { novel: { description: "唯一正文".repeat(50000) } };
   await f.service.request("t", { repairKey: "r", idempotencyKey: "capacity" });
   await settle();
   const saved = f.source.seed.planningRepairAdvice;
@@ -435,10 +459,10 @@ const parse = (value, contract = prompt.planningRepairAdvicePrompt.outputSchema,
   label: "advice-offline", strategy: "prompt_json", profile: {}, maxRepairAttempts: 0, finishReason: "stop", ...extra,
 });
 
-test("v9 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
+test("v10 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
   const asset = prompt.planningRepairAdvicePrompt;
   const text = asset.render({ contextJson: "{}" })[0].content;
-  assert.equal(asset.version, "v9"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
+  assert.equal(asset.version, "v10"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
   const jsonSchema = JSON.parse(text.split("完整输出契约（minItems/maxItems是数量，minLength/maxLength是字符数）：\n")[1].split("\n输出格式示例")[0]);
   const fields = jsonSchema.properties.options.items.properties;
   assert.deepEqual(fields.diagnosis.enum, schema.planningRepairAdviceDiagnoses);
@@ -448,7 +472,7 @@ test("v9 prompt renders the full shared contract and example, with explicit paid
   assert.equal(schema.planningRepairAdviceOutputSchema.safeParse(prompt.planningRepairAdviceExample).success, true);
   assert.match(text, /不得超过4000字符/); assert.match(text, /采用一个可执行方案即明确授权追加1轮/);
   assert.match(text, /不要让写作新手查询服务器schema/);
-  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v9/);
+  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v10/);
 });
 
 test("real rejected response keeps every action under wider non-safety limits but still rejects invented diagnoses", async () => {

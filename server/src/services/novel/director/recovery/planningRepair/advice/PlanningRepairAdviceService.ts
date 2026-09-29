@@ -9,15 +9,15 @@ import { runWithEnforcedTimeout } from "../../../../../../llm/invokeTimeout";
 import { PlanningRepairRecoveryService } from "../PlanningRepairRecoveryService";
 import { assertAdvicePaused, readAdviceSource, type AdviceSource } from "./AdviceSource";
 import { describeAdviceFailure } from "./AdviceFailure";
-import { AdviceContextCapacityError, prepareAdviceContext } from "./AdviceContextEncoding";
+import { AdviceContextCapacityError } from "./AdviceContextEncoding";
 import { planningRepairAdviceReviewPrompt } from "../../../../../../prompting/prompts/novel/volume/recovery/planningRepairAdviceReview.prompts";
-import { planningRepairAdviceReviewOutputSchema, validateAdviceSemanticReview, type PlanningRepairAdviceReviewOutput } from "./semanticReview";
+import { planningRepairAdviceReviewOutputSchema, prepareAdviceSemanticReviewContext, resolveAdviceSemanticReview, validateAdviceSemanticReview, type PlanningRepairAdviceReviewOutput } from "./semanticReview";
 
 interface SavedAdvice {
   adviceId: string; requestId: string; repairKey: string; fingerprint: string; sourceToken: string;
   status: "running" | "ready" | "failed"; result?: PlanningRepairAdviceOutput; error?: string;
   failureDiagnostics?: ReturnType<typeof describeAdviceFailure>["failureDiagnostics"];
-  semanticReview?: { version: 1; resultDigest: string; sourceFingerprint: string; checks: PlanningRepairAdviceReviewOutput["checks"] };
+  semanticReview?: { version: 2; resultDigest: string; sourceFingerprint: string; checks: PlanningRepairAdviceReviewOutput["checks"]; issueAssessments?: PlanningRepairAdviceReviewOutput["issueAssessments"] };
 }
 const active = new Set<string>();
 const requesting = new Set<string>();
@@ -32,10 +32,16 @@ function saved(source: AdviceSource): SavedAdvice | undefined { return source.se
 const resultDigest = (result: PlanningRepairAdviceOutput) => createHash("sha256").update(JSON.stringify(result)).digest("hex");
 function semanticApprovalError(source: AdviceSource): string | null {
   const advice = saved(source);
-  if (!advice?.result || advice.semanticReview?.version !== 1
+  if (!advice?.result || advice.semanticReview?.version !== 2
     || advice.semanticReview.sourceFingerprint !== source.fingerprint
     || advice.semanticReview.resultDigest !== resultDigest(advice.result)) {
     return "此方案尚未通过证据与结论核验，请重新获取修复方案。";
+  }
+  try {
+    validateAdviceSemanticReview({ advice: advice.result, checks: advice.semanticReview.checks,
+      issueAssessments: advice.semanticReview.issueAssessments }, source.context);
+  } catch {
+    return "此方案未完整核对当前问题与证据，请重新获取修复方案。";
   }
   return null;
 }
@@ -52,7 +58,8 @@ function reusableReview(previous: SavedAdvice | undefined, source: AdviceSource)
 }
 function approvedAdvice(advice: SavedAdvice, reviewed: PlanningRepairAdviceReviewOutput): SavedAdvice {
   return { ...advice, status: "ready", result: reviewed.advice, semanticReview: {
-    version: 1, resultDigest: resultDigest(reviewed.advice), sourceFingerprint: advice.fingerprint, checks: reviewed.checks,
+    version: 2, resultDigest: resultDigest(reviewed.advice), sourceFingerprint: advice.fingerprint, checks: reviewed.checks,
+    issueAssessments: reviewed.issueAssessments,
   } };
 }
 function canResume(option: PlanningRepairAdviceOutput["options"][number], source: AdviceSource) {
@@ -103,7 +110,7 @@ export function projectAdvice(source: AdviceSource): PlanningRepairAdviceStatus 
 
 async function generate(source: AdviceSource) {
   let contextJson: string;
-  try { contextJson = prepareAdviceContext(source.context); }
+  try { contextJson = prepareAdviceSemanticReviewContext(source.context).contextJson; }
   catch (error) {
     if (error instanceof AdviceContextCapacityError) throw new AppError(error.message, 409);
     throw error;
@@ -119,7 +126,8 @@ async function generate(source: AdviceSource) {
 }
 
 async function review(source: AdviceSource, draft: PlanningRepairAdviceOutput): Promise<PlanningRepairAdviceReviewOutput> {
-  const contextJson = prepareAdviceContext(source.context);
+  const prepared = prepareAdviceSemanticReviewContext(source.context);
+  const { contextJson } = prepared;
   const result = await runWithEnforcedTimeout({ timeoutMs: 300000, label: "planning-repair-advice-review", run: (signal) => runStructuredPrompt({
     asset: planningRepairAdviceReviewPrompt, promptInput: { contextJson, draftAdviceJson: JSON.stringify(draft) },
     options: { ...adviceModelOptions(source.seed), signal, timeoutMs: 300000, temperature: 0.1, reasoningEnabled: false, maxTokens: 8000,
@@ -127,7 +135,7 @@ async function review(source: AdviceSource, draft: PlanningRepairAdviceOutput): 
       taskId: source.row.id, novelId: source.repair.novelId, chapterId: source.repair.chapterId,
       entrypoint: "planning_repair_advice_explicit", stage: "planning_repair_advice_review" },
   }) });
-  return planningRepairAdviceReviewOutputSchema.parse(result.output);
+  return resolveAdviceSemanticReview(result.output, prepared);
 }
 
 export class PlanningRepairAdviceService {

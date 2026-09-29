@@ -10,11 +10,11 @@ export interface PromptAssetLoaderEntry {
 
 export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
   {
-    key: "novel.planning_repair.advice_review@v2",
+    key: "novel.planning_repair.advice_review@v5",
     load: () => require("../prompts/novel/volume/recovery/planningRepairAdviceReview.prompts").planningRepairAdviceReviewPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.planning_repair.advice@v9",
+    key: "novel.planning_repair.advice@v10",
     load: () => require("../prompts/novel/volume/recovery/planningRepairAdvice.prompts").planningRepairAdvicePrompt as UnknownPromptAsset,
   },
   {

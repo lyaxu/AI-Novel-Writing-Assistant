@@ -3,6 +3,8 @@ import { StructuredOutputError } from "../../../../../../llm/structuredOutput";
 import { AppError } from "../../../../../../middleware/errorHandler";
 
 export function describeAdviceFailure(error: unknown, receivedOutput?: unknown) {
+  const rejectedOutput = error instanceof Error
+    ? Object.getOwnPropertyDescriptor(error, "rejectedOutput") : undefined;
   const category = error instanceof StructuredOutputError ? error.category
     : error instanceof ZodError ? "schema_mismatch"
       : error instanceof Error && error.name === "TimeoutError" ? "timeout"
@@ -12,6 +14,8 @@ export function describeAdviceFailure(error: unknown, receivedOutput?: unknown) 
     detail: error instanceof Error ? error.message : String(error),
     ...(error instanceof StructuredOutputError && error.rejectedOutput
       ? { rejectedOutput: error.rejectedOutput }
+      : rejectedOutput && !rejectedOutput.enumerable && rejectedOutput.value
+        ? { rejectedOutput: rejectedOutput.value }
       : receivedOutput !== undefined ? { rejectedOutput: { parsed: receivedOutput } } : {}),
   };
   let message: string;

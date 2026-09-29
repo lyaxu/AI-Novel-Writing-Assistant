@@ -102,7 +102,7 @@ export function buildAdviceContext(input: {
     candidatePlanningHorizon: horizon(candidateDocument),
     chapterEvidence: input.chapters.map(object).filter((c) => materialized.has(String(c.id)) || relevant.has(String(c.id)))
       .map((c) => pick(c, ["id", "order", "title", "expectation", "summary", "content", "taskSheet", "sceneCards", "chapterStatus"])),
-    repair: { ...pick(repair, ["key", "rounds", "maxRounds", "phase", "summary", "guidance", "quality", "candidateVersionId", "obligationMoves", "technicalError", "reviewTargets", "remainingRisks"]),
+    repair: { ...pick(repair, ["key", "chapterId", "affectedChapterIds", "rounds", "maxRounds", "phase", "summary", "guidance", "quality", "candidateVersionId", "obligationMoves", "technicalError", "reviewTargets", "remainingRisks"]),
       recentHistory: Array.isArray(repair.history) ? repair.history.slice(-6).map((entry) => {
         const item = historyForDiagnosis(entry);
         return { ...item, provenance: { authoritativeForCurrentCandidate: false,
