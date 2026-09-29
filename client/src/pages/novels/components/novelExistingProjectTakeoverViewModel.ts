@@ -294,7 +294,7 @@ export function buildTakeoverContinuousTarget(
   const normalizedSelected = normalizePositiveOrder(selectedOrder ?? null);
   const resolvedSelected = normalizedSelected
     ? Math.min(Math.max(normalizedSelected, currentWindow.startOrder), targetOrder)
-    : targetOrder;
+    : currentWindow.startOrder;
   return {
     startOrder: currentWindow.startOrder,
     currentWindowEndOrder: currentWindow.maxOrder,

@@ -362,7 +362,7 @@ export default function NovelExistingProjectTakeoverDialog({
           <DialogHeader className="shrink-0 border-b bg-gradient-to-r from-primary/[0.06] via-primary/[0.025] to-transparent px-4 pb-4 pr-12 pt-5 text-left sm:px-6 sm:pt-6">
             <DialogTitle>继续自动导演</DialogTitle>
             <DialogDescription>
-              AI 会先核对已完成的内容，再从最合适的位置继续，不会重复生成已有资产。
+              请先确认接续范围与续写终点。AI 会核对已有内容，补齐所选范围的规划；规划通过审查后，再生成正文。
             </DialogDescription>
           </DialogHeader>
           <div className={AUTO_DIRECTOR_MOBILE_CLASSES.dialogBody}>

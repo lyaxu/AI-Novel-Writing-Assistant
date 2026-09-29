@@ -66,6 +66,11 @@ export default function MobileNovelEditView(props: NovelEditViewProps) {
   const pendingResourceProposalCount = taskDrawer?.resourceProposals?.length ?? 0;
   const totalChapters = chapterTab.chapters.length;
   const generatedChapters = chapterTab.chapters.filter((item) => Boolean(item.content?.trim())).length;
+  const showContinuationGuidance = taskDrawer?.task?.status === "succeeded"
+    && generatedChapters > 0
+    && !hideTakeoverEntry
+    && !isTakeoverLoading
+    && Boolean(activeStepTakeoverEntry);
   const pendingRepairs = pipelineTab.chapterReports.filter(
     (item) => item.overall < pipelineTab.pipelineForm.qualityThreshold,
   ).length;
@@ -240,6 +245,11 @@ export default function MobileNovelEditView(props: NovelEditViewProps) {
                 AI 自动导演接管
               </Button>
             ) : activeStepTakeoverEntry}
+            {showContinuationGuidance ? (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                本轮范围已完成。点击「AI 自动导演接管」选择续写终点，AI 会先补齐规划并审查，再生成正文。
+              </p>
+            ) : null}
           </div>
         ) : null}
 

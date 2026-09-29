@@ -3,7 +3,7 @@ import type {
   NovelProductionScope,
   NovelProductionExperienceSelectionResponse,
 } from "@ai-novel/shared/types/novelWorkflow";
-import { buildFullBookAutopilotExecutionPlan } from "@ai-novel/shared/types/novelDirector";
+import { buildFullBookAutopilotExecutionPlan, isDirectorAutoExecutionRunMode } from "@ai-novel/shared/types/novelDirector";
 import { buildFullDirectorAutoApprovalConfig } from "@ai-novel/shared/types/autoDirectorApproval";
 import { prisma } from "../../../../db/prisma";
 import { AppError } from "../../../../middleware/errorHandler";
@@ -20,20 +20,34 @@ export function parseSelectedExperience(seed: DirectorWorkflowSeedPayload): Nove
     : null;
 }
 
+/** Takeover authorization is already explicit; choosing an interface cannot replace its range. */
+export function getTakeoverProductionPlan(seed: DirectorWorkflowSeedPayload) {
+  return seed.takeover && isDirectorAutoExecutionRunMode(seed.directorInput?.runMode)
+    ? seed.directorInput?.autoExecutionPlan ?? null : null;
+}
+
 export function buildProductionExperienceSeed(
   seed: DirectorWorkflowSeedPayload,
   experience: NovelProductionExperience,
-  scope: NovelProductionScope = seed.productionScope ?? "book",
+  scope?: NovelProductionScope,
 ): DirectorWorkflowSeedPayload {
   const directorInput = seed.directorInput;
   if (!directorInput) {
     throw new AppError("自动导演任务缺少继续生产所需的上下文。", 409);
   }
+  const authorizedPlan = getTakeoverProductionPlan(seed);
+  if (authorizedPlan) {
+    if (scope !== undefined) throw new AppError("接管范围已确认，请仅选择创作界面；如需调整范围，请返回 AI 自动导演接管。", 409);
+    return { ...seed, productionExperience: experience, productionScope: undefined,
+      runMode: directorInput.runMode, autoExecutionPlan: authorizedPlan,
+      autoApproval: directorInput.autoApproval, directorInput };
+  }
+  const selectedScope = scope ?? seed.productionScope ?? "book";
   const nextInput = applyDirectorRunModeContract({
     ...directorInput,
     runMode: "full_book_autopilot" as const,
-    autoExecutionPlan: scope === "book" ? buildFullBookAutopilotExecutionPlan() : {
-      mode: "chapter_range", startOrder: 1, endOrder: scope === "sample3" ? 3 : 5,
+    autoExecutionPlan: selectedScope === "book" ? buildFullBookAutopilotExecutionPlan() : {
+      mode: "chapter_range", startOrder: 1, endOrder: selectedScope === "sample3" ? 3 : 5,
       autoReview: true, autoRepair: true,
     },
     autoApproval: buildFullDirectorAutoApprovalConfig(),
@@ -41,7 +55,7 @@ export function buildProductionExperienceSeed(
   return {
     ...seed,
     productionExperience: experience,
-    productionScope: scope,
+    productionScope: selectedScope,
     runMode: nextInput.runMode,
     autoExecutionPlan: nextInput.autoExecutionPlan,
     autoApproval: nextInput.autoApproval,
@@ -67,10 +81,12 @@ export class DirectorProductionExperienceService {
 
     const seed = parseSeedPayload<DirectorWorkflowSeedPayload>(task.seedPayloadJson) ?? {};
     const selected = parseSelectedExperience(seed);
+    const authorizedPlan = getTakeoverProductionPlan(seed);
+    if (authorizedPlan && scope !== undefined) throw new AppError("接管范围已确认，请仅选择创作界面；如需调整范围，请返回 AI 自动导演接管。", 409);
     if (selected && scope && scope !== (seed.productionScope ?? "book")) {
       throw new AppError("请从章节执行范围中确认后续写作范围；切换界面不会扩大试写范围。", 409);
     }
-    const productionScope = scope ?? seed.productionScope ?? "book";
+    const productionScope = authorizedPlan ? undefined : scope ?? seed.productionScope ?? "book";
     if (selected && selected !== experience) {
       const nextSeed = { ...seed, productionExperience: experience };
       await prisma.$transaction(async (tx) => {
@@ -88,6 +104,7 @@ export class DirectorProductionExperienceService {
       });
       return {
         productionScope,
+        autoExecutionPlan: authorizedPlan ?? undefined,
         experience,
         workflowTaskId: task.id,
         novelId: task.novelId,
@@ -114,9 +131,9 @@ export class DirectorProductionExperienceService {
             status: "waiting_approval",
             currentStage: "chapter_execution",
             currentItemKey: "chapter_batch_ready",
-            currentItemLabel: productionScope === "book" ? "准备开始全书生产" : "准备生成开篇样章",
+            currentItemLabel: authorizedPlan ? "准备按确认范围继续写作" : productionScope === "book" ? "准备开始全书生产" : "准备生成开篇样章",
             checkpointType: "chapter_batch_ready",
-            checkpointSummary: productionScope === "book" ? "章节执行资源已准备完成，AI 将开始全书生产。" : `仅试写前${productionScope === "sample3" ? 3 : 5}章，完成后等待试读，不自动扩写整本。`,
+            checkpointSummary: authorizedPlan ? "AI 将按接管时确认的范围继续写作，保留已有正文。" : productionScope === "book" ? "章节执行资源已准备完成，AI 将开始全书生产。" : `仅试写前${productionScope === "sample3" ? 3 : 5}章，完成后等待试读，不自动扩写整本。`,
             pendingManualRecovery: false,
           },
         });
@@ -147,6 +164,7 @@ export class DirectorProductionExperienceService {
       : null;
     return {
       productionScope,
+      autoExecutionPlan: authorizedPlan ?? undefined,
       experience,
       workflowTaskId: task.id,
       novelId: task.novelId,

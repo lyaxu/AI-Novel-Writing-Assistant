@@ -1,3 +1,5 @@
+import type { DirectorAutoExecutionPlan } from "./novelDirector";
+
 export type NovelWorkflowLane = "manual_create" | "auto_director" | "creation_studio";
 
 export type NovelWorkflowStage =
@@ -92,6 +94,7 @@ export type NovelProductionScope = "sample3" | "sample5" | "book";
 
 export interface NovelProductionExperienceSelectionResponse {
   productionScope?: NovelProductionScope;
+  autoExecutionPlan?: DirectorAutoExecutionPlan;
   experience: NovelProductionExperience;
   workflowTaskId: string;
   novelId: string;

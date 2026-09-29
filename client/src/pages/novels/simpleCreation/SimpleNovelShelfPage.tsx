@@ -174,6 +174,8 @@ export default function SimpleNovelShelfPage() {
   const savedDraftCount = readableChapters.length;
   const stableChapterCount = shelf.progress.completedChapters;
   const totalChapterCount = shelf.progress.totalChapters || shelf.chapters.length;
+  const canChooseContinuation = shelf.progress.sampleCompleted
+    || (shelf.progress.status === "completed" && savedDraftCount < totalChapterCount);
 
   return (
     <div className="min-h-screen bg-muted/20">
@@ -194,7 +196,7 @@ export default function SimpleNovelShelfPage() {
                       <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{shelf.novel.title}</h1>
                       <Badge variant="outline">简易模式 · 阅读书架</Badge>
                     </div>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{shelf.progress.sampleCompleted ? "先读样章，再决定是否继续这条故事方向。" : "这里优先展示这本书的正文和进度。AI 会在后台继续规划、写作和审校；需要查看完整资料时可随时切换工作台。"}</p>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{canChooseContinuation ? "本轮范围已完成。点击「选择续写范围」进入专业模式，再点击「AI 自动导演接管」确认续写终点；AI 会先补齐规划并审查，再生成正文。" : "这里优先展示这本书的正文和进度。AI 会在后台继续规划、写作和审校；需要查看完整资料时可随时切换工作台。"}</p>
                   </div>
                 </div>
               </div>
@@ -223,6 +225,12 @@ export default function SimpleNovelShelfPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 border-t border-border bg-muted/20 px-5 py-3 sm:px-7">
+            {canChooseContinuation ? (
+              <Button size="sm" onClick={() => switchExperienceMutation.mutate()} disabled={switchExperienceMutation.isPending}>
+                {switchExperienceMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                选择续写范围
+              </Button>
+            ) : null}
             {shelf.progress.directorTaskId ? (
               <Button variant="outline" size="sm" asChild>
                 <Link to={`/novels/auto-director?taskId=${encodeURIComponent(shelf.progress.directorTaskId)}`}>查看 AI 导演进度</Link>

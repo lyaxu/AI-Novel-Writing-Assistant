@@ -235,3 +235,62 @@ test("director candidate contract requires exactly two directions", () => {
     candidates: [candidate("只有一个方向")],
   }).success, false);
 });
+
+
+test("takeover production selection preserves authorized chapter and volume ranges across interface changes", () => {
+  for (const plan of [{ mode: "chapter_range", startOrder: 4, endOrder: 4, autoReview: true, autoRepair: true },
+    { mode: "volume", volumeOrder: 2, autoReview: true, autoRepair: true }]) {
+    const seed = directorSeed(); seed.takeover = { entryStep: "chapter", strategy: "continue_existing" };
+    seed.directorInput.runMode = "auto_to_execution";
+    seed.directorInput.autoExecutionPlan = plan;
+    // A historical state is not authority to reset the explicitly requested plan.
+    seed.autoExecution = { mode: "chapter_range", startOrder: 1, endOrder: 3 };
+    seed.productionScope = "sample3";
+    const selected = buildProductionExperienceSeed(seed, "professional");
+    assert.deepEqual(selected.autoExecutionPlan, plan);
+    assert.deepEqual(selected.directorInput.autoExecutionPlan, plan);
+    assert.equal(selected.productionScope, undefined);
+    assert.equal(selected.runMode, "auto_to_execution");
+    const switched = buildProductionExperienceSeed(JSON.parse(JSON.stringify(selected)), "simple");
+    assert.deepEqual(switched.directorInput.autoExecutionPlan, plan);
+    assert.throws(() => buildProductionExperienceSeed(seed, "simple", "sample3"), /接管范围已确认/);
+    assert.throws(() => buildProductionExperienceSeed(seed, "simple", "book"), /接管范围已确认/);
+  }
+});
+
+test("takeover interface endpoint persists 4-4, reports the true plan and enqueues scoped continuation", async () => {
+  const seed = directorSeed(); seed.takeover = { entryStep: "chapter", strategy: "continue_existing" };
+  const plan = { mode: "chapter_range", startOrder: 4, endOrder: 4, autoReview: true, autoRepair: true };
+  seed.directorInput.autoExecutionPlan = plan; seed.directorInput.runMode = "auto_to_execution";
+  seed.autoExecution = { mode: "chapter_range", startOrder: 1, endOrder: 3, completedChapterCount: 3 };
+  const originals = { findUnique: prisma.novelWorkflowTask.findUnique, transaction: prisma.$transaction };
+  let update; let command;
+  prisma.novelWorkflowTask.findUnique = async () => ({ id: "takeover-next", lane: "auto_director", novelId: "novel-1",
+    status: "waiting_approval", checkpointType: "production_experience_required", seedPayloadJson: JSON.stringify(seed) });
+  prisma.$transaction = async operation => operation({ novelWorkflowTask: { updateMany: async input => { update = input; return { count: 1 }; } }, novel: { update: async () => ({}) } });
+  try {
+    const service = new DirectorProductionExperienceService({ enqueueContinueCommand: async (taskId, input) => { command = { taskId, ...input }; return { commandId: "next" }; } });
+    await assert.rejects(service.select("takeover-next", "professional", "sample3"), /接管范围已确认/);
+    assert.equal(update, undefined); assert.equal(command, undefined);
+    const result = await service.select("takeover-next", "professional");
+    const saved = JSON.parse(update.data.seedPayloadJson);
+    assert.deepEqual(saved.directorInput.autoExecutionPlan, plan);
+    assert.deepEqual(saved.autoExecutionPlan, plan);
+    assert.equal(saved.productionScope, undefined);
+    assert.deepEqual(result.autoExecutionPlan, plan);
+    assert.equal(result.productionScope, undefined);
+    assert.deepEqual(command, { taskId: "takeover-next", continuationMode: "auto_execute_range", forceResume: true });
+    assert.equal(update.data.checkpointType, "chapter_batch_ready");
+  } finally { prisma.novelWorkflowTask.findUnique = originals.findUnique; prisma.$transaction = originals.transaction; }
+});
+
+
+test("preparation-only takeover with a stored range still requires explicit production scope selection", () => {
+  const seed = directorSeed(); seed.takeover = { entryStep: "structured", strategy: "continue_existing" };
+  seed.directorInput.runMode = "auto_to_ready";
+  seed.directorInput.autoExecutionPlan = { mode: "chapter_range", startOrder: 4, endOrder: 4 };
+  const selected = buildProductionExperienceSeed(seed, "simple", "sample3");
+  assert.equal(selected.runMode, "full_book_autopilot");
+  assert.equal(selected.productionScope, "sample3");
+  assert.deepEqual(selected.autoExecutionPlan, { mode: "chapter_range", startOrder: 1, endOrder: 3, autoReview: true, autoRepair: true });
+});

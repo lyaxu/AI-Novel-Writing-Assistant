@@ -298,7 +298,7 @@ test("takeover chapter target clamps input to unwritten chapter range", () => {
   assert.equal(target?.plan.endOrder, 11);
 });
 
-test("takeover uses the full-book target while keeping the current chapter window rolling", () => {
+test("takeover offers the full-book target but defaults to the next chapter", () => {
   const target = buildTakeoverContinuousTarget(buildReadiness({
     snapshot: {
       hasStoryMacroPlan: true,
@@ -328,7 +328,37 @@ test("takeover uses the full-book target while keeping the current chapter windo
     currentWindowEndOrder: 10,
     targetOrder: 80,
   });
-  assert.match(target?.summary ?? "", /不会预先生成远期章节任务/);
+  assert.equal(target?.selectedOrder, 4);
+  assert.equal(target?.actionLabel, "推进至第 4 章");
+  assert.match(target?.summary ?? "", /本次只推进第 4-4 章/);
+});
+
+test("completed sample continues beyond the old range and only expands on selection", () => {
+  const readiness = buildReadiness({
+    snapshot: {
+      chapterCount: 8,
+      firstVolumeChapterCount: 8,
+      plannedChapterCount: 80,
+      generatedChapterCount: 3,
+      approvedChapterCount: 3,
+    },
+    executableRange: {
+      startOrder: 1,
+      endOrder: 3,
+      totalChapterCount: 3,
+      nextChapterOrder: null,
+    },
+  });
+  const target = buildTakeoverContinuousTarget(readiness);
+  assert.equal(target?.startOrder, 4);
+  assert.equal(target?.selectedOrder, 4);
+  const execution = buildTakeoverChapterTarget(readiness, null, target?.selectedOrder);
+  assert.deepEqual(execution?.plan, {
+    mode: "chapter_range", startOrder: 4, endOrder: 4, autoReview: true, autoRepair: true,
+  });
+  const fullBook = buildTakeoverContinuousTarget(readiness, null, 80);
+  assert.equal(fullBook?.selectedOrder, 80);
+  assert.match(fullBook?.summary ?? "", /不会预先生成远期章节任务/);
 });
 
 test("takeover accepts a smaller target below the full-book estimate", () => {

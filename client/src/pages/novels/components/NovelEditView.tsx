@@ -155,6 +155,11 @@ function DesktopNovelEditView(props: NovelEditViewProps) {
   );
   const isTakeoverLoading = takeover?.mode === "loading";
   const hideTakeoverEntry = takeover?.mode === "running" || takeover?.mode === "waiting";
+  const showContinuationGuidance = taskDrawer?.task?.status === "succeeded"
+    && generatedChapters > 0
+    && !hideTakeoverEntry
+    && !isTakeoverLoading
+    && Boolean(activeStepTakeoverEntry);
   const workspaceTone = taskDrawer?.task?.status === "failed"
     ? "danger"
     : taskDrawer?.task?.status === "waiting_approval"
@@ -201,7 +206,9 @@ function DesktopNovelEditView(props: NovelEditViewProps) {
             </>
           )}
           title={currentStepLabel}
-          description={showWorkflowRecommendation && workflowStepLabel
+          description={showContinuationGuidance
+            ? "本轮范围已完成。点击「AI 自动导演接管」选择续写终点，AI 会先补齐规划并审查，再生成正文。"
+            : showWorkflowRecommendation && workflowStepLabel
             ? `流程推荐：建议切换到「${workflowStepLabel}」继续推进。`
             : "按当前步骤整理这本书的生产资产，需要时可以交给 AI 自动导演接管。"}
           actions={(
