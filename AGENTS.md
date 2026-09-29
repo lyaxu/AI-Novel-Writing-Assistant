@@ -6,6 +6,7 @@
 - At a completed milestone in this ongoing local optimization work, update the handoff when requested or when preparing a recommended window transition. Keep stable constraints separate from time-sensitive task state; distinguish verified results from prior-session reports.
 - Do not automatically start generation, select a candidate, commit/push, or create a new task when merely receiving a handoff. State the next bounded action and follow the latest user request.
 - Use the global `thread-handoff-packager` skill for packaging/resuming. The linked documents are project continuity records, not guaranteed automatic personal-memory loading.
+- On takeover, honor the latest sample-book stop decision in CURRENT and its snapshot. An older recovery checklist is not authorization to resume an abandoned book. Keep engineering verification, user workflow observations, and full-text literary judgments distinct.
 
 # Safety Rules
 
