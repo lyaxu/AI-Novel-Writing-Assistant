@@ -166,6 +166,7 @@ Open-source AI novel writing assistant and long-form production studio.
 #### 修复
 
 - 章节规划与已写正文冲突时，可纠正错误的兑现描述并继续复核，避免反复被同一旧描述卡住。
+- 修复建议核对当前保存的规划，避免把未采用的修复结果误认为已完成；正文审查提供带准确出处的引用，区分原文与事实摘要。
 - 规划审查可准确引用已写正文及相关设定，减少因证据来源识别不完整导致的中断。
 
 完整更新历史见 [版本更新说明](docs/releases/release-notes.md)。

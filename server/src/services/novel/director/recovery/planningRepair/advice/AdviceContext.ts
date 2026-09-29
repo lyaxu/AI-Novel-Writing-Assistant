@@ -1,3 +1,4 @@
+import type { PlanningRepairAdviceOutput } from "@ai-novel/shared/types/planningRepair/advice";
 import type { VolumePlanDocument } from "@ai-novel/shared/types/novel";
 import { projectPlanningHorizon } from "../../../../volume/planningPromises";
 
@@ -61,15 +62,56 @@ export function buildAdviceContext(input: {
       autoExecutionPlan: input.seed.autoExecutionPlan ?? null, startupPreparation: input.seed.startupPreparation ?? null },
     eligibleChapterIds: input.eligibleChapterIds,
     baselineWindow, candidateWindow, currentWindow,
+    candidateAuthority: { versionId: candidate.id ?? null, source: "persisted_candidate_version",
+      currentContentPath: "candidateWindow", planningHorizonPath: "candidatePlanningHorizon",
+      rule: "只有此独立保存版本是当前待复核候选；历史模型返回、修复建议与审查描述不能替代当前内容。返回修复文本不证明已应用或已通过审查。" },
     baselinePlanningHorizon: horizon(baseline),
     candidatePlanningHorizon: horizon(candidateDocument),
     chapterEvidence: input.chapters.map(object).filter((c) => materialized.has(String(c.id)) || relevant.has(String(c.id)))
       .map((c) => pick(c, ["id", "order", "title", "expectation", "summary", "content", "taskSheet", "sceneCards", "chapterStatus"])),
     repair: { ...pick(repair, ["key", "rounds", "maxRounds", "phase", "summary", "guidance", "quality", "candidateVersionId"]),
-      recentHistory: Array.isArray(repair.history) ? repair.history.slice(-6) : [],
+      recentHistory: Array.isArray(repair.history) ? repair.history.slice(-6).map((entry) => {
+        const item = object(entry);
+        return { ...item, provenance: { authoritativeForCurrentCandidate: false,
+          role: item.kind === "repair" ? "model_repair_proposal_not_current_candidate"
+            : item.kind === "rejected_response" ? "rejected_model_response_not_applied" : "historical_record_not_current_candidate",
+          rule: "保留原文仅供诊断；不能依据本条声称当前候选已改好。必须对照candidateWindow实际保存文本。" } };
+      }) : [],
       omittedEarlierHistoryCount: Array.isArray(repair.history) ? Math.max(0, repair.history.length - 6) : 0 },
     missingEvidence: [!input.seed.directorInput && "缺少用户原始导演输入", !candidate.contentJson && "缺少独立修复候选版本",
       !baselineWindow.length && "缺少窗口基线", !input.macro && "缺少书级宏观规划"].filter(Boolean),
     scopeNotice: "eligibleChapterIds 是修改权限，不是阅读权限。candidatePlanningHorizon 是当前候选中实际已存同卷后续路线与节奏板，baselinePlanningHorizon 是基线，二者不可混用。只读后续安排可证明承接，不需在本章重复抄写；阅读不扩大可修改窗口，也不将计划变为已发生事实。遵守 coverage 的容量边界，未提供全书正文，缺失不得推断为不存在。",
   };
+}
+
+
+/** Structural provenance guard only; AI must still judge whether cited content resolves the issue. */
+export function adviceCandidateEvidenceError(option: PlanningRepairAdviceOutput["options"][number], context: unknown): string | null {
+  if (option.executionMode !== "review_existing") return null;
+  const source = object(context);
+  const versionId = object(source.candidateAuthority).versionId;
+  if (typeof versionId !== "string" || option.candidateVersionId !== versionId || !option.candidateEvidence?.length) {
+    return "此复核建议缺少当前候选的版本与原文依据，请重新获取建议。";
+  }
+  const witnessed = new Set<string>();
+  for (const evidence of option.candidateEvidence) {
+    const path = evidence.sourcePath;
+    const match = /^candidateWindow\[(\d+)\]\.chapters\[(\d+)\]\.(summary|purpose|exclusiveEvent|endingState|nextChapterEntryState|mustAvoid|taskSheet|sceneCards|payoffRefs|payoffRefsJson|causalContract)(.*)$/.exec(path);
+    if (!match || !/^(?:\.[A-Za-z_][A-Za-z0-9_]*|\[\d+\])*$/.test(match[4])) return "复核依据必须引用当前候选章节的实际执行内容，请重新获取建议。";
+    const chapter = array(array(source.candidateWindow)[Number(match[1])]?.chapters)[Number(match[2])];
+    if (!chapter || !option.affectedChapterIds.includes(String(chapter.id))) return "复核依据未对应本方案的候选章节，请重新获取建议。";
+    let leaf: unknown = chapter[match[3]];
+    const segments = match[4].match(/[A-Za-z_][A-Za-z0-9_]*|\d+/g) ?? [];
+    for (const segment of segments) {
+      if (typeof leaf === "string") { try { leaf = JSON.parse(leaf); } catch { leaf = undefined; } }
+      if (!leaf || typeof leaf !== "object" || !Object.hasOwn(leaf, segment)) { leaf = undefined; break; }
+      leaf = (leaf as Data)[segment];
+    }
+    if (typeof leaf !== "string" || !evidence.quote.trim() || !leaf.includes(evidence.quote)) {
+      return "复核建议引用的内容不在当前已保存候选中，请重新获取建议。";
+    }
+    witnessed.add(String(chapter.id));
+  }
+  if (!option.affectedChapterIds.every(id => witnessed.has(id))) return "复核依据未覆盖本方案的全部候选章节，请重新获取建议。";
+  return null;
 }

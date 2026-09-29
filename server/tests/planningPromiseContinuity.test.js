@@ -29,6 +29,7 @@ const { chapterTaskSheetQualityPrompt: prompt } = load("../src/prompting/prompts
   "@ai-novel/shared/types/chapterTaskSheetQuality": quality,
   "./evidence/chapterEvidence": chapterEvidence, "./evidence/planningPromiseEvidence": promiseEvidence, "./evidence/issueCheckProjection": issueProjection,
   "./evidence/newIssueEvidence": newIssueEvidence,
+  "./evidence/primaryProseCitationCatalog": load("../src/prompting/prompts/novel/volume/evidence/primaryProseCitationCatalog.ts", {}),
 });
 const candidate = { chapterOrder: 2, summary: "通过交换药物赢得初步信任" };
 const source = { status: "available", sourceTaskId: "task", fingerprint: "source-1", candidate: {
@@ -99,6 +100,21 @@ test("selected source accepts its exact context prefix but rejects guessed prefi
   }
   value[0].sourceEvidence[0].quote = "专业技能促成了人际关系";
   assert.throws(() => prompt.postValidate(assessment(value), { candidate, reviewContextJson: context() }), /exact selected-source/);
+});
+
+test("quality rendering exposes copyable primary quotes without replacing validator source context", () => {
+  const prose = "She received a silver coin. He left without waiting.";
+  const reviewContextJson = context({ writtenEvidence: { chapters: [{ content: prose }], compressedFacts: { authority: "secondary_not_proof", items: [{ text: "A courier was paid in silver." }] } } });
+  const input = { candidate, reviewContextJson };
+  const rendered = prompt.render(input).map(message => message.content).join("\n");
+  assert.equal(input.reviewContextJson, reviewContextJson);
+  assert.equal(rendered.split(prose).length - 1, 1);
+  assert.match(rendered, /primaryProseCitationCatalog/);
+  assert.match(rendered, /secondary_not_proof/);
+  const values = checks(); values[0].contextEvidence = [{ sourcePath: "writtenEvidence.chapters[0].content", quote: "She received a silver coin." }];
+  assert.doesNotThrow(() => prompt.postValidate(assessment(values), input));
+  values[0].contextEvidence[0].quote = "A courier was paid in silver.";
+  assert.throws(() => prompt.postValidate(assessment(values), input), /absent from supplied plans or written facts/);
 });
 
 test("lost relationship/payoff and vague opening postponement enter existing automatic repair even if AI says usable", () => {

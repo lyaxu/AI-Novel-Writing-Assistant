@@ -18,6 +18,7 @@ const schema = load("../../shared/types/planningRepair/advice.ts", { zod: requir
 const encoding = load("../src/services/novel/director/recovery/planningRepair/advice/AdviceContextEncoding.ts", {});
 const horizon = load("../src/services/novel/volume/planningPromises/planningHorizon.ts", {});
 const adviceContextImports = { "../../../../volume/planningPromises": horizon };
+const contextModule = load("../src/services/novel/director/recovery/planningRepair/advice/AdviceContext.ts", adviceContextImports);
 const structuredOutput = load("../src/llm/structuredOutput.ts", { zod: require("zod"), "./providers": {}, "./reasoning": {} });
 class TestAppError extends Error {}
 const failureModule = load("../src/services/novel/director/recovery/planningRepair/advice/AdviceFailure.ts", {
@@ -32,7 +33,7 @@ const output = () => ({ summary: "复核后给出可执行方向", recommendedOp
 }] });
 function fixture(useDefaultGenerator = false) {
   let source = { row: { id: "t", seedPayloadJson: "old", updatedAt: "time" }, seed: {}, repair: { key: "r", novelId: "n", chapterId: "c1" },
-    fingerprint: "f", sourceToken: "s", eligibleChapterIds: ["c1", "c2", "c3"], context: { userIntent: "保留设定" } };
+    fingerprint: "f", sourceToken: "s", eligibleChapterIds: ["c1", "c2", "c3"], context: { userIntent: "保留设定", candidateAuthority: { versionId: "candidate-v1" }, candidateWindow: [{ chapters: [{ id: "c1", taskSheet: "先核对已经交付的记录，再检查箱内仍存在的痕迹。" }] }] } };
   let writes = 0, calls = 0, rejectCas = false, pending;
   const tx = { novelWorkflowTask: { updateMany: async ({ data }) => {
     writes++;
@@ -48,6 +49,7 @@ function fixture(useDefaultGenerator = false) {
     "../../../../../../prompting/core/promptRunner": { runStructuredPrompt: () => { throw new Error("Paid calls forbidden"); } },
     "../../../../../../prompting/prompts/novel/volume/recovery/planningRepairAdvice.prompts": {},
     "../../../../../../llm/invokeTimeout": {}, "../PlanningRepairRecoveryService": {},
+    "./AdviceContext": contextModule,
     "./AdviceFailure": failureModule,
     "./AdviceContextEncoding": encoding,
     "./AdviceSource": { readAdviceSource: async () => structuredClone(source), assertAdvicePaused: async () => {} },
@@ -134,7 +136,7 @@ test("partial fixes, creative-tradeoff review and legacy closure claims cannot b
 
 test("complete evidence-backed review disagreement remains executable without rewriting guidance", async () => {
   const f = fixture(); const request = await f.service.request("t", { repairKey: "r", idempotencyKey: "req" });
-  const result = output(); Object.assign(result.options[0], { executionMode: "review_existing", diagnosis: "review_disagreement" });
+  const result = output(); Object.assign(result.options[0], { executionMode: "review_existing", diagnosis: "review_disagreement", candidateVersionId: "candidate-v1", candidateEvidence: [{ sourcePath: "candidateWindow[0].chapters[0].taskSheet", quote: "先核对已经交付的记录，再检查箱内仍存在的痕迹。" }] });
   f.resolve(result); await settle();
   assert.equal((await f.service.status("t")).options[0].canResume, true);
   await f.service.select("t", { repairKey: "r", adviceId: request.adviceId, optionId: "a", idempotencyKey: "click" });
@@ -298,10 +300,10 @@ const parse = (value, contract = prompt.planningRepairAdvicePrompt.outputSchema,
   label: "advice-offline", strategy: "prompt_json", profile: {}, maxRepairAttempts: 0, finishReason: "stop", ...extra,
 });
 
-test("v7 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
+test("v8 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
   const asset = prompt.planningRepairAdvicePrompt;
   const text = asset.render({ contextJson: "{}" })[0].content;
-  assert.equal(asset.version, "v7"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
+  assert.equal(asset.version, "v8"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
   const jsonSchema = JSON.parse(text.split("完整输出契约（minItems/maxItems是数量，minLength/maxLength是字符数）：\n")[1].split("\n输出格式示例")[0]);
   const fields = jsonSchema.properties.options.items.properties;
   assert.deepEqual(fields.diagnosis.enum, schema.planningRepairAdviceDiagnoses);
@@ -311,7 +313,7 @@ test("v7 prompt renders the full shared contract and example, with explicit paid
   assert.equal(schema.planningRepairAdviceOutputSchema.safeParse(prompt.planningRepairAdviceExample).success, true);
   assert.match(text, /不得超过4000字符/); assert.match(text, /采用一个可执行方案即明确授权追加1轮/);
   assert.match(text, /不要让写作新手查询服务器schema/);
-  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v7/);
+  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v8/);
 });
 
 test("real rejected response keeps every action under wider non-safety limits but still rejects invented diagnoses", async () => {
@@ -385,4 +387,64 @@ test("legacy failed advice receives a safe read-only projection without rewritin
   assert.match(view.error, /上次未能取得可用方案/);
   assert.doesNotMatch(view.error, /STRUCTURED_OUTPUT|guidance|too big/);
   assert.equal(JSON.stringify(f.source.seed), original); assert.equal(f.writes(), 0); assert.equal(f.calls(), 0);
+});
+
+
+test("advice separates rejected historical repairs from the authoritative persisted candidate", () => {
+  const old = "当前候选仍要求已经交付物品从箱内消失";
+  const proposed = "未应用修复改为检查箱内残留痕迹";
+  const doc = { volumes: [{ id: "v", chapters: [{ id: "c1", chapterOrder: 1, taskSheet: old }] }], beatSheets: [] };
+  const result = contextModule.buildAdviceContext({ novel: {}, volumes: doc.volumes, chapters: [], macro: null,
+    candidate: { id: "candidate-v1", contentJson: JSON.stringify(doc) }, eligibleChapterIds: ["c1"],
+    seed: { planningRepair: { volumeId: "v", history: [{ kind: "repair", round: 7, output: { changes: [{ taskSheet: proposed }] } },
+      { kind: "rejected_response", round: 7, output: { summary: "rejected" } }] }, planningRepairSnapshot: { baselineDocument: doc } } });
+  assert.equal(result.candidateAuthority.versionId, "candidate-v1");
+  assert.equal(result.candidateWindow[0].chapters[0].taskSheet, old);
+  assert.equal(result.repair.recentHistory[0].output.changes[0].taskSheet, proposed);
+  assert.equal(result.repair.recentHistory[0].provenance.authoritativeForCurrentCandidate, false);
+  assert.equal(result.repair.recentHistory[1].provenance.role, "rejected_model_response_not_applied");
+});
+
+test("review evidence rejects history, wrong version, title-only proof and invented current text", () => {
+  const f = fixture(); const option = { ...output().options[0], executionMode: "review_existing", candidateVersionId: "candidate-v1",
+    candidateEvidence: [{ sourcePath: "candidateWindow[0].chapters[0].taskSheet", quote: "先核对已经交付的记录，再检查箱内仍存在的痕迹。" }] };
+  assert.equal(contextModule.adviceCandidateEvidenceError(option, f.source.context), null);
+  for (const patch of [ { candidateVersionId: "old" }, { candidateEvidence: undefined },
+    { candidateEvidence: [{ sourcePath: "repair.recentHistory[0].output.changes[0].taskSheet", quote: "历史修复已经改成正确实现方式" }] },
+    { candidateEvidence: [{ sourcePath: "candidateWindow[0].chapters[0].title", quote: "标题不能证明具体问题已经解决" }] },
+    { candidateEvidence: [{ sourcePath: "candidateWindow[0].chapters[0].taskSheet", quote: "仅在修复提案中出现的全新句子" }] },
+    { affectedChapterIds: ["c1", "c2"] } ]) {
+    assert.ok(contextModule.adviceCandidateEvidenceError({ ...option, ...patch }, f.source.context));
+  }
+});
+
+test("new advice cannot become ready by quoting an unapplied repair as current candidate", async () => {
+  const f = fixture(); await f.service.request("t", { repairKey: "r", idempotencyKey: "new-rejected-proof" });
+  const result = output(); Object.assign(result.options[0], { executionMode: "review_existing", diagnosis: "review_disagreement",
+    candidateVersionId: "candidate-v1", candidateEvidence: [{ sourcePath: "candidateWindow[0].chapters[0].taskSheet", quote: "仅历史返回里存在的修复措辞不算当前候选" }] });
+  f.resolve(result); await settle();
+  assert.equal((await f.service.status("t")).status, "failed");
+  assert.equal(f.grants.length, 0);
+});
+
+test("legacy review-only advice remains readable but cannot grant recovery without current candidate proof", async () => {
+  const f = fixture(); const request = await f.service.request("t", { repairKey: "r", idempotencyKey: "legacy-review" });
+  f.resolve(); await settle();
+  Object.assign(f.source.seed.planningRepairAdvice.result.options[0], { executionMode: "review_existing", diagnosis: "review_disagreement" });
+  const view = await f.service.status("t");
+  assert.equal(view.status, "ready"); assert.equal(view.options[0].canResume, false);
+  assert.match(view.options[0].blockedReason, /当前候选.*原文依据/);
+  await assert.rejects(f.service.select("t", { repairKey: "r", adviceId: request.adviceId, optionId: "a", idempotencyKey: "click" }), /重新获取建议/);
+  assert.equal(f.grants.length, 0);
+});
+
+
+test("candidate proof accepts brief real evidence and parses saved scene JSON without treating history as current", () => {
+  const option = { ...output().options[0], executionMode: "review_existing", candidateVersionId: "v",
+    candidateEvidence: [{ sourcePath: "candidateWindow[0].chapters[0].sceneCards.scenes[0].mustAdvance[0]", quote: "已交付" }] };
+  const context = { candidateAuthority: { versionId: "v" }, candidateWindow: [{ chapters: [{ id: "c1",
+    sceneCards: JSON.stringify({ scenes: [{ mustAdvance: ["已交付"] }] }) }] }] };
+  assert.equal(contextModule.adviceCandidateEvidenceError(option, context), null);
+  option.candidateEvidence[0].quote = "";
+  assert.ok(contextModule.adviceCandidateEvidenceError(option, context));
 });

@@ -18,17 +18,21 @@ const evidence = load("../src/prompting/prompts/novel/volume/evidence/chapterEvi
 const schema = load("../../shared/types/chapterTaskSheetQuality.ts", { zod: require("zod"), "./chapterLengthControl.js": require("../../shared/dist/types/chapterLengthControl.js") });
 const promiseEvidence = load("../src/prompting/prompts/novel/volume/evidence/planningPromiseEvidence.ts", {
   "./chapterEvidence": evidence,
-  "@ai-novel/shared/types/novel/planningPromises": load("../../shared/types/novel/planningPromises.ts", { zod: require("zod") }),
+  "@ai-novel/shared/types/novel/planningPromises": load("../../shared/types/novel/planningPromises.ts", { zod: require("zod"),
+    "./bookStoryFoundation.js": load("../../shared/types/novel/bookStoryFoundation.ts", { zod: require("zod") }),
+  }),
 });
 const issueProjection = load("../src/prompting/prompts/novel/volume/evidence/issueCheckProjection.ts", { "./chapterEvidence": evidence });
 const { chapterTaskSheetQualityPrompt: prompt } = load("../src/prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts.ts", {
   "@langchain/core/messages": require("@langchain/core/messages"), zod: require("zod"),
   "@ai-novel/shared/types/chapterTaskSheetQuality": schema, "./evidence/chapterEvidence": evidence,
   "./evidence/planningPromiseEvidence": promiseEvidence, "./evidence/issueCheckProjection": issueProjection,
+  "./evidence/newIssueEvidence": load("../src/prompting/prompts/novel/volume/evidence/newIssueEvidence.ts", { "./chapterEvidence": evidence }),
+  "./evidence/primaryProseCitationCatalog": load("../src/prompting/prompts/novel/volume/evidence/primaryProseCitationCatalog.ts", {}),
 });
 const fixture = require("./fixtures/planningEvidenceLabeledQuotes.json");
 const output = () => ({ verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is",
-  summary: "已复核", issues: [], repairGuidance: [], confidence: 0.9, issueChecks: structuredClone(fixture.issueChecks), promiseChecks: [] });
+  summary: "已复核", issues: [], repairGuidance: [], confidence: 0.9, issueChecks: structuredClone(fixture.issueChecks), promiseChecks: [], refinements: [] });
 const input = () => ({ candidate: fixture.candidate, previousIssues: fixture.issueChecks.map((c) => ({ id: c.issueId })) });
 
 test("eight saved field-labeled citations verify against the same candidate without paid recovery", () => {
@@ -59,13 +63,16 @@ test("legacy compatibility rejects fake labels, arbitrary splicing, altered punc
   assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: "s.turn", quote: "甲， 乙。" }), true);
 });
 test("coverage includes eight real issues plus synthetic overload without dropping any issue", () => {
-  const issues = Array.from({ length: 8 }, (_, i) => ({ id: `i${i}`, severity: "high", target: "semantic", summary: "问题", repairHint: "修改" }));
+  const issues = Array.from({ length: 8 }, (_, i) => ({ id: `i${i}`, severity: "high", target: "semantic", summary: "问题", repairHint: "修改",
+    basis: { kind: "unsupported_prerequisite", candidateEvidence: [{ sourcePath: "summary", quote: "完成交换" }], counterEvidence: [], contextEvidence: [],
+      executionImpact: "交换缺少必要前提", whyExistingConstraintsInsufficient: "既有说明没有资源来源" },
+  }));
   issues.push({ ...issues[0], id: "contract_overloaded" });
   const current = { ...output(), verdict: "repairable", safeToSync: false, recommendedHandling: "repair_contract", issues,
     issueChecks: issues.map((issue) => ({ issueId: issue.id, status: "unresolved", candidateEvidence: [], explanation: "仍缺少前提" })) };
   assert.equal(prompt.outputSchema.safeParse(current).success, true);
-  prompt.postValidate(current, { candidate: {}, previousIssues: issues });
-  assert.throws(() => prompt.postValidate({ ...current, issueChecks: current.issueChecks.slice(0, 8) }, { candidate: {}, previousIssues: issues }), /exactly once/);
+  prompt.postValidate(current, { candidate: { summary: "完成交换" }, previousIssues: issues });
+  assert.throws(() => prompt.postValidate({ ...current, issueChecks: current.issueChecks.slice(0, 8) }, { candidate: { summary: "完成交换" }, previousIssues: issues }), /exactly once/);
   assert.equal(prompt.outputSchema.safeParse({ ...current, issues: issues.map((issue, i) => ({ ...issue, id: `new${i}` })) }).success, false);
 });
 test("render provides stable scene paths and legacy keyless scenes remain readable", () => {
@@ -110,7 +117,7 @@ test("actual scene-card aliases cannot collide with another indexed leaf", () =>
 
 const followupCapturePaths = ["mining-followup-evidence.json", "mining-followup-candidate.json", "mining-followup-review-request.json"]
   .map(name => path.resolve(__dirname, "../../.codex-run", name));
-test("latest complete rejected review replays against its actual saved input without a model call", {
+test("historical rejected review retains evidence projection without satisfying the newer fresh-output schema", {
   skip: !followupCapturePaths.every(file => fs.existsSync(file)),
 }, () => {
   const [seed, candidate, request] = followupCapturePaths.map(file => JSON.parse(fs.readFileSync(file, "utf8")));
@@ -118,8 +125,13 @@ test("latest complete rejected review replays against its actual saved input wit
   const reviewContextJson = human.split("reviewContext (current source and repair history):\n")[1].split("\npreviousIssues:\n")[0];
   const previousIssues = JSON.parse(human.split("\npreviousIssues:\n")[1]);
   const rejected = seed.planningRepair.history.filter(item => item.kind === "rejected_response").at(-1);
-  const received = prompt.outputSchema.parse(rejected.output);
-  const projected = prompt.postValidate(received, { candidate, previousIssues, reviewContextJson });
+  const received = schema.aiChapterTaskSheetQualityAssessmentSchema.parse(rejected.output);
+  // This capture predates basis/refinements. Do not invent evidence to certify it
+  // under the fresh-output contract; verify its original historical projection.
+  assert.equal(prompt.outputSchema.safeParse(received).success, false);
+  assert.throws(() => prompt.postValidate(received, { candidate, previousIssues, reviewContextJson }), /requires an execution-impact basis/);
+  promiseEvidence.validatePlanningPromiseEvidence(received.promiseChecks, candidate, reviewContextJson);
+  const projected = issueProjection.projectValidatedIssueChecks(received, candidate, previousIssues);
   assert.equal(projected.safeToSync, false);
   assert.equal(projected.verdict, "repairable");
   assert.equal(projected.issueChecks.find(check => check.issueId === "resume_unresolved_prerequisite").status, "resolved");

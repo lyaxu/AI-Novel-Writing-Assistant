@@ -20,6 +20,7 @@ import { buildChapterEvidenceIndex } from "./evidence/chapterEvidence";
 import { projectValidatedIssueChecks } from "./evidence/issueCheckProjection";
 import { newIssueContextEvidenceIndex, validateNewIssueEvidence } from "./evidence/newIssueEvidence";
 import { planningPromiseEvidenceContext, validatePlanningPromiseEvidence } from "./evidence/planningPromiseEvidence";
+import { buildPrimaryProseCitationCatalog } from "./evidence/primaryProseCitationCatalog";
 
 export interface ChapterTaskSheetQualityPromptInput {
   candidate: ChapterExecutionContractQualityCandidate;
@@ -144,7 +145,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   AiChapterTaskSheetQualityAssessment
 > = {
   id: "novel.volume.chapter_task_sheet_quality",
-  version: "v11",
+  version: "v12",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -160,7 +161,9 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
     })),
     refinements: z.array(z.string().trim().min(1).max(500)).max(8),
   }),
-  render: (input) => [
+  render: (input) => {
+    const citationCatalog = buildPrimaryProseCitationCatalog(input.reviewContextJson);
+    return [
     new SystemMessage(createSystemPrompt(input.mode)),
     new HumanMessage([
       `mode: ${input.mode}`,
@@ -177,16 +180,21 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
       JSON.stringify([...planningPromiseEvidenceContext(input.reviewContextJson).contextIndex.leaves.keys()]),
       "newIssueContextEvidenceIndex (read-only source leaves for basis.contextEvidence; plans are not written facts):",
       JSON.stringify([...newIssueContextEvidenceIndex(input.reviewContextJson).leaves.keys()]),
+      "primaryProseCitationCatalog (all supplied prose, exact contiguous excerpts; no character omitted):",
+      "每个source的sourcePath才是引用路径；从其excerpts.quote复制连续原文（最多240字），可缩短或跨相邻段截取。start仅为原文位置，不是sourcePath；禁止引用目录/excerpts路径或DISPLAY REFERENCE占位文字。",
+      "authority=written_prose_not_planning是正文原文；reviewContext里的compressedFacts.authority=secondary_not_proof只是辅助索引。不得把压缩事实text填到正文content路径，也不能把摘要改成正文引文。需证明已发生动作时优先引用此目录的准确正文，不拿未来计划或摘要替代。",
+      JSON.stringify(citationCatalog.sources),
       "",
       "reviewContext (current source and repair history):",
-      input.reviewContextJson || "No additional context supplied. Do not invent prior facts.",
+      citationCatalog.reviewContextDisplayJson,
       "previousIssues:",
       JSON.stringify(input.previousIssues ?? []),
       "priorIssueDecisions (historical judgments only; recheck against current candidate):",
       JSON.stringify(input.priorIssueDecisions ?? []),
       `omittedResolvedIssueCount: ${input.omittedResolvedIssueCount ?? 0}`,
     ].join("\n")),
-  ],
+    ];
+  },
   postValidate: (output, input) => {
     validatePlanningPromiseEvidence(output.promiseChecks ?? [], input.candidate, input.reviewContextJson);
     const projected = projectValidatedIssueChecks(output, input.candidate, input.previousIssues);

@@ -13,6 +13,9 @@ export const planningRepairAdviceOutputSchema = z.object({
     tradeoffs: z.array(z.string().min(1).max(500)).max(planningRepairAdviceItemLimit),
     diagnosis: z.enum(planningRepairAdviceDiagnoses),
     executionMode: z.enum(["repair_then_review", "review_existing", "source_edit"]),
+    // Optional only for persisted legacy advice; current review-only execution validates provenance.
+    candidateVersionId: z.string().min(1).optional(),
+    candidateEvidence: z.array(z.object({ sourcePath: z.string().min(1).max(400), quote: z.string().trim().min(1).max(600) }).strict()).min(1).max(3).optional(),
     blockerResolution: z.object({
       status: z.enum(["complete", "partial", "unknown"]),
       remainingBlockers: z.array(z.string().min(1).max(400)).max(8),

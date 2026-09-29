@@ -1,3 +1,4 @@
+import { adviceCandidateEvidenceError } from "./AdviceContext";
 import { randomUUID } from "node:crypto";
 import { planningRepairAdviceOutputSchema, type PlanningRepairAdviceOutput, type PlanningRepairAdviceStatus } from "@ai-novel/shared/types/planningRepair/advice";
 import { prisma } from "../../../../../../db/prisma";
@@ -30,6 +31,7 @@ function canResume(option: PlanningRepairAdviceOutput["options"][number], source
     && option.blockerResolution?.status === "complete"
     && option.blockerResolution.remainingBlockers.length === 0
     && (option.executionMode !== "review_existing" || option.diagnosis === "review_disagreement")
+    && !adviceCandidateEvidenceError(option, source.context)
     && !option.changesHardConstraints && !option.requiresSourceEdit
     && option.affectedChapterIds.length >= 1 && option.affectedChapterIds.length <= 3
     && new Set(option.affectedChapterIds).size === option.affectedChapterIds.length
@@ -55,7 +57,7 @@ export function projectAdvice(source: AdviceSource): PlanningRepairAdviceStatus 
     options: advice.result.options.map((option) => ({
       id: option.id, title: option.title, reason: option.reason, changes: option.changes,
       preserves: option.preserves, tradeoffs: option.tradeoffs, executionMode: option.executionMode, canResume: canResume(option, source),
-      ...(!canResume(option, source) ? { blockedReason: !option.executionMode || !option.blockerResolution ? "此建议缺少执行方式或阻塞核验，请重新获取建议。" : option.changesHardConstraints
+      ...(!canResume(option, source) ? { blockedReason: !option.executionMode || !option.blockerResolution ? "此建议缺少执行方式或阻塞核验，请重新获取建议。" : adviceCandidateEvidenceError(option, source.context) ?? (option.changesHardConstraints
         ? "请先到小说基础信息与卷规划确认书级约束，再返回本页获取建议。"
         : option.executionMode === "source_edit" || option.requiresSourceEdit
           ? "请先在本页章节规划或所属卷规划确认窗口外的改动，再获取建议。"
@@ -63,7 +65,7 @@ export function projectAdvice(source: AdviceSource): PlanningRepairAdviceStatus 
             ? "此方案仍有未解决的规划缺口，请重新获取能完整解决问题的方案，或到章节规划确认缺少的安排。"
           : option.executionMode === "review_existing" && option.diagnosis !== "review_disagreement"
             ? "只复核适用于有证据的审查争议，不能将未解决的问题转成待办后写作。请重新获取修复方案。"
-          : "方案的章节范围不符合当前修复窗口，请重新获取建议。" } : {}),
+          : "方案的章节范围不符合当前修复窗口，请重新获取建议。") } : {}),
     })) };
 }
 
@@ -125,7 +127,12 @@ export class PlanningRepairAdviceService {
     let receivedOutput: unknown;
     try {
       receivedOutput = await this.generateAdvice(source);
-      completed = { ...advice, status: "ready", result: planningRepairAdviceOutputSchema.parse(receivedOutput) };
+      const parsed = planningRepairAdviceOutputSchema.parse(receivedOutput);
+      for (const option of parsed.options) {
+        const evidenceError = adviceCandidateEvidenceError(option, source.context);
+        if (evidenceError) throw new AppError(evidenceError, 409);
+      }
+      completed = { ...advice, status: "ready", result: parsed };
     } catch (error) { completed = { ...advice, status: "failed", ...describeAdviceFailure(error, receivedOutput) }; }
     try {
       await prisma.$transaction(async (tx) => {
@@ -145,7 +152,10 @@ export class PlanningRepairAdviceService {
       if (!advice || advice.adviceId !== input.adviceId || advice.repairKey !== input.repairKey || source.repair.key !== input.repairKey
         || advice.status !== "ready" || !advice.result) throw new AppError("建议不存在或未完成，请刷新。", 409);
       const option = advice.result.options.find((item) => item.id === input.optionId);
-      if (!option || !canResume(option, source)) throw new AppError("此方向不能直接继续，请先确认规划来源。", 409);
+      if (!option) throw new AppError("此方向不能直接继续，请先确认规划来源。", 409);
+      const evidenceError = adviceCandidateEvidenceError(option, source.context);
+      if (evidenceError) throw new AppError(evidenceError, 409);
+      if (!canResume(option, source)) throw new AppError("此方向不能直接继续，请先确认规划来源。", 409);
       // The stored option owns the recovery identity. Fresh client keys cannot add repeated rounds.
       const idempotencyKey = `advice:${advice.adviceId}:${option.id}`;
       const guidance = JSON.stringify({ diagnosis: option.diagnosis, affectedChapterIds: option.affectedChapterIds, ...option.guidance });
