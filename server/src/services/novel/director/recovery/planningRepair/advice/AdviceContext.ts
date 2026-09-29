@@ -11,6 +11,37 @@ function document(value: unknown): Data {
   return object(value);
 }
 
+/** Inventory contains paths only: exact authoritative text remains in candidateWindow. */
+function candidateEvidencePaths(volumes: Data[]): string[] {
+  const paths: string[] = [];
+  const visit = (value: unknown, path: string) => {
+    if (typeof value === "string") {
+      if (!value.trim()) return;
+      try { const parsed: unknown = JSON.parse(value); if (parsed && typeof parsed === "object") { visit(parsed, path); return; } } catch { /* Plain source text. */ }
+      paths.push(path);
+    } else if (Array.isArray(value)) value.forEach((child, i) => visit(child, `${path}[${i}]`));
+    else if (value && typeof value === "object") Object.entries(value).forEach(([key, child]) => visit(child, `${path}.${key}`));
+  };
+  volumes.forEach((v, i) => array(v.chapters).forEach((c, j) => {
+    if (!c.writable) return;
+    for (const key of ["summary", "purpose", "exclusiveEvent", "endingState", "nextChapterEntryState", "mustAvoid", "taskSheet", "sceneCards", "payoffRefs", "payoffRefsJson", "causalContract"]) {
+      visit(c[key], `candidateWindow[${i}].chapters[${j}].${key}`);
+    }
+  }));
+  return paths;
+}
+
+function historyForDiagnosis(entry: unknown): Data {
+  const item = object(entry);
+  if (item.kind !== "repair") return item;
+  const output = object(item.output);
+  // Preserve obligations verbatim, including proposed references; omit repetitive executable
+  // chapter drafts so they cannot visually masquerade as persisted candidate content.
+  return { ...item, output: { ...pick(output, ["requiresUserDecision", "reason", "obligationMoves", "reviewTargets", "remainingRisks"]),
+    proposedChapterObligations: array(output.changes).map(change => pick(change, ["chapterId", "payoffRefs", "payoffRefsJson"])),
+    projection: { role: "unverified_historical_proposal", omittedFields: "changes中的章节正文执行安排（summary/taskSheet/sceneCards等）；原始记录保留在运行历史，未在建议上下文重复。", rule: "reason和提出的义务均是历史模型主张，不证明当前候选已改动；请逐项对照candidateWindow。" } } };
+}
+
 /** The fingerprint covers the whole source; paid context only contains the authorized window and its boundary. */
 export function buildAdviceContext(input: {
   novel: Data; volumes: unknown[]; chapters: unknown[]; macro: unknown; candidate: unknown;
@@ -53,6 +84,11 @@ export function buildAdviceContext(input: {
     beatSheets: array(source.beatSheets) as unknown as VolumePlanDocument["beatSheets"],
   }, String(repair.volumeId ?? ""), input.eligibleChapterIds);
   return {
+    candidateAuthority: { versionId: candidate.id ?? null, source: "persisted_candidate_version",
+      currentContentPath: "candidateWindow", planningHorizonPath: "candidatePlanningHorizon",
+      rule: "只有此独立保存版本是当前待复核候选；历史模型返回、修复建议与审查描述不能替代当前内容。返回修复文本不证明已应用或已通过审查。" },
+    candidateWindow,
+    candidateEvidencePaths: candidateEvidencePaths(candidateWindow),
     novel: pick(input.novel, ["id", "title", "description", "genreId", "targetAudience", "writingMode", "defaultChapterLength",
       "bookSellingPoint", "competingFeel", "first30ChapterPromise", "commercialTagsJson", "narrativeForm", "writingPlatform",
       "narrativePov", "pacePreference", "styleTone", "emotionIntensity", "aiFreedom", "storyWorldSliceJson",
@@ -61,17 +97,14 @@ export function buildAdviceContext(input: {
     userIntent: { directorInput: input.seed.directorInput ?? null, selectedCandidate: input.seed.candidate ?? null,
       autoExecutionPlan: input.seed.autoExecutionPlan ?? null, startupPreparation: input.seed.startupPreparation ?? null },
     eligibleChapterIds: input.eligibleChapterIds,
-    baselineWindow, candidateWindow, currentWindow,
-    candidateAuthority: { versionId: candidate.id ?? null, source: "persisted_candidate_version",
-      currentContentPath: "candidateWindow", planningHorizonPath: "candidatePlanningHorizon",
-      rule: "只有此独立保存版本是当前待复核候选；历史模型返回、修复建议与审查描述不能替代当前内容。返回修复文本不证明已应用或已通过审查。" },
+    baselineWindow, currentWindow,
     baselinePlanningHorizon: horizon(baseline),
     candidatePlanningHorizon: horizon(candidateDocument),
     chapterEvidence: input.chapters.map(object).filter((c) => materialized.has(String(c.id)) || relevant.has(String(c.id)))
       .map((c) => pick(c, ["id", "order", "title", "expectation", "summary", "content", "taskSheet", "sceneCards", "chapterStatus"])),
-    repair: { ...pick(repair, ["key", "rounds", "maxRounds", "phase", "summary", "guidance", "quality", "candidateVersionId"]),
+    repair: { ...pick(repair, ["key", "rounds", "maxRounds", "phase", "summary", "guidance", "quality", "candidateVersionId", "obligationMoves", "technicalError", "reviewTargets", "remainingRisks"]),
       recentHistory: Array.isArray(repair.history) ? repair.history.slice(-6).map((entry) => {
-        const item = object(entry);
+        const item = historyForDiagnosis(entry);
         return { ...item, provenance: { authoritativeForCurrentCandidate: false,
           role: item.kind === "repair" ? "model_repair_proposal_not_current_candidate"
             : item.kind === "rejected_response" ? "rejected_model_response_not_applied" : "historical_record_not_current_candidate",

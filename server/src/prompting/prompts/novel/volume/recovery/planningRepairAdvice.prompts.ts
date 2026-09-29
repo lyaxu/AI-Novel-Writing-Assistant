@@ -23,7 +23,7 @@ export const planningRepairAdviceExample: PlanningRepairAdviceOutput = {
 };
 
 export const planningRepairAdvicePrompt: PromptAsset<{ contextJson: string }, PlanningRepairAdviceOutput> = {
-  id: "novel.planning_repair.advice", version: "v8", taskType: "outline_planning", mode: "structured", language: "zh",
+  id: "novel.planning_repair.advice", version: "v9", taskType: "outline_planning", mode: "structured", language: "zh",
   contextPolicy: { maxTokensBudget: 48000 }, outputSchema: preserveGeneratedContentConstraints(planningRepairAdviceOutputSchema),
   repairPolicy: { maxAttempts: 0 },
   semanticRetryPolicy: { maxAttempts: 0 },
@@ -33,6 +33,7 @@ export const planningRepairAdvicePrompt: PromptAsset<{ contextJson: string }, Pl
 审阅输入的用户原始意图、书级约束、基线、最新候选、历轮修正与审查证据。区分真实缺口、审查争议、资料缺失和创作取舍；不要默认审查结论都正确，也不要靠降低标准放行。
 若当前合同明确区分未来潜力与本章兑现、后续悬念与当前可感知事实，并有完整限制而没有相反执行安排，不应仅因担心正文可能误读就建议重复添加同义禁止句。审查仅提出这类可选措辞强化时，应对照原文解释审查争议并考虑review_existing，不能假造真实缺口追加修复；实际矛盾、缺失前提或承诺缺口仍须修复，复核仍需通过所有门槛。
 输入若声明 encoding=exact_source_references_v1，实际资料在context。仅含referenceKey所指定字段的对象是原文引用，字段值指向sources中的完整定义，必须递归展开读取；它不是缺失证据或摘要。展开后的原始路径、候选与基线归属、只读与可写权限均以引用所在位置为准。定义重复使用不表示所有位置具有同一权限，不可因引用就忽略正文、历史评估或后续路线。
+先逐字段阅读前置明文candidateWindow，再阅读历史诊断。candidateEvidencePaths仅为该候选可引用叶子的路径目录，引用内容必须回到对应路径逐字提取，不能按历史修复稿补全。历史repair.output仅保留诊断与提出的义务，省略整篇执行稿以免与当前候选混淆；reason中的“已改为”等仍是未核实主张。必须检查当前summary、taskSheet、sceneCards、payoffRefs有无相反安排；某一处符合预期不代表其余字段一致。
 candidateAuthority指定当前独立保存候选的版本与唯一文本来源candidateWindow。repair.recentHistory中的repair是模型提出的修复稿，不是应用成功事件；rejected_response是未被接受的模型响应。所有历史记录只作诊断，不能因轮次较新或文字写着已修复就覆盖当前候选。currentWindow是已同步规划，baselineWindow是历史基线，均不能替代独立候选。只复核的对象永远是candidateWindow实际保存文本。
 review_existing每个方案必须输出candidateVersionId（逐字等于candidateAuthority.versionId）与candidateEvidence（1-3项{sourcePath,quote}），逐个覆盖affectedChapterIds。sourcePath使用candidateWindow[卷数组下标].chapters[章数组下标].taskSheet/exclusiveEvent/sceneCards等实际执行字段，可继续指向数组与对象叶子，例如candidateWindow[0].chapters[0].sceneCards.scenes[0].mustAdvance[0]（sceneCards为JSON字符串时按解析后的结构定位）、candidateWindow[0].chapters[0].payoffRefs[2]；quote逐字引用该路径非空且最多600字符的原文。不能引用标题、ID、历史repair.output、审查结论、建议文字或另一版本；不能把仅在被拒绝响应中出现的修复当成当前已落实。引用必须实质证明所声称的缺口已闭合，不能拿无关现存句子充数；结构检查通过不代表语义成立。其他executionMode无需这两个字段。缺少当前版本或找不到原文依据时，不可推荐review_existing；依据当前缺口提出有范围的repair_then_review或说明资料缺失。若历史修复因缺少revise映射被拒绝，先修正同章obligationMoves的原引用→replacement映射及候选再审，不声称旧修复已保存。
 提供1至3个具体、互相有区别的方向，并推荐一个。用新手能理解的中文解释为何这样改、要改什么、保留什么及代价；不要让用户自己发明修复方案。
@@ -52,7 +53,7 @@ options为1至3项，id互不重复，recommendedOptionId必须准确引用其�
 完整输出契约（minItems/maxItems是数量，minLength/maxLength是字符数）：
 ${outputContract}
 输出格式示例（仅演示结构与类型，必须替换章节ID与内容，不能照抄剧情或诊断）：
-${JSON.stringify(planningRepairAdviceExample)}`),
+${JSON.stringify(planningRepairAdviceExample, null, 2)}`),
     new HumanMessage(input.contextJson),
   ],
 };

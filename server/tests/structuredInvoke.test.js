@@ -10,6 +10,40 @@ const { shouldRetryDirectorIdeaWithOriginalContext } = require("../dist/services
 const { plannerOutputSchema } = require("../dist/services/planner/plannerSchemas.js");
 const { normalizePlannerOutput } = require("../dist/services/planner/PlannerService.js");
 
+test("disabled repair preserves syntax failure instead of validating a fabricated null", async () => {
+  const originalGetLLM = factory.getLLM;
+  let calls = 0;
+  factory.getLLM = async () => { calls += 1; throw new Error("unexpected repair"); };
+  const input = {
+    schema: z.object({ options: z.array(z.object({ resolution: z.object({ status: z.string() }) })) }),
+    label: "test.no-repair", maxRepairAttempts: 0, strategy: "prompt_json",
+    profile: resolveStructuredOutputProfile({ provider: "deepseek" }),
+  };
+  try {
+    // A missing interior object closure cannot be repaired by appending braces.
+    await assert.rejects(structuredInvoke.parseStructuredLlmRawContentDetailed({
+      ...input, rawContent: '{"options":[{"resolution":{"status":"resolved","affectedIds":[]}]}',
+    }), error => {
+      assert.equal(error.category, "malformed_json");
+      assert.match(error.message, /本次未启用模型修复/);
+      assert.doesNotMatch(error.message, /received null/);
+      return true;
+    });
+    await assert.rejects(structuredInvoke.parseStructuredLlmRawContentDetailed({
+      ...input, rawContent: '{}',
+    }), error => {
+      assert.equal(error.category, "schema_mismatch");
+      assert.match(error.message, /本次未启用模型修复/);
+      return true;
+    });
+    // A nullable contract must not turn a parse error into an accepted null.
+    await assert.rejects(structuredInvoke.parseStructuredLlmRawContentDetailed({
+      ...input, schema: z.object({ value: z.string() }).nullable(), rawContent: '{"value": nope}',
+    }), error => error.category === "malformed_json");
+    assert.equal(calls, 0);
+  } finally { factory.getLLM = originalGetLLM; }
+});
+
 test("truncated structured output stops without spending on JSON repair", async () => {
   const originalGetLLM = factory.getLLM;
   const budgets = [];

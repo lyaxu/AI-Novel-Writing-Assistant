@@ -300,10 +300,10 @@ const parse = (value, contract = prompt.planningRepairAdvicePrompt.outputSchema,
   label: "advice-offline", strategy: "prompt_json", profile: {}, maxRepairAttempts: 0, finishReason: "stop", ...extra,
 });
 
-test("v8 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
+test("v9 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
   const asset = prompt.planningRepairAdvicePrompt;
   const text = asset.render({ contextJson: "{}" })[0].content;
-  assert.equal(asset.version, "v8"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
+  assert.equal(asset.version, "v9"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
   const jsonSchema = JSON.parse(text.split("完整输出契约（minItems/maxItems是数量，minLength/maxLength是字符数）：\n")[1].split("\n输出格式示例")[0]);
   const fields = jsonSchema.properties.options.items.properties;
   assert.deepEqual(fields.diagnosis.enum, schema.planningRepairAdviceDiagnoses);
@@ -313,7 +313,7 @@ test("v8 prompt renders the full shared contract and example, with explicit paid
   assert.equal(schema.planningRepairAdviceOutputSchema.safeParse(prompt.planningRepairAdviceExample).success, true);
   assert.match(text, /不得超过4000字符/); assert.match(text, /采用一个可执行方案即明确授权追加1轮/);
   assert.match(text, /不要让写作新手查询服务器schema/);
-  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v8/);
+  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v9/);
 });
 
 test("real rejected response keeps every action under wider non-safety limits but still rejects invented diagnoses", async () => {
@@ -396,11 +396,19 @@ test("advice separates rejected historical repairs from the authoritative persis
   const doc = { volumes: [{ id: "v", chapters: [{ id: "c1", chapterOrder: 1, taskSheet: old }] }], beatSheets: [] };
   const result = contextModule.buildAdviceContext({ novel: {}, volumes: doc.volumes, chapters: [], macro: null,
     candidate: { id: "candidate-v1", contentJson: JSON.stringify(doc) }, eligibleChapterIds: ["c1"],
-    seed: { planningRepair: { volumeId: "v", history: [{ kind: "repair", round: 7, output: { changes: [{ taskSheet: proposed }] } },
+    seed: { planningRepair: { volumeId: "v", technicalError: "lost original obligation", obligationMoves: [{ action: "retain" }], history: [{ kind: "repair", round: 7, output: { obligationMoves: [], reviewTargets: ["check source"], remainingRisks: ["pending"], changes: [{ chapterId: "c1", taskSheet: proposed, payoffRefs: ["proposed duty"] }] } },
       { kind: "rejected_response", round: 7, output: { summary: "rejected" } }] }, planningRepairSnapshot: { baselineDocument: doc } } });
   assert.equal(result.candidateAuthority.versionId, "candidate-v1");
   assert.equal(result.candidateWindow[0].chapters[0].taskSheet, old);
-  assert.equal(result.repair.recentHistory[0].output.changes[0].taskSheet, proposed);
+  assert.equal(result.repair.technicalError, "lost original obligation");
+  assert.deepEqual(result.repair.obligationMoves, [{ action: "retain" }]);
+  assert.deepEqual(result.repair.recentHistory[0].output.obligationMoves, []);
+  assert.deepEqual(result.repair.recentHistory[0].output.reviewTargets, ["check source"]);
+  assert.deepEqual(result.repair.recentHistory[0].output.remainingRisks, ["pending"]);
+  assert.deepEqual(result.repair.recentHistory[0].output.proposedChapterObligations, [{ chapterId: "c1", payoffRefs: ["proposed duty"] }]);
+  assert.equal(result.repair.recentHistory[0].output.changes, undefined);
+  assert.ok(!JSON.stringify(result).includes(proposed));
+  assert.ok(result.candidateEvidencePaths.includes("candidateWindow[0].chapters[0].taskSheet"));
   assert.equal(result.repair.recentHistory[0].provenance.authoritativeForCurrentCandidate, false);
   assert.equal(result.repair.recentHistory[1].provenance.role, "rejected_model_response_not_applied");
 });
@@ -447,4 +455,43 @@ test("candidate proof accepts brief real evidence and parses saved scene JSON wi
   assert.equal(contextModule.adviceCandidateEvidenceError(option, context), null);
   option.candidateEvidence[0].quote = "";
   assert.ok(contextModule.adviceCandidateEvidenceError(option, context));
+});
+
+
+const capturedAdviceDir = path.resolve(__dirname, "../../.codex-run/delivery-box-advice-failure");
+test("captured failed advice rebuild keeps real candidate plain and historical proposal duties distinct", {
+  skip: !fs.existsSync(path.join(capturedAdviceDir, "candidate.json")) || !fs.existsSync(path.join(capturedAdviceDir, "request-readable.json")),
+}, t => {
+  const read = name => JSON.parse(fs.readFileSync(path.join(capturedAdviceDir, name), "utf8").replace(/^\uFEFF/, ""));
+  const seed = read("seed.json"); const candidate = read("candidate.json");
+  const before = JSON.stringify({ seed, candidate });
+  const messages = read("request-readable.json");
+  const encoded = JSON.parse(messages.at(-1).content);
+  const expand = node => {
+    if (node && typeof node === "object" && Object.keys(node).length === 1 && Object.hasOwn(node, encoded.referenceKey)) return expand(encoded.sources[node[encoded.referenceKey]]);
+    if (Array.isArray(node)) return node.map(expand);
+    if (node && typeof node === "object") return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, expand(v)]));
+    return node;
+  };
+  const previous = expand(encoded.context);
+  const context = contextModule.buildAdviceContext({ novel: previous.novel, volumes: previous.currentWindow,
+    chapters: previous.chapterEvidence, macro: previous.macro, candidate, seed, eligibleChapterIds: previous.eligibleChapterIds });
+  const prepared = encoding.prepareAdviceContext(context);
+  const envelope = JSON.parse(prepared);
+  assert.deepEqual((envelope.context ?? envelope).candidateWindow, context.candidateWindow);
+  const chapter = context.candidateWindow.flatMap(v => v.chapters).find(c => c.chapterOrder === 3);
+  assert.ok(chapter.taskSheet.includes("油纸包连旧痕一起不见"));
+  assert.ok(context.candidateEvidencePaths.some(p => p.includes("sceneCards.scenes[")));
+  for (const entry of context.repair.recentHistory.filter(e => e.kind === "repair")) {
+    const original = seed.planningRepair.history.find(e => e.kind === "repair" && e.round === entry.round);
+    assert.equal(entry.output.changes, undefined);
+    assert.deepEqual(entry.output.obligationMoves, original.output.obligationMoves);
+    assert.deepEqual(entry.output.proposedChapterObligations.map(c => c.payoffRefs), original.output.changes.map(c => c.payoffRefs));
+  }
+  assert.deepEqual(context.repair.technicalError, seed.planningRepair.technicalError);
+  assert.deepEqual(context.repair.obligationMoves, seed.planningRepair.obligationMoves);
+  assert.equal(JSON.stringify({ seed, candidate }), before, "source fingerprint inputs stay untouched");
+  assert.ok(contextModule.adviceCandidateEvidenceError({ executionMode: "review_existing", candidateVersionId: candidate.id,
+    affectedChapterIds: [chapter.id], candidateEvidence: [{ sourcePath: `candidateWindow[0].chapters[${context.candidateWindow[0].chapters.indexOf(chapter)}].taskSheet`, quote: "箱底残留暗红印痕与薄绢碎屑" }] }, context));
+  t.diagnostic(`captured input=${messages.at(-1).content.length}; rebuilt input=${prepared.length}; candidate paths=${context.candidateEvidencePaths.length}`);
 });

@@ -60,3 +60,16 @@ test("actual captured advice context fits after lossless encoding", { skip: !fs.
   assert.ok(encoded.length <= 160000);
   t.diagnostic(`original=${original.length}; encoded=${encoded.length}; saved=${original.length - encoded.length}`);
 });
+
+
+test("authoritative candidate stays plain while baseline and history still round trip exactly", () => {
+  const text = "当前候选的完整执行约束。".repeat(200);
+  const candidateWindow = [{ chapters: [{ taskSheet: text, sceneCards: JSON.stringify({ scenes: [{ goal: text }] }) }] }];
+  const input = { candidateAuthority: { versionId: "v1" }, candidateWindow,
+    candidateEvidencePaths: ["candidateWindow[0].chapters[0].taskSheet"],
+    baselineWindow: structuredClone(candidateWindow), history: [text, text, text] };
+  const encoded = prepareAdviceContext(input);
+  const envelope = JSON.parse(encoded);
+  assert.deepEqual((envelope.context ?? envelope).candidateWindow, candidateWindow);
+  assert.equal(JSON.stringify(decode(encoded)), JSON.stringify(input));
+});

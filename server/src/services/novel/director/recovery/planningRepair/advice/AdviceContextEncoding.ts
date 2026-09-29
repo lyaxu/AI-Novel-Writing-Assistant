@@ -33,7 +33,12 @@ export function encodeAdviceContext(input: unknown) {
     references++;
     return { [referenceKey]: id };
   };
-  const context = encode(value);
+  // Keep the sole current candidate readable in place, even when identical to another
+  // version. Deduplication remains exact and lossless for all other source material.
+  const plainKeys = new Set(["candidateAuthority", "candidateWindow", "candidateEvidencePaths"]);
+  const context = value && !Array.isArray(value) && typeof value === "object"
+    ? Object.fromEntries(Object.entries(value).map(([key, child]) => [key, plainKeys.has(key) ? child : encode(child)]))
+    : encode(value);
   const encoded = {
     encoding: "exact_source_references_v1", referenceKey, context, sources,
     coverage: { lossless: true, omittedTextCount: 0, sourceCount: ids.size, referenceCount: references,

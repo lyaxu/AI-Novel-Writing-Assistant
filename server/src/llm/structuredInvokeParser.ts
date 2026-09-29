@@ -427,6 +427,17 @@ async function parseStructuredContent<T>(
 
   const maxRepairAttempts = input.maxRepairAttempts ?? 1;
   if (parseErrorMessage) {
+    if (maxRepairAttempts <= 0) {
+      throw buildStructuredError({
+        message: `[${input.label}] JSON 解析失败；本次未启用模型修复。错误：${parseErrorMessage}`,
+        category: "malformed_json",
+        strategy: input.strategy,
+        profile: input.profile,
+        reasoningForcedOff: input.reasoningForcedOff,
+        fallbackAvailable: input.fallbackAvailable,
+        fallbackUsed: input.fallbackUsed,
+      });
+    }
     for (let attempt = 1; attempt <= maxRepairAttempts; attempt += 1) {
       try {
         return {
@@ -543,7 +554,7 @@ async function parseStructuredContent<T>(
   }
 
   throw buildStructuredError({
-    message: `[${input.label}] LLM 输出经修复后仍未通过 Schema 校验。错误：${formatZodErrors(zodError)}`,
+    message: `[${input.label}] ${maxRepairAttempts > 0 ? "LLM 输出经修复后仍未通过 Schema 校验" : "LLM 输出未通过 Schema 校验；本次未启用模型修复"}。错误：${formatZodErrors(zodError)}`,
     category: "schema_mismatch",
     strategy: input.strategy,
     profile: input.profile,
