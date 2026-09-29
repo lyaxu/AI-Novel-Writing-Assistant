@@ -79,6 +79,54 @@ test("old ready advice stays readable but loses recommendation and cannot execut
   assert.equal(f.grants.length, 0); assert.equal(f.writes(), before); assert.equal(f.calls() + f.reviews(), 0);
 });
 
+test("explicit reacquisition can revalidate saved complete review without model calls, while GET cannot", async () => {
+  const f = fixture();
+  const reviewed = { advice: output(), checks: [{ optionId: "a", verdict: "supported", rationale: "核验完成", evidence: [
+    { sourcePath: "candidateWindow[0].chapters[0].taskSheet", quote: "先核对已经交付的记录", relation: "supports" },
+  ] }] };
+  f.source.seed.planningRepairAdvice = { adviceId: "rejected", requestId: "old", repairKey: "r", fingerprint: "f", status: "failed",
+    failureDiagnostics: { category: "unknown", detail: "old source guard", rejectedOutput: { parsed: reviewed } } };
+  assert.equal((await f.service.status("t")).status, "failed"); assert.equal(f.writes(), 0);
+  const view = await f.service.request("t", { repairKey: "r", idempotencyKey: "recheck" });
+  assert.equal(view.status, "ready"); assert.equal(view.options[0].canResume, true);
+  assert.equal(f.calls() + f.reviews(), 0); assert.equal(f.grants.length, 0);
+  await f.service.request("t", { repairKey: "r", idempotencyKey: "recheck" });
+  assert.equal(f.writes(), 1); assert.equal(f.calls() + f.reviews(), 0);
+});
+
+test("stale, invalid, or draft-only rejected output cannot be reused as an approved semantic review", async () => {
+  for (const variant of ["stale", "invented", "draft"]) {
+    const f = fixture();
+    const parsed = variant === "draft" ? output() : { advice: output(), checks: [{ optionId: "a", verdict: "supported", rationale: "核验", evidence: [
+      { sourcePath: "candidateWindow[0].chapters[0].taskSheet", quote: variant === "invented" ? "不存在的原句" : "先核对已经交付的记录", relation: "supports" },
+    ] }] };
+    f.source.seed.planningRepairAdvice = { adviceId: "old", repairKey: "r", fingerprint: variant === "stale" ? "old-source" : "f", status: "failed",
+      failureDiagnostics: { rejectedOutput: { parsed } } };
+    assert.equal((await f.service.request("t", { repairKey: "r", idempotencyKey: variant })).status, "running");
+    assert.equal(f.calls(), 1); assert.equal(f.reviews(), 0); f.fail(); await settle();
+  }
+});
+
+const proseCapture = path.resolve(__dirname, "../../.codex-run/delivery-box-prose-evidence");
+test("actual rejected cross-source review is reusable only through an explicit request with no generation or repair", {
+  skip: !fs.existsSync(path.join(proseCapture, "seed.json")),
+}, async () => {
+  const read = name => JSON.parse(fs.readFileSync(path.join(proseCapture, `${name}.json`), "utf8"));
+  const f = fixture(), seed = read("seed");
+  f.source.seed = seed; f.source.repair = seed.planningRepair;
+  f.source.fingerprint = seed.planningRepairAdvice.fingerprint;
+  f.source.sourceToken = seed.planningRepairAdvice.sourceToken;
+  f.source.eligibleChapterIds = seed.planningRepairSnapshot.eligibleChapterIds;
+  f.source.context = contextModule.buildAdviceContext({ novel: {}, volumes: [], macro: null,
+    chapters: read("chapters"), candidate: read("candidate"), seed, eligibleChapterIds: f.source.eligibleChapterIds });
+  assert.equal((await f.service.status("t")).status, "failed"); assert.equal(f.writes(), 0);
+  const view = await f.service.request("t", { repairKey: seed.planningRepair.key, idempotencyKey: "offline-explicit-recheck" });
+  assert.equal(view.status, "ready"); assert.equal(view.options[0].executionMode, "repair_then_review");
+  assert.equal(view.options[0].canResume, true);
+  assert.equal(f.calls() + f.reviews(), 0); assert.equal(f.grants.length, 0);
+  assert.equal(f.source.seed.planningRepair.rounds, 7); assert.equal(f.source.seed.planningRepair.maxRounds, 9);
+});
+
 test("production generation wiring performs exactly proposal plus review with all hidden retries disabled", async () => {
   const invocations = [];
   const f = fixture(true, async request => {

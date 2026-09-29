@@ -39,6 +39,22 @@ function semanticApprovalError(source: AdviceSource): string | null {
   }
   return null;
 }
+/** Only an explicit new request may revalidate a completed independent review for identical sources. */
+function reusableReview(previous: SavedAdvice | undefined, source: AdviceSource): PlanningRepairAdviceReviewOutput | null {
+  if (previous?.status !== "failed" || previous.fingerprint !== source.fingerprint) return null;
+  const diagnostics = previous.failureDiagnostics;
+  const rejected = diagnostics && "rejectedOutput" in diagnostics ? diagnostics.rejectedOutput : undefined;
+  if (!rejected || !("parsed" in rejected)) return null;
+  const result = planningRepairAdviceReviewOutputSchema.safeParse(rejected.parsed);
+  if (!result.success) return null;
+  try { validateAdviceSemanticReview(result.data, source.context); return result.data; }
+  catch { return null; }
+}
+function approvedAdvice(advice: SavedAdvice, reviewed: PlanningRepairAdviceReviewOutput): SavedAdvice {
+  return { ...advice, status: "ready", result: reviewed.advice, semanticReview: {
+    version: 1, resultDigest: resultDigest(reviewed.advice), sourceFingerprint: advice.fingerprint, checks: reviewed.checks,
+  } };
+}
 function canResume(option: PlanningRepairAdviceOutput["options"][number], source: AdviceSource) {
   return ["repair_then_review", "review_existing"].includes(option.executionMode)
     && !semanticApprovalError(source)
@@ -134,14 +150,16 @@ export class PlanningRepairAdviceService {
       if (requestIds.includes(input.idempotencyKey)) throw new AppError("这次请求已有记录，请刷新查看最新建议。", 409);
       await assertAdvicePaused(tx, source);
       if (previous && active.has(previous.adviceId)) throw new AppError("建议正在生成，请等待结果。", 409);
-      const advice: SavedAdvice = { adviceId: randomUUID(), requestId: input.idempotencyKey,
+      const reservationAdvice: SavedAdvice = { adviceId: randomUUID(), requestId: input.idempotencyKey,
         repairKey: input.repairKey, fingerprint: source.fingerprint, sourceToken: source.sourceToken, status: "running" };
+      const reusable = reusableReview(previous, source);
+      const advice = reusable ? approvedAdvice(reservationAdvice, reusable) : reservationAdvice;
       const changed = await tx.novelWorkflowTask.updateMany({ where: { id: taskId, seedPayloadJson: source.row.seedPayloadJson, updatedAt: source.row.updatedAt },
         data: { seedPayloadJson: JSON.stringify({ ...source.seed, planningRepairAdvice: advice,
           planningRepairAdviceRequests: [...requestIds, input.idempotencyKey] }) } });
       if (changed.count !== 1) throw new AppError("修复状态发生并发变化，请刷新。", 409);
       source.seed.planningRepairAdvice = advice;
-      return { source, advice, run: true };
+      return { source, advice, run: !reusable };
     });
     if (reservation.run) {
       active.add(reservation.advice.adviceId);
@@ -173,9 +191,7 @@ export class PlanningRepairAdviceService {
         const evidenceError = adviceCandidateEvidenceError(option, source.context);
         if (evidenceError) throw new AppError(evidenceError, 409);
       }
-      completed = { ...advice, status: "ready", result: parsed, semanticReview: {
-        version: 1, resultDigest: resultDigest(parsed), sourceFingerprint: source.fingerprint, checks: reviewed.checks,
-      } };
+      completed = approvedAdvice(advice, reviewed);
     } catch (error) { completed = { ...advice, status: "failed", ...describeAdviceFailure(error, receivedOutput) }; }
     try {
       await prisma.$transaction(async (tx) => {

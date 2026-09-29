@@ -60,3 +60,41 @@ test("every affected chapter needs independent final-option evidence", () => {
   value.checks[0].evidence.push({ sourcePath: "candidateWindow[0].chapters[1].taskSheet", quote: "邻章证据", relation: "supports" });
   assert.doesNotThrow(() => validateAdviceSemanticReview(value, context));
 });
+
+test("cross-source evidence accepts exact supplied prose without replacing candidate coverage", () => {
+  const withProse = { ...context, chapterEvidence: [{ id: "written-previous", content: "他递出包裹，对方当面展开油纸。", summary: "收件人开包" }] };
+  const value = fixture();
+  const prose = { sourcePath: "chapterEvidence[0].content", quote: "对方当面展开油纸", relation: "supports" };
+  value.checks[0].evidence.push(prose);
+  assert.doesNotThrow(() => validateAdviceSemanticReview(value, withProse));
+  value.checks[0].evidence = [prose];
+  assert.throws(() => validateAdviceSemanticReview(value, withProse), /每个候选章节/);
+  for (const bad of [
+    { ...prose, quote: "对方打开了包裹" },
+    { ...prose, sourcePath: "chapterEvidence[1].content" },
+    { ...prose, sourcePath: "chapterEvidence[0].summary", quote: "收件人开包" },
+    { ...prose, sourcePath: "repair.history[0].output.content" },
+  ]) {
+    const invalid = fixture(); invalid.checks[0].evidence.push(bad);
+    assert.throws(() => validateAdviceSemanticReview(invalid, withProse), /正文原文/);
+  }
+  const blank = fixture(); blank.checks[0].evidence.push(prose);
+  assert.throws(() => validateAdviceSemanticReview(blank, { ...context, chapterEvidence: [{ content: "" }] }));
+});
+
+const fs = require("node:fs"), path = require("node:path");
+const capture = path.resolve(__dirname, "../../.codex-run/delivery-box-prose-evidence");
+test("captured rejected review passes unchanged when its exact written prose source is allowed", {
+  skip: !fs.existsSync(path.join(capture, "seed.json")),
+}, () => {
+  const read = name => JSON.parse(fs.readFileSync(path.join(capture, `${name}.json`), "utf8"));
+  const seed = read("seed"), candidate = read("candidate"), chapters = read("chapters");
+  const { buildAdviceContext } = require("../dist/services/novel/director/recovery/planningRepair/advice/AdviceContext");
+  const ctx = buildAdviceContext({ novel: {}, volumes: [], macro: null, chapters, candidate, seed,
+    eligibleChapterIds: seed.planningRepairSnapshot.eligibleChapterIds });
+  const result = seed.planningRepairAdvice.failureDiagnostics.rejectedOutput.parsed;
+  const before = JSON.stringify({ seed, candidate, chapters });
+  assert.equal(result.checks[0].evidence.filter(e => e.sourcePath === "chapterEvidence[0].content").length, 1);
+  assert.doesNotThrow(() => validateAdviceSemanticReview(result, ctx));
+  assert.equal(JSON.stringify({ seed, candidate, chapters }), before);
+});
