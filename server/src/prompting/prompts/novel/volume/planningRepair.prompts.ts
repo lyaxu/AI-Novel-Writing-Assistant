@@ -25,6 +25,7 @@ const commonRules = [
   "本轮唯一有效范围是顶层 allowedChapterIds；originalChapters 和 candidateChapters 仅包含本轮待修复或待审章节。assessment.original 是历史问题依据，不是当前权限，若其文字引用旧窗口，应以顶层当前范围为准。",
   "严格保留每章原始目标字数。允许在原始预算内重新分配场景字数，但 sceneCards.targetWordCount 的总和不得超过本章原始 targetWordCount；优先恰好等于原始预算。不能靠增加目标字数解决职责过载。",
   "保留原始叙事义务、兑现引用和继承钩子，不得靠静默删掉职责或重复兑现一次性事件解决过载。同一全书钩子可被多章合理引用，不能把 payoffRefs 的引用次数直接当作实际义务重复。",
+  "currentObligationReferences列出当前候选每章实际存在的payoffRefs，是本轮新修订的来源。appliedObligationMoves（兼容旧名obligationMoves）是此前已应用的累计审计记录，不是要求再次执行的待办。多轮A→B→C表示同一义务的修订链，审查最终C保留的功能与整条历史，不要求A或B仍出现在最终候选。",
   "遵守全书约束、节拍表和只读上下文，保持世界设定、人物知情范围、动机、关系、人物线与状态变化一致。",
   "writtenEvidence中的实际已写原文与可核验事实高于计划来源。selectedPlanningDirection是用户原选候选/开篇原型，不能用后来生成的大纲替代。对照assessment.promiseChecks（逐章结果中的同名字段）保留原选卖点、人物关系变化与开篇回报；改编须保留等价叙事价值，延期须在允许窗口给出具体承接和obligationMoves，不能只写后面再补。不能把重复追逃或受压当作关系推进与阶段回报的等价替代。",
   "openingChain是开篇功能与回报承诺，允许合理拆合与调整章序；earlyPayoff与全书长期承诺要区分，不要求本章完成全书/前30章全部回报。若来源缺失明确未知，不猜测用户原选；若兑现需要改动受保护约束或窗口外内容，交回既有方向确认，不擅自牺牲承诺。",
@@ -35,7 +36,7 @@ const commonRules = [
 // These assets do not resolve models; the coordinator must pass its explicit modelRoute to the runner.
 export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, PlanningRepairOutput> = {
   id: "novel.volume.planning_repair",
-  version: "v8",
+  version: "v9",
   taskType: "replan",
   mode: "structured",
   language: "zh",
@@ -54,6 +55,7 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
       "每个修复场景还须包含 causality:{actor,choice,motive,prerequisites:[{condition,sourceKind,reference}],resistanceResponse,outcomeMechanism,resultingConstraints:[{constraint,persistence}]}。sourceKind 只用 established_in_context、establish_in_scene、unresolved。既有前提必须引用可核对的上下文；本场建立的条件要先获得再使用，缺失来源必须标 unresolved，不能虚构已完成事件。说明人物为何如此选择、阻力如何回应、结果为何发生、代价如何限制后续行动。允许失败、拒绝和安静变化；没有新增条件或代价时相应数组可为空。",
       "readerExperience 沿用现有结构：readerQuestion、promisedReward、rewardLevel（只能 setup|partial|major）、protagonistWant、primaryResistance、keyTurn、emotionalShift、informationReveal、netChange、inheritedHookResponsibilities（最多4项）、endingHook。",
       "obligationMoves 记录实际义务的去向并给出具体 reason。action只能retain|merge|move|revise：retain与revise的来源和目标必须是同章；move必须是窗口内不同章；merge允许同章、同一场景内合并职责或窗口内跨章合并。仅revise必须有replacement字段，其他动作不得携带replacement。revise只纠正义务表达与实现方式，不授权删掉义务、改变回报时限、挪到窗口外或降低用户承诺。账本必须与 changes 一致，不得凭空声称已保留职责。",
+      "输出前逐条对比currentObligationReferences与changes.payoffRefs：任何被改写的原引用都要输出本轮revise映射，obligation逐字复制当前原引用，replacement逐字等于该章返回的新引用。即使只追加承接证据、解释、引用或改动标点，也不能漏记映射；不需要修改的引用原样保留。过去A→B后本轮只改B→C，就输出B→C，不把已不存在的A当本轮新来源；没有本轮变化时不要重复提交历史映射。",
       "修复首章的入口必须承接 readonlyPrevious 的结束态；修复末章的结束态必须保留 readonlyNext 的进入条件，不得提前占用下一章独占事件。",
       "若必须由作者决定或必须修改窗口外内容，requiresUserDecision=true，在 reason 说明具体决策点，changes 和 obligationMoves 返回空数组。普通可修复质量问题不应升级为用户决策。",
     ].join("\n")),
@@ -72,7 +74,7 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
 
 export const planningRepairReviewPrompt: PromptAsset<PlanningRepairReviewPromptInput, PlanningRepairReviewOutput> = {
   id: "novel.volume.planning_repair_review",
-  version: "v7",
+  version: "v8",
   taskType: "review",
   mode: "structured",
   language: "zh",

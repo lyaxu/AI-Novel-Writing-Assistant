@@ -76,14 +76,53 @@ function collectPayoffs(chapters: readonly VolumeChapterPlan[]): Set<string> {
   return refs;
 }
 
+type ObligationMove = PlanningRepairOutput["obligationMoves"][number];
+
+function appliedMoves(value: readonly unknown[]): ObligationMove[] {
+  return planningRepairOutputSchema.parse({ requiresUserDecision: false, reason: "Persisted obligation ledger",
+    changes: [], obligationMoves: value }).obligationMoves;
+}
+function moveIdentity(move: ObligationMove): string {
+  return JSON.stringify([move.action, move.fromChapterId, move.toChapterId,
+    comparable(move.obligation), comparable(move.replacement)]);
+}
+
+/** Only successfully persisted candidate ledgers may be supplied as prior; never model history. */
+export function mergeAppliedPlanningRepairObligations(prior: readonly unknown[], current: readonly ObligationMove[]): ObligationMove[] {
+  const merged = new Map<string, ObligationMove>();
+  for (const move of [...appliedMoves(prior), ...current]) {
+    if (!merged.has(moveIdentity(move))) merged.set(moveIdentity(move), move);
+  }
+  return [...merged.values()];
+}
+
+function appliedRevisionEndpoint(revision: ObligationMove, prior: readonly ObligationMove[], source: VolumeChapterPlan): string | null {
+  if (!prior.some(move => moveIdentity(move) === moveIdentity(revision))) return null;
+  // Follow only saved same-chapter revisions to the reference that exists in the current
+  // candidate. A historical A -> B -> C ledger must not require A or B to reappear.
+  let reference = comparable(revision.replacement);
+  const visited = new Set<string>([comparable(revision.obligation)]);
+  while (reference && !visited.has(reference)) {
+    if (source.payoffRefs.some(ref => comparable(ref) === reference)) return reference;
+    visited.add(reference);
+    const next = prior.filter(move => move.action === "revise" && move.fromChapterId === source.id
+      && move.toChapterId === source.id && comparable(move.obligation) === reference);
+    if (next.length !== 1) return null;
+    reference = comparable(next[0].replacement);
+  }
+  return null;
+}
+
 /** Pure candidate construction only; aggregate review and persistence belong to the coordinator. */
 export function applyPlanningRepairCandidate(
   document: VolumePlanDocument,
   volumeId: string,
   allowedIds: readonly string[],
   output: PlanningRepairOutput,
+  previouslyAppliedObligations: readonly unknown[] = [],
 ): VolumePlanDocument {
   const parsed = planningRepairOutputSchema.parse(output);
+  const priorMoves = appliedMoves(previouslyAppliedObligations);
   if (parsed.requiresUserDecision) {
     throw new Error("Planning repair requires user decision; no candidate can be applied.");
   }
@@ -196,7 +235,20 @@ export function applyPlanningRepairCandidate(
     const originalRef = comparable(revision.obligation);
     const replacementRef = comparable(revision.replacement);
     if (!source.payoffRefs.some((ref) => comparable(ref) === originalRef)) {
-      throw new Error("Planning repair revision source reference does not exist.");
+      const endpoint = appliedRevisionEndpoint(revision, priorMoves, source);
+      if (!endpoint) {
+        throw new Error("Planning repair revision source reference does not exist.");
+      }
+      if (destination.payoffRefs.some(ref => comparable(ref) === originalRef)) {
+        throw new Error("Planning repair revision replay restored an obsolete reference.");
+      }
+      if (!destination.payoffRefs.some(ref => comparable(ref) === endpoint)
+        && !revisions.some(move => move.fromChapterId === source.id && comparable(move.obligation) === endpoint)) {
+        throw new Error(`Planning repair lost payoff obligation: ${endpoint}`);
+      }
+      // Current references remain protected by the before/after obligation check below;
+      // replay cannot authorize deleting B/C or replacing it without a fresh revision.
+      continue;
     }
     if (originalRef === replacementRef) throw new Error("Planning repair revision must change its reference.");
     if (!destination.payoffRefs.some((ref) => comparable(ref) === replacementRef)) {

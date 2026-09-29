@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const { createSceneCausality } = require("./fixtures/sceneCausality.js");
 const {
   applyPlanningRepairCandidate,
+  mergeAppliedPlanningRepairObligations,
   planningRepairOutputSchema,
   planningRepairReviewOutputSchema,
 } = require("../dist/services/novel/volume/planningRepair/planningRepairDomain.js");
@@ -441,4 +442,68 @@ test("independent review must judge revised reference semantics against written 
   assert.match(review, /逐场检查最终候选实际落实/);
   assert.equal(planningRepairReviewOutputSchema.safeParse({ usable: true, safeToSync: true,
     requiresUserDecision: false, summary: "Unresolved obligation", issues: ["Narrative function lost"] }).success, false);
+});
+
+
+test("saved same-chapter revisions are idempotent, but model history is not proof of application", () => {
+  const first = revisionProposal(); const candidate = apply(document(), first);
+  const replay = () => applyPlanningRepairCandidate(candidate, "volume-1", ["plan-1"], first, first.obligationMoves);
+  assert.deepEqual(replay(), candidate);
+  assert.throws(() => applyPlanningRepairCandidate(candidate, "volume-1", ["plan-1"], first), /source reference/);
+  const forged = structuredClone(first); forged.obligationMoves[0].obligation = "never applied source";
+  assert.throws(() => applyPlanningRepairCandidate(candidate, "volume-1", ["plan-1"], forged, first.obligationMoves), /source reference/);
+  const dropped = structuredClone(first); dropped.changes[0].payoffRefs = [];
+  assert.throws(() => applyPlanningRepairCandidate(candidate, "volume-1", ["plan-1"], dropped, first.obligationMoves), /lost payoff/);
+});
+test("A to B to C keeps an accumulated ledger while later replay resolves to the current endpoint", () => {
+  const first = revisionProposal(); const b = apply(document(), first);
+  const second = structuredClone(first);
+  second.obligationMoves = [{ ...first.obligationMoves[0], obligation: first.obligationMoves[0].replacement, replacement: "Third explicit implementation" }];
+  second.changes[0].payoffRefs = [second.obligationMoves[0].replacement];
+  // Repeating the historical entry alongside the new revision is permitted, not required.
+  second.obligationMoves.unshift(first.obligationMoves[0]);
+  const c = applyPlanningRepairCandidate(b, "volume-1", ["plan-1"], second, first.obligationMoves);
+  const ledger = mergeAppliedPlanningRepairObligations(first.obligationMoves, second.obligationMoves);
+  assert.equal(ledger.length, 2);
+  assert.deepEqual(mergeAppliedPlanningRepairObligations(ledger, []), ledger);
+  assert.deepEqual(applyPlanningRepairCandidate(c, "volume-1", ["plan-1"], second, ledger), c);
+  const lost = structuredClone(second); lost.changes[0].payoffRefs = [];
+  assert.throws(() => applyPlanningRepairCandidate(c, "volume-1", ["plan-1"], lost, ledger), /lost payoff/);
+  const restored = structuredClone(second); restored.changes[0].payoffRefs.push("clue-plan-1");
+  assert.throws(() => applyPlanningRepairCandidate(c, "volume-1", ["plan-1"], restored, ledger), /obsolete/);
+});
+
+test("replaying a same-chapter revision cannot erase its endpoint just because another chapter shares the reference", () => {
+  const first = revisionProposal(); const candidate = apply(document(), first);
+  const other = candidate.volumes[0].chapters.find(c => c.id === "plan-2");
+  other.payoffRefs.push(first.obligationMoves[0].replacement);
+  const deletion = output(["plan-1", "plan-2"]);
+  deletion.obligationMoves = first.obligationMoves;
+  deletion.changes[0].payoffRefs = [];
+  deletion.changes[1].payoffRefs = [...other.payoffRefs];
+  assert.throws(() => applyPlanningRepairCandidate(candidate, "volume-1", ["plan-1", "plan-2"], deletion, first.obligationMoves), /lost payoff/);
+});
+const round9Dir = require("node:path").resolve(__dirname, "../../.codex-run/delivery-box-round9");
+test("captured round9 passes historical replay but still rejects unmapped new payoff rewrites", {
+  skip: !require("node:fs").existsSync(require("node:path").join(round9Dir, "candidate-round8.json")),
+}, () => {
+  const read = name => JSON.parse(require("node:fs").readFileSync(require("node:path").join(round9Dir, name), "utf8").replace(/^\uFEFF/, ""));
+  const seed = read("seed.json"); const state = seed.planningRepair;
+  const candidate = read("candidate-round8.json");
+  const proposal = state.history.find(h => h.round === 9 && h.kind === "repair").output;
+  const before = JSON.stringify(candidate);
+  assert.throws(() => applyPlanningRepairCandidate(candidate, state.volumeId, state.affectedChapterIds, proposal, state.obligationMoves), /lost payoff obligation/);
+  const source = candidate.volumes.flatMap(v => v.chapters).find(c => c.id === state.chapterId);
+  const change = proposal.changes.find(c => c.chapterId === state.chapterId);
+  const removed = source.payoffRefs.filter(ref => !change.payoffRefs.includes(ref));
+  const added = change.payoffRefs.filter(ref => !source.payoffRefs.includes(ref));
+  assert.equal(removed.length, 2); assert.equal(added.length, 2);
+  // This is an explicit test-only model response, never an automatic product mapping.
+  const corrected = structuredClone(proposal);
+  corrected.obligationMoves.push(...removed.map((ref, i) => ({ action: "revise", obligation: ref, replacement: added[i],
+    fromChapterId: state.chapterId, toChapterId: state.chapterId, reason: "Test-only explicit same-chapter revision supplied by the model." })));
+  const result = applyPlanningRepairCandidate(candidate, state.volumeId, state.affectedChapterIds, corrected, state.obligationMoves);
+  assert.equal(JSON.stringify(candidate), before);
+  assert.deepEqual(result.volumes.flatMap(v => v.chapters).find(c => c.id === state.chapterId).payoffRefs,
+    proposal.changes.find(c => c.chapterId === state.chapterId).payoffRefs);
 });

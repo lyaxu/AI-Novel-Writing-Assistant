@@ -597,3 +597,27 @@ test("uncommitted neighboring chapter still cannot bypass owner guard",async()=>
  const h=harness();await assert.rejects(h.coordinator.run({...h.input,chapterId:"c4"}),{code:"PLANNING_REPAIR_CONFIRMATION_REQUIRED"});
  assert.deepEqual(h.calls,[]);
 });
+
+
+test("a later repair keeps persisted revision lineage and distinguishes current references in prompts", async () => {
+  const h = harness({ local: true });
+  h.session.candidate = document();
+  const prior = { obligation: "old reference A", replacement: "current reference B", fromChapterId: "c3", toChapterId: "c3", action: "revise", reason: "Prior applied correction" };
+  h.session.candidate.volumes[0].chapters[0].payoffRefs = [prior.replacement];
+  Object.assign(h.session.state, { phase: "reviewing", affectedChapterIds: ["c3"], obligationMoves: [prior],
+    recoveryAction: { requestId: "new-direction", mode: "repair_then_review" } });
+  const invoke = async request => {
+    const context = JSON.parse(request.promptInput.contextJson);
+    assert.deepEqual(context.currentObligationReferences, [{ chapterId: "c3", payoffRefs: [prior.replacement] }]);
+    assert.deepEqual(context.appliedObligationMoves, [prior]);
+    const result = await h.invoke(request);
+    if (request.asset.id === "novel.volume.planning_repair") {
+      result.output.changes[0].payoffRefs = [prior.replacement];
+      result.output.obligationMoves = []; // No new revision; old lineage must survive.
+    }
+    return result;
+  };
+  await new PlanningRepairCoordinator(h.store, h.gate, invoke).run(h.input);
+  assert.deepEqual(h.session.state.obligationMoves, [prior]);
+  assert.equal(h.session.state.phase, "committed");
+});
