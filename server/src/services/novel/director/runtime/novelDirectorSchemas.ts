@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bookStoryFoundationSchema } from "@ai-novel/shared/types/novel/bookStoryFoundation";
 import {
   DIRECTOR_MAX_TARGET_CHAPTER_COUNT,
   DIRECTOR_MIN_TARGET_CHAPTER_COUNT,
@@ -154,6 +155,7 @@ export const directorCandidateSchema = z.object({
   targetChapterCount: chapterCountSchema,
   productionFoundation: productionFoundationSchema.optional(),
   storyPrototype: storyPrototypeSchema.optional(),
+  bookStoryFoundation: bookStoryFoundationSchema.optional(),
 });
 
 export const directorPersistedCandidateSchema = directorCandidateSchema.extend({
@@ -163,6 +165,7 @@ export const directorPersistedCandidateSchema = directorCandidateSchema.extend({
 export const directorCandidateResponseSchema = z.object({
   candidates: z.array(directorCandidateSchema.extend({
     storyPrototype: storyPrototypeSchema,
+    bookStoryFoundation: bookStoryFoundationSchema,
     recommendedWritingPlatform: z.enum(["fanqie_free", "qidian_male", "jinjiang_female"]),
     writingPlatformReason: nonEmptyString,
   })).length(2),

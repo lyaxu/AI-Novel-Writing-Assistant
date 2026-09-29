@@ -1,4 +1,6 @@
-﻿import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import type { BookStoryFoundation } from "@ai-novel/shared/types/novel/bookStoryFoundation";
+import { BOOK_STORY_FOUNDATION_RULES, renderBookStoryFoundation } from "./bookFoundation";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import type {
   StoryDecomposition,
@@ -17,6 +19,7 @@ export interface StoryMacroDecompositionPromptInput {
 }
 
 export interface StoryMacroFieldRegenerationPromptInput {
+  bookStoryFoundation?: BookStoryFoundation;
   field: StoryMacroField;
   storyInput: string;
   expansion: StoryExpansion;
@@ -33,6 +36,9 @@ function buildExpansionAndDecompositionPrompt(
   return {
     system: [
       "你是资深小说作者 + 剧情策划编辑。",
+      ...BOOK_STORY_FOUNDATION_RULES,
+      "宏观规划须沿用用户已确认候选中的书级构思；可补足具体因果、边界和回收，不得静默改换终局答案或世界。若来源确有冲突，在issues中标明，不以题材标签覆盖原始设定。",
+      "progressionPhases 单独输出2-8个适合本书的阶段{name,goal}，目标写实际人物行动及变化，阶段长短由故事决定；不预设误判、反噬、认知翻转五段式。",
       "你的任务不是润色用户想法，而是将其重构为一个具备持续叙事能力、可用于后续约束生成的「故事引擎原型」。",
       "",
       "任务目标：",
@@ -49,16 +55,16 @@ function buildExpansionAndDecompositionPrompt(
       "4. 禁止为了制造复杂感而凭空新增大量组织、地理、历史、体系设定。",
       "",
       "你必须完成以下构建：",
-      "1. 把主角困住，形成明确且无法轻易退出的处境。",
-      "2. 构建一个可以持续升级、反复变形、长期压迫主角的核心矛盾。",
-      "3. 设置一个能够持续牵引读者阅读的 mystery box，即：最关键但暂时无法完整知道的未知。",
+      "1. 写清主角主动追求或必须应对的处境、行动理由和取舍，不强制受困或受辱开局。",
+      "2. 构建持续推动人物行动的核心矛盾，允许生活尺度与轻松基调。",
+      "3. mystery_box 表达本书真实的阅读悬念；若无隐藏真相，明确它是人物目标能否实现，不凭空增加幕后谜团。",
       "4. 设计 2-3 个具有画面感、冲突性和后续可扩展性的高张力场面种子。",
       "5. 明确叙事气质，让后续写作知道这本书应该怎么写，而不是只知道写什么。",
       "",
       "题材适配要求：",
-      "1. 如果题材呈现克苏鲁 / 不可名状倾向，必须体现：认知崩塌、现实不可信、真相不可直视。",
-      "2. 如果题材呈现悬疑 / 推理倾向，必须体现：信息揭示节奏、认知误导、真相分层推进。",
-      "3. 如果题材呈现成长倾向，必须体现：阶段性认知变化、代价、认知纠偏与自我重构。",
+      "1. 以用户的故事设定和阅读体验决定叙事方法，不由题材标签决定固定剧情模式。",
+      "2. 存在调查与秘密时，区分作者掌握的事实、人物知识、读者获知时机，并安排可回看的证据。",
+      "3. 力量、地位、关系、认识和生活目标均可承载推进；不强迫所有故事认知崩塌、自我重构或悲壮收尾。",
       "",
       "项目上下文使用规则：",
       "1. 如果项目上下文包含“这本书会用到的世界设定”，必须优先使用其中已有的规则、组织、地点、冲突、边界与禁配。",
@@ -69,10 +75,10 @@ function buildExpansionAndDecompositionPrompt(
       "1. 优先做“冲突重构”和“叙事驱动构建”，不要把重点放在设定说明。",
       "2. 所有字段都应服务于‘这本书为什么能一直写下去’。",
       "3. expanded_premise 不是简介润色，而是强化后的故事前提。",
-      "4. protagonist_core 不是人物介绍，而是主角被困结构 + 内在裂缝 + 可变化空间。",
+      "4. protagonist_core 不是人物介绍，而是主角的行动处境 + 内在诉求或矛盾 + 可变化空间。",
       "5. conflict_engine 必须回答：剧情为何能不断升级、变形、反转、继续推进。",
       "6. mystery_box 必须足够关键，且不能是无意义卖关子。",
-      "7. progression_loop 必须清晰体现：发现 -> 介入 -> 升级 -> 反噬/反转 -> 再发现 的循环逻辑。",
+      "7. progression_loop 写行动及其后果怎样持续产生新局面，允许积累、调查、经营、冒险或关系变化，不强制固定发现升级反噬循环。",
       "8. constraints 必须是后续生成阶段可直接遵守的叙事规则，而不是空泛建议。",
       "",
       "缺失与冲突处理：",
@@ -86,11 +92,14 @@ function buildExpansionAndDecompositionPrompt(
       "2. 不要输出解释、备注、Markdown、代码块或任何额外文本。",
       "3. 所有字段都必须填写；若无法完全确定，应给出最稳妥、最克制的结果，并在 issues 中说明。",
       "",
-      "JSON 结构：",
+      "JSON 结构（bookStoryFoundation须遵守上方完整结构）：",
+      'bookStoryFoundation: {throughline:{centralQuestion,thematicAnswer,endingChoice,choiceCost,resolution,setupPayoffs:[{setup,payoff}]},worldBoundary:{baseline,crossingRules,knowledgeBoundary,hardLimits:[]},characterDynamics:[{role,independentGoal,mainlineEffect,relationshipChange}],viewpoint:{anchor,scopeConnection},progression:{escalationLogic,emotionalMovement}}；其中各属性均为文本，注明数组者除外。',
       "{",
+      '  "bookStoryFoundation": {"throughline":{"centralQuestion":"全书问题","thematicAnswer":"最终回答","endingChoice":"终局选择","choiceCost":"取舍","resolution":"解决结果","setupPayoffs":[{"setup":"前期依据","payoff":"后期回收"}]},"worldBoundary":{"baseline":"世界基准","crossingRules":"跨越规则或不适用","knowledgeBoundary":"知识边界","hardLimits":["禁限"]},"characterDynamics":[{"role":"角色槽位","independentGoal":"自身目标","mainlineEffect":"主线作用","relationshipChange":"关系变化"}],"viewpoint":{"anchor":"观察立场","scopeConnection":"生活与主线联系"},"progression":{"escalationLogic":"后果积累","emotionalMovement":"情绪积累"}},',
+      '  "progressionPhases": [{"name":"阶段名称","goal":"该阶段实际行动与后果"},{"name":"收束阶段","goal":"终局选择如何回应全书问题"}],',
       '  "expansion": {',
       '    "expanded_premise": "强化冲突后的故事前提",',
-      '    "protagonist_core": "主角被困的处境 + 内在裂缝 + 可变化空间",',
+      '    "protagonist_core": "主角的行动处境 + 内在诉求或矛盾 + 可变化空间",',
       '    "conflict_engine": "驱动剧情持续推进并不断升级的核心机制",',
       '    "conflict_layers": {',
       '      "external": "外部压迫/威胁",',
@@ -106,7 +115,7 @@ function buildExpansionAndDecompositionPrompt(
       '    "selling_point": "一句话卖点",',
       '    "core_conflict": "长期不可调和的对立",',
       '    "main_hook": "带未知的主线问题",',
-      '    "progression_loop": "故事如何发现 -> 升级 -> 反转地循环推进",',
+      '    "progression_loop": "行动及后果如何产生新的局面",',
       '    "growth_path": "主角认知或状态如何阶段性变化",',
       '    "major_payoffs": ["爆点1", "爆点2"],',
       '    "ending_flavor": "结局风格"',
@@ -123,6 +132,7 @@ function buildExpansionAndDecompositionPrompt(
 }
 
 function buildFieldRegenerationPrompt(input: {
+  bookStoryFoundation?: BookStoryFoundation;
   field: StoryMacroField;
   storyInput: string;
   expansion: StoryExpansion | null;
@@ -149,6 +159,8 @@ function buildFieldRegenerationPrompt(input: {
       "4. 禁止输出具体角色姓名、详细人物小传、固定角色名单。",
       "5. 如果项目上下文包含“这本书会用到的世界设定”，则重写结果必须严格服从其中已有规则、地点、组织、边界、禁配与冲突，不得越界扩写。",
       "6. 必须遵守已有 constraints。",
+      renderBookStoryFoundation(input.bookStoryFoundation),
+      "书级构思是不可改写的上位约束。本次只能重写指定字段，不得借局部改写修改世界、人物主线或终局方向。",
       "7. 必须尊重 lockedFields 所代表的既定方向，不得通过重写目标字段去间接破坏已锁定字段的成立基础。",
       "",
       "重写原则：",
@@ -170,10 +182,10 @@ function buildFieldRegenerationPrompt(input: {
       "9. 如果目标字段是 selling_point：必须足够凝练，能够体现区别性与吸引力。",
       "10. 如果目标字段是 core_conflict：必须是长期不可调和的对立，而不是一次性事件。",
       "11. 如果目标字段是 main_hook：必须体现主线未知与持续牵引力。",
-      "12. 如果目标字段是 progression_loop：必须明确体现“发现 -> 介入 -> 升级 -> 反噬/反转 -> 再发现”的循环机制。",
+      "12. 如果目标字段是 progression_loop：体现适合本书的行动与后果积累，不机械重复同一套路或强制反噬、反转。",
       "13. 如果目标字段是 growth_path：必须体现主角认知或状态的阶段性变化与代价。",
       "14. 如果目标字段是 major_payoffs：必须是真正值得兑现的爆点，不要写普通剧情节点。",
-      "15. 如果目标字段是 ending_flavor：应体现结局气质与最终余味，而不是具体结局细纲。",
+      "15. 如果目标字段是 ending_flavor：表达与已确认书级终局选择一致的气质和余味，不得替换或推翻大底。",
       "16. 如果目标字段是 constraints：必须写成后续生成可以直接遵守的叙事规则，禁止空话。",
       "",
       "输出要求：",
@@ -200,7 +212,7 @@ export const storyMacroDecompositionPrompt: PromptAsset<
   typeof STORY_MACRO_RESPONSE_SCHEMA._output
 > = {
   id: "novel.story_macro.decomposition",
-  version: "v1",
+  version: "v2",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -228,7 +240,7 @@ export const storyMacroFieldRegenerationPrompt: PromptAsset<
   typeof storyMacroFieldRegenerationSchema._output
 > = {
   id: "novel.story_macro.field_regeneration",
-  version: "v1",
+  version: "v2",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -240,6 +252,7 @@ export const storyMacroFieldRegenerationPrompt: PromptAsset<
   outputSchema: storyMacroFieldRegenerationSchema,
   render: (input, context) => {
     const prompt = buildFieldRegenerationPrompt({
+      bookStoryFoundation: input.bookStoryFoundation,
       field: input.field,
       storyInput: input.storyInput,
       expansion: input.expansion,

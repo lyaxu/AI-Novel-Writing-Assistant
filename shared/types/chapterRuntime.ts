@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bookStoryFoundationSchema } from "./novel/bookStoryFoundation.js";
 import {
   chapterScenePlanSchema,
   lengthBudgetContractSchema,
@@ -299,6 +300,7 @@ export const bookContractContextSchema = z.object({
 });
 
 export const macroConstraintContextSchema = z.object({
+  bookStoryFoundation: bookStoryFoundationSchema.optional(),
   sellingPoint: z.string(),
   coreConflict: z.string(),
   mainHook: z.string(),

@@ -33,7 +33,7 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
     }
     if (isOpeningPlanningPromise(check.sourceId) && check.scope === "book_arc") throw new Error(`Opening promise ${check.sourceId} cannot be reclassified as a book arc.`);
     if (!check.sourceEvidence.length || check.sourceEvidence.some(evidence =>
-      !(evidence.sourcePath === check.sourceId || evidence.sourcePath.startsWith(`${check.sourceId}.`))
+      !belongsToPlanningPromiseSource(evidence.sourcePath, check.sourceId)
       || !matchesChapterEvidence(sourceIndex, evidence))) throw new Error(`Promise ${check.sourceId} lacks exact selected-source evidence.`);
     if (check.candidateEvidence.some(evidence => !matchesChapterEvidence(candidateIndex, evidence))
       || check.contextEvidence.some(evidence => !matchesChapterEvidence(contextIndex, evidence))) throw new Error(`Promise ${check.sourceId} cites evidence absent from supplied plans or written facts.`);
@@ -41,4 +41,8 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
       throw new Error(`Promise ${check.sourceId} needs evidence of its preserved narrative value.`);
     }
   }
+}
+
+export function belongsToPlanningPromiseSource(sourcePath: string, sourceId: string): boolean {
+  return sourcePath === sourceId || sourcePath.startsWith(`${sourceId}.`) || sourcePath.startsWith(`${sourceId}[`);
 }

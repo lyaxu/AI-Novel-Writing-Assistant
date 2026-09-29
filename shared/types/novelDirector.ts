@@ -26,6 +26,7 @@ import type { StyleIntentSummary } from "./styleEngine";
 import type { DirectorAutoApprovalConfig } from "./autoDirectorApproval";
 import type { DirectorIssuePolicy } from "./directorIssue";
 import type { DirectorRiskAssessment } from "./directorRisk";
+import type { BookStoryFoundation } from "./novel/bookStoryFoundation";
 
 export const DIRECTOR_CORRECTION_PRESETS = [
   {
@@ -391,6 +392,8 @@ export interface BookSpec {
 }
 
 export interface DirectorCandidate {
+  /** Optional only for candidates persisted before the book-level foundation contract. */
+  bookStoryFoundation?: BookStoryFoundation;
   id: string;
   workingTitle: string;
   titleOptions?: TitleFactorySuggestion[];

@@ -124,6 +124,8 @@ function buildStoryMacroBlock(macro: MacroConstraintContext | null): PromptConte
     id: "story_macro",
     group: "story_macro",
     priority: 98,
+    required: Boolean(macro.bookStoryFoundation),
+    allowSummary: !macro.bookStoryFoundation,
     content: renderStoryMacroText(macro),
   });
 }

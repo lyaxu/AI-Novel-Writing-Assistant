@@ -13,6 +13,8 @@ const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
 }).outputText;
 const schemas = { extend: () => ({}) };
 const mocks = {
+  "@ai-novel/shared/types/novel/bookStoryFoundation": {},
+  "./bookFoundation": { BOOK_STORY_FOUNDATION_RULES: [], renderBookStoryFoundation: () => "" },
   "@langchain/core/messages": require("@langchain/core/messages"),
   "@ai-novel/shared/types/novelDirector": { DIRECTOR_CORRECTION_PRESETS: [] },
   "../../core/renderContextBlocks": { renderSelectedContextBlocks: () => "selected context" },
@@ -51,8 +53,8 @@ test("generation and patch deliver the same opening schedule contract", () => {
     return section;
   });
   assert.equal(sharedSections[0], sharedSections[1]);
-  assert.equal(assets[0].version, "v4");
-  assert.equal(assets[1].version, "v3");
+  assert.equal(assets[0].version, "v5");
+  assert.equal(assets[1].version, "v4");
 });
 
 test("capacity and pressure rules preserve genre freedom while requiring progression", () => {

@@ -91,7 +91,7 @@ function buildPaceDirective(pace: string | null | undefined): string {
 
 export const chapterWriterPrompt: PromptAsset<ChapterWriterPromptInput, string, string> = {
   id: "novel.chapter.writer",
-  version: "v9",
+  version: "v10",
   taskType: "writer",
   mode: "text",
   language: "zh",

@@ -1,3 +1,5 @@
+import { bookStoryFoundationSchema } from "@ai-novel/shared/types/novel/bookStoryFoundation";
+import { BOOK_STORY_FOUNDATION_RULES, renderBookStoryFoundation } from "./bookFoundation";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import {
   DIRECTOR_CORRECTION_PRESETS,
@@ -80,6 +82,7 @@ function formatCandidateDigest(candidate: DirectorCandidate, index: number): str
     `protagonist path: ${candidate.protagonistPath}`,
     `hook strategy: ${candidate.hookStrategy}`,
     `progression loop: ${candidate.progressionLoop}`,
+    renderBookStoryFoundation(candidate.bookStoryFoundation),
     candidate.storyPrototype ? `story prototype: ${JSON.stringify(candidate.storyPrototype)}` : "",
     `ending direction: ${candidate.endingDirection}`,
   ].join("\n");
@@ -110,7 +113,7 @@ export const directorCandidatePrompt: PromptAsset<
   typeof directorCandidateResponseSchema._output
 > = {
   id: "novel.director.candidates",
-  version: "v4",
+  version: "v5",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -148,13 +151,14 @@ export const directorCandidatePrompt: PromptAsset<
       "openingChain 必须是因果链：后一章处理前章选择造成的具体后果，而不是重开一件类似小事。前三章应兑现至少一个引入的核心疑问或阶段目标，earlyPayoff 与实际章节对应；不能把威胁暂退、知道还有秘密或领到下一单当作全部回报。",
       "每次解围须能追溯到已介绍的条件、人物本领或付出的代价，不能临时赋予道具新用途、新权限或让对手突然失智。突破必须同时带来真实收益与后续局面的变化，不用凭空扩大阴谋或人物苦难掩盖事件空转。",
       ...CANDIDATE_OPENING_PACING_RULES,
+      ...BOOK_STORY_FOUNDATION_RULES,
       "1. workingTitle 必须是可读的暂定书名，适合封面展示，不要写成策划案口号、世界观概念短语或陈旧套壳名。",
       "2. logline 必须清晰说明：这是谁，在什么处境下，面临什么核心冲突，会朝什么方向展开。",
       "3. positioning 必须说明这本书在题材、阅读满足或读者感知上的定位，而不是泛泛写“爽文”“成长文”。",
       "4. sellingPoint 必须突出这条方向最值得继续做整书规划的核心卖点。",
       "5. coreConflict 必须写清真正能支撑长篇连载的主要矛盾，不要只写一时事件。",
       "6. protagonistPath 必须体现主角长期变化方向，而不是静态人设描述。",
-      "7. endingDirection 只给高层终局方向，不要写死详细结局。",
+      "7. endingDirection 概括 bookStoryFoundation 的终局选择与落点；明确大底，过程保留空间。",
       "8. hookStrategy 必须说明前期如何抓住读者追读，而不是空泛写“制造悬念”。",
       "9. progressionLoop 必须说明这本书主要靠什么循环推进，比如升级、博弈、探索、关系裂变、任务兑现等。",
       "10. whyItFits 必须说明这条候选为什么适合当前用户输入，而不是夸候选本身。",
@@ -207,7 +211,7 @@ export const directorCandidatePatchPrompt: PromptAsset<
   typeof directorCandidateSchema._output
 > = {
   id: "novel.director.candidate_patch",
-  version: "v3",
+  version: "v4",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -217,7 +221,7 @@ export const directorCandidatePatchPrompt: PromptAsset<
     preferredGroups: ["project_context", "preset_hints", "freeform_feedback", "latest_batch"],
     dropOrder: ["latest_batch"],
   },
-  outputSchema: directorCandidateSchema.extend({ storyPrototype: storyPrototypeSchema }),
+  outputSchema: directorCandidateSchema.extend({ storyPrototype: storyPrototypeSchema, bookStoryFoundation: bookStoryFoundationSchema }),
   render: (input, context) => [
     new SystemMessage([
       "你是长篇小说书级方向修正导演，服务对象是不懂写作流程的新手用户。",
@@ -235,6 +239,7 @@ export const directorCandidatePatchPrompt: PromptAsset<
       "3. 如果用户说“我就偏向这套，但有些地方不对”，要把这套修得更准，而不是重新另起炉灶。",
       "4. 修正后仍然必须是完整、清晰、可继续推进整书规划的候选。",
       ...CANDIDATE_OPENING_PACING_RULES,
+      ...BOOK_STORY_FOUNDATION_RULES,
       "",
       "【字段要求】",
       "输出字段必须完整包含：workingTitle、logline、positioning、sellingPoint、coreConflict、protagonistPath、endingDirection、hookStrategy、progressionLoop、whyItFits、recommendedWritingPlatform、writingPlatformReason、toneKeywords、targetChapterCount。",

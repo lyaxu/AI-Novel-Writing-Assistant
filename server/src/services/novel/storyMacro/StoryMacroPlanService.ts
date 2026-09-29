@@ -1,3 +1,4 @@
+import type { BookStoryFoundation } from "@ai-novel/shared/types/novel/bookStoryFoundation";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import type {
   StoryDecomposition,
@@ -8,6 +9,7 @@ import type {
   StoryMacroLocks,
   StoryMacroPlan,
   StoryMacroState,
+  StoryMacroPhase,
 } from "@ai-novel/shared/types/storyMacro";
 import { prisma } from "../../../db/prisma";
 import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
@@ -126,6 +128,8 @@ export class StoryMacroPlanService {
   private async savePlan(
     novelId: string,
     input: {
+      bookStoryFoundation?: BookStoryFoundation;
+      progressionPhases?: StoryMacroPhase[];
       storyInput?: string | null;
       expansion?: StoryExpansion | null;
       decomposition?: StoryDecomposition | null;
@@ -141,6 +145,8 @@ export class StoryMacroPlanService {
     const nextConstraints = input.constraints !== undefined
       ? normalizeConstraints(input.constraints)
       : (previousPlan?.constraints ?? []);
+    const progressionPhases = input.progressionPhases ?? previousPlan?.progressionPhases;
+    const bookStoryFoundation = input.bookStoryFoundation ?? previousPlan?.bookStoryFoundation;
     const nextConstraintEngine = input.constraintEngine !== undefined
       ? input.constraintEngine
       : (previousPlan?.constraintEngine ?? null);
@@ -154,6 +160,8 @@ export class StoryMacroPlanService {
         issuesJson: JSON.stringify(input.issues ?? []),
         lockedFieldsJson: JSON.stringify(input.lockedFields ?? {}),
         constraintEngineJson: serializeConstraintPayload({
+          bookStoryFoundation,
+          progressionPhases,
           constraints: nextConstraints,
           constraintEngine: nextConstraintEngine,
         }),
@@ -165,9 +173,11 @@ export class StoryMacroPlanService {
         ...(input.decomposition !== undefined ? { decompositionJson: input.decomposition ? JSON.stringify(input.decomposition) : null } : {}),
         ...(input.issues !== undefined ? { issuesJson: JSON.stringify(input.issues) } : {}),
         ...(input.lockedFields !== undefined ? { lockedFieldsJson: JSON.stringify(input.lockedFields) } : {}),
-        ...(input.constraints !== undefined || input.constraintEngine !== undefined
+        ...(input.constraints !== undefined || input.constraintEngine !== undefined || input.bookStoryFoundation !== undefined || input.progressionPhases !== undefined
           ? {
               constraintEngineJson: serializeConstraintPayload({
+                bookStoryFoundation,
+                progressionPhases,
                 constraints: nextConstraints,
                 constraintEngine: nextConstraintEngine,
               }),
@@ -206,6 +216,8 @@ export class StoryMacroPlanService {
     });
     return {
       plan: {
+        bookStoryFoundation: parsed.output.bookStoryFoundation,
+        progressionPhases: parsed.output.progressionPhases,
         expansion: normalizeExpansion(parsed.output.expansion),
         decomposition: normalizeDecomposition(parsed.output.decomposition),
         constraints: normalizeConstraints(parsed.output.constraints),
@@ -232,11 +244,12 @@ export class StoryMacroPlanService {
         constraints: plan.constraints,
         lockedFields,
         projectContext,
+        bookStoryFoundation: plan.bookStoryFoundation,
       },
       contextBlocks: buildStoryMacroFieldRegenerationContextBlocks({
         field,
         storyInput,
-        projectContext,
+        projectContext: [projectContext, plan.bookStoryFoundation ? `已确认书级根基（仅作约束，不可修改）：${JSON.stringify(plan.bookStoryFoundation)}` : ""].filter(Boolean).join("\n\n"),
         expansionSummary: JSON.stringify(plan.expansion ?? {}, null, 2),
         decompositionSummary: JSON.stringify(plan.decomposition, null, 2),
         constraints: plan.constraints,
@@ -300,6 +313,8 @@ export class StoryMacroPlanService {
       ? buildStoryConstraintEngine(merged)
       : null;
     return this.savePlan(novelId, {
+      bookStoryFoundation: merged.bookStoryFoundation,
+      progressionPhases: merged.progressionPhases,
       storyInput: normalizedInput,
       expansion: merged.expansion,
       decomposition: merged.decomposition,
@@ -389,6 +404,8 @@ export class StoryMacroPlanService {
     };
     const previousEditablePlan = previousPlan ? toEditablePlan(previousPlan) : null;
     const nextEditablePlan: StoryMacroEditablePlan = {
+      bookStoryFoundation: previousEditablePlan?.bookStoryFoundation,
+      progressionPhases: previousEditablePlan?.progressionPhases,
       expansion: normalizeExpansion({
         ...(previousEditablePlan?.expansion ?? EMPTY_EXPANSION),
         ...(input.expansion ?? {}),

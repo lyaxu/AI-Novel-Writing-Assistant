@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bookStoryFoundationSchema } from "./bookStoryFoundation.js";
 
 const sourceText = z.string().trim().min(1);
 export const selectedPlanningCandidateSchema = z.object({
@@ -9,6 +10,7 @@ export const selectedPlanningCandidateSchema = z.object({
   hookStrategy: sourceText.optional(),
   progressionLoop: sourceText.optional(),
   endingDirection: sourceText.optional(),
+  bookStoryFoundation: bookStoryFoundationSchema.optional(),
   storyPrototype: z.object({
     protagonistWant: sourceText, opposition: sourceText, difficultChoice: sourceText,
     distinctiveEngine: sourceText, earlyPayoff: sourceText, appealRisk: sourceText,

@@ -1,3 +1,4 @@
+import { BookStoryFoundationDetails } from "./bookFoundation/BookStoryFoundationDetails";
 import type { TitleFactorySuggestion } from "@ai-novel/shared/types/title";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Check, ChevronDown, RefreshCw, Wand2 } from "lucide-react";
@@ -224,6 +225,7 @@ export default function NovelAutoDirectorCandidateBatches(props: NovelAutoDirect
                           </div>
                         ))}
                       </dl>
+                      <BookStoryFoundationDetails value={candidate.bookStoryFoundation} />
                       {candidate.storyPrototype && <details className="mt-5 border-t pt-4">
                         <summary className="cursor-pointer text-sm font-medium">开篇事件链</summary>
                         <ol className="mt-3 space-y-4">

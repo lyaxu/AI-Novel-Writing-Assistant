@@ -1,12 +1,15 @@
+import { bookStoryFoundationSchema, type BookStoryFoundation } from "@ai-novel/shared/types/novel/bookStoryFoundation";
 import type {
   StoryConstraintEngine,
   StoryDecomposition,
   StoryExpansion,
   StoryMacroPlan,
   StoryMacroState,
+  StoryMacroPhase,
 } from "@ai-novel/shared/types/storyMacro";
 import {
   EMPTY_STATE,
+  progressionPhasesSchema,
   buildConstraintEngine,
   hasMeaningfulDecomposition,
   hasMeaningfulExpansion,
@@ -34,6 +37,8 @@ export interface PersistedPlanRow {
 }
 
 interface PersistedConstraintPayload {
+  bookStoryFoundation?: unknown;
+  progressionPhases?: unknown;
   constraints?: unknown;
   engine?: unknown;
 }
@@ -113,12 +118,16 @@ function deriveConstraintEngine(
   decomposition: StoryDecomposition | null,
   constraints: string[],
   persistedEngine: unknown,
+  bookStoryFoundation?: BookStoryFoundation,
+  progressionPhases?: StoryMacroPhase[],
 ): StoryConstraintEngine | null {
-  if (expansion && decomposition && isDecompositionComplete(decomposition)) {
+  if ((!isRecord(persistedEngine) || !pickString(persistedEngine, "conflict_axis")) && expansion && decomposition && isDecompositionComplete(decomposition)) {
     return buildConstraintEngine({
       expansion,
       decomposition,
       constraints,
+      bookStoryFoundation,
+      progressionPhases,
     });
   }
   if (!isRecord(persistedEngine)) {
@@ -162,10 +171,14 @@ function deriveConstraintEngine(
 export function serializeConstraintPayload(input: {
   constraints: string[];
   constraintEngine: StoryConstraintEngine | null;
+  bookStoryFoundation?: BookStoryFoundation;
+  progressionPhases?: StoryMacroPhase[];
 }): string {
   return JSON.stringify({
     constraints: input.constraints,
     engine: input.constraintEngine,
+    bookStoryFoundation: input.bookStoryFoundation,
+    progressionPhases: input.progressionPhases,
   });
 }
 
@@ -173,6 +186,11 @@ export function mapRowToPlan(row: PersistedPlanRow): StoryMacroPlan {
   const rawExpansion = safeParseJSON<unknown>(row.expansionJson, null);
   const rawDecomposition = safeParseJSON<unknown>(row.decompositionJson, null);
   const rawConstraintPayload = parseConstraintPayload(row.constraintEngineJson);
+  // Legacy absence is supported; corrupted saved contracts must not silently become absent.
+  const progressionPhases = rawConstraintPayload.progressionPhases == null
+    ? undefined : progressionPhasesSchema.parse(rawConstraintPayload.progressionPhases);
+  const bookStoryFoundation = rawConstraintPayload.bookStoryFoundation == null
+    ? undefined : bookStoryFoundationSchema.parse(rawConstraintPayload.bookStoryFoundation);
   const expansion = deriveExpansion(rawExpansion, rawDecomposition, rawConstraintPayload);
   const decomposition = deriveDecomposition(rawDecomposition);
   const constraints = normalizeConstraints(rawConstraintPayload.constraints);
@@ -180,12 +198,14 @@ export function mapRowToPlan(row: PersistedPlanRow): StoryMacroPlan {
     id: row.id,
     novelId: row.novelId,
     storyInput: row.storyInput,
+    ...(bookStoryFoundation ? { bookStoryFoundation } : {}),
+    ...(progressionPhases ? { progressionPhases } : {}),
     expansion,
     decomposition,
     constraints,
     issues: normalizeIssues(safeParseJSON(row.issuesJson, [])),
     lockedFields: normalizeLockedFields(safeParseJSON(row.lockedFieldsJson, {})),
-    constraintEngine: deriveConstraintEngine(expansion, decomposition, constraints, rawConstraintPayload.engine),
+    constraintEngine: deriveConstraintEngine(expansion, decomposition, constraints, rawConstraintPayload.engine, bookStoryFoundation, progressionPhases),
     state: safeParseJSON<StoryMacroState>(row.stateJson, EMPTY_STATE),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

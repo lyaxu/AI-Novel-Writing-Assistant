@@ -1,3 +1,4 @@
+import { renderBookStoryFoundation } from "./bookFoundation";
 import type {
   DirectorCandidate,
   DirectorCandidateBatch,
@@ -103,6 +104,7 @@ function formatCandidateDigest(candidate: DirectorCandidate): string {
     `progression loop: ${candidate.progressionLoop}`,
     candidate.storyPrototype ? `Selected story prototype and opening causal chain: ${JSON.stringify(candidate.storyPrototype)}` : "",
     `ending direction: ${candidate.endingDirection}`,
+    renderBookStoryFoundation(candidate.bookStoryFoundation),
   ].join("\n");
 }
 
@@ -148,6 +150,7 @@ export function buildDirectorCandidateContextBlocks(input: {
       group: "idea_seed",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Idea seed:\n${compactText(input.idea)}`,
     }),
     createContextBlock({
@@ -190,6 +193,7 @@ export function buildDirectorBlueprintContextBlocks(input: {
       group: "book_contract",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: [
         "Book contract:",
         formatCandidateDigest(input.candidate),
@@ -201,6 +205,7 @@ export function buildDirectorBlueprintContextBlocks(input: {
       group: "idea_seed",
       priority: 96,
       required: true,
+      allowSummary: false,
       content: `Idea seed:\n${compactText(input.idea)}`,
     }),
     createContextBlock({
@@ -214,6 +219,7 @@ export function buildDirectorBlueprintContextBlocks(input: {
       group: "macro_constraints",
       priority: 92,
       required: true,
+      allowSummary: false,
       content: `Story macro summary:\n${formatStoryMacroSummary(input.storyMacroPlan)}`,
     }),
   ];
@@ -232,6 +238,7 @@ export function buildDirectorBookContractContextBlocks(input: {
       group: "book_contract",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: [
         "Director book direction:",
         formatCandidateDigest(input.candidate),
@@ -243,6 +250,7 @@ export function buildDirectorBookContractContextBlocks(input: {
       group: "idea_seed",
       priority: 96,
       required: true,
+      allowSummary: false,
       content: `Idea seed:\n${compactText(input.idea)}`,
     }),
     createContextBlock({
@@ -270,6 +278,7 @@ export function buildStoryMacroDecompositionContextBlocks(input: {
       group: "story_input",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Story input:\n${compactText(input.storyInput)}`,
     }),
     createContextBlock({
@@ -296,6 +305,7 @@ export function buildStoryMacroFieldRegenerationContextBlocks(input: {
       group: "story_input",
       priority: 100,
       required: true,
+      allowSummary: false,
       content: `Story input:\n${compactText(input.storyInput)}`,
     }),
     createContextBlock({
@@ -303,6 +313,7 @@ export function buildStoryMacroFieldRegenerationContextBlocks(input: {
       group: "target_field",
       priority: 98,
       required: true,
+      allowSummary: false,
       content: `Target field: ${input.field}`,
     }),
     createContextBlock({
@@ -322,6 +333,7 @@ export function buildStoryMacroFieldRegenerationContextBlocks(input: {
       group: "decomposition_summary",
       priority: 94,
       required: true,
+      allowSummary: false,
       content: `Decomposition summary:\n${compactText(input.decompositionSummary)}`,
     }),
     createContextBlock({
@@ -329,6 +341,7 @@ export function buildStoryMacroFieldRegenerationContextBlocks(input: {
       group: "constraints",
       priority: 96,
       required: true,
+      allowSummary: false,
       content: `Constraints:\n${takeUnique(input.constraints, 8).join("\n") || "none"}`,
     }),
     createContextBlock({

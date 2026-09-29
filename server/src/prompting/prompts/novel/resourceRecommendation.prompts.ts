@@ -34,7 +34,7 @@ export const novelCreateResourceRecommendationPrompt: PromptAsset<
   z.infer<typeof novelCreateResourceRecommendationSchema>
 > = {
   id: "novel.create.resource_recommendation",
-  version: "v3",
+  version: "v4",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -60,6 +60,7 @@ export const novelCreateResourceRecommendationPrompt: PromptAsset<
       "4. 是否与已有卖点、阅读感、节奏、情绪强度和视角倾向相匹配",
       "",
       "推荐原则：",
+      "用户明确的故事世界、时代与主要行动场域优先于主角原职业和题材标签。现代人穿越不等于故事仍属现代都市；不得为了匹配标签改写故事世界、技术条件或同人范围。跨时空由用户设定及实际主线决定，不自动补现代道具。",
       "1. 题材基底回答“这是什么书”，要优先选能稳住故事外观和市场预期的项。",
       "2. 主推进模式回答“这本书靠什么持续推进和兑现”，必须选择一个最核心、最稳定的驱动。",
       "3. 副推进模式只有在确实能补充风味且不干扰主驱动时才给；否则宁可不推荐。",

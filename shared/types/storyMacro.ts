@@ -1,3 +1,5 @@
+import type { BookStoryFoundation } from "./novel/bookStoryFoundation";
+
 export type StoryMacroField =
   | "expanded_premise"
   | "protagonist_core"
@@ -89,6 +91,9 @@ export interface StoryMacroPlan {
   id: string;
   novelId: string;
   storyInput?: string | null;
+  /** Author planning foundation; absent for legacy plans, never inferred on read. */
+  bookStoryFoundation?: BookStoryFoundation;
+  progressionPhases?: StoryMacroPhase[];
   expansion?: StoryExpansion | null;
   decomposition?: StoryDecomposition | null;
   constraints: string[];

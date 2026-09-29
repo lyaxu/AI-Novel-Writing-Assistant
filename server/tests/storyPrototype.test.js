@@ -1,3 +1,4 @@
+const { foundation } = require("./fixtures/bookStoryFoundation");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { storyPrototypeSchema, directorCandidateSchema, directorCandidateResponseSchema } = require("../dist/services/novel/director/runtime/novelDirectorSchemas");
@@ -26,13 +27,13 @@ test("prompt loader keys match declared versions throughout the creation chain",
 test("legacy saved candidates remain readable, new generation requires a causal prototype", () => {
   assert.equal(directorCandidateSchema.safeParse(legacy).success, true);
   assert.equal(directorCandidateResponseSchema.safeParse({ candidates: [legacy, legacy] }).success, false);
-  assert.equal(directorCandidateResponseSchema.safeParse({ candidates: [{ ...legacy, storyPrototype: prototype }, { ...legacy, storyPrototype: prototype }] }).success, true);
+  assert.equal(directorCandidateResponseSchema.safeParse({ candidates: [{ ...legacy, storyPrototype: prototype, bookStoryFoundation: foundation }, { ...legacy, storyPrototype: prototype, bookStoryFoundation: foundation }] }).success, true);
   assert.equal(storyPrototypeSchema.safeParse({ ...prototype, openingChain: prototype.openingChain.slice(0, 2) }).success, false);
   assert.equal(storyPrototypeSchema.safeParse({ ...prototype, openingChain: prototype.openingChain.map(c => ({ ...c, chapterOrder: 1 })) }).success, false);
 });
 
 test("normalization and downstream story inputs retain the chosen opening chain", () => {
-  const candidate = normalizeCandidate({ ...legacy, storyPrototype: prototype }, 0);
+  const candidate = normalizeCandidate({ ...legacy, storyPrototype: prototype, bookStoryFoundation: foundation }, 0);
   assert.deepEqual(candidate.storyPrototype, prototype);
   const input = { idea: "Shop idea", candidate };
   assert.match(buildStoryInput(input, toBookSpec(candidate, input.idea)), /Lose a guarantee/);
@@ -41,12 +42,12 @@ test("normalization and downstream story inputs retain the chosen opening chain"
 });
 
 test("updated assets resolve through registry and reader remains advisory", () => {
-  for (const key of ["novel.director.candidates@v4", "novel.director.candidate_patch@v3", "novel.volume.beat_sheet@v6", "novel.volume.chapter_list@v12", "novel.chapter.writer@v9", "novel.second_reader@v2"]) assert.ok(getRegisteredPromptAsset(...key.split("@")), key);
+  for (const key of ["novel.director.candidates@v5", "novel.director.candidate_patch@v4", "novel.volume.beat_sheet@v6", "novel.volume.chapter_list@v12", "novel.chapter.writer@v10", "novel.second_reader@v2"]) assert.ok(getRegisteredPromptAsset(...key.split("@")), key);
   const prompt = getRegisteredPromptAsset("novel.second_reader", "v2");
   const text = prompt.render({ title: "Title", description: "", chapters: "Body" }).map(m => m.content).join("\n");
   assert.match(text, /不是工作流通过条件/);
   assert.match(text, /连续阅读而非逐章打勾/);
-  const writer = getRegisteredPromptAsset("novel.chapter.writer", "v9");
+  const writer = getRegisteredPromptAsset("novel.chapter.writer", "v10");
   const proseInstructions = writer.render({ novelTitle: "Title", chapterOrder: 1, chapterTitle: "Opening", revealLevel: 2 }, {
     blocks: [], selectedBlockIds: [], droppedBlockIds: [], summarizedBlockIds: [], estimatedInputTokens: 0,
   }).map(m => m.content).join("\n");

@@ -147,6 +147,7 @@ export function buildMacroConstraintContext(storyMacroPlan: StoryMacroPlan | nul
     progressionLoop: compactText(storyMacroPlan.decomposition?.progression_loop, "not specified"),
     growthPath: compactText(storyMacroPlan.decomposition?.growth_path, "not specified"),
     endingFlavor: compactText(storyMacroPlan.decomposition?.ending_flavor, "not specified"),
+    bookStoryFoundation: storyMacroPlan.bookStoryFoundation ?? undefined,
     hardConstraints: takeUnique([
       ...(storyMacroPlan.constraints ?? []),
       ...(storyMacroPlan.constraintEngine?.hard_constraints ?? []),
@@ -558,6 +559,8 @@ export function getAllContextBlocks(contextPackage: GenerationContextPackage): P
       id: "story_macro",
       group: "story_macro",
       priority: 98,
+      required: Boolean(writeContext.macroConstraints.bookStoryFoundation),
+      allowSummary: !writeContext.macroConstraints.bookStoryFoundation,
       content: renderStoryMacroText(writeContext.macroConstraints),
     }));
   }

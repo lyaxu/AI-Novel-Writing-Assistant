@@ -1,3 +1,4 @@
+import type { BookStoryFoundation } from "@ai-novel/shared/types/novel/bookStoryFoundation";
 import type {
   StoryConstraintEngine,
   StoryDecomposition,
@@ -17,6 +18,8 @@ import {
 } from "./storyMacroPlanSchema";
 
 export interface StoryMacroEditablePlan {
+  bookStoryFoundation?: BookStoryFoundation;
+  progressionPhases?: StoryMacroPhase[];
   expansion: StoryExpansion;
   decomposition: StoryDecomposition;
   constraints: string[];
@@ -63,6 +66,7 @@ const DEFAULT_PHASE_NAMES = [
 ] as const;
 
 function buildPhaseModel(plan: StoryMacroEditablePlan): StoryMacroPhase[] {
+  if (plan.progressionPhases?.length) return plan.progressionPhases.map((phase) => ({ ...phase }));
   const { expansion, decomposition } = plan;
   return [
     {
@@ -88,11 +92,12 @@ function buildPhaseModel(plan: StoryMacroEditablePlan): StoryMacroPhase[] {
   ];
 }
 
-function buildTurningPoints(payoffs: string[]): StoryMacroTurningPoint[] {
+function buildTurningPoints(payoffs: string[], phases?: StoryMacroPhase[]): StoryMacroTurningPoint[] {
   return payoffs.map((item, index) => ({
     title: `兑现节点 ${index + 1}`,
     summary: item,
-    phase: DEFAULT_PHASE_NAMES[Math.min(index, DEFAULT_PHASE_NAMES.length - 1)] ?? DEFAULT_PHASE_NAMES[DEFAULT_PHASE_NAMES.length - 1],
+    // AI stages are not assigned payoff timing by array position.
+    phase: phases ? "待卷级规划明确承接阶段" : (DEFAULT_PHASE_NAMES[Math.min(index, DEFAULT_PHASE_NAMES.length - 1)] ?? DEFAULT_PHASE_NAMES[DEFAULT_PHASE_NAMES.length - 1]),
   }));
 }
 
@@ -101,7 +106,7 @@ function buildHardConstraints(plan: StoryMacroEditablePlan): string[] {
   return mergeUnique([
     ...plan.constraints,
     "角色创建前禁止生成具体角色姓名、固定角色阵容或完整人物小传。",
-    `每轮推进都必须持续回应核心未知：${plan.expansion.mystery_box || plan.decomposition.main_hook}`,
+    `主线行动持续回应阅读承诺，不强制每轮揭谜或反转：${plan.decomposition.main_hook}`,
     `剧情升级必须由冲突引擎驱动：${summarizeText(plan.expansion.conflict_engine, plan.decomposition.core_conflict)}`,
     `高张力场面必须服务于主线，而不是单独炫技：${plan.expansion.setpiece_seeds.join(" / ")}`,
     ...growthSteps,
@@ -124,7 +129,7 @@ export function buildConstraintEngine(plan: StoryMacroEditablePlan): StoryConstr
     growth_path: growthSteps.length > 0 ? growthSteps : [plan.decomposition.growth_path].filter(Boolean),
     phase_model: buildPhaseModel(plan),
     hard_constraints: hardConstraints,
-    turning_points: buildTurningPoints(plan.decomposition.major_payoffs),
+    turning_points: buildTurningPoints(plan.decomposition.major_payoffs, plan.progressionPhases),
     ending_constraints: {
       must_have: mergeUnique([
         `回应主线问题：${plan.decomposition.main_hook}`,
@@ -169,6 +174,8 @@ export function setEditablePlanFieldValue(
   value: StoryMacroFieldValue,
 ): StoryMacroEditablePlan {
   const nextPlan: StoryMacroEditablePlan = {
+    bookStoryFoundation: plan.bookStoryFoundation,
+    progressionPhases: plan.progressionPhases,
     expansion: normalizeExpansion(plan.expansion),
     decomposition: normalizeDecomposition(plan.decomposition),
     constraints: normalizeConstraints(plan.constraints),
@@ -228,7 +235,9 @@ export function mergeLockedFields(
   if (!previousPlan) {
     return nextPlan;
   }
-  let merged = {
+  let merged: StoryMacroEditablePlan = {
+    bookStoryFoundation: nextPlan.bookStoryFoundation,
+    progressionPhases: nextPlan.progressionPhases,
     expansion: normalizeExpansion(nextPlan.expansion),
     decomposition: normalizeDecomposition(nextPlan.decomposition),
     constraints: normalizeConstraints(nextPlan.constraints),

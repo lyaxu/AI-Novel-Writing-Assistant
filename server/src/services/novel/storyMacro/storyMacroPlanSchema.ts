@@ -1,3 +1,4 @@
+import { bookStoryFoundationSchema } from "@ai-novel/shared/types/novel/bookStoryFoundation";
 import type {
   StoryConflictLayers,
   StoryDecomposition,
@@ -87,7 +88,14 @@ const conflictLayersSchema = z.object({
   relational: z.string().trim().min(1).max(280),
 });
 
+export const progressionPhasesSchema = z.array(z.object({
+  name: z.string().trim().min(1).max(80),
+  goal: z.string().trim().min(1).max(500),
+})).min(2).max(8);
+
 export const STORY_MACRO_RESPONSE_SCHEMA = z.object({
+  bookStoryFoundation: bookStoryFoundationSchema,
+  progressionPhases: progressionPhasesSchema,
   expansion: z.object({
     expanded_premise: z.string().trim().min(1).max(900),
     protagonist_core: z.string().trim().min(1).max(500),

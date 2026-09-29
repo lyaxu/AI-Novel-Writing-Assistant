@@ -53,6 +53,8 @@ export function formatProjectContext(novel: StoryMacroNovelContext, worldSliceCo
 
 export function toEditablePlan(plan: StoryMacroPlan | null | undefined): StoryMacroEditablePlan {
   return {
+    bookStoryFoundation: plan?.bookStoryFoundation,
+    progressionPhases: plan?.progressionPhases,
     expansion: normalizeExpansion(plan?.expansion ?? EMPTY_EXPANSION),
     decomposition: normalizeDecomposition(plan?.decomposition ?? EMPTY_DECOMPOSITION),
     constraints: normalizeConstraints(plan?.constraints ?? []),

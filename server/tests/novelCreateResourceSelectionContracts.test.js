@@ -154,9 +154,9 @@ test("resource recommendation prompt distinguishes candidate ordinals from stabl
 
   assert.match(service, /候选序号（仅用于定位）/);
   assert.match(service, /ID（选择后必须原样返回）/);
-  assert.match(prompt, /version: "v3"/);
+  assert.match(prompt, /version: "v4"/);
   assert.match(prompt, /绝对不能把 1、2、3 等候选序号写进任何 ID 字段/);
-  assert.match(loaders, /novel\.create\.resource_recommendation@v3/);
+  assert.match(loaders, /novel\.create\.resource_recommendation@v4/);
 });
 
 test("candidate workflow persists the resolved production foundation for recovery", () => {
@@ -188,7 +188,7 @@ test("idea inspirations bound creative sampling and retry with the original cont
 
   assert.match(service, /Math\.min\(0\.8, Math\.max\(0\.55/);
   assert.match(service, /maxTokens: IDEA_INSPIRATION_MAX_TOKENS/);
-  assert.match(context, /error instanceof StructuredOutputError && error\.category !== "transport_error"/);
+  assert.match(context, /error instanceof StructuredOutputError\s+&& error\.category !== "transport_error"/);
   assert.match(service, /runIdeaInspirationPrompt\(input, IDEA_INSPIRATION_RETRY_TEMPERATURE\)/);
   assert.match(prompt, /version: "v3"/);
   assert.match(prompt, /maxAttempts: 0/);

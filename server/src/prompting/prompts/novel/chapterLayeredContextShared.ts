@@ -1,3 +1,4 @@
+import { renderBookStoryFoundation } from "./bookFoundation";
 import type {
   BookContractContext,
   ChapterWriteContext,
@@ -100,6 +101,7 @@ export function renderStoryMacroText(macro: MacroConstraintContext): string {
     `推进循环：${displayPromptValue(macro.progressionLoop)}`,
     `成长路径：${displayPromptValue(macro.growthPath)}`,
     `结局味道：${displayPromptValue(macro.endingFlavor)}`,
+    renderBookStoryFoundation(macro.bookStoryFoundation),
     macro.hardConstraints.length > 0 ? `硬性约束：${macro.hardConstraints.join(" | ")}` : "",
   ].filter(Boolean).join("\n");
 }

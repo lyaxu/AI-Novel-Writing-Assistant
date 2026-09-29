@@ -39,7 +39,10 @@ export async function resolveAdvancedPromptMessages<I, O, R = O>(input: {
     slotDefs: input.asset.slots ?? [],
     slots: input.context.slots,
     allowedContextGroups: getAllowedTemplateContextGroups(input.asset as PromptAsset<unknown, unknown, unknown>),
-    requiredContextGroups: getRequiredTemplateContextGroups(input.asset.id),
+    requiredContextGroups: [...new Set([
+      ...getRequiredTemplateContextGroups(input.asset.id),
+      ...input.context.blocks.filter((block) => block.required).map((block) => block.group),
+    ])],
   });
   if (hasBlockingPromptTemplateDiagnostics(compiled.diagnostics)) {
     const details = [
