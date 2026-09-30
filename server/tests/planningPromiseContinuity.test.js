@@ -30,6 +30,7 @@ const { chapterTaskSheetQualityPrompt: prompt } = load("../src/prompting/prompts
   "./evidence/chapterEvidence": chapterEvidence, "./evidence/planningPromiseEvidence": promiseEvidence, "./evidence/issueCheckProjection": issueProjection,
   "./evidence/newIssueEvidence": newIssueEvidence,
   "./evidence/primaryProseCitationCatalog": load("../src/prompting/prompts/novel/volume/evidence/primaryProseCitationCatalog.ts", {}),
+  "./evidence/narrativeProgressionEvidence": load("../src/prompting/prompts/novel/volume/evidence/narrativeProgressionEvidence.ts", { "./chapterEvidence": chapterEvidence }),
 });
 const candidate = { chapterOrder: 2, summary: "通过交换药物赢得初步信任" };
 const source = { status: "available", sourceTaskId: "task", fingerprint: "source-1", candidate: {
@@ -40,7 +41,10 @@ const source = { status: "available", sourceTaskId: "task", fingerprint: "source
     openingChain: [{ chapterOrder: 2, action: "交换药物", resistance: "彼此不信任", choice: "先交出资源", consequence: "陌生人提供帮助", payoff: "关系从戒备变为互助", nextQuestion: "能否再次合作" }] },
 } };
 const context = (extra = {}) => JSON.stringify({ selectedPlanningDirection: source, ...extra });
-const assessment = checks => ({ verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is", summary: "通过", issues: [], repairGuidance: [], confidence: 0.9, issueChecks: [], promiseChecks: checks, refinements: [] });
+const assessment = checks => ({ verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is", summary: "通过", issues: [], repairGuidance: [], confidence: 0.9, issueChecks: [], promiseChecks: checks, refinements: [],
+  progressionChecks: ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"].map(dimension => ({ dimension, status: "insufficient_context",
+    candidateEvidence: [{ sourcePath: "summary", quote: candidate.summary }], priorEvidence: [], explanation: "未提供可比较的前文正文", issueId: null, repairHint: "" })),
+});
 function checks() {
   const index = chapterEvidence.buildChapterEvidenceIndex(source.candidate);
   return promises.selectedPlanningPromiseIds(source).map(sourceId => {

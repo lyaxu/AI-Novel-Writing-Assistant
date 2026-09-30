@@ -122,7 +122,18 @@ export class ChapterQualityGateService {
   }
 
   private isCacheable(result: ChapterAcceptanceAssessmentResult): boolean {
+    const checks = result?.assessment?.progressionChecks;
+    const dimensions = ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"] as const;
+    const statuses = ["progressed", "justified_repetition", "stalled", "insufficient_evidence", "not_applicable"];
+    // Historical reports remain readable, but an old/incomplete audit cannot certify a fresh gate.
+    const hasProgressionCoverage = Array.isArray(checks) && checks.length === dimensions.length
+      && dimensions.every((dimension) => checks.filter((check) => check?.dimension === dimension).length === 1)
+      && checks.every((check) => check && statuses.includes(check.status)
+        && Array.isArray(check.previousEvidence) && Array.isArray(check.currentEvidence)
+        && Array.isArray(check.validationIssues)
+        && typeof check.explanation === "string" && check.explanation.trim().length > 0);
     return Boolean(result?.assessment?.riskTags && result.assessment.blockingIssues)
+      && hasProgressionCoverage
       && !result.assessment.riskTags.includes("acceptance_gate_unavailable")
       && !result.assessment.blockingIssues.some((issue) => issue.code === "acceptance_gate_unavailable");
   }
@@ -130,7 +141,7 @@ export class ChapterQualityGateService {
   private async loadAssessment(input: ChapterAcceptanceAssessmentInput, identity: CacheIdentity) {
     const key = JSON.stringify([input.novelId, input.chapterId, identity.contentHash, identity.requestKey]);
     const cached = this.cache.get(key);
-    if (cached) return cached;
+    if (cached && this.isCacheable(cached)) return cached;
     const running = this.inFlight.get(key);
     if (running) return running;
     // Claim before the first persisted-cache await to coalesce concurrent misses.
@@ -155,27 +166,8 @@ export class ChapterQualityGateService {
         return exact.result;
       }
 
-      // requestKey can change after a task resume while the chapter content is unchanged.
-      // Reuse the latest cache for the same content hash instead of paying for a duplicate gate.
-      const fallback = await prisma.chapterArtifactSyncCheckpoint.findFirst({
-        where: {
-          novelId: input.novelId,
-          chapterId: input.chapterId,
-          contentHash: identity.contentHash,
-          artifactType: "quality_gate_acceptance",
-          status: "succeeded",
-        },
-        orderBy: { updatedAt: "desc" },
-        select: { metadataJson: true },
-      });
-      if (fallback?.metadataJson) {
-        const payload = JSON.parse(fallback.metadataJson) as PersistedAcceptance;
-        if (payload.schemaVersion === 2 && payload.gate === "acceptance"
-          && payload.contentHash === identity.contentHash && this.isCacheable(payload.result)) {
-          rememberCacheValue(this.cache, key, payload.result);
-          return payload.result;
-        }
-      }
+      // Equal prose is insufficient: prompt, prior evidence, model or overrides may have changed.
+      // Only the exact effective request identity above is eligible; retain older rows as history.
     } catch {
       console.warn("[chapter-runtime] acceptance cache read skipped", { chapterId: input.chapterId });
     }

@@ -1,6 +1,7 @@
 import type { ChapterAcceptancePromptInput, ChapterAcceptanceAssessmentOutput } from "../../../../prompting/prompts/novel/chapterAcceptance.prompts";
 import type { ChapterAcceptanceAssessmentInput } from "../ChapterAcceptanceAssessmentService";
 import { projectActionStateAssessment } from "./actionStateProjection";
+import { projectProgressionAssessment } from "./progressionProjection";
 
 /** Both invocation and cache identity must use the same requested scene coverage. */
 export function buildAcceptancePromptInput(input: ChapterAcceptanceAssessmentInput): ChapterAcceptancePromptInput {
@@ -21,12 +22,12 @@ export function buildAcceptancePromptInput(input: ChapterAcceptanceAssessmentInp
 
 /** Reserve a bounded evidence allowance; a larger cap does not itself generate more tokens. */
 export function acceptanceOutputBudget(sceneCount: number): number {
-  return 4224 + Math.min(8, Math.max(0, Math.floor(sceneCount))) * 1536;
+  return 5760 + Math.min(8, Math.max(0, Math.floor(sceneCount))) * 1536;
 }
 
 /** Deterministic projection of the AI verdict, never a second semantic classifier. */
 export function projectCausalAssessment(output: ChapterAcceptanceAssessmentOutput): ChapterAcceptanceAssessmentOutput {
-  output = projectActionStateAssessment(output);
+  output = projectProgressionAssessment(projectActionStateAssessment(output));
   const failures = (output.sceneCausalityVerdicts ?? []).filter((row) => row.verdict !== "earned");
   if (!failures.length) return output;
   const blockingIssues = [...output.blockingIssues];
@@ -58,10 +59,11 @@ export function projectCausalAssessment(output: ChapterAcceptanceAssessmentOutpu
     }
   }
   const onlyUnknown = failures.every((row) => row.verdict === "insufficient_evidence");
+  const promotesToRepair = !onlyUnknown && (output.status === "accepted" || output.status === "continue_with_risk");
   return {
     ...output,
-    status: output.status === "accepted" ? (onlyUnknown ? "continue_with_risk" : "repairable") : output.status,
-    continuePolicy: output.status === "accepted" ? (onlyUnknown ? "continue" : "repair_once") : output.continuePolicy,
+    status: promotesToRepair ? "repairable" : output.status === "accepted" ? "continue_with_risk" : output.status,
+    continuePolicy: promotesToRepair ? "repair_once" : output.status === "accepted" ? "continue" : output.continuePolicy,
     blockingIssues,
     repairDirectives,
     riskTags: [...new Set(riskTags)],

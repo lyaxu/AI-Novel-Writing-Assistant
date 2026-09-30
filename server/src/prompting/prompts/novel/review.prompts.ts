@@ -94,7 +94,7 @@ export const chapterReviewPrompt: PromptAsset<
   z.infer<typeof fullAuditOutputSchema>
 > = {
   id: "novel.review.chapter",
-  version: "v2",
+  version: "v3",
   taskType: "critical_review",
   mode: "structured",
   language: "zh",
@@ -134,6 +134,8 @@ export const chapterReviewPrompt: PromptAsset<
       "4. voice：文风、叙述口吻、人物表达是否稳定且适配当前内容。",
       "5. engagement：是否具有持续阅读动力，结尾钩子、冲突推进与信息揭示是否有效。",
       "6. overall：综合质量判断，应反映本章是否达到可发布或需重点修整的水平。",
+      "7. 对照所提供的已写前章，分别检查：是否重演已完成事件、是否再次发现同一人物已知信息、是否只重述前章行动决定而未尝试执行或产生后果。有实际缺口分别进入repetition或pacing问题，引用双方原文；前文缺失只说明证据不足，不编造过去事件。新任务或新倒计时本身不能抵消旧目标空转。",
+      "8. 保留细腻、慢热与有效回顾。关系变化、信念动摇、排除线索、误解加深、有代价的失败和主动改选均可推进，不要求每章打斗、获胜或反转。修复建议应压缩无新结果的重复，把篇幅用于选择和后果，不能仅换人换地点重做；以先前章节最终状态核对资源，不使用已花掉的钱或已失效条件。",
       "",
       "【issues 要求】",
       "1. issues 必须只抓真正影响阅读与连载质量的问题，避免吹毛求疵式碎问题泛滥。",

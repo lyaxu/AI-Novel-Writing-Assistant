@@ -344,7 +344,7 @@ test("chapter task sheet quality service passes usable semantic assessments", as
 });
 
 test("chapter task sheet quality prompt is registered as a product prompt asset", () => {
-  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v13");
+  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v14");
   assert.equal(registered, chapterTaskSheetQualityPrompt);
 });
 
@@ -352,7 +352,10 @@ test("fresh review requires grounded blockers and keeps optional refinements out
   const candidate = buildCandidate();
   const output = { verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is",
     summary: "合同可执行，可选精简重复说明", issues: [], repairGuidance: [], confidence: 0.9,
-    issueChecks: [], promiseChecks: [], refinements: ["可选精简重复限制说明"] };
+    issueChecks: [], promiseChecks: [], refinements: ["可选精简重复限制说明"],
+    progressionChecks: ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"].map(dimension => ({ dimension, status: "insufficient_context",
+      candidateEvidence: [{ sourcePath: "purpose", quote: candidate.purpose }], priorEvidence: [], explanation: "未提供前文正文", issueId: null, repairHint: "" })),
+  };
   assert.equal(chapterTaskSheetQualityPrompt.outputSchema.safeParse(output).success, true);
   const parsed = chapterTaskSheetQualityPrompt.postValidate(output, { candidate });
   assert.equal(parsed.safeToSync, true);

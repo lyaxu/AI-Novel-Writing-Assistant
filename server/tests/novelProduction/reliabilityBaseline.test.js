@@ -29,7 +29,11 @@ function gateHarness() {
       getCacheIdentity: async (input) => hashContent(JSON.stringify(input)),
       assess: async () => {
         calls++;
-        return { assessment: { riskTags: unavailable ? ["acceptance_gate_unavailable"] : [], blockingIssues: [] } };
+        return { assessment: { riskTags: unavailable ? ["acceptance_gate_unavailable"] : [], blockingIssues: [],
+          progressionChecks: ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"].map((dimension) => ({
+            dimension, status: "not_applicable", previousEvidence: [], currentEvidence: [], validationIssues: [], explanation: "模拟已完成三维核验",
+          })),
+        } };
       },
     } }),
   };

@@ -29,6 +29,7 @@ const { chapterTaskSheetQualityPrompt: prompt } = load("../src/prompting/prompts
   "./evidence/planningPromiseEvidence": promiseEvidence, "./evidence/issueCheckProjection": issueProjection,
   "./evidence/newIssueEvidence": load("../src/prompting/prompts/novel/volume/evidence/newIssueEvidence.ts", { "./chapterEvidence": evidence }),
   "./evidence/primaryProseCitationCatalog": load("../src/prompting/prompts/novel/volume/evidence/primaryProseCitationCatalog.ts", {}),
+  "./evidence/narrativeProgressionEvidence": load("../src/prompting/prompts/novel/volume/evidence/narrativeProgressionEvidence.ts", { "./chapterEvidence": evidence }),
 });
 const fixture = require("./fixtures/planningEvidenceLabeledQuotes.json");
 const output = () => ({ verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is",
@@ -43,6 +44,8 @@ test("eight saved field-labeled citations verify against the same candidate with
 });
 test("fresh schema requires separate leaf path and quote; wrong field and old candidate are rejected", () => {
   const fresh = output(); const index = evidence.buildChapterEvidenceIndex(fixture.candidate);
+  fresh.progressionChecks = ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"].map(dimension => ({ dimension, status: "insufficient_context",
+    candidateEvidence: [{ sourcePath: "readerExperience.keyTurn", quote: index.leaves.get("readerExperience.keyTurn") }], priorEvidence: [], explanation: "未提供前文正文", issueId: null, repairHint: "" }));
   fresh.issueChecks = fresh.issueChecks.map((check) => ({ ...check, candidateEvidence: [{ sourcePath: "readerExperience.keyTurn", quote: index.leaves.get("readerExperience.keyTurn") }] }));
   assert.equal(prompt.outputSchema.safeParse(fresh).success, true);
   assert.equal(prompt.outputSchema.safeParse(output()).success, false);
@@ -70,6 +73,8 @@ test("coverage includes eight real issues plus synthetic overload without droppi
   issues.push({ ...issues[0], id: "contract_overloaded" });
   const current = { ...output(), verdict: "repairable", safeToSync: false, recommendedHandling: "repair_contract", issues,
     issueChecks: issues.map((issue) => ({ issueId: issue.id, status: "unresolved", candidateEvidence: [], explanation: "仍缺少前提" })) };
+  current.progressionChecks = ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"].map(dimension => ({ dimension, status: "insufficient_context",
+    candidateEvidence: [{ sourcePath: "summary", quote: "完成交换" }], priorEvidence: [], explanation: "未提供前文正文", issueId: null, repairHint: "" }));
   assert.equal(prompt.outputSchema.safeParse(current).success, true);
   prompt.postValidate(current, { candidate: { summary: "完成交换" }, previousIssues: issues });
   assert.throws(() => prompt.postValidate({ ...current, issueChecks: current.issueChecks.slice(0, 8) }, { candidate: { summary: "完成交换" }, previousIssues: issues }), /exactly once/);

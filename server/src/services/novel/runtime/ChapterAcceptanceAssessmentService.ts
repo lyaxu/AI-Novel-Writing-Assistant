@@ -378,6 +378,8 @@ export class ChapterAcceptanceAssessmentService {
               sceneCausalityVerdicts: assessment.sceneCausalityVerdicts ?? [],
               actionStateChecks: assessment.actionStateChecks ?? [],
               actionStateAuditIssues: assessment.actionStateAuditIssues ?? [],
+              progressionChecks: assessment.progressionChecks ?? [],
+              progressionAuditIssues: assessment.progressionAuditIssues ?? [],
             }),
             issues: {
               create: issues.map((issue, index) => ({
@@ -439,6 +441,8 @@ export class ChapterAcceptanceAssessmentService {
           sceneCausalityVerdicts: assessment.sceneCausalityVerdicts ?? [],
           actionStateChecks: assessment.actionStateChecks ?? [],
           actionStateAuditIssues: assessment.actionStateAuditIssues ?? [],
+          progressionChecks: assessment.progressionChecks ?? [],
+          progressionAuditIssues: assessment.progressionAuditIssues ?? [],
         }),
         issues: issues.map((issue, index) => ({
           id: `${reportId}:${issue.code || "issue"}:${index + 1}`,

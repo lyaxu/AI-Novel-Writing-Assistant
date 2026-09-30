@@ -69,6 +69,7 @@ export interface ChapterTaskSheetQualityGateResult {
   confidence: number;
   issueChecks?: ChapterPlanningIssueCheck[];
   promiseChecks?: ChapterPlanningPromiseCheck[];
+  progressionChecks?: ChapterNarrativeProgressionCheck[];
   refinements?: string[];
 }
 
@@ -108,6 +109,20 @@ export const chapterPlanningPromiseCheckSchema = z.object({
   repairHint: z.string().trim().max(600),
 });
 export type ChapterPlanningPromiseCheck = z.infer<typeof chapterPlanningPromiseCheckSchema>;
+
+export const NARRATIVE_PROGRESSION_DIMENSIONS = ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"] as const;
+export const chapterNarrativeProgressionCheckSchema = z.object({
+  dimension: z.enum(NARRATIVE_PROGRESSION_DIMENSIONS),
+  status: z.enum(["effective", "justified_repetition", "stalled", "insufficient_context"]),
+  candidateEvidence: z.array(chapterPlanningEvidenceQuoteSchema).min(1).max(2),
+  priorEvidence: z.array(chapterPlanningEvidenceQuoteSchema).max(2),
+  explanation: z.string().trim().min(1).max(400),
+  issueId: z.string().trim().min(1).nullable(),
+  repairHint: z.string().trim().max(300),
+});
+export const chapterNarrativeProgressionChecksSchema = z.array(chapterNarrativeProgressionCheckSchema).length(3)
+  .refine(checks => new Set(checks.map(check => check.dimension)).size === 3, "Every narrative progression dimension must appear exactly once.");
+export type ChapterNarrativeProgressionCheck = z.infer<typeof chapterNarrativeProgressionCheckSchema>;
 
 export function unresolvedPlanningPromises(checks: ChapterPlanningPromiseCheck[] = []) {
   return checks.filter(check => check.status === "dropped" || check.status === "insufficient"
@@ -212,6 +227,7 @@ export const aiChapterTaskSheetQualityAssessmentSchema = z.object({
   issueChecks: z.array(chapterPlanningIssueCheckSchema).optional(),
   // Old saved assessments remain readable; fresh prompt output requires this field.
   promiseChecks: z.array(chapterPlanningPromiseCheckSchema).max(10).optional(),
+  progressionChecks: chapterNarrativeProgressionChecksSchema.optional(),
   refinements: z.array(z.string().trim().min(1).max(500)).max(8).optional(),
 });
 
@@ -317,6 +333,11 @@ export function mapSemanticAssessmentToQualityGate(
   assessment: AiChapterTaskSheetQualityAssessment,
   mode: ChapterTaskSheetQualityMode,
 ): ChapterTaskSheetQualityGateResult {
+  const progressionStalled = (assessment.progressionChecks ?? []).some(check => check.status === "stalled");
+  if (progressionStalled) {
+    assessment = { ...assessment, verdict: assessment.verdict === "unusable" ? "unusable" : "repairable", safeToSync: false,
+      recommendedHandling: assessment.recommendedHandling === "replan_window" ? "replan_window" : "repair_contract" };
+  }
   const promiseGaps = unresolvedPlanningPromises(assessment.promiseChecks);
   if (promiseGaps.length) {
     const repairHint = promiseGaps.map(check => `${check.sourceId}: ${check.repairHint || check.explanation}`).join("；");
@@ -354,6 +375,7 @@ export function mapSemanticAssessmentToQualityGate(
       confidence: assessment.confidence,
       issueChecks: assessment.issueChecks ?? [],
       promiseChecks: assessment.promiseChecks ?? [],
+      progressionChecks: assessment.progressionChecks,
       refinements: assessment.refinements ?? [],
     };
   }
@@ -372,7 +394,7 @@ export function mapSemanticAssessmentToQualityGate(
     recommendedHandling: assessment.recommendedHandling,
     // 全书自动执行保留语义审校结果供后续正文验收消费，但不为可写的
     // 任务单重复生成整份合同；结构缺失仍由 shape gate 阻断。
-    canEnterExecution: mode === "full_book_autopilot" && promiseGaps.length === 0
+    canEnterExecution: mode === "full_book_autopilot" && !progressionStalled && promiseGaps.length === 0
       && !(assessment.issueChecks ?? []).some(check => check.status !== "resolved"),
     issues,
     summary: assessment.summary,
@@ -380,6 +402,7 @@ export function mapSemanticAssessmentToQualityGate(
     confidence: assessment.confidence,
     issueChecks: assessment.issueChecks ?? [],
     promiseChecks: assessment.promiseChecks ?? [],
+    progressionChecks: assessment.progressionChecks,
     refinements: assessment.refinements ?? [],
   };
 }

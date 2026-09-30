@@ -91,7 +91,7 @@ function buildPaceDirective(pace: string | null | undefined): string {
 
 export const chapterWriterPrompt: PromptAsset<ChapterWriterPromptInput, string, string> = {
   id: "novel.chapter.writer",
-  version: "v10",
+  version: "v11",
   taskType: "writer",
   mode: "text",
   language: "zh",
@@ -324,6 +324,7 @@ export const chapterWriterPrompt: PromptAsset<ChapterWriterPromptInput, string, 
         "1c. 冲突分数只是0-100的辅助参数，不得因为分数低而削弱任务单已有的对抗、选择和后果。职业操作、感官代价、催促、查资料等若前文已展示，本章只写其新后果，不逐步重演。阶段线索须促成行动或回答旧问题，不能只换一种问法再留到下一章。",
         "1a. reader_experience 是本章读者体验硬合同：必须让 promisedReward、keyTurn 与 netChange 在正文中可见，主角必须围绕 protagonistWant 主动行动并面对 primaryResistance。",
         "1b. inheritedHookResponsibilities 必须优先得到回应、触达或部分兑现；不得只制造新钩子而不给旧问题任何回报。",
+        "1c. 对照前章实际正文中已发生事件、人物已有认识和结尾决定：本章要让具体行动发生并产生结果，结果可以是失败、代价、关系变化或对线索的新解释。不要反复盘点相同困境、重新发现已知信息，最后又只决定执行前章同一目标。有叙事功能的回顾和重复行动可保留，但须让读者获得新的意义或后果；未提供前文时不能编造。细腻和慢热允许深入细节与情绪，不等于延迟行动；不为加速强塞打斗、胜利、反转或提前揭底。",
         "1d. scene_causality 约束选择为何发生、条件从何而来、阻力如何回应、结果如何产生及代价如何持续。established_in_context 必须能对照实际前文，不能把合同声明当历史；establish_in_scene 的条件须先建立再使用，unresolved 不得靠补一句‘早已获得’消除。既有伤势、时长、物资和关系限制必须真正改变行动。",
         "1e. 允许人物拒绝、误判、让步、等待或失败；不必每场获胜。关键结果必须来自已建立的条件和具体选择，不能靠对手无故失能、临时道具、突增能力或旁白担保。因果可通过必要细节简洁呈现，不要扩写成操作说明。",
         "1f. 写关键动作前先核对人物身体、物品、能力、知识和位置：当前能否做、凭什么知道、资源从何处取得。解除限制的动作或规则必须早于使用，不能先消费成功后才会得到的自由或能力；合理魔法、治疗或借力可以改变状态，但要有已建立的机制和实际过渡。",

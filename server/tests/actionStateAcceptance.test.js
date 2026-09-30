@@ -21,13 +21,18 @@ const sharedAction = source("../../shared/types/novel/sceneCausality/actionState
 const shared = source("../../shared/types/novel/sceneCausality.ts", { "./sceneCausality/actionState.js": sharedAction });
 const evidence = source("../src/prompting/prompts/novel/acceptance/actionStateEvidence.ts");
 const projection = source("../src/services/novel/runtime/acceptance/actionStateProjection.ts");
-const causal = source("../src/services/novel/runtime/acceptance/causalAssessment.ts", { "./actionStateProjection": projection });
+const progressionSchema = source("../../shared/types/novel/progression/index.ts");
+const progressionEvidence = source("../src/prompting/prompts/novel/acceptance/progressionEvidence.ts", { "@ai-novel/shared/types/novel/progression/index": progressionSchema });
+const progressionProjection = source("../src/services/novel/runtime/acceptance/progressionProjection.ts");
+const causal = source("../src/services/novel/runtime/acceptance/causalAssessment.ts", { "./actionStateProjection": projection, "./progressionProjection": progressionProjection });
 const prompts = source("../src/prompting/prompts/novel/chapterAcceptance.prompts.ts", {
   "@ai-novel/shared/types/novel/sceneCausality": shared,
   "@ai-novel/shared/types/chapterProseContract": { CHAPTER_PROSE_QUALITY_AUDIT_RULES: [] },
   "../../core/renderContextBlocks": { renderSelectedContextBlocks: () => "已写正文" },
   "./promptBudgetProfiles": { NOVEL_PROMPT_BUDGETS: { chapterAcceptance: 1200 } },
   "./acceptance/actionStateEvidence": evidence,
+  "@ai-novel/shared/types/novel/progression/index": progressionSchema,
+  "./acceptance/progressionEvidence": progressionEvidence,
 });
 let modelOutput;
 const service = source("../src/services/novel/runtime/ChapterAcceptanceAssessmentService.ts", {
@@ -61,9 +66,14 @@ function assessment(checks = [check()]) {
       choiceAndResistanceEvidence: "人物行动", outcomeMechanismEvidence: "结果发生", constraintEvidence: [], explanation: "计划完成" }] };
 }
 function evaluate(row, content, extra = {}) {
-  const parsed = prompts.generatedChapterAcceptanceAssessmentSchema.parse(assessment([row]));
+  const currentEvidence = [quote(content.slice(0, 180))];
+  const modelAssessment = { ...assessment([row]), progressionChecks: progressionSchema.CHAPTER_PROGRESSION_DIMENSIONS.map((dimension) => ({
+    dimension, status: "not_applicable", priorState: "前文没有本次对应职责", actualChange: "", newConsequence: "", previousEvidence: [], currentEvidence,
+    explanation: "本测试仅聚焦行动状态，前文无本项对应职责。", repairSuggestion: "",
+  })) };
+  const parsed = prompts.generatedChapterAcceptanceAssessmentSchema.parse(modelAssessment);
   const output = prompts.chapterAcceptanceAssessmentPrompt.postValidate(parsed, {
-    chapterId: "c2", chapterOrder: 2, content, expectedSceneKeys: ["s"], ...extra,
+    chapterId: "c2", chapterOrder: 2, content, expectedSceneKeys: ["s"], establishedProse: [{ chapterId: "c1", order: 1, content: "前章以他入睡作结。" }], ...extra,
   });
   return service.normalizeAssessment(output, content);
 }
@@ -179,8 +189,8 @@ test("fresh prompt has a full compact state example, relevant dimensions only, a
   const rendered = prompt.render({ chapterId: "c2", chapterOrder: 2, novelTitle: "武侠", chapterTitle: "解穴", content: "正文", expectedSceneKeys: ["s"] }, {});
   assert.match(String(rendered[0].content), /通常1-2项，不要求每次列齐五类/);
   assert.match(String(rendered[0].content), /planned_contract只能说明计划/);
-  assert.equal(causal.acceptanceOutputBudget(3), 8832);
-  assert.equal(causal.acceptanceOutputBudget(100), 16512);
+  assert.equal(causal.acceptanceOutputBudget(3), 10368);
+  assert.equal(causal.acceptanceOutputBudget(100), 18048);
 });
 
 test("uniform prompt input carries only actual prior prose with exact chapter IDs", () => {

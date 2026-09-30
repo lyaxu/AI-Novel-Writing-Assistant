@@ -14,6 +14,7 @@ import {
   chapterPlanningHandoffStatusSchema,
   chapterTaskSheetQualityIssueSchema,
   chapterPlanningIssueBasisSchema,
+  chapterNarrativeProgressionChecksSchema,
 } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import type { PromptAsset } from "../../../core/promptTypes";
 import { buildChapterEvidenceIndex } from "./evidence/chapterEvidence";
@@ -21,6 +22,7 @@ import { projectValidatedIssueChecks } from "./evidence/issueCheckProjection";
 import { newIssueContextEvidenceIndex, validateNewIssueEvidence } from "./evidence/newIssueEvidence";
 import { planningPromiseEvidenceContext, validatePlanningPromiseEvidence } from "./evidence/planningPromiseEvidence";
 import { buildPrimaryProseCitationCatalog } from "./evidence/primaryProseCitationCatalog";
+import { narrativeProgressionPriorEvidenceIndex, validateNarrativeProgressionEvidence } from "./evidence/narrativeProgressionEvidence";
 
 export interface ChapterTaskSheetQualityPromptInput {
   candidate: ChapterExecutionContractQualityCandidate;
@@ -104,7 +106,11 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "如果存在问题，给出面向自动修复器的具体 repairGuidance。",
     "",
     "输出严格 JSON，不要 Markdown、注释、解释或额外字段。",
-    "顶层只能输出 verdict、safeToSync、loadRisk、recommendedHandling、summary、issues、repairGuidance、confidence、issueChecks、promiseChecks、refinements。refinements必填，为最多8条500字以内的可选润色说明，没有则[]。",
+    "顶层只能输出 verdict、safeToSync、loadRisk、recommendedHandling、summary、issues、repairGuidance、confidence、issueChecks、promiseChecks、progressionChecks、refinements。refinements必填，为最多8条500字以内的可选润色说明，没有则[]。",
+    "修复方向也必须遵守前章结束时的最新状态，不可拿前章中途曾拥有的钱、物、身份或已失效条件继续使用。识别重复后，不能只建议换人、换地点或再做一次；应明确新动作如何改变结果，并检查需要的资源仍存在。新任务、新诱因或新倒计时本身不自动证明旧目标得到执行：核对实际尝试和后果；若仅接到任务后再次出发、主要篇幅仍重复铺垫，不能据此将目标承接判为有效。合理延后须有与该目标相关的具体阻力或主动取舍。",
+    "progressionChecks必填且恰好三条，每维一次：event_repetition审查是否换场景重复同一受压/奔逃/办事；knowledge_repetition审查是否把前文已知再当新发现；prior_goal_followthrough审查前章已经选择或开始的行动，本章是否有执行、阻力后果或有理由的改变，而非再次决定同一件事。只能依据已提供前文正文判断既成事实，不能从旧计划或压缩事实反推。",
+    "每条progressionChecks只含dimension、status、candidateEvidence、priorEvidence、explanation、issueId、repairHint。candidateEvidence引用当前计划1-2条准确原文，priorEvidence引用progressionPriorEvidenceIndex中前章正文0-2条准确原文（可从正文目录复制，仍用规范content路径）；explanation在400字以内对照说明事件/知识/目标承接的净变化或重复功能，不能只说有推进。status为effective（有具体变化）、justified_repetition（重复有新的代价、线索、关系、认识或明确回顾功能）、stalled（有前文证据表明实质空转）、insufficient_context（缺少足以比较的前文）。首章或仅有未来计划而无前文正文时用insufficient_context，不因缺上下文自动阻塞，不编造历史。",
+    "stalled必须在issues内给出同一问题的证据basis，并用issueId精确关联；repairHint写300字以内的可执行修正方向，同时保持repairable或unusable、safeToSync=false、repair_contract或确有范围冲突时replan_window，走已有规划修复通道。其他状态issueId=null，无需修正则repairHint为空。允许安静的关系推进、旧线索的新解释、必要回顾和合理延迟；不按题材或固定章数强制高潮、胜利、反转，不因表面动作相似就判停滞，也不靠新增人物/阴谋/受难掩盖重复。",
     "issueChecks每项包含issueId、status、candidateEvidence（最多3个{sourcePath,quote}）、explanation（400字以内）。sourcePath须选candidateEvidenceIndex真实叶路径；quote是该值中240字以内连续准确原文，不带标签、不拼接字段。无可引用原文用空数组，不伪造。issueChecks须完整覆盖全部previousIssues，不受新问题上限限制。issues最多8项普通问题加contract_overloaded、selected_direction_drift两项，不重复堆放历史问题。",
     "verdict 只能使用 usable、repairable、unusable。",
     "loadRisk 只能使用 normal、overloaded。",
@@ -146,7 +152,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   AiChapterTaskSheetQualityAssessment
 > = {
   id: "novel.volume.chapter_task_sheet_quality",
-  version: "v13",
+  version: "v14",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -157,6 +163,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
     issues: z.array(chapterTaskSheetQualityIssueSchema.extend({ basis: chapterPlanningIssueBasisSchema })).max(10)
       .refine(issues => issues.filter(issue => !["contract_overloaded", "selected_direction_drift"].includes(issue.id)).length <= 8),
     promiseChecks: z.array(chapterPlanningPromiseCheckSchema.extend({ handoffStatus: chapterPlanningHandoffStatusSchema })).max(10),
+    progressionChecks: chapterNarrativeProgressionChecksSchema,
     issueChecks: z.array(chapterPlanningIssueCheckSchema.extend({
       candidateEvidence: z.array(chapterPlanningEvidenceQuoteSchema).max(3),
     })),
@@ -181,6 +188,8 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
       JSON.stringify([...planningPromiseEvidenceContext(input.reviewContextJson).contextIndex.leaves.keys()]),
       "newIssueContextEvidenceIndex (read-only source leaves for basis.contextEvidence; plans are not written facts):",
       JSON.stringify([...newIssueContextEvidenceIndex(input.reviewContextJson).leaves.keys()]),
+      "progressionPriorEvidenceIndex (only these earlier primary prose leaves may establish prior events or knowledge):",
+      JSON.stringify([...narrativeProgressionPriorEvidenceIndex(input.reviewContextJson, input.candidate.chapterOrder).leaves.keys()]),
       "primaryProseCitationCatalog (all supplied prose, exact contiguous excerpts; no character omitted):",
       "每个source的sourcePath才是引用路径；从其excerpts.quote复制连续原文（最多240字），可缩短或跨相邻段截取。start仅为原文位置，不是sourcePath；禁止引用目录/excerpts路径或DISPLAY REFERENCE占位文字。",
       "authority=written_prose_not_planning是正文原文；reviewContext里的compressedFacts.authority=secondary_not_proof只是辅助索引。不得把压缩事实text填到正文content路径，也不能把摘要改成正文引文。需证明已发生动作时优先引用此目录的准确正文，不拿未来计划或摘要替代。",
@@ -200,6 +209,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
     validatePlanningPromiseEvidence(output.promiseChecks ?? [], input.candidate, input.reviewContextJson);
     const projected = projectValidatedIssueChecks(output, input.candidate, input.previousIssues);
     validateNewIssueEvidence(output, input.candidate, input.previousIssues, input.reviewContextJson);
+    validateNarrativeProgressionEvidence(projected, input.candidate, input.reviewContextJson);
     return projected;
   },
 };

@@ -6,6 +6,8 @@ import { NOVEL_PROMPT_BUDGETS } from "./promptBudgetProfiles";
 import { CHAPTER_PROSE_QUALITY_AUDIT_RULES } from "@ai-novel/shared/types/chapterProseContract";
 import { actionStateCheckSchema, sceneCausalityVerdictSchema } from "@ai-novel/shared/types/novel/sceneCausality";
 import { ACTION_STATE_AUDIT_RULES, reconcileSceneActionVerdicts, validateActionStateEvidence } from "./acceptance/actionStateEvidence";
+import { chapterProgressionCheckSchema } from "@ai-novel/shared/types/novel/progression/index";
+import { CHAPTER_PROGRESSION_AUDIT_RULES, validateProgressionEvidence } from "./acceptance/progressionEvidence";
 
 export const chapterAcceptanceIssueCategorySchema = z.enum([
   "continuity",
@@ -184,6 +186,8 @@ export const chapterAcceptanceAssessmentSchema = z.object({
   sceneCausalityVerdicts: z.array(sceneCausalityVerdictSchema).max(8).optional(),
   actionStateChecks: z.array(actionStateCheckSchema).max(8).optional(),
   actionStateAuditIssues: z.array(z.string()).optional(),
+  progressionChecks: z.array(chapterProgressionCheckSchema).max(3).optional(),
+  progressionAuditIssues: z.array(z.string()).optional(),
   blockingIssues: z.array(z.object({
     severity: z.enum(["low", "medium", "high", "critical"]),
     category: z.preprocess(normalizeAcceptanceCategory, chapterAcceptanceIssueCategorySchema),
@@ -227,9 +231,10 @@ export const chapterAcceptanceAssessmentSchema = z.object({
 export type ChapterAcceptanceAssessmentOutput = z.infer<typeof chapterAcceptanceAssessmentSchema>;
 
 /** New model output must explicitly report evidence; old persisted assessments remain readable. */
-export const generatedChapterAcceptanceAssessmentSchema = chapterAcceptanceAssessmentSchema.omit({ actionStateAuditIssues: true }).extend({
+export const generatedChapterAcceptanceAssessmentSchema = chapterAcceptanceAssessmentSchema.omit({ actionStateAuditIssues: true, progressionAuditIssues: true }).extend({
   sceneCausalityVerdicts: z.array(sceneCausalityVerdictSchema).max(8),
   actionStateChecks: z.array(actionStateCheckSchema.omit({ validationIssues: true })).min(1).max(8),
+  progressionChecks: z.array(chapterProgressionCheckSchema.omit({ validationIssues: true })).length(3),
 });
 
 export interface ChapterAcceptancePromptInput {
@@ -255,6 +260,11 @@ const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
   },
   summary: "本章主线可以成立，但结尾钩子和中段推进需要轻修后再继续。",
   sceneCausalityVerdicts: [],
+  progressionChecks: [
+    { dimension: "event_repetition", status: "progressed", priorState: "等待她回应合同", actualChange: "知情后拒绝签字", newConsequence: "合作未能成立", previousEvidence: [], currentEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她把笔放下，没有签字。" }], explanation: "本章拒绝形成实际结果，而非再次决定要考虑合同。", repairSuggestion: "" },
+    { dimension: "knowledge_repetition", status: "progressed", priorState: "未得知具体欠款条款", actualChange: "读完欠款条款后改变合作意愿", newConsequence: "拒绝承担欠款", previousEvidence: [], currentEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她读完了欠款条款。" }], explanation: "信息进入本次选择，不仅重复背景。", repairSuggestion: "" },
+    { dimension: "prior_goal_followthrough", status: "insufficient_evidence", priorState: "未提供前章原文", actualChange: "当前有拒绝行动", newConsequence: "", previousEvidence: [], currentEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她把笔放下，没有签字。" }], explanation: "不能凭计划认证前章曾作出的决定。", repairSuggestion: "" },
+  ],
   actionStateChecks: [{
     sceneKey: "chapter", actor: "她", action: "拒绝签字", actionEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她把笔放下，没有签字。" }],
     states: [{ dimension: "knowledge", entity: "她对欠款的知情", before: "已经读到欠款条款", requiredForAction: "了解合同条款", after: "知情但拒绝承担欠款",
@@ -307,7 +317,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ChapterAcceptanceAssessmentOutput
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v4",
+  version: "v5",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -353,10 +363,13 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       throw new Error(`sceneCausalityVerdicts 必须逐一覆盖指定场景，不得缺漏或重复：${expected.join(", ") || "无；返回空数组"}`);
     }
     const audit = validateActionStateEvidence(output.actionStateChecks ?? [], input);
+    const progression = validateProgressionEvidence(output.progressionChecks ?? [], input);
     return {
       ...output,
       actionStateChecks: audit.checks,
       actionStateAuditIssues: audit.coverageIssues,
+      progressionChecks: progression.checks,
+      progressionAuditIssues: progression.coverageIssues,
       sceneCausalityVerdicts: reconcileSceneActionVerdicts(output.sceneCausalityVerdicts ?? [], audit.checks).map((row) =>
         row.verdict === "earned" && audit.coverageIssues.some((issue) => issue.endsWith(`:${row.sceneKey}`))
           ? { ...row, verdict: "insufficient_evidence" as const, explanation: "关键行动状态核验缺失或重复，不能认证因果已成立。" }
@@ -394,6 +407,8 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       "21. 先给逐场证据结论，再汇总分数。unearned/contradicted 必须进入 blockingIssues 和可执行的 repairDirectives；insufficient_evidence 必须保留可追踪风险，不能因总分高而消失。局部缺口优先 repairable/continue_with_risk，遵守既有继续策略，不自行升级为全局停止。",
       "关键行动状态审查：",
       ...ACTION_STATE_AUDIT_RULES,
+      "前后章实际推进审查：",
+      ...CHAPTER_PROGRESSION_AUDIT_RULES,
       "正文退化检测边界：",
       ...CHAPTER_PROSE_QUALITY_AUDIT_RULES.map((rule, index) => `${index + 1}. ${rule}`),
     ].join("\n")),
