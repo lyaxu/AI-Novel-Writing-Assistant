@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { chapterPayoffDecisionsSchema, type ChapterPayoffDecision } from "@ai-novel/shared/types/novel/payoffPlanning";
+export { buildPayoffPlanningEvidenceBlock } from "./context";
 
 type Contract = Partial<Record<"expectation" | "taskSheet" | "sceneCards" | "hook" | "mustAvoid", string | null>>;
 
@@ -30,11 +31,16 @@ export function buildPayoffEvidenceHash(evidence: unknown): string {
   return createHash("sha256").update(JSON.stringify(evidence)).digest("hex");
 }
 
-export function validateChapterPayoffDecisions(input: {
-  decisions: unknown; contract: Contract;
+export interface ChapterPayoffValidationInput {
+  contract: Contract;
   candidates: Array<{ ledgerKey: string; currentStatus: string; targetEndChapterOrder?: number | null }>;
   chapterOrder: number; planningWindow: unknown;
-}): ChapterPayoffDecision[] {
+}
+
+export function validateChapterPayoffDecisions(
+  input: ChapterPayoffValidationInput & { decisions: unknown },
+  options: { allowReplan?: boolean } = {},
+): ChapterPayoffDecision[] {
   const decisions = chapterPayoffDecisionsSchema.parse(input.decisions);
   const seen = new Set<string>();
   for (const decision of decisions) {
@@ -49,19 +55,23 @@ export function validateChapterPayoffDecisions(input: {
       throw new Error(`Unpaid due payoff requires a concrete follow-up even when applying pressure: ${decision.ledgerKey}`);
     }
     if (!input.contract[decision.contractEvidence.sourcePath]?.includes(decision.contractEvidence.quote)) {
-      throw new Error(`Payoff decision cites absent current chapter contract evidence: ${decision.ledgerKey}`);
+      throw new Error(`Payoff decision cites absent current chapter contract evidence: ${decision.ledgerKey}. Copy one continuous verbatim quote from ${decision.contractEvidence.sourcePath}; preserve numbering and punctuation, never join separate clauses.`);
     }
-    if (decision.followUp && (decision.followUp.chapterOrder <= input.chapterOrder
-      || !stringLeaves(findFutureChapter(input.planningWindow, decision.followUp.chapterOrder))
-        .some((leaf) => leaf.includes(decision.followUp!.planningQuote)))) {
-      throw new Error(`Payoff follow-up must cite a supplied future planning target: ${decision.ledgerKey}`);
+    if (decision.followUp) {
+      const targets = findFutureChapter(input.planningWindow, decision.followUp.chapterOrder);
+      if (decision.followUp.chapterOrder <= input.chapterOrder || !targets.length) {
+        throw new Error(`Payoff follow-up must cite a supplied future planning target: ${decision.ledgerKey}. Chapter ${decision.followUp.chapterOrder} is not a supplied future chapter in planningWindow. A ledger target date is not an existing chapter plan. ${due ? "This payoff is due; do not remove its required follow-up while keeping seed/touch/pressure. Choose a valid authorized decision or requires_replan." : "This payoff is not due. For seed/touch/pressure an optional followUp may be null; do not invent a future chapter. Defer and partial_reveal still require real follow-up evidence."}`);
+      }
+      if (!stringLeaves(targets).some((leaf) => leaf.includes(decision.followUp!.planningQuote))) {
+        throw new Error(`Payoff follow-up must cite a supplied future planning target: ${decision.ledgerKey}. Chapter ${decision.followUp.chapterOrder} exists, but planningQuote is not a continuous verbatim quote from that chapter. Copy from planningWindow, not the ledger or book summary.`);
+      }
     }
   }
   if (input.candidates.some((item) => !seen.has(item.ledgerKey))) {
     throw new Error("Payoff decisions must cover every supplied bounded candidate, including explicit out_of_scope decisions.");
   }
   const replan = decisions.filter((decision) => decision.operation === "requires_replan");
-  if (replan.length) throw new PayoffPlanningReplanRequiredError(replan);
+  if (replan.length && !options.allowReplan) throw new PayoffPlanningReplanRequiredError(replan);
   return decisions;
 }
 

@@ -3,9 +3,11 @@ import type { StoryPlanLevel } from "@ai-novel/shared/types/novel";
 import type { PromptAsset } from "../../core/promptTypes";
 import { normalizePlannerOutput, type PlannerOutput } from "../../../services/planner/plannerOutputNormalization";
 import { plannerOutputSchema } from "../../../services/planner/plannerSchemas";
+import { validateChapterPayoffDecisions, type ChapterPayoffValidationInput } from "../../../services/planner/payoff";
 
 interface PlannerPlanPromptInput {
   scopeLabel: string;
+  payoffValidation?: ChapterPayoffValidationInput;
 }
 
 function buildPlannerPlanAsset(input: {
@@ -99,10 +101,11 @@ function buildPlannerPlanAsset(input: {
         "5. mustAdvance 和 mustPreserve 必须简短、具体、可直接用于后续写作。",
         ...(input.planLevel === "chapter" ? [
           "6. reference_candidates_not_chapter_obligations中的全局冲突和人物阶段只是待判断背景。结合已写正文、当前章目标及明确执行合同，选择本章相关事项并具体化后才写入mustAdvance/mustPreserve；不直接抄内部问题代码或远期阶段标签。未选背景不等于本章缺项，用户和当前章的明确硬约束仍必须遵守。participants只包含本章实际需要的参与者，不为凑人数添加全书角色，也不强制每章出现主角。",
-          "6a. 章级输出必须含payoffDecisions数组，没有提供候选时可为空。对payoffCandidates结合当前章合同、前文与未来章节规划决定seed/touch/pressure/partial_reveal/payoff/forbid/defer/out_of_scope/requires_replan，不按逾期状态机械施压或强制兑现。每个提供的bounded payoffCandidates须恰好一项决定，只有候选为空时可空数组。无关候选用out_of_scope并依据当前合同解释无关，不强行塞入本章；不得把本章相关到期回报伪装无关。每项含ledgerKey、operation、reason、authorizedScope及contractEvidence:{sourcePath:expectation|taskSheet|sceneCards|hook|mustAvoid,quote:当前合同原文}、followUp:null。defer必须提供followUp；到期/逾期候选选择seed/touch/pressure同样未兑现，也必须提供followUp:{chapterOrder:后续明确章序,expectedChange:具体兑现变化,planningQuote:未来规划原文}，说明当前为何不兑现以及如何承接，禁止空泛后面再说。若当前合同禁止回报且未来规划没有合法承接落点，用requires_replan和明确reason，followUp为null；不能编造未来引文或用pressure无期限拖延。partial_reveal须另填remainingObligation与有未来规划原文的followUp，明确余下交付，不能不断给一点作为拖延。partial_reveal/payoff说明本章可兑现多少，不以旧账本日期突破合同范围、保护信息或世界设定。获得能力可以是书已确认的突然获得，不强制苦练、额外付费或悲壮代价。",
+          "6a. 章级输出必须含payoffDecisions数组，没有提供候选时可为空。对payoffCandidates结合当前章合同、前文与未来章节规划决定seed/touch/pressure/partial_reveal/payoff/forbid/defer/out_of_scope/requires_replan，不按逾期状态机械施压或强制兑现。每个提供的bounded payoffCandidates须恰好一项决定，只有候选为空时可空数组。无关候选用out_of_scope并依据当前合同解释无关，不强行塞入本章；不得把本章相关到期回报伪装无关。每项含ledgerKey、operation、reason、authorizedScope及contractEvidence:{sourcePath:expectation|taskSheet|sceneCards|hook|mustAvoid,quote:当前合同原文}、followUp:null。payoff_planning_evidence块是回报引用的唯一权威，不使用摘要替代。quote与planningQuote必须是该块对应来源中一段连续、逐字一致的原文，保留编号、换行与标点；可以只摘短句，不得拼接不同条目、删除中间编号、改写或修改句号。defer必须提供followUp；到期/逾期候选选择seed/touch/pressure同样未兑现，也必须提供followUp:{chapterOrder:后续明确章序,expectedChange:具体兑现变化,planningQuote:未来规划原文}，说明当前为何不兑现以及如何承接，禁止空泛后面再说。若当前合同禁止回报且未来规划没有合法承接落点，用requires_replan和明确reason，followUp为null；不能编造未来引文或用pressure无期限拖延。partial_reveal须另填remainingObligation与有未来规划原文的followUp，明确余下交付，不能不断给一点作为拖延。partial_reveal/payoff说明本章可兑现多少，不以旧账本日期突破合同范围、保护信息或世界设定。获得能力可以是书已确认的突然获得，不强制苦练、额外付费或悲壮代价。",
         ] : []),
         "",
         "字段要求：",
+        ...(input.planLevel === "chapter" ? ["followUp只可指向planningWindow里实际提供的未来chapterOrder，账本的目标日期不代表该章已拆出。尚未到期且仅seed/touch/pressure的铺垫可以followUp:null，不为完整性虚构后续安排；到期未兑、defer、partial_reveal仍须实际承接证据。"] : []),
         ...(input.planLevel === "chapter" ? ["回报与秘密分开判断：可以本章获得奖励而暂不揭示奖励来源。账本提及某个秘密不等于整个回报禁止推进；forbid只用于明确禁止的事项，在authorizedScope写清该事项。受保护信息仍须遵守，不用‘保密’取消已授权的收益。"] : []),
         ...(input.planLevel === "chapter" ? ["回报与秘密分开判断：可以本章获得奖励而暂不揭示奖励来源。账本提及某个秘密不等于整个回报禁止推进；forbid只用于明确禁止的事项，在authorizedScope写清该事项。受保护信息仍须遵守，不用‘保密’取消已授权的收益。"] : []),
         "1. title：写当前层级规划条目的标题，简洁明确，不要占位词。",
@@ -151,7 +154,7 @@ function buildPlannerPlanAsset(input: {
 
       return [new SystemMessage(systemPrompt), new HumanMessage(userPrompt)];
     },
-    postValidate: (output) => {
+    postValidate: (output, promptInput) => {
       const normalized = normalizePlannerOutput(output);
 
       if (!normalized.title?.trim()) {
@@ -177,6 +180,9 @@ function buildPlannerPlanAsset(input: {
       if (input.planLevel === "chapter") {
         if (!Array.isArray(normalized.payoffDecisions)) {
           throw new Error("Chapter planner output is missing payoffDecisions.");
+        }
+        if (promptInput?.payoffValidation) {
+          validateChapterPayoffDecisions({ ...promptInput.payoffValidation, decisions: normalized.payoffDecisions }, { allowReplan: true });
         }
         if (!normalized.planRole) {
           throw new Error("Chapter planner output is missing planRole.");
@@ -235,7 +241,7 @@ export const plannerArcPlanPrompt = buildPlannerPlanAsset({
 
 export const plannerChapterPlanPrompt = buildPlannerPlanAsset({
   id: "planner.chapter.plan",
-  version: "v3",
+  version: "v4",
   planLevel: "chapter",
   includeScenes: true,
   maxTokensBudget: 2400,

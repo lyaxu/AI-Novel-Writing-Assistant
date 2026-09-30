@@ -37,7 +37,7 @@ import {
   type PlannerStoryModeRow,
 } from "./plannerContextHelpers";
 import { resolveChapterPlanParticipants } from "./plannerParticipantResolution";
-import { buildPayoffEvidenceHash, readCurrentPayoffDecisions, validateChapterPayoffDecisions } from "./payoff";
+import { buildPayoffEvidenceHash, buildPayoffPlanningEvidenceBlock, readCurrentPayoffDecisions, validateChapterPayoffDecisions, type ChapterPayoffValidationInput } from "./payoff";
 import { loadPlanningWrittenEvidence } from "../novel/volume/writtenEvidence";
 import { plannerPlanQueryService } from "./query";
 import { plannerReplanService, type ReplanInput } from "./replan";
@@ -511,6 +511,18 @@ export class PlannerService {
         ].filter(Boolean).join("\n")
       : "无";
     const payoffWrittenEvidence = await loadPlanningWrittenEvidence(novelId, chapter.order);
+    const payoffValidation: ChapterPayoffValidationInput = {
+      contract: { expectation: chapter.expectation, taskSheet: chapter.taskSheet, sceneCards: chapter.sceneCards,
+        hook: chapter.hook, mustAvoid: chapter.mustAvoid },
+      candidates: buildChapterPlanningReferenceCandidates(resolvedStateDrivenContext.snapshot).payoffCandidates,
+      chapterOrder: chapter.order,
+      planningWindow: plannerVolumes.map((volume) => ({
+        title: volume.title,
+        chapters: volume.chapters.filter((item) => item.chapterOrder > chapter.order).map((item) => ({
+          chapterOrder: item.chapterOrder, title: item.title, summary: item.summary,
+        })),
+      })),
+    };
     const contextBlocks = buildChapterPlanContextBlocks({
       novelTitle: novel.title,
       description: novel.description,
@@ -548,11 +560,8 @@ export class PlannerService {
       plotBeats: plotBeats.map((item) => `${item.chapterOrder ?? "-"} ${item.title} ${item.content}`).join("\n") || "无",
       stateSnapshot: [
         buildStateContextBlockFromCanonical(resolvedStateDrivenContext.snapshot),
-        JSON.stringify(buildChapterPlanningReferenceCandidates(resolvedStateDrivenContext.snapshot)),
-        JSON.stringify({ writtenEvidence: payoffWrittenEvidence, currentContract: {
-          expectation: chapter.expectation, taskSheet: chapter.taskSheet, sceneCards: chapter.sceneCards,
-          hook: chapter.hook, mustAvoid: chapter.mustAvoid,
-        } }),
+        JSON.stringify({ ...buildChapterPlanningReferenceCandidates(resolvedStateDrivenContext.snapshot),
+          payoffCandidates: "see payoff_planning_evidence" }),
       ].join("\n\n"),
       openAuditIssues: openAuditIssues.join("\n") || "无",
       recentDecisions: recentDecisions.map((item) => `${item.category}/${item.importance}: ${item.content}`).join("\n") || "无",
@@ -580,11 +589,13 @@ export class PlannerService {
       payoffLedgerSummary: buildPlannerPayoffLedgerContext(payoffLedger, chapter.order),
       storyModeBlock,
     });
+    contextBlocks.push(buildPayoffPlanningEvidenceBlock(payoffValidation, payoffWrittenEvidence));
     const output = await invokePlannerLLM({
       options,
       scopeLabel: `章节规划：第${chapter.order}章《${chapter.title}》`,
       planLevel: "chapter",
       contextBlocks,
+      payoffValidation,
     });
     const metadata = normalizePlanMetadata("chapter", output, {
       ...defaultMetadata,
@@ -599,11 +610,8 @@ export class PlannerService {
       chapterOrder: chapter.order,
     });
     const payoffDecisions = validateChapterPayoffDecisions({
+      ...payoffValidation,
       decisions: output.payoffDecisions,
-      contract: chapter,
-      candidates: buildChapterPlanningReferenceCandidates(resolvedStateDrivenContext.snapshot).payoffCandidates,
-      chapterOrder: chapter.order,
-      planningWindow: plannerVolumes,
     });
 
     return persistStoryPlan({

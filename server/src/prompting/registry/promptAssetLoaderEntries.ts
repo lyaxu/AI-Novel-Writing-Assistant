@@ -210,7 +210,7 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/planner/plannerPlan.prompts").plannerArcPlanPrompt as UnknownPromptAsset,
   },
   {
-    key: "planner.chapter.plan@v3",
+    key: "planner.chapter.plan@v4",
     load: () => require("../prompts/planner/plannerPlan.prompts").plannerChapterPlanPrompt as UnknownPromptAsset,
   },
   {

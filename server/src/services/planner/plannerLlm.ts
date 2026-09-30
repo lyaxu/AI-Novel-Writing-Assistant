@@ -3,6 +3,7 @@ import type { StoryPlanLevel } from "@ai-novel/shared/types/novel";
 import { runStructuredPrompt } from "../../prompting/core/promptRunner";
 import type { PromptContextBlock } from "../../prompting/core/promptTypes";
 import { normalizePlannerOutput, type PlannerOutput } from "./plannerOutputNormalization";
+import type { ChapterPayoffValidationInput } from "./payoff";
 import {
   plannerArcPlanPrompt,
   plannerBookPlanPrompt,
@@ -20,6 +21,7 @@ export async function invokePlannerLLM(input: {
   scopeLabel: string;
   planLevel: StoryPlanLevel;
   contextBlocks: PromptContextBlock[];
+  payoffValidation?: ChapterPayoffValidationInput;
 }): Promise<PlannerOutput> {
   const asset = input.planLevel === "book"
     ? plannerBookPlanPrompt
@@ -30,6 +32,7 @@ export async function invokePlannerLLM(input: {
     asset,
     promptInput: {
       scopeLabel: input.scopeLabel,
+      payoffValidation: input.payoffValidation,
     },
     contextBlocks: input.contextBlocks,
     options: {
