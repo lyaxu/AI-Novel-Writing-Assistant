@@ -4,6 +4,8 @@ import { buildCompressionLog } from "../../../prompting/core/contextBudget";
 import { prisma } from "../../../db/prisma";
 import { ragServices } from "../../rag";
 import { plannerService } from "../../planner/PlannerService";
+import { buildPayoffEvidenceHash, readCurrentPayoffDecisions } from "../../planner/payoff";
+import { buildChapterExecutionContractHash } from "../../planner/plannerPersistence";
 import { buildChapterRagQuery } from "../NovelReferenceService";
 import { NovelContinuationService } from "../NovelContinuationService";
 import { parseJsonStringArray } from "../novelP0Utils";
@@ -264,6 +266,10 @@ export class GenerationContextAssembler {
     const resolvedStateDrivenContext = await contextAssemblyService.build({
       novelId,
       chapterId,
+      payoffDecisions: readCurrentPayoffDecisions(ensuredPlan?.rawPlanJson, {
+        contractHash: buildChapterExecutionContractHash(chapter),
+        evidenceHash: buildPayoffEvidenceHash(writtenEvidence),
+      }) ?? [],
       chapterOrder: chapter.order,
       includeCurrentChapterState: false,
       policy: request.controlPolicy,

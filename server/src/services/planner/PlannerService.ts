@@ -37,6 +37,8 @@ import {
   type PlannerStoryModeRow,
 } from "./plannerContextHelpers";
 import { resolveChapterPlanParticipants } from "./plannerParticipantResolution";
+import { buildPayoffEvidenceHash, readCurrentPayoffDecisions, validateChapterPayoffDecisions } from "./payoff";
+import { loadPlanningWrittenEvidence } from "../novel/volume/writtenEvidence";
 import { plannerPlanQueryService } from "./query";
 import { plannerReplanService, type ReplanInput } from "./replan";
 import {
@@ -101,10 +103,12 @@ export class PlannerService {
 
   async ensureChapterPlan(novelId: string, chapterId: string, options: PlannerOptions = {}) {
     const existing = await this.getChapterPlan(novelId, chapterId);
-    if (existing && existing.scenes.length > 0) {
+    if (existing) {
       const chapter = await prisma.chapter.findFirst({
         where: { id: chapterId, novelId },
         select: {
+          order: true,
+          content: true,
           expectation: true,
           targetWordCount: true,
           conflictLevel: true,
@@ -115,9 +119,13 @@ export class PlannerService {
           hook: true,
         },
       });
+      // A read/repair request for saved prose must not silently regenerate its plan.
+      if (chapter?.content?.trim()) return existing;
       const currentContractHash = chapter ? buildChapterExecutionContractHash(chapter) : null;
       const plannedContractHash = readPlanExecutionContractHash(existing.rawPlanJson);
-      if (currentContractHash && plannedContractHash === currentContractHash) {
+      const evidenceHash = chapter ? buildPayoffEvidenceHash(await loadPlanningWrittenEvidence(novelId, chapter.order)) : null;
+      if (existing.scenes.length > 0 && currentContractHash && plannedContractHash === currentContractHash && evidenceHash
+        && readCurrentPayoffDecisions(existing.rawPlanJson, { contractHash: currentContractHash, evidenceHash }) !== null) {
         return existing;
       }
     }
@@ -502,6 +510,7 @@ export class PlannerService {
             : "",
         ].filter(Boolean).join("\n")
       : "无";
+    const payoffWrittenEvidence = await loadPlanningWrittenEvidence(novelId, chapter.order);
     const contextBlocks = buildChapterPlanContextBlocks({
       novelTitle: novel.title,
       description: novel.description,
@@ -540,6 +549,10 @@ export class PlannerService {
       stateSnapshot: [
         buildStateContextBlockFromCanonical(resolvedStateDrivenContext.snapshot),
         JSON.stringify(buildChapterPlanningReferenceCandidates(resolvedStateDrivenContext.snapshot)),
+        JSON.stringify({ writtenEvidence: payoffWrittenEvidence, currentContract: {
+          expectation: chapter.expectation, taskSheet: chapter.taskSheet, sceneCards: chapter.sceneCards,
+          hook: chapter.hook, mustAvoid: chapter.mustAvoid,
+        } }),
       ].join("\n\n"),
       openAuditIssues: openAuditIssues.join("\n") || "无",
       recentDecisions: recentDecisions.map((item) => `${item.category}/${item.importance}: ${item.content}`).join("\n") || "无",
@@ -585,10 +598,19 @@ export class PlannerService {
       characterDynamicsOverview,
       chapterOrder: chapter.order,
     });
+    const payoffDecisions = validateChapterPayoffDecisions({
+      decisions: output.payoffDecisions,
+      contract: chapter,
+      candidates: buildChapterPlanningReferenceCandidates(resolvedStateDrivenContext.snapshot).payoffCandidates,
+      chapterOrder: chapter.order,
+      planningWindow: plannerVolumes,
+    });
 
     return persistStoryPlan({
       novelId,
       chapterId: chapter.id,
+      payoffDecisions,
+      payoffEvidenceHash: buildPayoffEvidenceHash(payoffWrittenEvidence),
       sourceStateSnapshotId: resolvedStateDrivenContext.snapshot.sourceSnapshotId ?? null,
       level: "chapter",
       title: output.title || chapter.title,

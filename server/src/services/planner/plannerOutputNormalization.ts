@@ -1,6 +1,8 @@
 import type { StoryPlanRole } from "@ai-novel/shared/types/novel";
+import { chapterPayoffDecisionsSchema, type ChapterPayoffDecision } from "@ai-novel/shared/types/novel/payoffPlanning";
 
 export interface PlannerOutput {
+  payoffDecisions?: ChapterPayoffDecision[];
   title?: string;
   objective?: string;
   participants?: string[];
@@ -112,6 +114,7 @@ export function normalizePlannerOutput(output: unknown): PlannerOutput {
   const record = output && typeof output === "object" ? output as Record<string, unknown> : {};
   return {
     title: toPlannerOptionalText(record.title) ?? undefined,
+    payoffDecisions: record.payoffDecisions === undefined ? undefined : chapterPayoffDecisionsSchema.parse(record.payoffDecisions),
     objective: pickPlannerOptionalText(record, PLANNER_OBJECTIVE_KEYS) ?? undefined,
     participants: toPlannerStringArray(record.participants),
     reveals: toPlannerStringArray(record.reveals),

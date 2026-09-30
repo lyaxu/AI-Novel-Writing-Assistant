@@ -6,10 +6,13 @@ import { sanitizeCreativeMustAdvanceItems } from "@ai-novel/shared/types/chapter
 import { createHash } from "node:crypto";
 import { prisma } from "../../db/prisma";
 import { enrichStoryPlan } from "./plannerPlanMetadata";
+import type { ChapterPayoffDecision } from "@ai-novel/shared/types/novel/payoffPlanning";
 
 export const STORY_PLAN_PERSISTENCE_TRANSACTION_TIMEOUT_MS = 60_000;
 
 interface PersistPlanInput {
+  payoffDecisions?: ChapterPayoffDecision[];
+  payoffEvidenceHash?: string;
   novelId: string;
   chapterId?: string;
   sourceStateSnapshotId?: string | null;
@@ -203,6 +206,7 @@ export async function persistStoryPlan(input: PersistPlanInput) {
 
   const serializedRawPlan = JSON.stringify({
     ...input,
+    ...(input.payoffDecisions !== undefined ? { payoffDecisionVersion: 1 } : {}),
     status: input.status ?? "draft",
     mustAdvance: sanitizeCreativeMustAdvanceItems(input.mustAdvance),
     mustPreserve: input.mustPreserve,

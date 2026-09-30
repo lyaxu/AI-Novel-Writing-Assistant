@@ -1,4 +1,5 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { CAPABILITY_AUTHORIZATION_RULES } from "./context/capabilityAuthorization";
 import { z } from "zod";
 import type { PromptAsset } from "../../core/promptTypes";
 import { renderSelectedContextBlocks } from "../../core/renderContextBlocks";
@@ -317,7 +318,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ChapterAcceptanceAssessmentOutput
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v5",
+  version: "v6",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -406,6 +407,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       "20. 对 scene_causality 的每个前提对照来源核实，检查建立是否早于使用、人物动机是否支持选择、阻力方回应是否符合其能力和利益、outcomeMechanism 是否实际写出、既有及新增代价是否限制后续行动。没有战斗、没有成功、安静的关系变化均可 earned，关键是其机制成立。",
       "21. 先给逐场证据结论，再汇总分数。unearned/contradicted 必须进入 blockingIssues 和可执行的 repairDirectives；insufficient_evidence 必须保留可追踪风险，不能因总分高而消失。局部缺口优先 repairable/continue_with_risk，遵守既有继续策略，不自行升级为全局停止。",
       "关键行动状态审查：",
+      ...CAPABILITY_AUTHORIZATION_RULES,
       ...ACTION_STATE_AUDIT_RULES,
       "前后章实际推进审查：",
       ...CHAPTER_PROGRESSION_AUDIT_RULES,

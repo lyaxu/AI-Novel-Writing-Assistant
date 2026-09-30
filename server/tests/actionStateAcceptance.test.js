@@ -30,6 +30,7 @@ const prompts = source("../src/prompting/prompts/novel/chapterAcceptance.prompts
   "@ai-novel/shared/types/chapterProseContract": { CHAPTER_PROSE_QUALITY_AUDIT_RULES: [] },
   "../../core/renderContextBlocks": { renderSelectedContextBlocks: () => "已写正文" },
   "./promptBudgetProfiles": { NOVEL_PROMPT_BUDGETS: { chapterAcceptance: 1200 } },
+  "./context/capabilityAuthorization": source("../src/prompting/prompts/novel/context/capabilityAuthorization.ts"),
   "./acceptance/actionStateEvidence": evidence,
   "@ai-novel/shared/types/novel/progression/index": progressionSchema,
   "./acceptance/progressionEvidence": progressionEvidence,
@@ -95,6 +96,41 @@ test("a later release cannot serve as the earlier enabling transition", () => {
   assert.equal(result.actionStateChecks[0].verdict, "contradicted");
   assert.equal(result.blockingIssues[0].severity, "high");
   assert.notEqual(result.continuePolicy, "pause");
+});
+
+test("authorized instantaneous acquisition inside a key action is not forced to have earlier training or cost", () => {
+  for (const trigger of ["系统赠予满级剑术", "签到抽到御剑能力", "血脉突然觉醒"]) {
+    const before = "他还不会御剑。";
+    const action = `${trigger}，他当即御剑越过深渊。`;
+    const row = check({ action: "御剑越过深渊", actionEvidence: [quote(action)],
+      states: [{ dimension: "ability", entity: "御剑", before: "不会御剑", requiredForAction: "能御剑", after: "获得能力并越过深渊",
+        beforeEvidence: [quote(before)], afterEvidence: [quote(action)], transitionEvidence: [quote(trigger)],
+        enablingTransitionRequired: true, stateChanged: true, transitionStatus: "established" }],
+      verdict: "earned", explanation: "AI 已核对该赠予/觉醒得到本书设定授权，正文写出触发和生效。" });
+    const result = evaluate(row, before + action);
+    assert.equal(result.actionStateChecks[0].verdict, "earned", trigger);
+  }
+});
+
+test("unwritten acquisition or an explicit contradictory capability remains a repair issue", () => {
+  for (const transitionStatus of ["missing", "contradicted"]) {
+    const row = check({ action: "突然御剑", actionEvidence: [quote("他突然御剑飞走。")], states: [{
+      dimension: "ability", entity: "御剑", before: "不会御剑", requiredForAction: "能御剑", after: "飞走",
+      beforeEvidence: [quote("他还不会御剑。")], afterEvidence: [quote("他突然御剑飞走。")], transitionEvidence: [],
+      enablingTransitionRequired: true, stateChanged: true, transitionStatus,
+    }] });
+    const result = evaluate(row, "他还不会御剑。他突然御剑飞走。");
+    assert.equal(result.actionStateChecks[0].verdict, transitionStatus === "missing" ? "unearned" : "contradicted");
+  }
+});
+
+test("acceptance prompt distinguishes authorized easy power from ungrounded rescue abilities", () => {
+  const rules = source("../src/prompting/prompts/novel/context/capabilityAuthorization.ts").CAPABILITY_AUTHORIZATION_RULES;
+  const text = rules.join("\n");
+  assert.match(text, /突然觉醒、系统赠予、签到抽奖、一夜满级/);
+  assert.match(text, /不得通用地要求苦练、付代价、长铺垫/);
+  assert.match(text, /不授权为眼前解局临时新增具体技能/);
+  assert.match(evidence.ACTION_STATE_AUDIT_RULES.join("\n"), /不额外要求代价、训练或长铺垫/);
 });
 
 test("missing heat and cooking medium are consumed as item-state gaps, not checked by culinary regex", () => {

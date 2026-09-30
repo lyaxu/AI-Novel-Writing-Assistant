@@ -151,9 +151,9 @@ test("prompt registry exposes versioned planning assets", () => {
     "agent.runtime.fallback_answer@v1",
     "agent.runtime.setup_guidance@v1",
     "agent.runtime.setup_ideation@v1",
-    "planner.chapter.plan@v2",
-    "novel.director.candidates@v5",
-    "novel.director.candidate_patch@v4",
+    "planner.chapter.plan@v3",
+    "novel.director.candidates@v6",
+    "novel.director.candidate_patch@v5",
     "novel.director.blueprint@v1",
     "novel.character.castOptions@v3",
     "novel.character.castOptions.repair@v1",
@@ -171,7 +171,7 @@ test("prompt registry exposes versioned planning assets", () => {
     "audit.chapter.full@v3",
     "bookAnalysis.source.note@v1",
     "character.base.skeleton@v1",
-    "novel.continuation.rewrite_similarity@v1",
+    "novel.continuation.rewrite_similarity@v2",
     "novel.draft_optimize.selection@v1",
     "novel.draft_optimize.full@v1",
     "novel.framing.suggest@v1",
@@ -190,7 +190,7 @@ test("prompt registry exposes versioned planning assets", () => {
     promptKey(styleProfileExtractionPrompt),
     promptKey(styleProfileFromBookAnalysisPrompt),
     "style.recommendation@v1",
-    "novel.review.chapter@v3",
+    "novel.review.chapter@v4",
     promptKey(chapterWriterPrompt),
     promptKey(chapterArtifactDeltaPrompt),
     "world.draft.generate@v1",
@@ -213,7 +213,7 @@ test("prompt registry exposes versioned planning assets", () => {
     assert.ok(getRegisteredPromptAsset(id, version), `missing prompt asset ${key}`);
   }
 
-  const chapterAsset = getRegisteredPromptAsset("planner.chapter.plan", "v2");
+  const chapterAsset = getRegisteredPromptAsset("planner.chapter.plan", "v3");
   assert.ok(chapterAsset);
   assert.equal(chapterAsset.taskType, "planner");
 });
@@ -669,8 +669,8 @@ test("chapter writer prompt does not expose scene contract controls", () => {
 
 test("novel main-chain prompt assets declare explicit non-zero context budgets", () => {
   const expectedBudgets = new Map([
-    ["novel.director.candidates@v5", NOVEL_PROMPT_BUDGETS.directorCandidates],
-    ["novel.director.candidate_patch@v4", NOVEL_PROMPT_BUDGETS.directorCandidatePatch],
+    ["novel.director.candidates@v6", NOVEL_PROMPT_BUDGETS.directorCandidates],
+    ["novel.director.candidate_patch@v5", NOVEL_PROMPT_BUDGETS.directorCandidatePatch],
     ["novel.director.blueprint@v1", NOVEL_PROMPT_BUDGETS.directorBlueprint],
     ["novel.story_macro.decomposition@v2", NOVEL_PROMPT_BUDGETS.storyMacroDecomposition],
     ["novel.story_macro.field_regeneration@v2", NOVEL_PROMPT_BUDGETS.storyMacroFieldRegeneration],
@@ -684,8 +684,8 @@ test("novel main-chain prompt assets declare explicit non-zero context budgets",
     ["novel.volume.chapter_task_sheet@v7", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
     ["novel.volume.rebalance.adjacent@v3", NOVEL_PROMPT_BUDGETS.volumeRebalance],
     [promptKey(chapterWriterPrompt), NOVEL_PROMPT_BUDGETS.chapterWriter],
-    ["novel.review.chapter@v3", NOVEL_PROMPT_BUDGETS.chapterReview],
-    ["novel.review.repair@v3", NOVEL_PROMPT_BUDGETS.chapterRepair],
+    ["novel.review.chapter@v4", NOVEL_PROMPT_BUDGETS.chapterReview],
+    ["novel.review.repair@v4", NOVEL_PROMPT_BUDGETS.chapterRepair],
     ["audit.chapter.full@v3", NOVEL_PROMPT_BUDGETS.chapterReview],
   ]);
 
@@ -1519,6 +1519,7 @@ test("runStructuredPrompt retries semantically after postValidate failure", asyn
       data: {
         title: "第 3 章",
         objective: "让主角确认敌人的第一次公开动作",
+        payoffDecisions: [],
         participants: ["林焰", "监察队"],
         reveals: ["敌人已经在城内布局"],
         riskNotes: ["不要把调查写成背景复述"],
@@ -2279,6 +2280,7 @@ test("streamStructuredPrompt can recover with semantic retry after streamed outp
       data: {
         title: "第 3 章",
         objective: "主角确认敌方试探已经开始",
+        payoffDecisions: [],
         participants: ["林焰", "敌方探子"],
         reveals: ["敌人已经渗入城防"],
         riskNotes: ["不要只写调查结果，要保留冲突推进"],

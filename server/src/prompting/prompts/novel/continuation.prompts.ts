@@ -2,6 +2,7 @@
  * @LastEditors: biz
  */
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { CAPABILITY_AUTHORIZATION_RULES } from "./context/capabilityAuthorization";
 import type { PromptAsset } from "../../core/promptTypes";
 
 export interface NovelContinuationRewritePromptInput {
@@ -12,7 +13,7 @@ export interface NovelContinuationRewritePromptInput {
 
 export const novelContinuationRewritePrompt: PromptAsset<NovelContinuationRewritePromptInput, string, string> = {
   id: "novel.continuation.rewrite_similarity",
-  version: "v1",
+  version: "v2",
   taskType: "repair",
   mode: "text",
   language: "zh",
@@ -23,6 +24,7 @@ export const novelContinuationRewritePrompt: PromptAsset<NovelContinuationRewrit
     new SystemMessage([
       "你是长篇小说续写重写编辑。",
       "你的任务是把当前章节重写为一章新的、可直接使用的中文正文，在保持剧情连续性的前提下，显著拉开与相似来源的桥段距离。",
+      ...CAPABILITY_AUTHORIZATION_RULES,
       "",
       "硬规则：",
       "1. 输出必须是简体中文完整章节正文，不要输出解释、注释、分析、标题说明、代码块或任何额外文本。",

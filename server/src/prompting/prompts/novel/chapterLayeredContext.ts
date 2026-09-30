@@ -284,7 +284,6 @@ function buildChapterBoundaryContract(
   const doNotCross = takeUnique([
     compactText(contextPackage.chapter.mustAvoid),
     ...protectedReveals.map((item) => `不得提前揭露：${item}`),
-    ...scenes.flatMap((scene) => scene.forbiddenExpansion ?? []),
     lastScene?.exitState ? `不得越过本章结束态：${lastScene.exitState}` : "",
     contextPackage.chapter.hook ? `不得直接展开钩子之后的后续事件：${contextPackage.chapter.hook}` : "",
   ], 12).filter(Boolean);

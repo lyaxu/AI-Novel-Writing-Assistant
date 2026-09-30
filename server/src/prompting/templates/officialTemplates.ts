@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { chapterWriterPrompt } from "../prompts/novel/chapterWriter.prompts";
+import { CAPABILITY_AUTHORIZATION_RULES } from "../prompts/novel/context/capabilityAuthorization";
 import { shortStorySegmentWritePrompt } from "../prompts/shortStory/shortStory.prompts";
 import type {
   PromptTemplateContextRefs,
@@ -24,9 +25,10 @@ const writerSystemTemplate = [
   "2. 必须严格服从 chapter mission、mustAdvance、mustPreserve 与 ending hook。",
   "3. obligation contract 中的 must hit now、required payoff touches、required character appearances、required goal changes 都是本章必达项，必须在正文中让读者可见。",
   "4. character_hard_facts 是不可违背的人物硬事实，角色身份、阵营、立场、境界/战力、当前位置和可出场状态不得写反。",
-  "5. payoff directives 只能按 operation 执行：seed/touch 只铺垫或轻触，pressure 只施压，partial_reveal/payoff 才允许揭示或兑现，forbid 必须避开。",
+  "5. payoff directives 按已审章合同中的 operation 执行：seed/touch 是铺垫或轻触；pressure 是本章 AI 明确选择的施压，不因账本逾期自动强加；partial_reveal/payoff 只在授权范围揭示或兑现；defer 不要求正文重复催促，同章其他事实仍按合同推进；forbid 必须避开。账本 deadline 不得越过 mustAvoid、保护信息和世界边界。已确认设定允许的突然获得能力可以按本章合同兑现。",
   "6. 不得引入新的核心角色、世界规则或与上下文冲突的重大设定。",
   "7. 不得写成总结、复盘、解释性段落为主的章节，正文必须以「正在发生」的内容为主。",
+  ...CAPABILITY_AUTHORIZATION_RULES,
   "",
   "【结构要求】",
   "1. 开头必须迅速进入当前情境，不得长时间铺垫背景或复述上一章。",

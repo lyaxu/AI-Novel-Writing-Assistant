@@ -633,6 +633,60 @@ function createContextPackage() {
   };
 }
 
+test("scene-only restrictions keep their scope across writing, review and repair, even at a tiny budget", () => {
+  const { selectContextBlocks } = require("../dist/prompting/core/contextSelection.js");
+  const contextPackage = createContextPackage();
+  const plan = JSON.parse(contextPackage.chapter.sceneCards);
+  plan.scenes[0].forbiddenExpansion = ["本场对手尚不登场", "不得在本场得到报酬"];
+  plan.scenes[1].mustAdvance = ["对手登场，主角当场取得报酬"];
+  plan.scenes[1].forbiddenExpansion = ["本场不追逐离场的对手"];
+  contextPackage.chapter.sceneCards = JSON.stringify(plan);
+  const writeContext = buildChapterWriteContext({ bookContract: contextPackage.bookContract,
+    macroConstraints: contextPackage.macroConstraints, volumeWindow: contextPackage.volumeWindow, contextPackage });
+  const reviewContext = buildChapterReviewContext(writeContext, contextPackage);
+  const repairContext = buildChapterRepairContext({ writeContext, contextPackage, issues: [] });
+  assert.ok(writeContext.chapterBoundary.doNotCross.includes(contextPackage.chapter.mustAvoid));
+  assert.ok(writeContext.chapterBoundary.doNotCross.some(item => item.includes("不得越过本章结束态")));
+  for (const globalRules of [writeContext.chapterBoundary.doNotCross, writeContext.obligationContract.forbiddenCrossings]) {
+    assert.ok(!globalRules.some(item => /本场/.test(item)));
+  }
+  for (const blocks of [buildChapterWriterContextBlocks(writeContext),
+    buildChapterWriterContextBlocks(writeContext, { mode: "incremental" }),
+    buildChapterReviewContextBlocks(reviewContext), buildChapterRepairContextBlocks(repairContext)]) {
+    const selected = selectContextBlocks(blocks, { maxTokensBudget: 1 });
+    const scoped = assertNonEmptyBlock(selected.selectedBlocks, "scene_causality");
+    assert.equal(scoped.required, true);
+    assert.equal(scoped.allowSummary, false);
+    const scenes = scoped.content.split("\n").filter(line => line.startsWith("{")).map(JSON.parse);
+    assert.deepEqual(scenes[0].forbiddenExpansion, plan.scenes[0].forbiddenExpansion);
+    assert.equal(scenes[0].sceneKey, plan.scenes[0].key);
+    assert.deepEqual(scenes[1].forbiddenExpansion, plan.scenes[1].forbiddenExpansion);
+    assert.match(scoped.content, /不是整章禁令/);
+    const obligation = blocks.find(block => block.id === "obligation_contract");
+    if (obligation) assert.doesNotMatch(obligation.content, /本场对手尚不登场|不得在本场得到报酬/);
+  }
+});
+
+test("audit preview preserves every local scene boundary without promoting it to chapter scope", () => {
+  const { buildChapterPreviewBlocks } = require("../dist/prompting/workbench/auditPreviewContext.js");
+  const { selectContextBlocks } = require("../dist/prompting/core/contextSelection.js");
+  const scenes = Array.from({ length: 3 }, (_, index) => ({ key: `scene-${index}`, title: `场景${index}`,
+    forbiddenExpansion: Array.from({ length: 4 }, (_, rule) => `场景${index}的局部限制${rule}`) }));
+  const blocks = buildChapterPreviewBlocks({ novel: { title: "范围测试" }, chapter: {
+    order: 1, title: "完成交易", mustAvoid: "不得改变契约规则", hook: "下一章另行交涉", sceneCards: JSON.stringify({ scenes }),
+  } });
+  const global = blocks.find(block => block.id === "chapter_boundary");
+  assert.match(global.content, /不得改变契约规则/);
+  assert.match(global.content, /不得直接展开钩子之后/);
+  assert.doesNotMatch(global.content, /局部限制/);
+  const scoped = selectContextBlocks(blocks, { maxTokensBudget: 1 }).selectedBlocks.find(block => block.id === "scene_boundaries");
+  assert.equal(scoped.required, true);
+  assert.equal(scoped.allowSummary, false);
+  assert.match(scoped.content, /场景2的局部限制3/);
+  const rendered = scoped.content.split("\n").slice(1).map(JSON.parse);
+  assert.deepEqual(rendered.map(scene => scene.forbiddenExpansion), scenes.map(scene => scene.forbiddenExpansion));
+});
+
 function createStyleContext() {
   const makeSection = (key, title, text) => ({
     key,

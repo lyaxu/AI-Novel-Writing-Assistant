@@ -24,6 +24,7 @@ const promiseEvidence = load("../src/prompting/prompts/novel/volume/evidence/pla
 });
 const issueProjection = load("../src/prompting/prompts/novel/volume/evidence/issueCheckProjection.ts", { "./chapterEvidence": evidence });
 const { chapterTaskSheetQualityPrompt: prompt } = load("../src/prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts.ts", {
+  "../context/capabilityAuthorization": load("../src/prompting/prompts/novel/context/capabilityAuthorization.ts", {}),
   "@langchain/core/messages": require("@langchain/core/messages"), zod: require("zod"),
   "@ai-novel/shared/types/chapterTaskSheetQuality": schema, "./evidence/chapterEvidence": evidence,
   "./evidence/planningPromiseEvidence": promiseEvidence, "./evidence/issueCheckProjection": issueProjection,

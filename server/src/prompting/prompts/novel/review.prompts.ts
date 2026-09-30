@@ -1,4 +1,5 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { CAPABILITY_AUTHORIZATION_RULES } from "./context/capabilityAuthorization";
 import { z } from "zod";
 import type { PromptAsset } from "../../core/promptTypes";
 import { renderSelectedContextBlocks } from "../../core/renderContextBlocks";
@@ -94,7 +95,7 @@ export const chapterReviewPrompt: PromptAsset<
   z.infer<typeof fullAuditOutputSchema>
 > = {
   id: "novel.review.chapter",
-  version: "v3",
+  version: "v4",
   taskType: "critical_review",
   mode: "structured",
   language: "zh",
@@ -122,6 +123,7 @@ export const chapterReviewPrompt: PromptAsset<
       "只输出符合 schema 的严格 JSON。",
       "不要输出 Markdown、解释、注释、代码块或任何额外文本。",
       "不能脑补未给出的前文、设定或隐藏剧情。",
+      ...CAPABILITY_AUTHORIZATION_RULES,
       "",
       "【评分要求】",
       "score 必须完整包含：coherence、repetition、pacing、voice、engagement、overall。",
@@ -173,7 +175,7 @@ export const chapterReviewPrompt: PromptAsset<
 
 export const chapterRepairPrompt: PromptAsset<ChapterRepairPromptInput, string, string> = {
   id: "novel.review.repair",
-  version: "v3",
+  version: "v4",
   taskType: "repair",
   mode: "text",
   language: "zh",
@@ -213,6 +215,7 @@ export const chapterRepairPrompt: PromptAsset<ChapterRepairPromptInput, string, 
       "【任务边界】",
       "只输出修复后的完整章节正文，不要输出解释、提纲、注释或任何额外文本。",
       "修文以‘最小必要修改’为原则，不要无关重写，不要把原章整体推翻重来。",
+      ...CAPABILITY_AUTHORIZATION_RULES,
       "不得引入新的核心角色、重大设定、主线转向或与上下文冲突的内容。",
       "",
       "【修复原则】",

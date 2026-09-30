@@ -1,4 +1,5 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { CAPABILITY_AUTHORIZATION_RULES } from "./context/capabilityAuthorization";
 import type { ChapterPatchRepairPlan } from "@ai-novel/shared/types/chapterPatchRepair";
 import { chapterPatchRepairPlanSchema } from "@ai-novel/shared/types/chapterPatchRepair";
 import type { PromptAsset } from "../../core/promptTypes";
@@ -18,7 +19,7 @@ export const chapterPatchRepairPrompt: PromptAsset<
   ChapterPatchRepairPlan
 > = {
   id: "novel.review.patch",
-  version: "v4",
+  version: "v5",
   taskType: "repair",
   mode: "structured",
   language: "zh",
@@ -57,6 +58,7 @@ export const chapterPatchRepairPrompt: PromptAsset<
       "只输出严格 JSON，不要 Markdown、解释或正文全文。",
       "",
       "【补丁原则】",
+      ...CAPABILITY_AUTHORIZATION_RULES,
       "1. strategy 默认必须是 patch_first。",
       "2. patches 中每个 targetExcerpt 必须逐字摘自当前正文，并且应足够长，确保在正文里只出现一次。",
       "3. replacement 只替换 targetExcerpt 对应片段，不要改写无关段落；如果修复目标是删除重复片段，replacement 可以是空字符串。",

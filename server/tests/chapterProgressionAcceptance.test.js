@@ -32,6 +32,7 @@ const prompts = source("../src/prompting/prompts/novel/chapterAcceptance.prompts
   "@ai-novel/shared/types/chapterProseContract": { CHAPTER_PROSE_QUALITY_AUDIT_RULES: [] },
   "../../core/renderContextBlocks": { renderSelectedContextBlocks: () => "已写正文" },
   "./promptBudgetProfiles": { NOVEL_PROMPT_BUDGETS: { chapterAcceptance: 1200 } },
+  "./context/capabilityAuthorization": source("../src/prompting/prompts/novel/context/capabilityAuthorization.ts"),
   "./acceptance/actionStateEvidence": actionEvidence,
   "./acceptance/progressionEvidence": evidence,
 });

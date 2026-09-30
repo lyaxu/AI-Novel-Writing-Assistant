@@ -49,6 +49,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
     }
     const actionPositions = check.actionEvidence[0] ? positions(input.content, check.actionEvidence[0].quote) : [];
     const actionStart = actionPositions[0];
+    const actionEnd = actionStart === undefined ? undefined : actionStart + compact(check.actionEvidence[0].quote).length;
     const entities = new Set<string>();
     for (const state of check.states) {
       const key = `${state.dimension}:${state.entity}`;
@@ -73,10 +74,11 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
       if (state.transitionStatus === "not_needed" && (state.enablingTransitionRequired || state.stateChanged)) missing = true;
       if (state.transitionStatus === "established") {
         if (!state.transitionEvidence.length) unknown = true;
-        // A cure, release, acquisition or lesson enabling an action has to precede its use.
-        if (state.enablingTransitionRequired && state.transitionEvidence.length && actionStart !== undefined
+        // A transition can occur within the same action (e.g. an authorized awakening).
+        // Only disjoint evidence after that action is deterministically too late; the AI reviews overlapping causality.
+        if (state.enablingTransitionRequired && state.transitionEvidence.length && actionEnd !== undefined
           && state.transitionEvidence.every((item) => item.source === "current_prose"
-            && positions(input.content, item.quote).every((position) => position + compact(item.quote).length > actionStart))) {
+            && positions(input.content, item.quote).every((position) => position >= actionEnd))) {
           contradiction = true;
           // Unlike an invalid citation, this is a witnessed but too-late enabling event.
         }
@@ -113,8 +115,8 @@ export const ACTION_STATE_AUDIT_RULES = [
   "actionStateChecks 必须按 expectedSceneKeys 每场恰好选1个决定结果的关键行动（最多8条）；没有场景合同则 sceneKey=chapter，检查1个实际行动/关系决定。状态审查先于场景earned与总分；不能只确认结局发生。",
   "每条包含 sceneKey、actor、action、actionEvidence、states、verdict、explanation。states只选真正相关的body/item/ability/knowledge/location维度，通常1-2项，不要求每次列齐五类；每项包含dimension、entity、before、requiredForAction、after、beforeEvidence、afterEvidence、transitionEvidence、enablingTransitionRequired、stateChanged、transitionStatus。各状态/说明180字内，引用180字内，每类至多2条；未知就标unknown且状态证据数组可空，不编造。",
   "证据对象为{source,sourceId,quote}。source=current_prose时sourceId使用本章chapterId；established_context时只用written_evidence已写正文的chapterId。quote必须为该来源的连续准确原文。planned_contract只能说明计划，不可证明物品已有、身体状态恢复或行动已发生；不得拿摘要、场景卡或sourceKind声明充当既有事实。actionEvidence和afterEvidence必须含当前正文证据。",
-  "先核对行动发生前人物能动哪些部位、持有哪些物品、身处何处、已知什么以及能力边界，再比较requiredForAction，最后核验after。若需要先解绳/恢复/取物/学习/接近才能行动，enablingTransitionRequired=true，transitionEvidence须证明建立动作先于使用。新状态也须有变化机制；stateChanged=true时不能声称not_needed。",
-  "transitionStatus只用not_needed（无需变化且前提已满足）、established（变化过程有原文）、missing（关键变化未建立）、contradicted（与已知状态相冲突）、unknown（给定文本不足）。魔法恢复、远距作用或突破常识本身不是错误；已建立规则、触发过程和代价可支持established。职业常识不能自动等于异界知识，物品被拿出不自动证明其在先前搜身后仍可用。",
+  "先核对行动发生前人物能动哪些部位、持有哪些物品、身处何处、已知什么以及能力边界，再比较requiredForAction，最后核验after。若需要先解绳/恢复/取物/获得能力/接近才能行动，enablingTransitionRequired=true，transitionEvidence须证明前提在使用时成立；授权觉醒或授予可以在同一动作中生效，不必另设学习场景。新状态须有变化机制；stateChanged=true时不能声称not_needed。",
+  "transitionStatus只用not_needed（无需变化且前提已满足）、established（变化过程有原文）、missing（关键变化未建立）、contradicted（与已知状态相冲突）、unknown（给定文本不足）。授权的魔法恢复、系统赠予、觉醒或远距作用可直接改变状态，清楚的触发/授予原文即可支持established，不额外要求代价、训练或长铺垫。职业常识不能自动等于异界知识，物品被拿出不自动证明其在先前搜身后仍可用。",
   "逐场最关键的执行条件必须实际核对；别把观察到材料当成已具备加工媒介/热源/时间，别把身体移动当成固定物体移动，别把事后恢复当成事前可行动。这些是通用检查，不要求每个题材都有战斗或器械。安静会谈也可核验知情、权限和位置，不能硬造身体伤害。",
   "缺失桥梁输出unearned，实际冲突输出contradicted，缺少前文原文输出insufficient_evidence；不得写states已经missing/contradicted却给动作或场景earned。未知不应凭空补剧情，确证局部问题交给既有repair/debt，不新增全局停写。",
 ];

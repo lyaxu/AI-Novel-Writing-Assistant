@@ -21,7 +21,6 @@ export function buildChapterPreviewBlocks(input: {
   const lastScene = scenes[scenes.length - 1] ?? null;
   const mustAdvance = scenes.flatMap((scene) => readStringList(scene.mustAdvance)).slice(0, 8);
   const mustPreserve = scenes.flatMap((scene) => readStringList(scene.mustPreserve)).slice(0, 8);
-  const forbiddenExpansion = scenes.flatMap((scene) => readStringList(scene.forbiddenExpansion)).slice(0, 8);
   const chapterLabel = `第 ${chapter.order} 章《${chapter.title || "未命名章节"}》`;
 
   return [
@@ -53,11 +52,27 @@ export function buildChapterPreviewBlocks(input: {
         chapter.hook ? `Next chapter entry state: ${chapter.hook}` : "",
         previewListBlock("Do not cross", [
           chapter.mustAvoid,
-          ...forbiddenExpansion,
           chapter.hook ? `不得直接展开钩子之后的后续事件：${chapter.hook}` : "",
         ]),
         previewListBlock("Protected reveals", []),
       ].filter(Boolean).join("\n"),
+    }),
+    createContextBlock({
+      id: "scene_boundaries",
+      group: "scene_causality",
+      priority: 100,
+      required: true,
+      allowSummary: false,
+      content: [
+        "场景局部边界：forbiddenExpansion 仅约束所属场景，不扩展为整章禁令；章节硬边界另见 chapter_boundary。",
+        ...scenes.map((scene, index) => JSON.stringify({
+          sceneKey: readString(scene.key) || `scene_${index + 1}`,
+          title: readString(scene.title),
+          entryState: readString(scene.entryState),
+          exitState: readString(scene.exitState),
+          forbiddenExpansion: readStringList(scene.forbiddenExpansion),
+        })),
+      ].join("\n"),
     }),
     createContextBlock({
       id: "structure_obligations",

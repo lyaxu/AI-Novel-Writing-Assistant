@@ -234,6 +234,7 @@ function buildSceneCausalityContextBlock(writeContext: ChapterWriteContext): Pro
     content: [
       "场景因果合同（规划意图，不是已经发生的事实；写作、验收、修复共用）：",
       "来源必须对照实际上下文；establish_in_scene 必须先建立再使用，unresolved 不能当成已知事实。结果出现不等于因果成立。",
+      "forbiddenExpansion 只约束其所属 sceneKey 的场景，不是整章禁令。后续场景可按各自合同推进；章节硬边界仍以 chapter_boundary 和章节执行义务为准。",
       ...scenes.map((scene) => JSON.stringify({
         sceneKey: scene.key,
         title: scene.title,
@@ -241,6 +242,7 @@ function buildSceneCausalityContextBlock(writeContext: ChapterWriteContext): Pro
         exitState: scene.exitState,
         resistance: scene.resistance,
         turn: scene.turn,
+        forbiddenExpansion: scene.forbiddenExpansion ?? [],
         causality: scene.causality ?? null,
       })),
       scenes.some((scene) => !scene.causality)

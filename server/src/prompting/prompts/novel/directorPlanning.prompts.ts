@@ -1,6 +1,7 @@
 import { bookStoryFoundationSchema } from "@ai-novel/shared/types/novel/bookStoryFoundation";
 import { BOOK_STORY_FOUNDATION_RULES, renderBookStoryFoundation } from "./bookFoundation";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { CAPABILITY_AUTHORIZATION_RULES } from "./context/capabilityAuthorization";
 import {
   DIRECTOR_CORRECTION_PRESETS,
   type DirectorCandidate,
@@ -113,7 +114,7 @@ export const directorCandidatePrompt: PromptAsset<
   typeof directorCandidateResponseSchema._output
 > = {
   id: "novel.director.candidates",
-  version: "v5",
+  version: "v6",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -149,7 +150,8 @@ export const directorCandidatePrompt: PromptAsset<
       "不要把一段事件拆成多章凑体量；连续重复查资料、工作受阻、口头催促、记日志不算升级。细节须改变决策、关系、局面或读者理解，不能用职业操作填满章节。安静章允许存在，不强求打斗、惊吓或每章大反转。",
       "先在内部构思不同的矛盾与人物关系，再选出最值得试读的两套；不要先填字段再拼成故事。职业是人物经历、手段和关系的来源，不是必须每章重做一次的工作流程。distinctiveEngine 不得只写接任务→解决→升级→接更难任务，而要说明什么选择持续改变谁与谁的关系、利益或处境。",
       "openingChain 必须是因果链：后一章处理前章选择造成的具体后果，而不是重开一件类似小事。前三章应兑现至少一个引入的核心疑问或阶段目标，earlyPayoff 与实际章节对应；不能把威胁暂退、知道还有秘密或领到下一单当作全部回报。",
-      "每次解围须能追溯到已介绍的条件、人物本领或付出的代价，不能临时赋予道具新用途、新权限或让对手突然失智。突破必须同时带来真实收益与后续局面的变化，不用凭空扩大阴谋或人物苦难掩盖事件空转。",
+      "每次解围须有明确的既有或本章安排的条件、人物本领或能力授予，不能无授权临时赋予道具新用途、新权限或让对手突然失智。突破应带来真实收益与后续局面的变化，不用凭空扩大阴谋或人物苦难掩盖事件空转。",
+      ...CAPABILITY_AUTHORIZATION_RULES,
       ...CANDIDATE_OPENING_PACING_RULES,
       ...BOOK_STORY_FOUNDATION_RULES,
       "1. workingTitle 必须是可读的暂定书名，适合封面展示，不要写成策划案口号、世界观概念短语或陈旧套壳名。",
@@ -211,7 +213,7 @@ export const directorCandidatePatchPrompt: PromptAsset<
   typeof directorCandidateSchema._output
 > = {
   id: "novel.director.candidate_patch",
-  version: "v4",
+  version: "v5",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -238,6 +240,7 @@ export const directorCandidatePatchPrompt: PromptAsset<
       "2. 允许调整 workingTitle、logline、positioning、sellingPoint、coreConflict、protagonistPath、endingDirection、hookStrategy、progressionLoop、whyItFits、toneKeywords、targetChapterCount。",
       "3. 如果用户说“我就偏向这套，但有些地方不对”，要把这套修得更准，而不是重新另起炉灶。",
       "4. 修正后仍然必须是完整、清晰、可继续推进整书规划的候选。",
+      ...CAPABILITY_AUTHORIZATION_RULES,
       ...CANDIDATE_OPENING_PACING_RULES,
       ...BOOK_STORY_FOUNDATION_RULES,
       "",

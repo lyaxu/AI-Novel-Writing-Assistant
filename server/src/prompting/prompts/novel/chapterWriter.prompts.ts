@@ -3,6 +3,7 @@ import type { PromptAsset } from "../../core/promptTypes";
 import { renderSelectedContextBlocks } from "../../core/renderContextBlocks";
 import { NOVEL_PROMPT_BUDGETS } from "./promptBudgetProfiles";
 import { CHAPTER_PROSE_QUALITY_RULES } from "@ai-novel/shared/types/chapterProseContract";
+import { CAPABILITY_AUTHORIZATION_RULES } from "./context/capabilityAuthorization";
 
 export interface ChapterWriterPromptInput {
   novelTitle: string;
@@ -91,7 +92,7 @@ function buildPaceDirective(pace: string | null | undefined): string {
 
 export const chapterWriterPrompt: PromptAsset<ChapterWriterPromptInput, string, string> = {
   id: "novel.chapter.writer",
-  version: "v11",
+  version: "v12",
   taskType: "writer",
   mode: "text",
   language: "zh",
@@ -326,14 +327,15 @@ export const chapterWriterPrompt: PromptAsset<ChapterWriterPromptInput, string, 
         "1b. inheritedHookResponsibilities 必须优先得到回应、触达或部分兑现；不得只制造新钩子而不给旧问题任何回报。",
         "1c. 对照前章实际正文中已发生事件、人物已有认识和结尾决定：本章要让具体行动发生并产生结果，结果可以是失败、代价、关系变化或对线索的新解释。不要反复盘点相同困境、重新发现已知信息，最后又只决定执行前章同一目标。有叙事功能的回顾和重复行动可保留，但须让读者获得新的意义或后果；未提供前文时不能编造。细腻和慢热允许深入细节与情绪，不等于延迟行动；不为加速强塞打斗、胜利、反转或提前揭底。",
         "1d. scene_causality 约束选择为何发生、条件从何而来、阻力如何回应、结果如何产生及代价如何持续。established_in_context 必须能对照实际前文，不能把合同声明当历史；establish_in_scene 的条件须先建立再使用，unresolved 不得靠补一句‘早已获得’消除。既有伤势、时长、物资和关系限制必须真正改变行动。",
-        "1e. 允许人物拒绝、误判、让步、等待或失败；不必每场获胜。关键结果必须来自已建立的条件和具体选择，不能靠对手无故失能、临时道具、突增能力或旁白担保。因果可通过必要细节简洁呈现，不要扩写成操作说明。",
+        "1e. 允许人物拒绝、误判、让步、等待或失败；不必每场获胜。关键结果必须来自已有条件或本章按授权设定建立的条件，不能靠对手无故失能、未经授权的临时道具/能力或旁白担保。因果可通过必要细节简洁呈现，不要扩写成操作说明。",
         "1f. 写关键动作前先核对人物身体、物品、能力、知识和位置：当前能否做、凭什么知道、资源从何处取得。解除限制的动作或规则必须早于使用，不能先消费成功后才会得到的自由或能力；合理魔法、治疗或借力可以改变状态，但要有已建立的机制和实际过渡。",
-        "1g. written_evidence 提供可核对的前文正文；角色推测、计划与资源摘要不自动成为已发生事实。保持部位、持有者与消耗状态连续；宏观卖点和章节结果不能授权临时添加解决危机的道具、知识或能力。",
+        "1g. written_evidence 提供可核对的前文正文；角色推测、计划与资源摘要不自动成为已发生事实。保持部位、持有者与消耗状态连续；区分明确授权的能力获得与只为解局临时发明能力。",
+        ...CAPABILITY_AUTHORIZATION_RULES,
         "2. 必须严格服从 chapter mission、mustAdvance、mustPreserve 与 ending hook。",
         "3. obligation contract 中的 must hit now、required payoff touches、required character appearances、required goal changes 都是本章必达项，必须在正文中让读者可见。",
       "4. character_hard_facts 是不可违背的人物硬事实，角色身份、阵营、立场、境界/战力、当前位置和可出场状态不得写反。",
       "4a. 角色行为指导中的主观倾向、以及作者与角色对话后确认的软性行为倾向，都只用于塑造角色的选择、误判和情绪反应，不是客观真相或强制剧情命令；不得把角色的猜测、误判、隐藏意图或对话影响写成旁白确认的事实，也不得覆盖 character_hard_facts。",
-        "5. payoff directives 只能按 operation 执行：seed/touch 只铺垫或轻触，pressure 只施压，partial_reveal/payoff 才允许揭示或兑现，forbid 必须避开。",
+        "5. payoff directives 按已审章合同中的 operation 执行：seed/touch 是铺垫或轻触；pressure 是本章 AI 明确选择的施压，不因账本逾期自动强加；partial_reveal/payoff 只在授权范围揭示或兑现；defer 不要求正文重复催促，同章其他事实仍按合同推进；forbid 必须避开。账本 deadline 不得越过 mustAvoid、保护信息和世界边界。已确认设定允许的突然获得能力可以按本章合同兑现。",
         "6. 不得引入新的核心角色、世界规则或与上下文冲突的重大设定。",
         "7. 不得写成总结、复盘、解释性段落为主的章节，正文必须以「正在发生」的内容为主。",
         "8. 任务单与场景卡约束的是必达结果、关键因果和人物状态，不是需要逐句扩写的操作清单。在不改变这些边界与必要先后关系的前提下，自主选择切入点、对话、细节与叙述详略；赶路、手续、重复试验等例行动作可压缩带过，把篇幅留给真正改变选择或关系的现场。不得借自由发挥遗漏必达项、提前执行后章事件或增设救场规则。",
@@ -371,7 +373,7 @@ export const chapterWriterPrompt: PromptAsset<ChapterWriterPromptInput, string, 
         "如果存在 style contract 或 continuation constraints，必须优先满足，视为强约束。",
         "",
         "【禁止事项】",
-        "禁止引入未铺垫的重大转折。",
+        "禁止引入未经本书授权且无因果支持的重大转折；已授权的突然觉醒或金手指生效不因缺少长铺垫而禁止。",
         "禁止跳跃式推进导致逻辑断裂。",
         "禁止整章只有情绪或氛围而缺乏事件推进。",
         "禁止用总结性语句代替剧情发展。",
@@ -388,7 +390,7 @@ export const chapterWriterPrompt: PromptAsset<ChapterWriterPromptInput, string, 
         "在生成正文前，先内部确认以下三点：",
         "(1) 结尾是否形成了新的悬念或钩子？",
         "(2) obligation contract 的所有必达项是否已在正文中可见兑现？",
-        "(3) 是否违反了任何禁止规则（新角色、场景模式重复、未铺垫转折）？",
+        "(3) 是否违反了任何禁止规则（未经授权的新核心角色、场景模式重复、未经本书授权且无因果支持的转折）？已授权的突然金手指按触发规则核对。",
         "(4) 读者是否实际获得了 promisedReward，并能看见 keyTurn、netChange 和旧钩子承接？",
         "确认通过后再开始输出，不需要在正文中输出核查结果。",
       ].filter((line) => line !== "").join("\n")),

@@ -10,6 +10,7 @@ import type {
 } from "@ai-novel/shared/types/canonicalState";
 import { canonicalStateService, type CanonicalStateScope } from "../state/CanonicalStateService";
 import { generationDecisionEngine } from "./GenerationDecisionEngine";
+import type { ChapterPayoffDecision } from "@ai-novel/shared/types/novel/payoffPlanning";
 
 export interface BuildStateDrivenContextInput extends CanonicalStateScope {
   novelId: string;
@@ -17,6 +18,7 @@ export interface BuildStateDrivenContextInput extends CanonicalStateScope {
   pendingReviewProposalCount?: number;
   openAuditIssueCount?: number;
   hasRepairableDraft?: boolean;
+  payoffDecisions?: ChapterPayoffDecision[];
 }
 
 export interface StateDrivenContextBundle {
@@ -34,67 +36,26 @@ function takeTop<T>(items: T[], limit: number): T[] {
   return items.slice(0, Math.max(0, limit));
 }
 
-function normalizeForBoundaryMatch(value: string | null | undefined): string {
-  return (value ?? "").trim().toLowerCase();
-}
-
-function resolveForbiddenReveal(
-  payoff: CanonicalPayoffState,
-  protectedSecrets: string[],
-): string | null {
-  const haystack = normalizeForBoundaryMatch(`${payoff.title}\n${payoff.summary}\n${payoff.statusReason ?? ""}`);
-  return protectedSecrets.find((secret) => {
-    const normalized = normalizeForBoundaryMatch(secret);
-    return normalized.length > 0 && haystack.includes(normalized);
-  }) ?? null;
-}
-
-function buildPayoffDirective(
-  payoff: CanonicalPayoffState,
-  chapterOrder: number,
-  protectedSecrets: string[],
-): ChapterPayoffDirective {
-  const forbiddenReveal = resolveForbiddenReveal(payoff, protectedSecrets);
-  if (forbiddenReveal) {
-    return {
-      title: payoff.title,
-      ledgerKey: payoff.ledgerKey,
-      operation: "forbid",
-      reason: "该 payoff 触及当前受保护信息，本章只能保持压力或铺垫，不得揭开答案。",
-      forbiddenReveal,
-    };
-  }
-
-  const targetStart = payoff.targetStartChapterOrder;
-  const operation: ChapterPayoffDirective["operation"] = payoff.currentStatus === "setup"
-    ? (typeof targetStart === "number" && targetStart <= chapterOrder ? "touch" : "seed")
-    : payoff.currentStatus === "hinted"
-      ? "touch"
-      : payoff.currentStatus === "pending_payoff" || payoff.currentStatus === "overdue"
-        ? "pressure"
-        : "touch";
-  const reason = payoff.statusReason?.trim()
-    || payoff.summary?.trim()
-    || "按当前章节窗口轻触该伏笔，不提前兑现。";
-  return {
-    title: payoff.title,
-    ledgerKey: payoff.ledgerKey,
-    operation,
-    reason,
-    forbiddenReveal: null,
-  };
-}
-
 export function buildChapterPayoffDirectives(
   snapshot: Awaited<ReturnType<typeof canonicalStateService.getSnapshot>>,
-  protectedSecrets: string[],
+  _protectedSecrets: string[],
+  decisions: ChapterPayoffDecision[] = [],
 ): ChapterPayoffDirective[] {
-  const chapterOrder = snapshot.narrative.currentChapterOrder ?? 0;
-  return takeTop([
-    ...snapshot.narrative.overduePayoffs,
-    ...snapshot.narrative.urgentPayoffs,
-    ...snapshot.narrative.pendingPayoffs,
-  ], 5).map((payoff) => buildPayoffDirective(payoff, chapterOrder, protectedSecrets));
+  const candidates = [...snapshot.narrative.overduePayoffs, ...snapshot.narrative.urgentPayoffs, ...snapshot.narrative.pendingPayoffs];
+  return decisions.flatMap((decision) => {
+    const payoff = candidates.find((item) => item.ledgerKey === decision.ledgerKey);
+    if (!payoff || ["defer", "out_of_scope", "requires_replan"].includes(decision.operation)) return [];
+    const operation = decision.operation as ChapterPayoffDirective["operation"];
+    // Protected information is a separate boundary. Only the structured AI
+    // decision can distinguish a permitted reward from its still-secret origin.
+    const forbiddenReveal = operation === "forbid" ? decision.authorizedScope : null;
+    return [{
+      title: payoff.title, ledgerKey: payoff.ledgerKey,
+      operation,
+      reason: `${decision.reason}；本章授权范围：${decision.authorizedScope}${decision.remainingObligation ? `；余下交付：${decision.remainingObligation}` : ""}${decision.followUp ? `；后续第${decision.followUp.chapterOrder}章：${decision.followUp.expectedChange}` : ""}`,
+      forbiddenReveal,
+    }];
+  });
 }
 
 export function buildChapterPlanningReferenceCandidates(
@@ -103,6 +64,8 @@ export function buildChapterPlanningReferenceCandidates(
   return {
     scope: "reference_candidates_not_chapter_obligations",
     openConflicts: snapshot.narrative.openConflicts,
+    payoffCandidates: [...new Map([...snapshot.narrative.overduePayoffs, ...snapshot.narrative.urgentPayoffs, ...snapshot.narrative.pendingPayoffs]
+      .map((item) => [item.ledgerKey, item])).values()].slice(0, 5),
     relationshipStages: snapshot.characters.map((character) => ({
       name: character.name,
       stages: character.relationStageLabels,
@@ -112,6 +75,7 @@ export function buildChapterPlanningReferenceCandidates(
 
 export function buildChapterStateGoal(
   snapshot: Awaited<ReturnType<typeof canonicalStateService.getSnapshot>>,
+  payoffDecisions: ChapterPayoffDecision[] = [],
 ): ChapterStateGoal | null {
   if (
     !snapshot.narrative.currentChapterId
@@ -129,15 +93,8 @@ export function buildChapterStateGoal(
     // Keep their full records in snapshot/localConflicts/localCharacters.
     targetConflicts: [],
     targetRelationships: [],
-    targetPayoffs: takeTop(
-      [
-        ...snapshot.narrative.overduePayoffs.map((item) => item.title),
-        ...snapshot.narrative.urgentPayoffs.map((item) => item.title),
-        ...snapshot.narrative.pendingPayoffs.map((item) => item.title),
-      ],
-      3,
-    ),
-    targetPayoffDirectives: buildChapterPayoffDirectives(snapshot, protectedSecrets),
+    targetPayoffs: buildChapterPayoffDirectives(snapshot, protectedSecrets, payoffDecisions).map((item) => item.title),
+    targetPayoffDirectives: buildChapterPayoffDirectives(snapshot, protectedSecrets, payoffDecisions),
     protectedSecrets,
   };
 }
@@ -160,7 +117,7 @@ export class ContextAssemblyService {
     return {
       snapshot,
       nextAction,
-      chapterStateGoal: buildChapterStateGoal(snapshot),
+      chapterStateGoal: buildChapterStateGoal(snapshot, input.payoffDecisions),
       localCharacters: takeTop(snapshot.characters, 6),
       localConflicts: takeTop(snapshot.narrative.openConflicts, 4),
       localPayoffs: takeTop([
