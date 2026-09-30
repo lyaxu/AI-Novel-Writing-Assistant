@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { AppError } from "../../../../../../middleware/errorHandler";
 import { readPlanningRepairSeed } from "../planningRepairRecovery";
 import { buildAdviceContext } from "./AdviceContext";
+import { isPlanningRepairConfirmationPhase, isPlanningRepairTaskPaused } from "@ai-novel/shared/types/planningRepair/recovery";
 
 function canonical(value: unknown): string {
   if (value instanceof Date) return JSON.stringify(value.toISOString());
@@ -34,7 +35,7 @@ export async function readAdviceSource(tx: Prisma.TransactionClient, taskId: str
   const snapshot = seed.planningRepairSnapshot as { eligibleChapterIds?: string[] } | undefined;
   const eligibleChapterIds = snapshot?.eligibleChapterIds;
   if (!Array.isArray(eligibleChapterIds) || !eligibleChapterIds.length) throw new AppError("修复窗口缺少可验证范围，请先检查规划来源。", 409);
-  const fingerprint = adviceHash({ sourceToken, candidate, intentSeed, status: row.status, cancelled: row.cancelRequestedAt });
+  const fingerprint = adviceHash({ sourceToken, candidate, intentSeed, status: row.status, pendingManualRecovery: row.pendingManualRecovery, cancelled: row.cancelRequestedAt });
   const context = buildAdviceContext({ novel: novelSource, volumes, chapters, macro, candidate, seed: intentSeed, eligibleChapterIds });
   return { row, seed, repair, recovery, sourceToken, fingerprint, context, eligibleChapterIds };
 }
@@ -42,15 +43,22 @@ export type AdviceSource = Awaited<ReturnType<typeof readAdviceSource>>;
 
 export async function assertAdvicePaused(tx: Prisma.TransactionClient, source: AdviceSource) {
   const { row, repair, recovery } = source;
-  if (!["waiting_approval", "failed"].includes(row.status) || row.cancelRequestedAt
-    || !["waiting_confirmation", "uncertain", "technical_failed"].includes(repair.phase)) {
+  if (!isPlanningRepairTaskPaused(row) || !isPlanningRepairConfirmationPhase(repair.phase)) {
     throw new AppError("请在规划修复暂停后获取建议。", 409);
   }
   if (recovery?.pendingGrant || (recovery?.idempotencyKey && recovery.guidance
     && !["waiting_confirmation", "uncertain", "committed"].includes(repair.phase))) {
     throw new AppError("已有确认的修复方向，请继续该请求。", 409);
   }
-  if (await tx.generationJob.findFirst({ where: { novelId: row.novelId!, status: { in: ["queued", "running"] } } })
+  const autoExecution = source.seed.autoExecution as { pipelineJobId?: unknown } | undefined;
+  const pausedPipelineJobId = typeof autoExecution?.pipelineJobId === "string" ? autoExecution.pipelineJobId : null;
+  if (await tx.generationJob.findFirst({ where: {
+    novelId: row.novelId!, status: { in: ["queued", "running"] },
+    ...(pausedPipelineJobId ? { NOT: {
+      id: pausedPipelineJobId, pendingManualRecovery: true,
+      executionOwner: null, executionLeaseExpiresAt: null,
+    } } : {}),
+  } })
     || await tx.directorRunCommand.findFirst({ where: { taskId: row.id, status: { in: ["queued", "leased", "running"] } } })) {
     throw new AppError("当前仍有生成请求，请等待结果后获取建议。", 409);
   }

@@ -560,7 +560,7 @@ export async function loadPersistentDirectorRuntimeProjection(
     }) as Promise<RuntimeInstanceProjectionRow | null>,
     prisma.novelWorkflowTask.findUnique({
       where: { id: taskId },
-      select: { status: true, seedPayloadJson: true, checkpointType: true, checkpointSummary: true },
+      select: { status: true, pendingManualRecovery: true, cancelRequestedAt: true, seedPayloadJson: true, checkpointType: true, checkpointSummary: true },
     }).catch(() => null),
     prisma.directorEvent.findMany({
       where: { taskId },

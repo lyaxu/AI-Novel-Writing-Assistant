@@ -6,6 +6,7 @@ import {
 } from "@/api/planningRepair";
 import { planningRepairHistory, planningRepairIssues } from "./planningRepairPresentation";
 import { RepairActions } from "./RepairActions";
+import { isPlanningRepairConfirmationPhase, isPlanningRepairTaskPaused } from "@ai-novel/shared/types/planningRepair/recovery";
 
 const PHASE_LABELS: Record<NonNullable<PlanningRepairStatus["planningRepair"]>["phase"], string> = {
   assessing: "检查章节计划", repairing: "修复章节计划", reviewing: "复核质量", ready: "等待保存候选方案",
@@ -23,8 +24,8 @@ export default function PlanningRepairPanel({ novelId }: { novelId: string }) {
   const status = query.data;
   const repair = status?.novelId === novelId ? status.planningRepair : null;
   if (!status || !repair) return query.isError && taskId ? <p role="alert" className="text-sm text-destructive">无法读取规划修复状态，请刷新后重试。</p> : null;
-  const canAct = (["waiting_confirmation", "uncertain", "technical_failed"].includes(repair.phase) || Boolean(repair.pendingOperation) || Boolean(status.recoveryRequest))
-    && ["waiting_approval", "failed"].includes(status.status);
+  const canAct = (isPlanningRepairConfirmationPhase(repair.phase) || Boolean(repair.pendingOperation) || Boolean(status.recoveryRequest))
+    && isPlanningRepairTaskPaused(status);
   const history = planningRepairHistory(repair.history);
   const issues = planningRepairIssues(repair.quality);
   return <section aria-label="章节规划修复" className="space-y-3 rounded-md bg-amber-50/60 p-4 dark:bg-amber-950/20">

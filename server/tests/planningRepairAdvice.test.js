@@ -9,6 +9,7 @@ function load(file, imports) {
   const source = ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports = {};
   vm.runInThisContext(`(function(require,exports){${source}\n})`, { filename })((id) => {
+    if (id === "@ai-novel/shared/types/planningRepair/recovery") return load("../../shared/types/planningRepair/recovery.ts", {});
     if (!(id in imports)) throw new Error(`Unmocked boundary: ${id}`);
     return imports[id];
   }, exports);

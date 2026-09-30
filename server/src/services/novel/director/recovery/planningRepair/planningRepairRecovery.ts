@@ -1,4 +1,5 @@
 import { AppError } from "../../../../../middleware/errorHandler";
+import { isPlanningRepairConfirmationPhase } from "@ai-novel/shared/types/planningRepair/recovery";
 
 export interface PlanningRepairState extends Record<string, unknown> {
   version: 1;
@@ -57,7 +58,7 @@ export function isPlanningRepairConfirmationError(error: unknown): boolean {
 export function assertPlanningRepairResumeAllowed(json: string | null | undefined, recoveryKey?: string): void {
   const { repair, recovery } = readPlanningRepairSeed(json);
   if (!repair || repair.phase === "committed") return;
-  const blocked = ["waiting_confirmation", "uncertain", "technical_failed"].includes(repair.phase)
+  const blocked = isPlanningRepairConfirmationPhase(repair.phase)
     || Boolean(repair.pendingOperation) || recovery?.pendingGrant;
   if (!blocked && ["assessing", "repairing", "reviewing", "ready"].includes(repair.phase)
     && (!recoveryKey || recovery?.idempotencyKey === recoveryKey)) return;

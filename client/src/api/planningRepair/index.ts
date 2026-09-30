@@ -8,6 +8,7 @@ export interface PlanningRepairStatus {
   novelId: string | null;
   status: string;
   pendingManualRecovery: boolean;
+  cancelRequestedAt?: string | null;
   recoveryRequest?: { idempotencyKey: string; guidance: string; executionMode?: "repair_then_review" | "review_existing"; affectedChapterIds?: string[] } | null;
   planningRepair: {
     version: 1;

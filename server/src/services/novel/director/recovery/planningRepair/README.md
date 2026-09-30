@@ -7,5 +7,7 @@
 - rebase 必须在事务读取任务后比较 `expectedSeedPayloadJson`，防止旧请求重置另一请求的授权状态。源内容发生变化时由 store 建立安全的新快照，不能把旧候选直接提交到新源。
 - 普通继续、批准关卡和跳过质量都不能越过 waiting/uncertain/technical_failed、pendingOperation 或尚未完成的预算授权。干净的 assessing/repairing/reviewing/ready 可在原预算内恢复并复用完成结果。明确授权的命令使用固定幂等键，HTTP 重放不重复授予预算或创建执行命令。
 - seed.planningRepairRecovery 保存原 `structured_outline` 或 `chapter_execution` 锚点。前者恢复指定章规划，后者清掉失败 job 引用并重新走 JIT，不调用 replanNovel，不跳过当前章。
-- pipeline job 丢失异常 code 时，通过 durable planningRepair 的 waiting/uncertain 状态补回导演暂停。生产执行器仍必须立即收束该异常，不得降级为成功或继续下一章。
+- pipeline job 丢失异常 code 时，通过 durable planningRepair 的 waiting_confirmation / uncertain / technical_failed 状态补回导演暂停。技术失败保留原阶段及技术原因，不能归入普通质量修复后让源页面失去操作。生产执行器仍必须立即收束该异常，不得降级为成功或继续下一章。
+- 暂停状态由前后端共享判断：waiting_approval / failed，或历史 running / queued 且明确 pendingManualRecovery；取消中的任务不可恢复。历史兼容只读展示，不在GET中清挂起标记或修复数据库。是否允许生成建议还需核对可修复阶段、任务归属及后台执行冲突。
+- 已挂起的批次不是活跃生成。建议入口只忽略seed中本导演当前pipelineJobId指向、pendingManualRecovery且无executionOwner/执行租约的job；其他任务、仍有执行归属或租约的job和活跃命令仍阻止建议，不能按所有pending记录一概放行。
 - 离线测试 `server/tests/planningRepairRecovery.test.js` 在导入服务前封锁数据库模块，验证 HTTP、CAS、错误映射和两类恢复路径；`PLANNING_REPAIR_TEST_SOURCE=1` 可直接转译最新源码测试而不触发 server build。

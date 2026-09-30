@@ -4,6 +4,7 @@ import { NovelWorkflowService } from "../../../workflow/NovelWorkflowService";
 import { buildNovelEditResumeTarget } from "../../../workflow/novelWorkflow.shared";
 import { readPlanningRepairSeed, resolvePlanningRepairResumePhase } from "./planningRepairRecovery";
 import { PlanningRepairStore } from "../../../volume/planningRepair/PlanningRepairStore";
+import { isPlanningRepairConfirmationPhase, isPlanningRepairTaskPaused } from "@ai-novel/shared/types/planningRepair/recovery";
 
 export class PlanningRepairRecoveryService {
   constructor(
@@ -19,7 +20,7 @@ export class PlanningRepairRecoveryService {
   async pauseIfNeeded(taskId: string): Promise<boolean> {
     const row = await this.workflow.getTaskByIdWithoutHealing(taskId);
     const { repair } = readPlanningRepairSeed(row?.seedPayloadJson);
-    if (!repair || !["waiting_confirmation", "uncertain"].includes(repair.phase)) return false;
+    if (!repair || !isPlanningRepairConfirmationPhase(repair.phase)) return false;
     await this.pauseAfterFailure(taskId);
     return true;
   }
@@ -31,9 +32,9 @@ export class PlanningRepairRecoveryService {
     const { repair, recovery } = readPlanningRepairSeed(row.seedPayloadJson);
     const recoveryRequest = recovery?.idempotencyKey && recovery.guidance
       && repair && (recovery.pendingGrant || !["waiting_confirmation", "uncertain", "committed"].includes(repair.phase))
-      && ["waiting_approval", "failed"].includes(row.status)
+      && isPlanningRepairTaskPaused(row)
       ? { idempotencyKey: recovery.idempotencyKey, guidance: recovery.guidance, executionMode: recovery.executionMode, affectedChapterIds: recovery.affectedChapterIds } : null;
-    return { taskId, novelId: row.novelId, status: row.status, pendingManualRecovery: row.pendingManualRecovery, planningRepair: repair, recoveryRequest };
+    return { taskId, novelId: row.novelId, status: row.status, pendingManualRecovery: row.pendingManualRecovery, cancelRequestedAt: row.cancelRequestedAt, planningRepair: repair, recoveryRequest };
   }
 
   async pauseAfterFailure(taskId: string, error?: unknown): Promise<void> {
@@ -43,7 +44,7 @@ export class PlanningRepairRecoveryService {
     if (!repair) throw new AppError("规划修复缺少持久化状态。", 409);
     if (repair.novelId !== row.novelId || repair.phase === "committed") throw new AppError("规划修复归属或状态已变化。", 409);
     const summary = error instanceof Error ? error.message : repair.summary ?? "规划修复需要确认。";
-    const waitingRepair = { ...repair, phase: repair.phase === "uncertain" ? "uncertain" : "waiting_confirmation", summary };
+    const waitingRepair = { ...repair, phase: repair.phase === "technical_failed" ? "technical_failed" : repair.phase === "uncertain" ? "uncertain" : "waiting_confirmation", summary };
     const resumeTarget = buildNovelEditResumeTarget({
       novelId: repair.novelId, taskId, stage: "structured", volumeId: repair.volumeId, chapterId: repair.chapterId,
     });
@@ -67,8 +68,9 @@ export class PlanningRepairRecoveryService {
     if (!row || row.lane !== "auto_director") throw new AppError("自动导演任务不存在。", 404);
     const { seed, repair, recovery } = readPlanningRepairSeed(row.seedPayloadJson);
     if (!repair || repair.key !== input.repairKey) throw new AppError("规划修复状态已变化，请刷新后再确认。", 409);
+    if (row.status === "cancelled" || row.cancelRequestedAt) throw new AppError("任务已取消，不能继续规划修复。", 409);
     if (input.action === "pause") {
-      if (!["waiting_approval", "failed"].includes(row.status)) throw new AppError("任务不处于暂停状态，请刷新后查看进度。", 409);
+      if (!isPlanningRepairTaskPaused(row)) throw new AppError("任务不处于暂停状态，请刷新后查看进度。", 409);
       return { granted: false, replayed: false, taskId };
     }
     const guidance = input.guidance?.trim();
@@ -88,7 +90,7 @@ export class PlanningRepairRecoveryService {
       throw new AppError("另一条修复确认正在处理，请先恢复该请求。", 409);
     }
     if ((!recovery?.pendingGrant && !repair.pendingOperation && !["waiting_confirmation", "uncertain", "technical_failed"].includes(repair.phase))
-      || !["waiting_approval", "failed"].includes(row.status)) {
+      || !isPlanningRepairTaskPaused(row)) {
       throw new AppError("当前规划修复不处于等待确认状态。", 409);
     }
     const maxRounds = repair.maxRounds ?? 2;
@@ -167,7 +169,7 @@ export class PlanningRepairRecoveryService {
     if (!current.repair || current.repair.key !== repair.key || !current.recovery?.pendingGrant
       || current.recovery.idempotencyKey !== idempotencyKey || current.recovery.guidance !== guidance
       || current.repair.rounds !== reservation.expectedRound || current.repair.maxRounds !== reservation.expectedMaxRounds
-      || !["waiting_approval", "failed"].includes(row.status)) {
+      || !isPlanningRepairTaskPaused(row)) {
       throw new AppError("修复范围或轮次已变化，本次未追加预算。", 409);
     }
     const currentRequests = Array.isArray(current.seed.planningRepairRecoveryRequests) ? current.seed.planningRepairRecoveryRequests : [];

@@ -30,7 +30,7 @@ test("explicit planning pause supersedes current failure text without erasing hi
   const history = [{ type: "node_failed", summary: "old semantic failure 3000" }];
   const projection = { status: "failed", blockedReason: history[0].summary, blockingReason: history[0].summary,
     detail: history[0].summary, lastErrorMessage: history[0].summary, recentEvents: history };
-  for (const phase of ["waiting_confirmation", "uncertain", "committed", "assessing"]) {
+  for (const phase of ["waiting_confirmation", "uncertain", "technical_failed", "committed", "assessing"]) {
     const task = { status: "waiting_approval", checkpointType: "step_review_required",
       checkpointSummary: "Current planning checkpoint", seedPayloadJson: JSON.stringify({ planningRepair: state({ phase }) }) };
     const next = overlayPlanningRepairPause(projection, task);
@@ -44,14 +44,14 @@ test("explicit planning pause supersedes current failure text without erasing hi
     assert.equal(projection.blockedReason, "old semantic failure 3000");
     for (const patch of [{ status: "failed" }, { status: "running" }, { checkpointType: "production_experience_required" },
       { seedPayloadJson: "{}" }, { seedPayloadJson: "broken" }, { checkpointSummary: "" },
-      { seedPayloadJson: JSON.stringify({ planningRepair: state({ phase: "technical_failed" }) }) }]) {
+      { cancelRequestedAt: new Date() }]) {
       assert.strictEqual(overlayPlanningRepairPause(projection, { ...task, ...patch }), projection);
     }
   }
 });
 
 test("planning recovery checkpoint identifies its source stage independently of stale runtime facts", () => {
-  for (const phase of ["waiting_confirmation", "uncertain", "assessing", "committed"]) {
+  for (const phase of ["waiting_confirmation", "uncertain", "technical_failed", "assessing", "committed"]) {
     const repair = state({ phase });
     const task = { status: "waiting_approval", checkpointType: "step_review_required",
       seedPayloadJson: JSON.stringify({ planningRepair: repair,
@@ -60,6 +60,25 @@ test("planning recovery checkpoint identifies its source stage independently of 
       ["assessing", "committed"].includes(phase) ? "chapter_execution" : "structured_outline");
     assert.equal(getPlanningRepairCheckpointStage({ ...task, status: "running" }), null);
     assert.equal(getPlanningRepairCheckpointStage({ ...task, seedPayloadJson: "{}" }), null);
+  }
+});
+
+test("legacy manual pause remains actionable in projections without rewriting the task", () => {
+  for (const status of ["running", "queued"]) {
+    const task = { status, pendingManualRecovery: true, checkpointType: "chapter_batch_ready",
+      checkpointSummary: "Current evidence requires review", seedPayloadJson: JSON.stringify({
+        planningRepair: state({ phase: "technical_failed" }), directorSession: { phase: "chapter_execution" },
+      }) };
+    const before = JSON.stringify(task);
+    const projection = { status: "running", recentEvents: [] };
+    assert.equal(getPlanningRepairCheckpointStage(task), "structured_outline");
+    assert.equal(overlayPlanningRepairPause(projection, task).status, "waiting_approval");
+    assert.equal(JSON.stringify(task), before);
+    for (const patch of [{ pendingManualRecovery: false }, { cancelRequestedAt: new Date() },
+      { status: "cancelled" }, { seedPayloadJson: JSON.stringify({ planningRepair: state({ phase: "committed" }) }) }]) {
+      assert.equal(getPlanningRepairCheckpointStage({ ...task, ...patch }), null);
+      assert.strictEqual(overlayPlanningRepairPause(projection, { ...task, ...patch }), projection);
+    }
   }
 });
 
@@ -295,7 +314,7 @@ test("pause keeps waiting without writes or budget changes", async () => {
 });
 
 test("safety conflict pauses on structured source and preserves original JIT resume anchor", async () => {
-  const { service, row } = harness({ directorSession: { phase: "chapter_execution" }, planningRepair: state({ phase: "technical_failed", candidateVersionId: "candidate-1" }) });
+  const { service, row } = harness({ directorSession: { phase: "chapter_execution" }, planningRepair: state({ phase: "technical_failed", technicalError: "Original source evidence failure", candidateVersionId: "candidate-1" }) });
   const error = Object.assign(new Error("Source changed"), { code: "PLANNING_REPAIR_CONFLICT" });
   assert.equal(isPlanningRepairConfirmationError(error), true);
   await service.pauseAfterFailure("task-1", error);
@@ -304,7 +323,8 @@ test("safety conflict pauses on structured source and preserves original JIT res
   assert.equal(row().pendingManualRecovery, true);
   assert.equal(JSON.parse(row().resumeTargetJson).stage, "structured");
   const seed = JSON.parse(row().seedPayloadJson);
-  assert.equal(seed.planningRepair.phase, "waiting_confirmation");
+  assert.equal(seed.planningRepair.phase, "technical_failed");
+  assert.equal(seed.planningRepair.technicalError, "Original source evidence failure");
   assert.equal(seed.planningRepair.candidateVersionId, "candidate-1");
   assert.equal(seed.planningRepairRecovery.resumePhase, "chapter_execution");
   assert.equal(resolvePlanningRepairResumePhase(row()), "chapter_execution");
