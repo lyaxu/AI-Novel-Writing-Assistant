@@ -31,6 +31,7 @@ export interface ChapterTaskSheetQualityPromptInput {
   previousIssues?: ChapterTaskSheetQualityIssue[];
   priorIssueDecisions?: ChapterPlanningIssueCheck[];
   omittedResolvedIssueCount?: number;
+  validationFeedback?: string;
 }
 
 function renderNullable(value: string | number | string[] | null | undefined): string {
@@ -80,6 +81,7 @@ function createSystemPrompt(mode: ChapterTaskSheetQualityPromptInput["mode"]): s
     "只评估当前章节合同，不扩写正文，不改写任务单。",
     "这是写前规划复核：判断已安排的动作与因果桥梁是否可执行，不要求规划提供尚未创作的正文。必须通读 taskSheet、mustAdvance 和 causality；若具体检查、建立或代价动作已安排在使用之前，不得因另一字段未重复描述而判定缺失。",
     "reviewContext 提供书级约束、原始与当前章节和邻章边界。历史评审只是待核实的意见，不能当作事实；以当前候选原文判断修复效果，不得机械复述上轮问题。未知前文不能自行编造。",
+    "唯一待审合同是 chapter execution contract candidate。reviewContext 中同章的旧 taskSheet/sceneCards 是只读历史背景，不得把其中的缺陷或引文归到当前 candidateEvidence。若收到 reviewValidationFeedback，表示上次审查输出不合法，不是合同已被判定有错；针对同一候选重新审查，按准确路径复制非空原文，不能凭上次无效意见要求改合同。",
     "writtenEvidence中的实际已写正文与可核验事实高于计划描述。selectedPlanningDirection来自用户确认的候选，是尚待履行的创作承诺，不是已经发生的事实，也不能用后来生成的大纲替代原始确认来源。",
     "逐项检查 selectedPromiseSourceIds：原选卖点、人物路径、开篇关系推进、earlyPayoff与openingChain中的回报价值是否贯穿当前细化。为每个sourceId输出一条promiseChecks。preserved=有证据保留，adapted=表现手段/落点改写但关系及回报价值等效，deferred=有理由延期且给出具体承接，dropped=承诺被丢弃，insufficient=证据不足。不要把纯追逃、重复受压当成原先关系变化或阶段回报的等价替代。",
     "scope区分current_chapter、opening_sequence、book_arc，由原始来源与实际安排判断，不按某个固定章序强锁动作。开篇原型允许合理拆合与移动，但延期须引用contextEvidence中实际承接章节的具体内容并说明回报何时如何落实；不能仅说后面再写。全书或前30章承诺不是本章必须全部兑现的清单；尚未到期的book_arc可以deferred并说明范围，不能据此无故阻塞当前章。",
@@ -152,7 +154,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   AiChapterTaskSheetQualityAssessment
 > = {
   id: "novel.volume.chapter_task_sheet_quality",
-  version: "v14",
+  version: "v15",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -175,6 +177,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
     new SystemMessage(createSystemPrompt(input.mode)),
     new HumanMessage([
       `mode: ${input.mode}`,
+      ...(input.validationFeedback ? ["reviewValidationFeedback (invalid prior review; unchanged candidate):", input.validationFeedback] : []),
       "",
       "chapter execution contract candidate:",
       renderCandidate(input.candidate),

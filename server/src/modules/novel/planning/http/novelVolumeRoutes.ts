@@ -89,14 +89,6 @@ function shouldPersistBeforeSlimVolumeResponse(body: unknown): boolean {
   return scope === "beat_sheet" || scope === "rebalance" || scope === "chapter_detail";
 }
 
-function shouldSyncSlimVolumeResponseToChapterExecution(body: unknown): boolean {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return false;
-  }
-  const scope = (body as { scope?: unknown }).scope;
-  return scope === "chapter_detail";
-}
-
 export function registerNovelVolumeRoutes(input: RegisterNovelVolumeRoutesInput): void {
   const {
     router,
@@ -153,12 +145,19 @@ export function registerNovelVolumeRoutes(input: RegisterNovelVolumeRoutesInput)
     async (req, res, next) => {
       try {
         const { id } = req.params as z.infer<typeof idParamsSchema>;
-        const data = await novelService.generateVolumes(id, req.body as any);
+        const chapterDetailTarget = shouldUseSlimVolumeGenerationResponse(req.body) && req.body.scope === "chapter_detail"
+          ? { volumeId: req.body.targetVolumeId, chapterId: req.body.targetChapterId, detailMode: req.body.detailMode }
+          : null;
+        const data = await novelService.generateVolumes(id, req.body as any, {
+          prepareChapterDetailCommit: Boolean(chapterDetailTarget),
+        });
         if (shouldUseSlimVolumeGenerationResponse(req.body)) {
-          const persistedData = shouldPersistBeforeSlimVolumeResponse(req.body)
+          const persistedData = chapterDetailTarget
+            ? await novelService.updateVolumes(id, data, { chapterDetailTarget })
+            : shouldPersistBeforeSlimVolumeResponse(req.body)
             ? await novelService.updateVolumes(id, {
               ...data,
-              syncToChapterExecution: shouldSyncSlimVolumeResponseToChapterExecution(req.body),
+              syncToChapterExecution: false,
             })
             : data;
           const responseData = buildSlimVolumeGenerationResponse(persistedData);

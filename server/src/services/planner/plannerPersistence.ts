@@ -149,7 +149,9 @@ function buildPlanSceneCards(input: PersistPlanInput): string | undefined {
       title,
       purpose: objective || reveal || title,
       mustAdvance: sanitizeCreativeMustAdvanceItems([objective, reveal, conflict].filter(Boolean)),
-      mustPreserve: input.mustPreserve.slice(0, 3).map((item) => sanitizePlanText(item)).filter(Boolean),
+      // Chapter-wide obligations remain in the task sheet. A coarse StoryPlan
+      // has no scene-level allocation and must not duplicate them in every scene.
+      mustPreserve: [],
       entryState,
       exitState,
       forbiddenExpansion: [],

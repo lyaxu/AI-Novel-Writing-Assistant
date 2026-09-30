@@ -223,7 +223,8 @@ export function useVolumeGenerationMutation({
           throw new Error("AI 已完成生成，但需要重新读取卷工作区后才能保存，请刷新卷规划后继续。");
         }
         nextDocument = latestWorkspaceResponse.data;
-        if (!autoSyncedToChapterExecution) {
+        // Chapter detail was saved together with its execution contract by the generation request.
+        if (!autoSyncedToChapterExecution || payload.scope === "chapter_detail") {
           return {
             generatedResponse,
             persistedResponse: latestWorkspaceResponse,

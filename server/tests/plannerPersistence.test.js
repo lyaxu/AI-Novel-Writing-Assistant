@@ -247,6 +247,7 @@ test("persistStoryPlan syncs chapter assets and promotes empty chapters to pendi
     assert.equal(captured.chapterUpdate.chapterStatus, "pending_generation");
     assert.match(captured.chapterUpdate.taskSheet, /章节目标：推进主线冲突并建立章节悬念/);
     assert.match(captured.chapterUpdate.taskSheet, /必须推进：/);
+    assert.match(captured.chapterUpdate.taskSheet, /保留主角求生动机/);
     assert.match(captured.chapterUpdate.taskSheet, /收尾钩子：结尾抛出更大的风险/);
     const parsedScenePlan = parseChapterScenePlan(captured.chapterUpdate.sceneCards, {
       targetWordCount: 3600,
@@ -254,6 +255,7 @@ test("persistStoryPlan syncs chapter assets and promotes empty chapters to pendi
     assert.ok(parsedScenePlan);
     assert.equal(parsedScenePlan.targetWordCount, 3600);
     assert.equal(parsedScenePlan.scenes.length, 3);
+    assert.ok(parsedScenePlan.scenes.every((scene) => scene.mustPreserve.length === 0));
     assert.equal(parsedScenePlan.scenes[0].title, "初次交锋");
     assert.deepEqual(parsedScenePlan.scenes[0].mustAdvance, [
       "把主角逼进选择",
@@ -522,6 +524,13 @@ test("runtime story plan preserves the complete chapter contract and hashes the 
       key: `approved-${index + 1}`,
       title: `已审场景 ${index + 1}`,
       purpose: "推进已审事件",
+      resistance: "守卫要求出示通行凭据",
+      causality: {
+        actor: "信使", choice: "出示已取得的凭据", motive: "兑现递信承诺",
+        prerequisites: [{ condition: "持有凭据", sourceKind: "established_in_context", reference: "前章交付凭据" }],
+        resistanceResponse: "守卫核对印章", outcomeMechanism: "核验成功后放行",
+        resultingConstraints: [{ constraint: "凭据被收回", persistence: "本次通行后" }],
+      },
       entryState: "保留原始局势",
       exitState: "完成规定结果",
       targetWordCount: 700,
@@ -539,6 +548,9 @@ test("runtime story plan preserves the complete chapter contract and hashes the 
   const preserved = { ...baseExecutionContract, ...captured.chapterUpdate };
   assert.equal(preserved.targetWordCount, 2800);
   assert.equal(JSON.parse(preserved.sceneCards).targetWordCount, 2800);
+  assert.equal(JSON.parse(preserved.sceneCards).scenes[0].causality.outcomeMechanism, "核验成功后放行");
+  assert.equal(JSON.parse(preserved.sceneCards).scenes[0].resistance, "守卫要求出示通行凭据");
+  assert.equal(preserved.mustAvoid, "不得提前揭密");
   const hash = readPlanExecutionContractHash(captured.plan.rawPlanJson);
   assert.equal(hash, buildChapterExecutionContractHash(baseExecutionContract));
   assert.notEqual(hash, buildChapterExecutionContractHash({

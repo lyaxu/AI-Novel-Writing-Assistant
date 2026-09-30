@@ -3,6 +3,8 @@ const test = require("node:test");
 
 const {
   buildChapterPayoffDirectives,
+  buildChapterStateGoal,
+  buildChapterPlanningReferenceCandidates,
 } = require("../dist/services/novel/production/ContextAssemblyService.js");
 
 function createPayoff(overrides) {
@@ -63,6 +65,29 @@ test("chapter payoff directives never turn overdue pressure into direct payoff",
       ["hinted-now", "touch"],
     ],
   );
+});
+
+test("chapter state keeps global conflicts and multi-stage arcs as inspectable references after rewrites", () => {
+  for (const currentChapterGoal of ["普通新章目标", "前章重写后抵达新的落点"]) {
+    const snapshot = createSnapshot([]);
+    Object.assign(snapshot.narrative, {
+      currentChapterId: "chapter-5", currentChapterGoal, hiddenKnowledge: ["不能提前公开的答案"],
+      openConflicts: [{ id: "conflict-1", title: "someone goal changed", summary: "前章目标改变" },
+        { id: "conflict-2", title: "continuity/issue", summary: "尚待核实的问题" }],
+    });
+    snapshot.characters = [{ name: "角色甲", relationStageLabels: ["初识", "合作", "最终收束"] }];
+    const before = JSON.stringify(snapshot);
+    const goal = buildChapterStateGoal(snapshot);
+    assert.equal(goal.summary, currentChapterGoal);
+    assert.deepEqual(goal.targetConflicts, []);
+    assert.deepEqual(goal.targetRelationships, []);
+    assert.deepEqual(goal.protectedSecrets, ["不能提前公开的答案"]);
+    const references = buildChapterPlanningReferenceCandidates(snapshot);
+    assert.equal(references.scope, "reference_candidates_not_chapter_obligations");
+    assert.deepEqual(references.openConflicts, snapshot.narrative.openConflicts);
+    assert.deepEqual(references.relationshipStages[0].stages, ["初识", "合作", "最终收束"]);
+    assert.equal(JSON.stringify(snapshot), before);
+  }
 });
 
 test("chapter payoff directives forbid protected reveals instead of advancing them", () => {

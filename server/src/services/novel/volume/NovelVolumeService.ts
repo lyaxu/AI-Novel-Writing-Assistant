@@ -19,6 +19,7 @@ import { payoffLedgerSyncService } from "../../payoff/PayoffLedgerSyncService";
 import { StoryMacroPlanService } from "../storyMacro/StoryMacroPlanService";
 import { StyleBindingService } from "../../styleEngine/StyleBindingService";
 import { ChapterExecutionContractService } from "./ChapterExecutionContractService";
+import { captureChapterDetailBaseline, rememberChapterDetailBaseline, commitGeneratedChapterDetail, type ChapterDetailTarget } from "./chapterDetail";
 import { createVolumeGenerationWriteGuard, type VolumeGenerationWriteGuard } from "./infrastructure/VolumeGenerationWriteGuard";
 export { createVolumeGenerationWriteGuard } from "./infrastructure/VolumeGenerationWriteGuard";
 import { isCommittedPlanningRepairDocument } from "./planningRepair/PlanningRepairCoordinator";
@@ -392,7 +393,15 @@ export class NovelVolumeService {
     return this.ensureVolumeWorkspace(novelId);
   }
 
-  async updateVolumes(novelId: string, input: unknown): Promise<VolumePlanDocument> {
+  async updateVolumes(novelId: string, input: unknown, internal?: { chapterDetailTarget: ChapterDetailTarget }): Promise<VolumePlanDocument> {
+    if (internal?.chapterDetailTarget) {
+      const committed = await commitGeneratedChapterDetail({ novelId, generated: input as VolumePlanDocument,
+        target: internal.chapterDetailTarget,
+        ensureActiveVersionRecord: (tx, id, document) => this.ensureActiveVersionRecord(tx, id, document) });
+      this.emitVolumeUpdated(novelId, "chapter_execution_contract_refined");
+      this.syncPayoffLedger(novelId);
+      return committed;
+    }
     const { workspaceInput, syncToChapterExecution } = extractVolumeWorkspaceUpdateInput(input);
     return this.updateVolumesWithOptions(novelId, workspaceInput, {
       syncToChapterExecution,
@@ -420,6 +429,17 @@ export class NovelVolumeService {
       return currentDocument;
     }
     const mergedDocument = mergeVolumeWorkspaceInput(novelId, currentDocument, input);
+    if (options.syncToChapterExecution) {
+      await this.syncVolumeChaptersWithOptions(novelId, {
+        volumes: mergedDocument.volumes, preserveContent: true, applyDeletes: false,
+      }, {
+        writeGuard: options.writeGuard, emitEvent: options.emitEvent,
+        syncPayoffLedger: options.syncPayoffLedger,
+        volumeUpdateReason: options.volumeUpdateReason,
+        preparedWorkspace: { current: currentDocument, merged: mergedDocument },
+      });
+      return this.ensureVolumeWorkspace(novelId);
+    }
     const persistedDocument = await this.persistWorkspaceDocument(novelId, mergedDocument, {
       writeGuard: options.writeGuard,
       volumeUpdateReason: options.volumeUpdateReason,
@@ -428,23 +448,6 @@ export class NovelVolumeService {
         ?? hasPayoffLedgerRelevantPlanChanges(currentDocument.volumes, mergedDocument.volumes),
       memoryTelemetry: options.memoryTelemetry,
     });
-    if (options.syncToChapterExecution) {
-      try {
-        await this.syncVolumeChaptersWithOptions(novelId, {
-          volumes: persistedDocument.volumes,
-          preserveContent: true,
-          applyDeletes: false,
-        }, {
-          writeGuard: options.writeGuard,
-          emitEvent: false,
-          syncPayoffLedger: false,
-        });
-        return this.ensureVolumeWorkspace(novelId);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "未知错误";
-        throw new Error(`当前卷工作区已保存，但章节执行连接失败：${message}`);
-      }
-    }
     return persistedDocument;
   }
 
@@ -659,6 +662,7 @@ export class NovelVolumeService {
       emitEvent?: boolean;
       syncPayoffLedger?: boolean;
       volumeUpdateReason?: VolumeUpdateReason;
+      preparedWorkspace?: { current: VolumePlanDocument; merged: VolumePlanDocument };
     } = {},
   ): Promise<VolumeSyncPreview> {
     return new VolumeChapterSyncService({
@@ -702,10 +706,15 @@ export class NovelVolumeService {
     return workspace;
   }
 
-  async generateVolumes(novelId: string, options: VolumeGenerateOptions = {}): Promise<VolumePlanDocument> {
+  async generateVolumes(novelId: string, options: VolumeGenerateOptions = {}, internal?: { prepareChapterDetailCommit: boolean }): Promise<VolumePlanDocument> {
     const writeGuard = options.writeGuard ?? await createVolumeGenerationWriteGuard(novelId, options.taskId);
     return withHighMemoryVolumeGenerationGuard(novelId, options, async () => {
       const persistedWorkspace = await this.ensureVolumeWorkspace(novelId);
+      const detailBaseline = internal?.prepareChapterDetailCommit && options.scope === "chapter_detail"
+        && options.targetVolumeId && options.targetChapterId && options.detailMode
+        ? await captureChapterDetailBaseline(novelId, persistedWorkspace, {
+          volumeId: options.targetVolumeId, chapterId: options.targetChapterId, detailMode: options.detailMode,
+        }, writeGuard) : null;
       const workspace = options.draftWorkspace
         ? mergeVolumeWorkspaceInput(novelId, persistedWorkspace, options.draftWorkspace)
         : options.draftVolumes
@@ -763,6 +772,7 @@ export class NovelVolumeService {
         },
         storyMacroPlanService: this.storyMacroPlanService,
       });
+      if (detailBaseline) rememberChapterDetailBaseline(generatedDocument, detailBaseline);
       logMemoryUsage({
         event: "before_return",
         component: "generateVolumes",

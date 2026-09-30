@@ -4,6 +4,8 @@ import type {
   VolumePlanDocument,
 } from "@ai-novel/shared/types/novel";
 import { assessChapterExecutionContractShape } from "@ai-novel/shared/types/chapterTaskSheetQuality";
+import type { ChapterExecutionContractQualityCandidate } from "@ai-novel/shared/types/chapterTaskSheetQuality";
+import type { VolumeChapterDetailPromptInput } from "../../../../prompting/prompts/novel/volume/shared";
 import {
   ChapterScenePlanNormalizationError,
   normalizeChapterScenePlan,
@@ -15,6 +17,7 @@ import { buildVolumeChapterDetailContextBlocks } from "../../../../prompting/pro
 import type { StoryMacroPlanService } from "../../storyMacro/StoryMacroPlanService";
 import {
   ChapterTaskSheetQualityGateService,
+  ChapterTaskSheetQualityGateError,
 } from "../ChapterTaskSheetQualityGateService";
 import type {
   VolumeGenerateOptions,
@@ -58,6 +61,9 @@ export function shouldRetryChapterExecutionContract(error: unknown, attempt: num
   }
   if (error instanceof ChapterScenePlanNormalizationError) {
     return true;
+  }
+  if (error instanceof ChapterTaskSheetQualityGateError) {
+    return error.result.verdict === "repairable" && error.result.recommendedHandling === "repair_contract";
   }
   return Boolean(
     error
@@ -157,13 +163,15 @@ export async function generateChapterTaskSheetDetail(params: {
 
   let lastError: Error | null = null;
   let qualityFeedback: string | null = null;
+  let previousCandidate: ChapterExecutionContractQualityCandidate | null = null;
   const qualityGate = new ChapterTaskSheetQualityGateService();
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const promptInput = qualityFeedback
+      const promptInput: VolumeChapterDetailPromptInput = qualityFeedback
         ? {
           ...params.promptInput,
+          contractRepairFeedback: qualityFeedback,
           guidance: [
             params.promptInput.guidance?.trim(),
             `上一版章节执行合同未通过质量门禁：${qualityFeedback}`,
@@ -203,7 +211,7 @@ export async function generateChapterTaskSheetDetail(params: {
         },
         generated.output.targetWordCount ?? promptInput.targetChapter.targetWordCount,
       );
-      if (!params.options.planningRepairManaged) await qualityGate.assertCanEnterExecution({
+      const candidate: ChapterExecutionContractQualityCandidate = {
         novelId: promptInput.workspace.novelId,
         volumeId: promptInput.targetVolume.id,
         chapterId: promptInput.targetChapter.id,
@@ -221,7 +229,9 @@ export async function generateChapterTaskSheetDetail(params: {
         payoffRefs: generated.output.payoffRefs,
         taskSheet: generated.output.taskSheet,
         sceneCards: serializeChapterScenePlan(scenePlan),
-      }, {
+      };
+      previousCandidate = candidate;
+      if (!params.options.planningRepairManaged) await qualityGate.assertCanEnterExecution(candidate, {
         mode: params.options.chapterTaskSheetQualityMode,
         provider: params.options.provider,
         model: params.options.model,
@@ -251,7 +261,13 @@ export async function generateChapterTaskSheetDetail(params: {
       if (!shouldRetryChapterExecutionContract(error, attempt)) {
         throw lastError;
       }
-      qualityFeedback = lastError.message;
+      qualityFeedback = error instanceof ChapterTaskSheetQualityGateError
+        ? JSON.stringify({
+          instruction: "修复上一候选的已核验问题，保留其有效设计；只返回完整修订合同，仍须重新通过写前审查。",
+          previousCandidate,
+          qualityResult: error.result,
+        })
+        : lastError.message;
     }
   }
 

@@ -211,11 +211,17 @@ test("volume routes cover workspace, versions, impact analysis, sync and legacy 
   const novelId = "novel-volume-route-test";
   const workspace = createWorkspace(novelId);
   const updateCalls = [];
+  const updateScopes = [];
+  const generationScopes = [];
 
   DefaultNovelApplicationServices.prototype.getVolumes = async () => workspace;
-  DefaultNovelApplicationServices.prototype.generateVolumes = async () => workspace;
-  DefaultNovelApplicationServices.prototype.updateVolumes = async (_id, input) => {
+  DefaultNovelApplicationServices.prototype.generateVolumes = async (_id, _input, internal) => {
+    generationScopes.push(internal);
+    return workspace;
+  };
+  DefaultNovelApplicationServices.prototype.updateVolumes = async (_id, input, internal) => {
     updateCalls.push(input);
+    updateScopes.push(internal);
     return workspace;
   };
   DefaultNovelApplicationServices.prototype.listVolumeVersions = async () => [createVersion(2, "draft"), createVersion(1, "active")];
@@ -288,6 +294,24 @@ test("volume routes cover workspace, versions, impact analysis, sync and legacy 
     assert.deepEqual(slimBeatSheetPayload.data.rebalanceDecisions, []);
     assert.equal(updateCalls.length, 1);
     assert.equal(updateCalls.at(-1).syncToChapterExecution, false);
+
+    const detailResponse = await fetch(`http://127.0.0.1:${port}/api/novels/${novelId}/volumes/generate`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "chapter_detail", targetVolumeId: "volume-1", targetChapterId: "chapter-1",
+        detailMode: "task_sheet", slimResponse: true }),
+    });
+    assert.equal(detailResponse.status, 200);
+    assert.equal((await detailResponse.json()).data.slimmed, true);
+    assert.deepEqual(generationScopes.at(-1), { prepareChapterDetailCommit: true });
+    assert.equal(updateCalls.at(-1), workspace, "service-owned generation receipt keeps object identity");
+    assert.deepEqual(updateScopes.at(-1), { chapterDetailTarget: { volumeId: "volume-1", chapterId: "chapter-1", detailMode: "task_sheet" } });
+    const generationCount = generationScopes.length;
+    const missingMode = await fetch(`http://127.0.0.1:${port}/api/novels/${novelId}/volumes/generate`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "chapter_detail", targetVolumeId: "volume-1", targetChapterId: "chapter-1", slimResponse: true }),
+    });
+    assert.equal(missingMode.status, 400);
+    assert.equal(generationScopes.length, generationCount);
 
     const draftResponse = await fetch(`http://127.0.0.1:${port}/api/novels/${novelId}/volumes/versions/draft`, {
       method: "POST",

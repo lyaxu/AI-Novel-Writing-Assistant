@@ -96,6 +96,9 @@ function buildPlannerPlanAsset(input: {
         "3. 输出必须服务于后续创作执行，而不是写分析说明。",
         "4. 各字段之间必须自洽，不得互相冲突。",
         "5. mustAdvance 和 mustPreserve 必须简短、具体、可直接用于后续写作。",
+        ...(input.planLevel === "chapter" ? [
+          "6. reference_candidates_not_chapter_obligations中的全局冲突和人物阶段只是待判断背景。结合已写正文、当前章目标及明确执行合同，选择本章相关事项并具体化后才写入mustAdvance/mustPreserve；不直接抄内部问题代码或远期阶段标签。未选背景不等于本章缺项，用户和当前章的明确硬约束仍必须遵守。participants只包含本章实际需要的参与者，不为凑人数添加全书角色，也不强制每章出现主角。",
+        ] : []),
         "",
         "字段要求：",
         "1. title：写当前层级规划条目的标题，简洁明确，不要占位词。",
@@ -225,7 +228,7 @@ export const plannerArcPlanPrompt = buildPlannerPlanAsset({
 
 export const plannerChapterPlanPrompt = buildPlannerPlanAsset({
   id: "planner.chapter.plan",
-  version: "v1",
+  version: "v2",
   planLevel: "chapter",
   includeScenes: true,
   maxTokensBudget: 2400,

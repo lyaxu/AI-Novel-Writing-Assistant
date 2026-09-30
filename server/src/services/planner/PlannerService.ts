@@ -4,7 +4,7 @@ import type { AuditReport, ReplanResult } from "@ai-novel/shared/types/novel";
 import type { PayoffLedgerSummary } from "@ai-novel/shared/types/payoffLedger";
 import { prisma } from "../../db/prisma";
 import { characterDynamicsQueryService } from "../novel/dynamics/CharacterDynamicsQueryService";
-import { contextAssemblyService } from "../novel/production/ContextAssemblyService";
+import { buildChapterPlanningReferenceCandidates, contextAssemblyService } from "../novel/production/ContextAssemblyService";
 import { buildStateContextBlockFromCanonical } from "../novel/state/CanonicalStateService";
 import { payoffLedgerSyncService } from "../payoff/PayoffLedgerSyncService";
 import { mapRowToPlan } from "../novel/storyMacro/storyMacroPlanPersistence";
@@ -537,7 +537,10 @@ export class PlannerService {
       characters: characters.map((item) => `${item.id}|${item.name}|${item.role}|goal=${item.currentGoal ?? ""}|state=${item.currentState ?? ""}`).join("\n") || "无",
       recentSummaries: summaries.map((item) => `${item.summary}`).join("\n") || "无",
       plotBeats: plotBeats.map((item) => `${item.chapterOrder ?? "-"} ${item.title} ${item.content}`).join("\n") || "无",
-      stateSnapshot: buildStateContextBlockFromCanonical(resolvedStateDrivenContext.snapshot),
+      stateSnapshot: [
+        buildStateContextBlockFromCanonical(resolvedStateDrivenContext.snapshot),
+        JSON.stringify(buildChapterPlanningReferenceCandidates(resolvedStateDrivenContext.snapshot)),
+      ].join("\n\n"),
       openAuditIssues: openAuditIssues.join("\n") || "无",
       recentDecisions: recentDecisions.map((item) => `${item.category}/${item.importance}: ${item.content}`).join("\n") || "无",
       characterDynamicsSummary: characterDynamicsContext.summary,
@@ -614,14 +617,8 @@ export class PlannerService {
       scenes: output.scenes ?? [],
       planRole: metadata.planRole,
       phaseLabel: metadata.phaseLabel,
-      mustAdvance: takeUnique([
-        ...(chapterStateGoal?.targetConflicts ?? []),
-        ...metadata.mustAdvance,
-      ], 8),
-      mustPreserve: takeUnique([
-        ...(chapterStateGoal?.targetRelationships ?? []),
-        ...metadata.mustPreserve,
-      ], 8),
+      mustAdvance: metadata.mustAdvance,
+      mustPreserve: metadata.mustPreserve,
       sourceIssueIds: metadata.sourceIssueIds,
       replannedFromPlanId: metadata.replannedFromPlanId,
     });

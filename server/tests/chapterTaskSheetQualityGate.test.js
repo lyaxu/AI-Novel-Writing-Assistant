@@ -201,9 +201,11 @@ test("contract readiness distinguishes structural completeness from current requ
   assert.equal(incomplete.canReuse, false);
 });
 
-test("chapter execution contract does not retry a semantic quality warning", () => {
+test("chapter execution contract repairs a verified local semantic finding only once", () => {
   const qualityError = new ChapterTaskSheetQualityGateError({
     status: "repairable",
+    verdict: "repairable",
+    recommendedHandling: "repair_contract",
     canEnterExecution: false,
     summary: "合同需要局部修正。",
     issues: [],
@@ -214,7 +216,7 @@ test("chapter execution contract does not retry a semantic quality warning", () 
     promptQualityFailureKind: "post_validate_failed",
   });
 
-  assert.equal(shouldRetryChapterExecutionContract(qualityError, 0), false);
+  assert.equal(shouldRetryChapterExecutionContract(qualityError, 0), true);
   assert.equal(shouldRetryChapterExecutionContract(qualityError, 1), false);
   assert.equal(shouldRetryChapterExecutionContract(postValidateError, 0), true);
   assert.equal(shouldRetryChapterExecutionContract(
@@ -344,7 +346,7 @@ test("chapter task sheet quality service passes usable semantic assessments", as
 });
 
 test("chapter task sheet quality prompt is registered as a product prompt asset", () => {
-  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v14");
+  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v15");
   assert.equal(registered, chapterTaskSheetQualityPrompt);
 });
 

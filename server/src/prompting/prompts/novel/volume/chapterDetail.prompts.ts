@@ -400,7 +400,7 @@ export const volumeChapterExecutionContractPrompt: PromptAsset<
   ReturnType<typeof createChapterExecutionContractSchema>["_output"]
 > = {
   id: "novel.volume.chapter_execution_contract",
-  version: "v8",
+  version: "v9",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -408,7 +408,10 @@ export const volumeChapterExecutionContractPrompt: PromptAsset<
   outputSchema: createChapterExecutionContractSchema(),
   render: (input, context) => [
     new SystemMessage(createExecutionContractSystemPrompt()),
-    new HumanMessage(buildChapterDetailPrompt(renderSelectedContextBlocks(context), input.detailMode)),
+    new HumanMessage([
+      buildChapterDetailPrompt(renderSelectedContextBlocks(context), input.detailMode),
+      ...(input.contractRepairFeedback ? ["Contract repair feedback (required; retain valid parts of the previous candidate):", input.contractRepairFeedback] : []),
+    ].join("\n\n")),
   ],
   postValidate: (output, input) => {
     validateBoundaryContract(output, input);

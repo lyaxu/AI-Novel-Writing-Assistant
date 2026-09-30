@@ -97,7 +97,20 @@ export function buildChapterPayoffDirectives(
   ], 5).map((payoff) => buildPayoffDirective(payoff, chapterOrder, protectedSecrets));
 }
 
-function buildChapterStateGoal(
+export function buildChapterPlanningReferenceCandidates(
+  snapshot: Awaited<ReturnType<typeof canonicalStateService.getSnapshot>>,
+) {
+  return {
+    scope: "reference_candidates_not_chapter_obligations",
+    openConflicts: snapshot.narrative.openConflicts,
+    relationshipStages: snapshot.characters.map((character) => ({
+      name: character.name,
+      stages: character.relationStageLabels,
+    })),
+  };
+}
+
+export function buildChapterStateGoal(
   snapshot: Awaited<ReturnType<typeof canonicalStateService.getSnapshot>>,
 ): ChapterStateGoal | null {
   if (
@@ -111,11 +124,11 @@ function buildChapterStateGoal(
     chapterId: snapshot.narrative.currentChapterId,
     chapterOrder: snapshot.narrative.currentChapterOrder,
     summary: snapshot.narrative.currentChapterGoal ?? "advance the current narrative state",
-    targetConflicts: takeTop(snapshot.narrative.openConflicts.map((item) => item.title), 3),
-    targetRelationships: takeTop(
-      snapshot.characters.flatMap((item) => item.relationStageLabels.map((label) => `${item.name}: ${label}`)),
-      3,
-    ),
+    // Snapshot conflicts and relationship stages are reference candidates, not
+    // chapter obligations. The planner must select their current relevance.
+    // Keep their full records in snapshot/localConflicts/localCharacters.
+    targetConflicts: [],
+    targetRelationships: [],
     targetPayoffs: takeTop(
       [
         ...snapshot.narrative.overduePayoffs.map((item) => item.title),

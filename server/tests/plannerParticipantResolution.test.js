@@ -150,7 +150,7 @@ function createOverview() {
   };
 }
 
-test("planner participant resolver augments AI output with high-priority dynamic roles", () => {
+test("planner participant resolver preserves AI cast without filling dynamic role quotas", () => {
   const participants = resolveChapterPlanParticipants({
     outputParticipants: ["林焰"],
     characters: createCharacters(),
@@ -158,7 +158,7 @@ test("planner participant resolver augments AI output with high-priority dynamic
     chapterOrder: 5,
   });
 
-  assert.deepEqual(participants.slice(0, 2), ["林焰", "苏雨"]);
+  assert.deepEqual(participants, ["林焰"]);
 });
 
 test("planner participant resolver blocks pending candidate names from entering the plan", () => {
@@ -171,10 +171,10 @@ test("planner participant resolver blocks pending candidate names from entering 
 
   assert.ok(!participants.includes("林策"));
   assert.ok(participants.includes("林焰"));
-  assert.ok(participants.includes("苏雨"));
+  assert.ok(!participants.includes("苏雨"));
 });
 
-test("planner participant resolver falls back to dynamic core roles instead of raw roster order", () => {
+test("planner participant resolver allows an empty cast without forcing the protagonist", () => {
   const participants = resolveChapterPlanParticipants({
     outputParticipants: [],
     characters: createCharacters(),
@@ -182,6 +182,12 @@ test("planner participant resolver falls back to dynamic core roles instead of r
     chapterOrder: 5,
   });
 
-  assert.deepEqual(participants.slice(0, 2), ["苏雨", "林焰"]);
-  assert.ok(!participants.slice(0, 2).includes("路人甲"));
+  assert.deepEqual(participants, []);
+});
+
+test("planner participant resolver keeps three selected actors and only normalizes valid names", () => {
+  assert.deepEqual(resolveChapterPlanParticipants({
+    outputParticipants: [" 林焰 ", "苏雨", "周衡", "林焰", "不存在"],
+    characters: createCharacters(), characterDynamicsOverview: createOverview(), chapterOrder: 5,
+  }), ["林焰", "苏雨", "周衡"]);
 });

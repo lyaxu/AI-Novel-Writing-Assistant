@@ -43,6 +43,27 @@ function normalizeQualityMode(mode?: ChapterTaskSheetQualityMode): ChapterTaskSh
   return mode ?? "ai_copilot";
 }
 
+/** Project the reviewed revision into duplicate current-plan slots, never into original promises/prose. */
+export function projectCurrentQualityCandidate(
+  candidate: ChapterExecutionContractQualityCandidate,
+  reviewContextJson?: string,
+): string | undefined {
+  if (!reviewContextJson) return reviewContextJson;
+  let context: Record<string, any>;
+  try { context = JSON.parse(reviewContextJson); } catch { return reviewContextJson; }
+  if (!context || typeof context !== "object" || Array.isArray(context)) return reviewContextJson;
+  const replaceCurrent = (chapters: unknown) => Array.isArray(chapters)
+    ? chapters.map((chapter) => chapter && (chapter.id === candidate.chapterId || chapter.chapterId === candidate.chapterId)
+      ? { ...chapter, ...candidate, authority: "current_review_candidate_not_written_prose" }
+      : chapter)
+    : chapters;
+  if (context.planningContext?.targetVolume?.chapters) {
+    context.planningContext.targetVolume.chapters = replaceCurrent(context.planningContext.targetVolume.chapters);
+  }
+  if (context.readonlyOpeningRoutes) context.readonlyOpeningRoutes = replaceCurrent(context.readonlyOpeningRoutes);
+  return JSON.stringify(context);
+}
+
 function ensureFailureResult(result: ChapterTaskSheetQualityGateResult): ChapterTaskSheetQualityGateResult {
   if (!result.canEnterExecution || result.status !== "passed") {
     return result;
@@ -60,6 +81,14 @@ export class ChapterTaskSheetQualityGateError extends Error {
   }
 }
 
+/** An invalid review is not a finding about the contract being reviewed. */
+export class ChapterTaskSheetQualityReviewError extends Error {
+  constructor(readonly originalError: unknown) {
+    super(originalError instanceof Error ? originalError.message : "章节合同审查输出无效。");
+    this.name = "ChapterTaskSheetQualityReviewError";
+  }
+}
+
 export class ChapterTaskSheetQualityGateService {
   constructor(private readonly semanticAssessor?: ChapterTaskSheetSemanticAssessor) {}
 
@@ -67,6 +96,7 @@ export class ChapterTaskSheetQualityGateService {
     candidate: ChapterExecutionContractQualityCandidate,
     options: ChapterTaskSheetQualityGateOptions = {},
   ): Promise<ChapterTaskSheetQualityGateResult> {
+    options = { ...options, reviewContextJson: projectCurrentQualityCandidate(candidate, options.reviewContextJson) };
     const mode = normalizeQualityMode(options.mode);
     const shapeResult = assessChapterExecutionContractShape(candidate);
     if (!shapeResult.canEnterExecution) {
@@ -100,34 +130,46 @@ export class ChapterTaskSheetQualityGateService {
       const context = JSON.parse(options.reviewContextJson || "{}");
       promiseCount = selectedPlanningPromiseIds(context?.selectedPlanningDirection as SelectedPlanningDirection | undefined, candidate.chapterOrder).length;
     } catch { /* Unknown original direction does not invent checks. */ }
-    const generated = await runStructuredPrompt({
-      asset: chapterTaskSheetQualityPrompt,
-      promptInput: {
-        candidate,
-        mode,
-        reviewContextJson: options.reviewContextJson,
-        previousIssues: options.previousIssues,
-        priorIssueDecisions: options.priorIssueDecisions,
-        omittedResolvedIssueCount: options.omittedResolvedIssueCount,
-      },
-      options: {
-        provider: options.provider,
-        model: options.model,
-        temperature: options.temperature ?? 0.1,
-        // One existing review call; bounded headroom for explicit evidence per selected promise.
-        maxTokens: Math.min(16000, 4000 + promiseCount * 600 + (options.previousIssues?.length ?? 0) * 500),
-        taskId: options.taskId,
-        entrypoint: options.entrypoint,
-        novelId: candidate.novelId,
-        volumeId: candidate.volumeId ?? undefined,
-        chapterId: candidate.chapterId,
-        stage: "chapter_task_sheet_quality",
-        itemKey: "chapter_detail_bundle",
-        scope: "chapter_detail",
-        triggerReason: "chapter_task_sheet_quality_gate",
-        signal: options.signal,
-      },
-    });
-    return generated.output;
+    let validationFeedback: string | undefined;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const generated = await runStructuredPrompt({
+          asset: chapterTaskSheetQualityPrompt,
+          promptInput: {
+            candidate,
+            mode,
+            reviewContextJson: options.reviewContextJson,
+            previousIssues: options.previousIssues,
+            priorIssueDecisions: options.priorIssueDecisions,
+            omittedResolvedIssueCount: options.omittedResolvedIssueCount,
+            validationFeedback,
+          },
+          options: {
+            provider: options.provider,
+            model: options.model,
+            temperature: options.temperature ?? 0.1,
+            // Bounded output headroom; invalid review output may be reissued once for this same candidate.
+            maxTokens: Math.min(16000, 4000 + promiseCount * 600 + (options.previousIssues?.length ?? 0) * 500),
+            taskId: options.taskId,
+            entrypoint: options.entrypoint,
+            novelId: candidate.novelId,
+            volumeId: candidate.volumeId ?? undefined,
+            chapterId: candidate.chapterId,
+            stage: "chapter_task_sheet_quality",
+            itemKey: "chapter_detail_bundle",
+            scope: "chapter_detail",
+            triggerReason: "chapter_task_sheet_quality_gate",
+            signal: options.signal,
+          },
+        });
+        return generated.output;
+      } catch (error) {
+        const kind = (error as { promptQualityFailureKind?: unknown } | null)?.promptQualityFailureKind;
+        if (kind !== "post_validate_failed" && kind !== "schema_repair_failed") throw error;
+        if (attempt > 0 || options.signal?.aborted) throw new ChapterTaskSheetQualityReviewError(error);
+        validationFeedback = error instanceof Error ? error.message : "审查输出未通过结构或引用校验。";
+      }
+    }
+    throw new Error("章节合同审查未完成。");
   }
 }

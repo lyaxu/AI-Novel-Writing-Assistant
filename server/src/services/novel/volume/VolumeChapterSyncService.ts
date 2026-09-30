@@ -39,6 +39,7 @@ export interface VolumeChapterSyncServiceDeps {
 }
 
 export interface VolumeChapterSyncOptions {
+  preparedWorkspace?: { current: VolumePlanDocument; merged: VolumePlanDocument };
   writeGuard?: VolumeGenerationWriteGuard;
   emitEvent?: boolean;
   syncPayoffLedger?: boolean;
@@ -72,8 +73,8 @@ export class VolumeChapterSyncService {
     input: VolumeSyncInput,
     options: VolumeChapterSyncOptions = {},
   ): Promise<VolumeSyncPreview> {
-    const workspace = await this.deps.ensureVolumeWorkspace(novelId);
-    const mergedDocument = mergeVolumeWorkspaceInput(novelId, workspace, { volumes: input.volumes });
+    const workspace = options.preparedWorkspace?.current ?? await this.deps.ensureVolumeWorkspace(novelId);
+    const mergedDocument = options.preparedWorkspace?.merged ?? mergeVolumeWorkspaceInput(novelId, workspace, { volumes: input.volumes });
     if (!input.allowIncompleteExecutionContracts) {
       this.assertSyncableChapterExecutionContracts(mergedDocument, input.executionContractChapterRange);
     }

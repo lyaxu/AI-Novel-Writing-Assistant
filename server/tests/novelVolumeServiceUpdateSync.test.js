@@ -86,7 +86,7 @@ function createSyncPreview() {
   };
 }
 
-test("updateVolumes syncs chapter execution after saving when requested", async () => {
+test("updateVolumes delegates workspace and execution saving to one sync transaction", async () => {
   const service = new NovelVolumeService();
   const originals = {
     ensureVolumeWorkspace: service.ensureVolumeWorkspace,
@@ -101,18 +101,13 @@ test("updateVolumes syncs chapter execution after saving when requested", async 
 
   service.ensureVolumeWorkspace = async () => savedWorkspace;
   service.persistWorkspaceDocument = async (_novelId, document) => {
-    savedWorkspace = {
-      ...document,
-      activeVersionId: "version-2",
-      source: "volume",
-    };
-    return savedWorkspace;
+    throw new Error("Workspace must not be saved ahead of execution sync");
   };
   service.syncVolumeChaptersWithOptions = async (_novelId, input, options) => {
     syncCall = { input, options };
     savedWorkspace = {
-      ...savedWorkspace,
-      volumes: savedWorkspace.volumes.map((volume) => ({
+      ...options.preparedWorkspace.merged,
+      volumes: options.preparedWorkspace.merged.volumes.map((volume) => ({
         ...volume,
         chapters: volume.chapters.map((chapter, index) => ({
           ...chapter,
@@ -134,14 +129,25 @@ test("updateVolumes syncs chapter execution after saving when requested", async 
     assert.equal(syncCall.input.preserveContent, true);
     assert.equal(syncCall.input.applyDeletes, false);
     assert.equal(syncCall.input.volumes[0].chapters.length, 2);
-    assert.equal(syncCall.options.emitEvent, false);
-    assert.equal(syncCall.options.syncPayoffLedger, false);
+    assert.equal(syncCall.options.preparedWorkspace.current, currentWorkspace);
     assert.equal(updated.volumes[0].chapters[0].chapterId, "chapter-row-1");
   } finally {
     service.ensureVolumeWorkspace = originals.ensureVolumeWorkspace;
     service.persistWorkspaceDocument = originals.persistWorkspaceDocument;
     service.syncVolumeChaptersWithOptions = originals.syncVolumeChaptersWithOptions;
   }
+});
+
+test("failed execution sync never persists the proposed workspace first", async () => {
+  const service = new NovelVolumeService();
+  const current = createWorkspace(1);
+  service.ensureVolumeWorkspace = async () => current;
+  let writes = 0;
+  service.persistWorkspaceDocument = async () => { writes++; throw new Error("Unexpected write"); };
+  service.syncVolumeChaptersWithOptions = async () => { throw new Error("Invalid contract"); };
+  await assert.rejects(service.updateVolumes("novel-demo", { volumes: createWorkspace(2).volumes, syncToChapterExecution: true }), /Invalid contract/);
+  assert.equal(writes, 0);
+  assert.equal(current.volumes[0].chapters.length, 1);
 });
 
 test("updateVolumes does not sync chapter execution when the flag is absent", async () => {
