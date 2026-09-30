@@ -16,6 +16,9 @@ export const chapterProgressionCheckSchema = z.object({
   priorState: z.string().trim().max(180),
   actualChange: z.string().trim().max(180),
   newConsequence: z.string().trim().max(180),
+  // Optional only for historical assessments; fresh prompt output requires explicit AI judgments.
+  repeatsEstablishedBeat: z.boolean().nullable().optional(),
+  addsNewConsequence: z.boolean().nullable().optional(),
   previousEvidence: z.array(evidenceSchema).max(2),
   currentEvidence: z.array(evidenceSchema).max(2),
   explanation: z.string().trim().min(1).max(240),

@@ -1,4 +1,6 @@
 import type { BaseMessageChunk } from "@langchain/core/messages";
+import { randomUUID } from "node:crypto";
+import type { ChapterPatchIssueResolution } from "@ai-novel/shared/types/chapterPatchRepair";
 import type { GenerationContextPackage } from "@ai-novel/shared/types/chapterRuntime";
 import type { ReviewIssue } from "@ai-novel/shared/types/novel";
 import type { StreamDoneHelpers } from "../../../../llm/streaming";
@@ -7,6 +9,8 @@ import { streamTextPrompt } from "../../../../prompting/core/promptRunner";
 import { withChapterRepairContext } from "../../../../prompting/prompts/novel/chapterLayeredContext";
 import { auditService } from "../../../audit/AuditService";
 import { ChapterPatchRepairFailedError } from "../../chapterPatchRepairService";
+import { chapterQualityLoopService } from "../../quality/ChapterQualityLoopService";
+import { filterVerifiedRepairIssues } from "../acceptance";
 import {
   isPass,
   logPipelineError,
@@ -33,6 +37,7 @@ export interface ChapterRepairStreamRuntimeDeps {
   contentFinalizationService: Pick<ChapterContentFinalizationService, "finalizeChapterContent">;
   lifecycleService: Pick<ChapterLifecycleService, "saveWorkingContent" | "markGenerationState">;
   resolveAuditIssues?: (novelId: string, issueIds: string[]) => Promise<unknown>;
+  qualityLoopService?: Pick<typeof chapterQualityLoopService, "recordPatchAttempt">;
 }
 
 export class ChapterRepairStreamRuntime {
@@ -83,6 +88,12 @@ export class ChapterRepairStreamRuntime {
       throw new ChapterContextAssemblyError(novelId, chapterId, "repair", error);
     }
 
+    const attemptId = `manual-patch:${randomUUID()}`;
+    const recordAttempt = (issueResolutions: ChapterPatchIssueResolution[], outcome: "candidate_prepared" | "application_failed") =>
+      (this.deps.qualityLoopService ?? chapterQualityLoopService).recordPatchAttempt({
+        novelId, chapterId, entry: { attemptId, recordedAt: new Date().toISOString(),
+          source: "manual_repair", outcome, issueResolutions },
+      });
     const prepared = await prepareChapterRepairExecution({
       novelId,
       chapterId,
@@ -98,9 +109,19 @@ export class ChapterRepairStreamRuntime {
         temperature: options.temperature,
         repairMode: options.repairMode,
       },
+    }).catch(async (error: unknown) => {
+      if (error instanceof ChapterPatchRepairFailedError && error.plan?.issueResolutions?.length) {
+        try {
+          await recordAttempt(error.plan.issueResolutions, "application_failed");
+        } catch (persistenceError) {
+          throw new AggregateError([error, persistenceError], "补丁未能安全应用，且处理回执保存失败。", { cause: error });
+        }
+      }
+      throw error;
     });
 
     if (prepared.kind === "patched") {
+      if (prepared.issueResolutions?.length) await recordAttempt(prepared.issueResolutions, "candidate_prepared");
       return {
         stream: createSingleChunkStream(prepared.content),
         onDone: async (fullContent: string, helpers: StreamDoneHelpers) => {
@@ -146,12 +167,17 @@ export class ChapterRepairStreamRuntime {
 
     const auditIssues = options.auditIssueIds?.length
       ? await prisma.auditIssue.findMany({
-        where: { id: { in: options.auditIssueIds } },
+        where: { id: { in: options.auditIssueIds }, report: { novelId, chapterId } },
+        include: { report: { select: { legacyScoreJson: true } } },
         orderBy: { createdAt: "asc" },
       })
       : [];
     if (auditIssues.length > 0) {
-      return auditIssues.map((item) => ({
+      const verifiedIssues = filterVerifiedRepairIssues(auditIssues, auditIssues.map((item) => item.report));
+      if (verifiedIssues.length === 0) {
+        throw new ChapterPatchRepairFailedError("所选问题的原文来源尚未核实，请先复查审校证据，再执行修文。");
+      }
+      return verifiedIssues.map((item) => ({
         severity: item.severity as ReviewIssue["severity"],
         category: item.auditType === "continuity"
           ? "coherence"

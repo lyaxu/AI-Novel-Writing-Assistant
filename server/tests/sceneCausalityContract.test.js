@@ -125,6 +125,12 @@ test("fresh acceptance requires evidence rows and validates exact expected-scene
   assert.equal(chapterAcceptanceAssessmentSchema.safeParse(assessment()).success, true);
   assert.equal(generatedChapterAcceptanceAssessmentSchema.safeParse(assessment()).success, false);
   const complete = generatedChapterAcceptanceAssessmentSchema.parse({ ...assessment(), sceneCausalityVerdicts: [verdict("scene_1"), verdict("scene_2")],
+    progressionChecks: ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"].map((dimension) => ({
+      dimension, status: "not_applicable", repeatsEstablishedBeat: false, addsNewConsequence: false,
+      priorState: "首章没有比较职责", actualChange: "", newConsequence: "", previousEvidence: [],
+      currentEvidence: [{ source: "current_prose", sourceId: "current", quote: "她把信收好。" }],
+      explanation: "首章没有前章已完成职责。", repairSuggestion: "",
+    })),
     actionStateChecks: [actionCheck("scene_1"), actionCheck("scene_2")] });
   const input = { chapterOrder: 1, content: "她读完信。她把信收好。", expectedSceneKeys: ["scene_1", "scene_2"] };
   assert.deepEqual(chapterAcceptanceAssessmentPrompt.postValidate(complete, input).sceneCausalityVerdicts, complete.sceneCausalityVerdicts);

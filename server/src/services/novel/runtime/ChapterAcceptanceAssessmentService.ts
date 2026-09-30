@@ -44,6 +44,10 @@ export interface ChapterAcceptanceAssessmentResult {
 type AcceptanceIssue = ChapterAcceptanceAssessmentOutput["blockingIssues"][number];
 type AcceptanceRepairDirective = ChapterAcceptanceAssessmentOutput["repairDirectives"][number];
 
+function hasUnverifiedSource(issue: AcceptanceIssue): boolean {
+  return Boolean(issue.sourceValidationIssues?.length);
+}
+
 const UNDER_LENGTH_MARKERS = [
   "length_insufficient",
   "length_under",
@@ -175,8 +179,9 @@ export function normalizeAssessment(
   const reconciled = projectCausalAssessment(reconcileLengthAssessment(output, content, targetWordCount));
   const score = normalizeScore(reconciled.score ?? ruleScore(content));
   const missingObligations = reconciled.missingObligations ?? [];
-  const hasHighRisk = reconciled.blockingIssues.some((issue) => issue.severity === "high" || issue.severity === "critical");
-  const hasRepairWork = reconciled.blockingIssues.length > 0
+  const actionableIssues = reconciled.blockingIssues.filter((issue) => !hasUnverifiedSource(issue));
+  const hasHighRisk = actionableIssues.some((issue) => issue.severity === "high" || issue.severity === "critical");
+  const hasRepairWork = actionableIssues.length > 0
     || reconciled.repairDirectives.length > 0
     || missingObligations.length > 0
     || reconciled.repairability === "patchable_obligation_gap"
@@ -207,9 +212,11 @@ export function normalizeAssessment(
     score,
     continuePolicy,
     riskTags: Array.from(new Set(reconciled.riskTags.map((item) => item.trim()).filter(Boolean))),
-    blockingIssues: reconciled.blockingIssues.slice(0, 5),
-    repairDirectives: reconciled.repairDirectives.slice(0, 4),
-    missingObligations: missingObligations.slice(0, 8),
+    // Projection can add state/progression findings ahead of the model's issues.
+    // Keep the complete assessment; an execution budget must not erase evidence.
+    blockingIssues: reconciled.blockingIssues,
+    repairDirectives: reconciled.repairDirectives,
+    missingObligations,
   };
 }
 
@@ -261,7 +268,7 @@ export class ChapterAcceptanceAssessmentService {
       riskTags: [...assessment.riskTags, ...proseQuality.findings.map((finding) => finding.code)],
     }, input.content, input.targetWordCount);
     const score = normalizeScore(normalized.score);
-    const issues = normalized.blockingIssues.map((issue) => ({
+    const issues = normalized.blockingIssues.filter((issue) => !hasUnverifiedSource(issue)).map((issue) => ({
       severity: issue.severity,
       category: categoryToReviewIssueCategory(issue.category),
       evidence: issue.evidence,
@@ -375,6 +382,12 @@ export class ChapterAcceptanceAssessmentService {
               riskTags: assessment.riskTags,
               assetSyncRecommendation: assessment.assetSyncRecommendation,
               repairDirectives: assessment.repairDirectives,
+              blockingIssues: assessment.blockingIssues,
+              missingObligations: assessment.missingObligations ?? [],
+              repairability: assessment.repairability,
+              decisionReason: assessment.decisionReason,
+              deferredRepairDirectives: assessment.deferredRepairDirectives ?? [],
+              deferredMissingObligations: assessment.deferredMissingObligations ?? [],
               sceneCausalityVerdicts: assessment.sceneCausalityVerdicts ?? [],
               actionStateChecks: assessment.actionStateChecks ?? [],
               actionStateAuditIssues: assessment.actionStateAuditIssues ?? [],
@@ -384,7 +397,7 @@ export class ChapterAcceptanceAssessmentService {
             issues: {
               create: issues.map((issue, index) => ({
                 auditType,
-                severity: issue.severity,
+                severity: hasUnverifiedSource(issue) ? "medium" : issue.severity,
                 code: issue.code || `acceptance_${index + 1}`,
                 description: issue.evidence,
                 evidence: issue.evidence,
@@ -438,6 +451,12 @@ export class ChapterAcceptanceAssessmentService {
           riskTags: assessment.riskTags,
           assetSyncRecommendation: assessment.assetSyncRecommendation,
           repairDirectives: assessment.repairDirectives,
+          blockingIssues: assessment.blockingIssues,
+          missingObligations: assessment.missingObligations ?? [],
+          repairability: assessment.repairability,
+          decisionReason: assessment.decisionReason,
+          deferredRepairDirectives: assessment.deferredRepairDirectives ?? [],
+          deferredMissingObligations: assessment.deferredMissingObligations ?? [],
           sceneCausalityVerdicts: assessment.sceneCausalityVerdicts ?? [],
           actionStateChecks: assessment.actionStateChecks ?? [],
           actionStateAuditIssues: assessment.actionStateAuditIssues ?? [],
@@ -448,7 +467,7 @@ export class ChapterAcceptanceAssessmentService {
           id: `${reportId}:${issue.code || "issue"}:${index + 1}`,
           reportId,
           auditType,
-          severity: issue.severity,
+          severity: hasUnverifiedSource(issue) ? "medium" : issue.severity,
           code: issue.code || `acceptance_${index + 1}`,
           description: issue.evidence,
           evidence: issue.evidence,

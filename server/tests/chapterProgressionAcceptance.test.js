@@ -176,3 +176,94 @@ test("same prompt keeps slow-burn and genre freedoms without chapter-count or ke
   assert.match(text, /悬疑暂不揭底、修仙闭关、民俗仪式、科幻等待、日常对白/);
   assert.match(text, /读者已知而角色首次获知/);
 });
+
+test("an AI-declared repeated beat cannot be certified as progressed even with a high score", () => {
+  const rows = checks("progressed").map((row) => ({ ...row, actualChange: "重复先前交付",
+    repeatsEstablishedBeat: true, addsNewConsequence: false }));
+  const result = assess(rows);
+  assert.equal(result.status, "continue_with_risk");
+  assert.ok(result.progressionChecks.every((row) => row.status === "insufficient_evidence"
+    && row.validationIssues.includes("progressed_conflicts_with_repeated_beat")));
+  assert.equal(result.repairDirectives.length, 0, "conflicting evidence must not invent a prose patch");
+  assert.ok(result.blockingIssues.length > 0, "inconsistent conclusions remain visible");
+});
+
+test("declared new consequences and repeated-beat states must agree without parsing narrative keywords", () => {
+  const row = checks("justified_repetition")[0];
+  const bad = evidence.validateProgressionEvidence([{ ...row, repeatsEstablishedBeat: true,
+    addsNewConsequence: false, newConsequence: "任意非空描述" }, ...checks().slice(1)], input());
+  assert.equal(bad.checks[0].status, "insufficient_evidence");
+  const good = evidence.validateProgressionEvidence([{ ...row, repeatsEstablishedBeat: true,
+    addsNewConsequence: true, newConsequence: "关系改变" }, ...checks().slice(1)], input());
+  assert.equal(good.checks[0].status, "justified_repetition");
+});
+
+test("issue evidence cannot substitute prior-chapter events for current-chapter facts", () => {
+  const issue = { code: "handover_conflict", sourceEvidence: [quote(oldText)] };
+  assert.throws(() => evidence.validateAcceptanceIssueSources([issue], input()), /does not belong to declared/);
+  assert.throws(() => evidence.validateAcceptanceIssueSources([{ ...issue,
+    sourceEvidence: [quote(oldText, "established_context", "c1")] }], input()), /must include current_prose/);
+  assert.doesNotThrow(() => evidence.validateAcceptanceIssueSources([{ ...issue, sourceEvidence: [
+    quote(oldText, "established_context", "c1"), quote(newText),
+  ] }], input()));
+  assert.doesNotThrow(() => evidence.validateAcceptanceIssueSources([{ code: "legacy" }], input()));
+});
+
+test("fresh output requires source evidence and semantic findings while persisted historical records remain readable", () => {
+  const example = prompts.chapterAcceptanceAssessmentPrompt.structuredOutputHint.example;
+  const missingSource = structuredClone(example);
+  delete missingSource.blockingIssues[0].sourceEvidence;
+  assert.equal(prompts.chapterAcceptanceAssessmentSchema.safeParse(missingSource).success, true);
+  assert.equal(prompts.generatedChapterAcceptanceAssessmentSchema.safeParse(missingSource).success, false);
+  const missingFinding = structuredClone(example);
+  delete missingFinding.progressionChecks[0].repeatsEstablishedBeat;
+  assert.equal(prompts.generatedChapterAcceptanceAssessmentSchema.safeParse(missingFinding).success, false);
+  const text = String(prompts.chapterAcceptanceAssessmentPrompt.render({ ...input(), novelTitle: "测试", chapterTitle: "测试" }, {})[0].content);
+  assert.match(text, /知道任务存在、知道任务内容、知道目标位置、知道执行方法是不同命题/);
+  assert.equal(prompts.chapterAcceptanceAssessmentPrompt.semanticRetryPolicy.maxAttempts, 1);
+});
+
+test("exhausted source correction preserves both valid and invalid issues but defers unlinked prose edits", () => {
+  const raw = assessment(checks("insufficient_evidence"));
+  const valid = { severity: "high", category: "plot", code: "valid_repetition", evidence: "比较两章确认重复",
+    fixSuggestion: "承接新事件", sourceEvidence: [quote(newText), quote(oldText, "established_context", "c1")] };
+  const invalid = { ...valid, code: "misattributed_handover", sourceEvidence: [quote(oldText)], fixSuggestion: "删除本章交付" };
+  raw.blockingIssues = [valid, invalid];
+  raw.repairDirectives = [{ mode: "patch", target: "plot", instruction: "删除本章交付" }];
+  raw.missingObligations = [{ kind: "must_hit_now", summary: "重写交付" }];
+  assert.throws(() => prompts.chapterAcceptanceAssessmentPrompt.postValidate(raw, input()), /does not belong/);
+  const recovered = prompts.chapterAcceptanceAssessmentPrompt.postValidateFailureRecovery({ rawOutput: raw,
+    promptInput: input(), validationError: "source mismatch", semanticRetryAttempts: 1, context: {} });
+  assert.equal(recovered.blockingIssues.length, 2);
+  assert.deepEqual(recovered.blockingIssues[0], valid);
+  assert.ok(recovered.blockingIssues[1].sourceValidationIssues.length > 0);
+  assert.equal(recovered.blockingIssues[1].unverifiedFixSuggestion, invalid.fixSuggestion);
+  assert.match(recovered.blockingIssues[1].fixSuggestion, /未核实前保留正文/);
+  assert.deepEqual(recovered.deferredRepairDirectives, raw.repairDirectives);
+  assert.deepEqual(recovered.deferredMissingObligations, raw.missingObligations);
+  assert.deepEqual(recovered.repairDirectives, []);
+  assert.deepEqual(recovered.missingObligations, []);
+  assert.equal(recovered.status, "continue_with_risk");
+  const persisted = prompts.chapterAcceptanceAssessmentSchema.parse(recovered);
+  assert.deepEqual(persisted.blockingIssues[1].sourceValidationIssues, recovered.blockingIssues[1].sourceValidationIssues);
+  assert.deepEqual(persisted.deferredRepairDirectives, raw.repairDirectives);
+});
+
+test("source recovery cannot bypass missing, duplicate or unexpected scene coverage", () => {
+  const raw = assessment(checks("insufficient_evidence"));
+  raw.blockingIssues = [{ severity: "high", category: "plot", code: "wrong_source", evidence: "错引",
+    fixSuggestion: "不可执行", sourceEvidence: [quote(oldText)] }];
+  const scene = { sceneKey: "s", outcomeObserved: true, verdict: "earned", prerequisiteEvidence: [],
+    choiceAndResistanceEvidence: "行动", outcomeMechanismEvidence: "机制", constraintEvidence: [], explanation: "成立" };
+  for (const scenes of [[], [scene, scene], [{ ...scene, sceneKey: "other" }]]) {
+    assert.throws(() => prompts.chapterAcceptanceAssessmentPrompt.postValidateFailureRecovery({
+      rawOutput: { ...raw, sceneCausalityVerdicts: scenes }, promptInput: input({ expectedSceneKeys: ["s"] }),
+      validationError: "source mismatch", semanticRetryAttempts: 1, context: {},
+    }), /逐一覆盖/);
+  }
+  const recovered = prompts.chapterAcceptanceAssessmentPrompt.postValidateFailureRecovery({
+    rawOutput: { ...raw, sceneCausalityVerdicts: [scene] }, promptInput: input({ expectedSceneKeys: ["s"] }),
+    validationError: "source mismatch", semanticRetryAttempts: 1, context: {},
+  });
+  assert.equal(recovered.sceneCausalityVerdicts[0].verdict, "insufficient_evidence", "missing key action coverage must not earn a scene");
+});

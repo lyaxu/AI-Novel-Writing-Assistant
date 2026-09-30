@@ -13,6 +13,7 @@ import { buildSyntheticPayoffIssues } from "../../payoff/payoffLedgerShared";
 import type { ChapterRuntimeRequestInput } from "./chapterRuntimeSchema";
 import type { StyleReviewResult } from "./PostGenerationStyleReviewRunner";
 import type { ChapterTimelineGateResult } from "./ChapterTimelineFinalizationService";
+import { filterVerifiedRepairIssues } from "./acceptance";
 
 export type TimelineGateResult = ChapterTimelineGateResult;
 
@@ -374,7 +375,8 @@ export function buildRuntimePackage(input: BuildRuntimePackageInput): ChapterRun
     }));
   }
 
-  const blockingIssueIds = openIssues
+  const verifiedIssues = filterVerifiedRepairIssues(openIssues, input.auditResult.auditReports, input.acceptance.blockingIssues);
+  const blockingIssueIds = verifiedIssues
     .filter((issue) => issue.severity === "high" || issue.severity === "critical")
     .map((issue) => issue.id);
   const blockingLedgerKeys = Array.from(new Set(
@@ -385,7 +387,7 @@ export function buildRuntimePackage(input: BuildRuntimePackageInput): ChapterRun
   const hasBlockingIssues = blockingIssueIds.length > 0 || input.acceptance.status === "needs_manual_review";
   const repairContextPackage = withChapterRepairContext(
     input.contextPackage,
-    openIssues.map((issue) => ({
+    verifiedIssues.map((issue) => ({
       severity: issue.severity,
       category: issue.auditType === "continuity"
         ? "coherence"

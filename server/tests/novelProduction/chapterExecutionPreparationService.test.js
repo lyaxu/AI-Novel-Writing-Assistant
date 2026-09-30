@@ -35,12 +35,56 @@ test("chapter preparation finishes planning writes before it reports ready", asy
 
   assert.deepEqual(calls.map(([name]) => name), ["execution_contract", "chapter_plan"]);
   assert.equal(calls[0][1].completionProfile.targetChapterCount, 48);
+  assert.equal(calls[0][1].prepareRouteWindow, true);
   assert.deepEqual(result, {
     status: "ready",
     mode: "full_book_autopilot",
     planId: "plan-1",
     preparedArtifacts: ["chapter_execution_contract", "chapter_plan"],
   });
+});
+
+for (const advanceMode of ["auto_to_execution", "stage_review", "auto_to_ready"]) {
+  test(`${advanceMode} rechecks the saved contract before planning without extending routes`, async () => {
+    const calls = [];
+    const service = new ChapterExecutionPreparationService({
+      chapterPlanJITService: {
+        ensureExecutionReady: async (novelId, chapterId, options) => {
+          calls.push(["contract", novelId, chapterId, options]);
+        },
+      },
+      planner: { ensureChapterPlan: async () => { calls.push(["plan"]); return { id: "plan-3" }; } },
+      loadEstimatedChapterCount: async () => { throw new Error("Contract review must not prepare the book route"); },
+    });
+    const result = await service.prepare("novel-1", "chapter-3", {
+      workflowTaskId: "director-existing-budget",
+      provider: "deepseek", model: "test-model",
+      controlPolicy: { kickoffMode: "director_start", advanceMode, reviewCheckpoints: ["chapter_batch"] },
+    });
+    assert.deepEqual(calls.map(([name]) => name), ["contract", "plan"]);
+    assert.equal(calls[0][3].prepareRouteWindow, false);
+    assert.equal(calls[0][3].completionProfile, undefined);
+    assert.equal(calls[0][3].taskId, "director-existing-budget");
+    assert.equal(result.mode, advanceMode);
+    assert.deepEqual(result.preparedArtifacts, ["chapter_execution_contract", "chapter_plan"]);
+  });
+}
+
+test("a stale contract requiring confirmation blocks automatic preparation before chapter planning", async () => {
+  const reviewError = Object.assign(new Error("Written facts conflict with the saved contract"), {
+    code: "PLANNING_REPAIR_CONFIRMATION_REQUIRED",
+  });
+  let planCalls = 0;
+  const service = new ChapterExecutionPreparationService({
+    chapterPlanJITService: { ensureExecutionReady: async () => { throw reviewError; } },
+    planner: { ensureChapterPlan: async () => { planCalls += 1; return { id: "must-not-run" }; } },
+    loadEstimatedChapterCount: async () => 80,
+  });
+  await assert.rejects(service.prepare("novel-1", "chapter-3", {
+    workflowTaskId: "task-1",
+    controlPolicy: { kickoffMode: "director_start", advanceMode: "auto_to_execution", reviewCheckpoints: [] },
+  }), (error) => error === reviewError);
+  assert.equal(planCalls, 0);
 });
 
 test("manual chapter preparation does not create an autopilot route window", async () => {

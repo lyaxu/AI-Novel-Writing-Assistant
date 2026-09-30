@@ -12,6 +12,7 @@ import type {
   QualityDebtAttribution,
 } from "../runtime/chapterRuntimePipeline";
 import { chapterLifecycleService } from "../runtime/lifecycle/ChapterLifecycleService";
+import { appendPatchReceiptHistory, appendQualityHistoryLine, type PatchReceiptHistoryEntry } from "./patchReceiptHistory";
 
 interface RecordChapterQualityLoopInput {
   novelId: string;
@@ -91,11 +92,7 @@ function appendRepairHistory(
       .map((signal) => `${signal.artifactType}:${signal.status}`)
       .join(","),
   ].filter(Boolean).join(" ");
-  const lines = [
-    ...(previous?.split(/\r?\n/).map((item) => item.trim()).filter(Boolean) ?? []),
-    line,
-  ].slice(-12);
-  return lines.join("\n");
+  return appendQualityHistoryLine(previous, line);
 }
 
 function resolveContinuableChapterState(
@@ -127,7 +124,18 @@ export function buildChapterQualityLoopChapterUpdate(
   qualityDebtAttribution?: RecordChapterQualityLoopInput["qualityDebtAttribution"],
   repairSelection?: RecordChapterQualityLoopInput["repairSelection"],
 ): Prisma.ChapterUpdateInput {
-  const nextRepairHistory = appendRepairHistory(chapter.repairHistory, assessment, terminalAction);
+  const assessmentHistory = appendRepairHistory(chapter.repairHistory, assessment, terminalAction);
+  const receipts = repairSelection?.issueResolutions ?? qualityDebtAttribution?.patchIssueResolutions;
+  const nextRepairHistory = receipts?.length
+    ? appendPatchReceiptHistory(assessmentHistory ?? chapter.repairHistory, {
+      attemptId: `quality:${assessment.evaluatedAt}`,
+      recordedAt: assessment.evaluatedAt,
+      source,
+      outcome: repairSelection?.selected === "candidate" ? "candidate_selected"
+        : repairSelection?.selected === "original" ? "original_retained" : "attempt_recorded",
+      issueResolutions: receipts,
+    })
+    : assessmentHistory;
   const shouldContinueChapter = assessment.recommendedAction === "continue" || terminalAction === "defer_and_continue";
   const continuableChapterState = shouldContinueChapter
     ? resolveContinuableChapterState(chapter)
@@ -147,6 +155,20 @@ export function buildChapterQualityLoopChapterUpdate(
 }
 
 export class ChapterQualityLoopService {
+  /** Persist a prepared or rejected manual patch before streaming or rechecking can fail. */
+  async recordPatchAttempt(input: { novelId: string; chapterId: string; entry: PatchReceiptHistoryEntry }): Promise<void> {
+    if (!input.entry.issueResolutions.length) return;
+    const chapter = await prisma.chapter.findFirst({
+      where: { id: input.chapterId, novelId: input.novelId },
+      select: { repairHistory: true },
+    });
+    if (!chapter) throw new Error("章节不存在，无法记录补丁处理回执。");
+    const repairHistory = appendPatchReceiptHistory(chapter.repairHistory, input.entry);
+    if (repairHistory !== undefined && repairHistory !== chapter.repairHistory) {
+      await chapterLifecycleService.applyQualityAssessmentState({ chapterId: input.chapterId, data: { repairHistory } });
+    }
+  }
+
   async recordAssessment(input: RecordChapterQualityLoopInput): Promise<ChapterQualityLoopAssessment> {
     const chapter = await prisma.chapter.findFirst({
       where: { id: input.chapterId, novelId: input.novelId },

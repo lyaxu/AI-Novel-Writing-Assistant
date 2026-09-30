@@ -9,12 +9,12 @@ import type { ChapterRouteWindowOptions, ChapterRouteWindowResult } from "./Chap
  *
  * 在执行第 N 章之前被调用，确保 task sheet 已就绪。
  * 若章节尚无 task sheet，则调用 volumeService 即时生成，并将已发生事实
- * 注入到生成上下文中。已有完整执行合同必须直接复用；事实变化由正文运行时
- * 上下文承接，不能把每次执行都变成合同重建。
+ * 注入到生成上下文中。已有合同由中央服务结合最新正文复核，不能把合同文本
+ * 完整等同于事实仍然兼容，也不能把每次执行都变成合同重建。
  *
  * 兼容性：
- * - 旧小说已有完整 taskSheet 时直接复用，不因事实数量重复生成。
- * - 只在 autopilot 流水线路径调用（manual 单章模式继续用 ChapterExecutionContractService）。
+ * - 旧小说已有完整 taskSheet 时交由中央服务判断复用，不因事实数量重复生成。
+ * - 自动执行共用合同准入；只有全书自动模式允许准备后续路线。
  */
 
 export interface ChapterPlanJITDeps {
@@ -43,6 +43,11 @@ export interface ChapterPlanJITDeps {
   listFacts?: typeof novelFactService.listForChapter;
 }
 
+export interface ChapterExecutionReadyOptions extends ChapterRouteWindowOptions {
+  /** Contract review does not itself authorize creating future chapter routes. */
+  prepareRouteWindow?: boolean;
+}
+
 export class ChapterPlanJITService {
   constructor(private readonly deps: ChapterPlanJITDeps) {}
 
@@ -50,12 +55,12 @@ export class ChapterPlanJITService {
    * 确保第 N 章的执行合同（task sheet / sceneCards / targetWordCount / mustAvoid）就绪。
    *
    * 调用时机：ChapterExecutionPreparationService 中，plannerService.ensureChapterPlan 之前。
-   * 仅在 advanceMode === "full_book_autopilot" 时调用。
+   * 自动写作均须调用；路线扩展与合同准入分别授权。
    */
   async ensureExecutionReady(
     novelId: string,
     chapterId: string,
-    routeOptions: ChapterRouteWindowOptions = {},
+    routeOptions: ChapterExecutionReadyOptions = {},
   ): Promise<void> {
     const loadChapter = this.deps.loadChapter ?? ((targetNovelId: string, targetChapterId: string) => prisma.chapter.findFirst({
       where: { id: targetChapterId, novelId: targetNovelId },
@@ -64,12 +69,14 @@ export class ChapterPlanJITService {
         order: true,
       },
     }));
-    let chapter = await loadChapter(novelId, chapterId);
+    const chapter = await loadChapter(novelId, chapterId);
     if (!chapter) {
       return;
     }
 
-    await this.deps.ensureRouteWindow?.(novelId, chapter.order, routeOptions);
+    if (routeOptions.prepareRouteWindow === true) {
+      await this.deps.ensureRouteWindow?.(novelId, chapter.order, routeOptions);
+    }
 
     // 合同是否可复用由唯一的准备度策略判断；JIT 不再维护第二套字段规则。
     const facts = await (this.deps.listFacts ?? novelFactService.listForChapter)({

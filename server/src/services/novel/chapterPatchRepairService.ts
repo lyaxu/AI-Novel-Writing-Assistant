@@ -68,6 +68,7 @@ export class ChapterPatchRepairService {
     const contextBlocks = repairContext
       ? buildChapterRepairContextBlocks(repairContext)
       : undefined;
+    const issueCatalog = input.issues.map((issue, index) => ({ id: `repair-issue-${index + 1}`, ...issue }));
     let generated: { output: ChapterPatchRepairPlan };
     try {
       generated = await runStructuredPrompt({
@@ -76,7 +77,11 @@ export class ChapterPatchRepairService {
           novelTitle: input.novelTitle,
           chapterTitle: input.chapterTitle,
           chapterContent: input.content,
-          issuesJson: input.issuesJson ?? JSON.stringify(input.issues, null, 2),
+          issuesJson: JSON.stringify({
+            issueCatalog,
+            additionalEvidence: input.issuesJson ?? null,
+          }, null, 2),
+          expectedIssueIds: issueCatalog.map(issue => issue.id),
           modeHint: input.modeHint,
         },
         contextBlocks,
@@ -84,7 +89,7 @@ export class ChapterPatchRepairService {
           provider: input.provider,
           model: input.model,
           temperature: Math.min(input.temperature ?? 0.35, 0.45),
-          maxTokens: 4200,
+          maxTokens: 4200 + issueCatalog.length * 96,
           novelId: input.novelId,
           chapterId: input.chapterId,
           stage: "chapter_patch",
@@ -98,6 +103,10 @@ export class ChapterPatchRepairService {
       throw new ChapterPatchRepairFailedError(`局部补丁计划未通过结构校验：${message}`);
     }
 
+    // Attach the exact input claim for durable audit; never trust a model-supplied copy.
+    generated.output.issueResolutions = generated.output.issueResolutions?.map(row => ({
+      ...row, inputEvidence: issueCatalog.find(issue => issue.id === row.issueId)?.evidence,
+    }));
     let applied: ChapterPatchApplyResult;
     try {
       applied = applyChapterPatchRepairPlan(input.content, generated.output);

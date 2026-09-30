@@ -15,12 +15,23 @@ export const chapterPatchOperationSchema = z.object({
   issueIds: z.array(z.string().trim().min(1)).max(8).default([]),
 });
 
+export const chapterPatchIssueResolutionSchema = z.object({
+  issueId: z.string().trim().min(1),
+  disposition: z.enum(["patched", "deferred", "not_supported", "plan_conflict"]),
+  patchIds: z.array(z.string().trim().min(1)),
+  reason: z.string().trim().min(1),
+  inputEvidence: z.string().optional(),
+});
+export type ChapterPatchIssueResolution = z.infer<typeof chapterPatchIssueResolutionSchema>;
+
 export const chapterPatchRepairPlanSchema = z.object({
   strategy: z.enum(CHAPTER_PATCH_REPAIR_STRATEGIES).default("patch_first"),
   summary: z.string().trim().min(1),
   patches: z.array(chapterPatchOperationSchema).max(8).default([]),
   requiresFullRewrite: z.boolean().default(false),
   escalationReason: z.string().trim().nullable().optional(),
+  // Old persisted plans remain readable; the current prompt requires a complete receipt.
+  issueResolutions: z.array(chapterPatchIssueResolutionSchema).optional(),
 });
 
 export type ChapterPatchOperation = z.infer<typeof chapterPatchOperationSchema>;

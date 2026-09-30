@@ -2,8 +2,10 @@ import type { ChapterRuntimePackage, GenerationContextPackage } from "@ai-novel/
 import type { ContentProvenance } from "@ai-novel/shared/types/canonicalState";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import type { QualityScore, ReviewIssue } from "@ai-novel/shared/types/novel";
+import type { ChapterPatchIssueResolution } from "@ai-novel/shared/types/chapterPatchRepair";
 import type { ChapterRuntimeRequestInput } from "./chapterRuntimeSchema";
 import type { ChapterAcceptanceAssessmentResult } from "./ChapterAcceptanceAssessmentService";
+import { filterVerifiedRepairIssues } from "./acceptance";
 import {
   ChapterArtifactSyncBoundaryError,
   type ChapterArtifactSyncResult,
@@ -51,6 +53,7 @@ export interface PipelineRuntimeInput extends ChapterRuntimeRequestInput {
  * 用于 analyze_quality_debt_attribution 工具聚合根因占比。
  */
 export interface QualityDebtAttribution {
+  patchIssueResolutions?: ChapterPatchIssueResolution[];
   /** 本章实际发起的自动修复次数；修复返回可恢复失败也计入。 */
   repairAttemptsUsed: number;
   /** 本次章节执行允许的自动修复次数，当前合同只允许 0 或 1。 */
@@ -224,6 +227,7 @@ export async function runPipelineChapterWithRuntime(
     pass: boolean;
   } | null = null;
   let repairSelection: ChapterRepairSelectionRecord | null = null;
+  let patchIssueResolutions: ChapterPatchIssueResolution[] | undefined;
 
   // 归因追踪变量
   let firstFailureIssueCodes: string[] = [];
@@ -354,6 +358,7 @@ export async function runPipelineChapterWithRuntime(
           issues: latestIssues,
         },
       });
+      repairSelection.issueResolutions = patchIssueResolutions;
       if (repairSelection.selected === "candidate") {
         await hooks.onCheckCancelled?.();
         await deps.saveDraftAndArtifacts(novelId, chapterId, content, "repaired", {
@@ -405,6 +410,7 @@ export async function runPipelineChapterWithRuntime(
         repairMode,
       },
     });
+    patchIssueResolutions = repairResult.issueResolutions;
     if (repairResult.recoverableFailure) {
       recoverableRepairFailure = repairResult.recoverableFailure;
       await deps.markChapterNeedsRepair(chapterId);
@@ -450,6 +456,7 @@ export async function runPipelineChapterWithRuntime(
       })
     : null;
 
+  if (qualityDebtAttribution) qualityDebtAttribution.patchIssueResolutions = patchIssueResolutions;
   return {
     reviewExecuted: true,
     pass,
@@ -556,21 +563,18 @@ function isQualityPass(score: QualityScore, qualityThreshold: number): boolean {
     && score.overall >= qualityThreshold;
 }
 
-function toReviewIssues(runtimePackage: ChapterRuntimePackage): ReviewIssue[] {
-  const issues = runtimePackage.audit.openIssues.map((issue) => ({
+export function toReviewIssues(runtimePackage: ChapterRuntimePackage): ReviewIssue[] {
+  // Select the original source before filtering: an all-unverified open list
+  // must not fall back to reports and revive the same unsafe repair orders.
+  const source = runtimePackage.audit.openIssues.length > 0
+    ? runtimePackage.audit.openIssues
+    : runtimePackage.audit.reports.flatMap((report) => report.issues);
+  return filterVerifiedRepairIssues(source, runtimePackage.audit.reports).map((issue) => ({
     severity: issue.severity,
     category: AUDIT_CATEGORY_MAP[issue.auditType],
     evidence: issue.evidence,
     fixSuggestion: issue.fixSuggestion,
   }));
-  return issues.length > 0
-    ? issues
-    : runtimePackage.audit.reports.flatMap((report) => report.issues.map((issue) => ({
-      severity: issue.severity,
-      category: AUDIT_CATEGORY_MAP[report.auditType],
-      evidence: issue.evidence,
-      fixSuggestion: issue.fixSuggestion,
-    })));
 }
 
 function toAcceptanceDirectiveIssues(runtimePackage: ChapterRuntimePackage): ReviewIssue[] {
@@ -623,6 +627,7 @@ async function repairDraftContent(input: {
 }): Promise<{
   content: string;
   recoverableFailure?: PipelineRecoverableRepairFailure | null;
+  issueResolutions?: ChapterPatchIssueResolution[];
 }> {
   if (shouldDeferNonPatchableReviewRisk(input.runtimePackage, input.issues)) {
     return {
@@ -659,6 +664,7 @@ async function repairDraftContent(input: {
     }
     return {
       content: input.content,
+      issueResolutions: error.plan?.issueResolutions,
       recoverableFailure: {
         chapterId: input.runtimePackage.chapterId,
         message: error.message,
@@ -671,15 +677,18 @@ async function repairDraftContent(input: {
   }
   return {
     content: repaired.content.trim() || input.content,
+    issueResolutions: repaired.issueResolutions,
     recoverableFailure: null,
   };
 }
 
-function shouldDeferNonPatchableReviewRisk(
+export function shouldDeferNonPatchableReviewRisk(
   runtimePackage: ChapterRuntimePackage,
-  _issues: ReviewIssue[],
+  issues: ReviewIssue[],
 ): boolean {
   const openIssues = runtimePackage.audit.openIssues ?? [];
+  if (issues.length === 0 && openIssues.length > 0
+    && filterVerifiedRepairIssues(openIssues, runtimePackage.audit.reports).length === 0) return true;
   return openIssues.length > 0
     && openIssues.every((issue) => typeof issue.code === "string"
       && NON_PATCHABLE_REVIEW_ISSUE_CODES.has(issue.code));

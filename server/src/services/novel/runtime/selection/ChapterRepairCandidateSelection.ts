@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ChapterRuntimePackage } from "@ai-novel/shared/types/chapterRuntime";
 import type { ReviewIssue } from "@ai-novel/shared/types/novel";
+import type { ChapterPatchIssueResolution } from "@ai-novel/shared/types/chapterPatchRepair";
 
 export interface ChapterRepairCandidateEvaluation {
   content: string;
@@ -10,6 +11,8 @@ export interface ChapterRepairCandidateEvaluation {
 }
 
 export interface ChapterRepairSelectionRecord {
+  /** Attempt receipts do not certify that the final prose passed review. */
+  issueResolutions?: ChapterPatchIssueResolution[];
   selected: "original" | "candidate";
   reasonCode:
     | "candidate_passed"

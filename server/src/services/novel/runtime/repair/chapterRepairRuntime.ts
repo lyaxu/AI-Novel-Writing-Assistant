@@ -1,11 +1,14 @@
 import type { ChapterRepairContext, ChapterRuntimePackage } from "@ai-novel/shared/types/chapterRuntime";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import type { ReviewIssue } from "@ai-novel/shared/types/novel";
+import type { ChapterPatchIssueResolution } from "@ai-novel/shared/types/chapterPatchRepair";
 import { runTextPrompt } from "../../../../prompting/core/promptRunner";
 import { buildChapterRepairContextBlocks } from "../../../../prompting/prompts/novel/chapterLayeredContext";
 import { chapterRepairPrompt } from "../../../../prompting/prompts/novel/review.prompts";
+import { filterVerifiedRepairIssues } from "../acceptance";
 import {
   ChapterPatchRepairService,
+  ChapterPatchRepairFailedError,
   type PatchRepairMode,
 } from "../../chapterPatchRepairService";
 
@@ -55,6 +58,7 @@ export interface ChapterHeavyRepairPromptRequest {
 export type PreparedChapterRepairExecution =
   | {
       kind: "patched";
+      issueResolutions?: ChapterPatchIssueResolution[];
       content: string;
       issues: ReviewIssue[];
       finalRepairMode: PatchRepairMode;
@@ -69,6 +73,7 @@ export type PreparedChapterRepairExecution =
     };
 
 export interface ExecutedChapterRepair {
+  issueResolutions?: ChapterPatchIssueResolution[];
   content: string;
   finalRepairMode: PatchRepairMode;
 }
@@ -85,8 +90,8 @@ function normalizeRepairIssues(issues: ReviewIssue[]): ReviewIssue[] {
 }
 
 function resolveIssueCodes(runtimePackage: ChapterRuntimePackage | null | undefined): string[] {
-  return runtimePackage?.audit.openIssues
-    ?.map((issue) => issue.code)
+  return filterVerifiedRepairIssues(runtimePackage?.audit.openIssues ?? [], runtimePackage?.audit.reports ?? [])
+    .map((issue) => issue.code)
     .filter((code): code is string => typeof code === "string" && code.trim().length > 0)
     ?? [];
 }
@@ -103,6 +108,7 @@ function buildRepairIssuesPayload(
   issues: ReviewIssue[],
   runtimePackage: ChapterRuntimePackage | null | undefined,
 ): string {
+  issues = filterVerifiedRepairIssues(issues, runtimePackage?.audit.reports ?? []);
   const missingObligations = runtimePackage?.obligationCoverage?.missing ?? [];
   const blockingIssueCodes = resolveIssueCodes(runtimePackage);
 
@@ -187,7 +193,13 @@ function buildRepairRagContext(input: {
 export async function prepareChapterRepairExecution(
   input: PrepareChapterRepairExecutionInput,
 ): Promise<PreparedChapterRepairExecution> {
-  const issues = normalizeRepairIssues(input.issues);
+  const verifiedInputIssues = filterVerifiedRepairIssues(input.issues, input.runtimePackage?.audit.reports ?? []);
+  const runtimeIssues = input.runtimePackage?.audit.openIssues ?? [];
+  if (verifiedInputIssues.length === 0 && (input.issues.length > 0
+    || runtimeIssues.length > 0 && filterVerifiedRepairIssues(runtimeIssues, input.runtimePackage?.audit.reports ?? []).length === 0)) {
+    throw new ChapterPatchRepairFailedError("问题的原文来源尚未核实，请先复查审校证据，再执行修文。");
+  }
+  const issues = normalizeRepairIssues(verifiedInputIssues);
   const issueCodes = resolveIssueCodes(input.runtimePackage);
   const activeRepairMode = input.options.repairMode ?? "light_repair";
   const modeHint = getRepairModeHint(activeRepairMode, issueCodes);
@@ -213,6 +225,7 @@ export async function prepareChapterRepairExecution(
     return {
       kind: "patched",
       content: patched.content,
+      issueResolutions: patched.plan.issueResolutions,
       issues,
       finalRepairMode: activeRepairMode,
       modeHint,
@@ -274,6 +287,7 @@ export async function runChapterRepairText(
   if (prepared.kind === "patched") {
     return {
       content: prepared.content,
+      issueResolutions: prepared.issueResolutions,
       finalRepairMode: prepared.finalRepairMode,
     };
   }

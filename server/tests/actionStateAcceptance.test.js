@@ -69,7 +69,8 @@ function assessment(checks = [check()]) {
 function evaluate(row, content, extra = {}) {
   const currentEvidence = [quote(content.slice(0, 180))];
   const modelAssessment = { ...assessment([row]), progressionChecks: progressionSchema.CHAPTER_PROGRESSION_DIMENSIONS.map((dimension) => ({
-    dimension, status: "not_applicable", priorState: "前文没有本次对应职责", actualChange: "", newConsequence: "", previousEvidence: [], currentEvidence,
+    dimension, status: "not_applicable", repeatsEstablishedBeat: false, addsNewConsequence: false,
+    priorState: "前文没有本次对应职责", actualChange: "", newConsequence: "", previousEvidence: [], currentEvidence,
     explanation: "本测试仅聚焦行动状态，前文无本项对应职责。", repairSuggestion: "",
   })) };
   const parsed = prompts.generatedChapterAcceptanceAssessmentSchema.parse(modelAssessment);

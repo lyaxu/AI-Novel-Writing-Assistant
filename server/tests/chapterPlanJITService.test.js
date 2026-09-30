@@ -36,12 +36,13 @@ test("JIT delegates contract reuse to the shared preparation policy", async () =
   let loadCount = 0;
   let factLoads = 0;
   let generations = 0;
+  let routeLoads = 0;
   const service = new ChapterPlanJITService({
     loadChapter: async () => {
       loadCount += 1;
       return buildChapter({ taskSheet: null, sceneCards: null });
     },
-    ensureRouteWindow: async () => ({ availableRouteCount: 5, extended: true }),
+    ensureRouteWindow: async () => { routeLoads += 1; return { availableRouteCount: 5, extended: true }; },
     listFacts: async () => {
       factLoads += 1;
       return [];
@@ -51,11 +52,12 @@ test("JIT delegates contract reuse to the shared preparation policy", async () =
     },
   });
 
-  await service.ensureExecutionReady("novel-1", "chapter-1");
+  await service.ensureExecutionReady("novel-1", "chapter-1", { prepareRouteWindow: true });
 
   assert.equal(loadCount, 1);
   assert.equal(factLoads, 1);
   assert.equal(generations, 1);
+  assert.equal(routeLoads, 1);
 });
 
 test("JIT forwards fact guidance to centralized contract preparation", async () => {
@@ -93,4 +95,27 @@ test("JIT forwards fact guidance to centralized contract preparation", async () 
     entrypoint: "jit_planner",
     chapterTaskSheetQualityMode: "full_book_autopilot",
   });
+});
+
+test("contract-only JIT reloads previous facts under the same task without creating routes", async () => {
+  const calls = [];
+  let factText = "Previous chapter has not delivered the medicine";
+  const service = new ChapterPlanJITService({
+    loadChapter: async () => buildChapter({ id: "chapter-3", order: 3 }),
+    ensureRouteWindow: async () => { throw new Error("Route extension was not authorized"); },
+    listFacts: async (input) => {
+      assert.equal(input.beforeChapterOrder, 3);
+      return [{ chapterOrder: 2, category: "completed", text: factText }];
+    },
+    ensureChapterExecutionContract: async (_novelId, chapterId, options) => { calls.push({ chapterId, options }); },
+  });
+  const options = { taskId: "same-director-budget", prepareRouteWindow: false };
+  await service.ensureExecutionReady("novel-1", "chapter-3", options);
+  factText = "Previous chapter already delivered the medicine and received the reward";
+  await service.ensureExecutionReady("novel-1", "chapter-3", options);
+  assert.equal(calls.length, 2);
+  assert.ok(calls[1].options.guidance.includes(factText));
+  assert.notEqual(calls[0].options.guidance, calls[1].options.guidance);
+  assert.equal(calls[1].options.taskId, "same-director-budget");
+  assert.equal(calls[1].chapterId, "chapter-3");
 });

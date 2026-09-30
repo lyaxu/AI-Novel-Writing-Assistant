@@ -8,7 +8,13 @@ import { CHAPTER_PROSE_QUALITY_AUDIT_RULES } from "@ai-novel/shared/types/chapte
 import { actionStateCheckSchema, sceneCausalityVerdictSchema } from "@ai-novel/shared/types/novel/sceneCausality";
 import { ACTION_STATE_AUDIT_RULES, reconcileSceneActionVerdicts, validateActionStateEvidence } from "./acceptance/actionStateEvidence";
 import { chapterProgressionCheckSchema } from "@ai-novel/shared/types/novel/progression/index";
-import { CHAPTER_PROGRESSION_AUDIT_RULES, validateProgressionEvidence } from "./acceptance/progressionEvidence";
+import { CHAPTER_PROGRESSION_AUDIT_RULES, validateProgressionEvidence, validateAcceptanceIssueSources } from "./acceptance/progressionEvidence";
+
+const acceptanceSourceEvidenceSchema = z.object({
+  source: z.enum(["current_prose", "established_context"]),
+  sourceId: z.string().trim().min(1),
+  quote: z.string().trim().min(1).max(240),
+});
 
 export const chapterAcceptanceIssueCategorySchema = z.enum([
   "continuity",
@@ -170,6 +176,25 @@ function normalizeMissingObligation(value: unknown): unknown {
   };
 }
 
+const acceptanceRepairDirectiveSchema = z.object({
+  mode: z.preprocess(normalizeRepairMode, z.enum(["patch", "rewrite", "manual"])),
+  target: z.preprocess(normalizeRepairTarget, z.enum(["continuity", "character", "plot", "ending", "voice"])),
+  instruction: z.string().trim().min(1),
+});
+
+const acceptanceMissingObligationSchema = z.preprocess(normalizeMissingObligation, z.object({
+    kind: z.preprocess(normalizeMissingObligationKind, z.enum([
+      "must_hit_now",
+      "must_preserve",
+      "payoff_touch",
+      "character_appearance",
+      "goal_change",
+      "forbidden_crossing",
+    ])),
+    summary: z.string().trim().min(1),
+    evidence: z.string().trim().min(1).nullable().optional(),
+  }));
+
 export const chapterAcceptanceAssessmentSchema = z.object({
   status: z.preprocess(
     normalizeAcceptanceStatus,
@@ -195,24 +220,14 @@ export const chapterAcceptanceAssessmentSchema = z.object({
     code: z.string().trim().min(1),
     evidence: z.string().trim().min(1),
     fixSuggestion: z.string().trim().min(1),
+    sourceEvidence: z.array(acceptanceSourceEvidenceSchema).optional(),
+    sourceValidationIssues: z.array(z.string()).optional(),
+    unverifiedFixSuggestion: z.string().optional(),
   })).default([]),
-  repairDirectives: z.array(z.object({
-    mode: z.preprocess(normalizeRepairMode, z.enum(["patch", "rewrite", "manual"])),
-    target: z.preprocess(normalizeRepairTarget, z.enum(["continuity", "character", "plot", "ending", "voice"])),
-    instruction: z.string().trim().min(1),
-  })).default([]),
-  missingObligations: z.array(z.preprocess(normalizeMissingObligation, z.object({
-    kind: z.preprocess(normalizeMissingObligationKind, z.enum([
-      "must_hit_now",
-      "must_preserve",
-      "payoff_touch",
-      "character_appearance",
-      "goal_change",
-      "forbidden_crossing",
-    ])),
-    summary: z.string().trim().min(1),
-    evidence: z.string().trim().min(1).nullable().optional(),
-  }))).default([]),
+  repairDirectives: z.array(acceptanceRepairDirectiveSchema).default([]),
+  deferredRepairDirectives: z.array(acceptanceRepairDirectiveSchema).optional(),
+  missingObligations: z.array(acceptanceMissingObligationSchema).default([]),
+  deferredMissingObligations: z.array(acceptanceMissingObligationSchema).optional(),
   repairability: z.enum([
     "none",
     "patchable_obligation_gap",
@@ -232,10 +247,16 @@ export const chapterAcceptanceAssessmentSchema = z.object({
 export type ChapterAcceptanceAssessmentOutput = z.infer<typeof chapterAcceptanceAssessmentSchema>;
 
 /** New model output must explicitly report evidence; old persisted assessments remain readable. */
-export const generatedChapterAcceptanceAssessmentSchema = chapterAcceptanceAssessmentSchema.omit({ actionStateAuditIssues: true, progressionAuditIssues: true }).extend({
+export const generatedChapterAcceptanceAssessmentSchema = chapterAcceptanceAssessmentSchema.omit({ actionStateAuditIssues: true, progressionAuditIssues: true, deferredRepairDirectives: true, deferredMissingObligations: true }).extend({
   sceneCausalityVerdicts: z.array(sceneCausalityVerdictSchema).max(8),
   actionStateChecks: z.array(actionStateCheckSchema.omit({ validationIssues: true })).min(1).max(8),
-  progressionChecks: z.array(chapterProgressionCheckSchema.omit({ validationIssues: true })).length(3),
+  progressionChecks: z.array(chapterProgressionCheckSchema.omit({ validationIssues: true }).extend({
+    repeatsEstablishedBeat: z.boolean().nullable(),
+    addsNewConsequence: z.boolean().nullable(),
+  })).length(3),
+  blockingIssues: z.array(chapterAcceptanceAssessmentSchema.shape.blockingIssues.removeDefault().element.omit({ sourceValidationIssues: true, unverifiedFixSuggestion: true }).extend({
+    sourceEvidence: z.array(acceptanceSourceEvidenceSchema).min(1),
+  })),
 });
 
 export interface ChapterAcceptancePromptInput {
@@ -247,6 +268,15 @@ export interface ChapterAcceptancePromptInput {
   content: string;
   expectedSceneKeys?: string[];
   establishedProse?: Array<{ chapterId: string; order: number; content: string }>;
+}
+
+function validateAcceptanceSceneCoverage(output: ChapterAcceptanceAssessmentOutput, input: ChapterAcceptancePromptInput): void {
+  const expected = input.expectedSceneKeys ?? [];
+  const actual = (output.sceneCausalityVerdicts ?? []).map((row) => row.sceneKey);
+  if (actual.length !== expected.length || new Set(actual).size !== actual.length
+    || expected.some((key) => !actual.includes(key))) {
+    throw new Error(`sceneCausalityVerdicts 必须逐一覆盖指定场景，不得缺漏或重复：${expected.join(", ") || "无；返回空数组"}`);
+  }
 }
 
 const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
@@ -262,9 +292,9 @@ const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
   summary: "本章主线可以成立，但结尾钩子和中段推进需要轻修后再继续。",
   sceneCausalityVerdicts: [],
   progressionChecks: [
-    { dimension: "event_repetition", status: "progressed", priorState: "等待她回应合同", actualChange: "知情后拒绝签字", newConsequence: "合作未能成立", previousEvidence: [], currentEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她把笔放下，没有签字。" }], explanation: "本章拒绝形成实际结果，而非再次决定要考虑合同。", repairSuggestion: "" },
-    { dimension: "knowledge_repetition", status: "progressed", priorState: "未得知具体欠款条款", actualChange: "读完欠款条款后改变合作意愿", newConsequence: "拒绝承担欠款", previousEvidence: [], currentEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她读完了欠款条款。" }], explanation: "信息进入本次选择，不仅重复背景。", repairSuggestion: "" },
-    { dimension: "prior_goal_followthrough", status: "insufficient_evidence", priorState: "未提供前章原文", actualChange: "当前有拒绝行动", newConsequence: "", previousEvidence: [], currentEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她把笔放下，没有签字。" }], explanation: "不能凭计划认证前章曾作出的决定。", repairSuggestion: "" },
+    { dimension: "event_repetition", status: "progressed", repeatsEstablishedBeat: false, addsNewConsequence: true, priorState: "等待她回应合同", actualChange: "知情后拒绝签字", newConsequence: "合作未能成立", previousEvidence: [], currentEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她把笔放下，没有签字。" }], explanation: "本章拒绝形成实际结果，而非再次决定要考虑合同。", repairSuggestion: "" },
+    { dimension: "knowledge_repetition", status: "progressed", repeatsEstablishedBeat: false, addsNewConsequence: true, priorState: "未得知具体欠款条款", actualChange: "读完欠款条款后改变合作意愿", newConsequence: "拒绝承担欠款", previousEvidence: [], currentEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她读完了欠款条款。" }], explanation: "信息进入本次选择，不仅重复背景。", repairSuggestion: "" },
+    { dimension: "prior_goal_followthrough", status: "insufficient_evidence", repeatsEstablishedBeat: null, addsNewConsequence: null, priorState: "未提供前章原文", actualChange: "当前有拒绝行动", newConsequence: "", previousEvidence: [], currentEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她把笔放下，没有签字。" }], explanation: "不能凭计划认证前章曾作出的决定。", repairSuggestion: "" },
   ],
   actionStateChecks: [{
     sceneKey: "chapter", actor: "她", action: "拒绝签字", actionEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她把笔放下，没有签字。" }],
@@ -279,6 +309,7 @@ const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
       severity: "medium",
       category: "plot",
       code: "ending_hook_soft",
+      sourceEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她把笔放下，没有签字。" }],
       evidence: "结尾只说明主角准备行动，没有形成新的压力或悬念。",
       fixSuggestion: "补强结尾的决策代价或外部压力，让下一章入口更明确。",
     },
@@ -318,7 +349,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ChapterAcceptanceAssessmentOutput
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v6",
+  version: "v7",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -356,13 +387,51 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
     note: "一次性判断章节是否可接收、是否需要局部修文、是否需要暂停确认，以及后续资产同步优先级。",
   },
   outputSchema: generatedChapterAcceptanceAssessmentSchema,
+  semanticRetryPolicy: { maxAttempts: 1 },
+  postValidateFailureRecovery: ({ rawOutput, promptInput, validationError }) => {
+    validateAcceptanceSceneCoverage(rawOutput, promptInput);
+    const blockingIssues = rawOutput.blockingIssues.map((issue) => {
+      try {
+        validateAcceptanceIssueSources([issue], promptInput);
+        return issue;
+      } catch (error) {
+        return {
+          ...issue,
+          sourceValidationIssues: [error instanceof Error ? error.message : String(error)],
+          unverifiedFixSuggestion: issue.fixSuggestion,
+          fixSuggestion: "先核实本章与前章原文来源；未核实前保留正文，不执行这条修改建议。",
+        };
+      }
+    });
+    // Other post-validation failures retain their existing error path.
+    if (!blockingIssues.some((issue) => issue.sourceValidationIssues?.length)) throw new Error(validationError);
+    const audit = validateActionStateEvidence(rawOutput.actionStateChecks ?? [], promptInput);
+    const progression = validateProgressionEvidence(rawOutput.progressionChecks ?? [], promptInput);
+    return {
+      ...rawOutput,
+      status: "continue_with_risk",
+      continuePolicy: "continue",
+      repairability: "none",
+      decisionReason: "部分问题的引文来源未能核实，完整保留问题供复核；无法逐项关联的修复指令暂不执行。",
+      blockingIssues,
+      deferredRepairDirectives: rawOutput.repairDirectives,
+      deferredMissingObligations: rawOutput.missingObligations,
+      missingObligations: [],
+      repairDirectives: [],
+      riskTags: [...new Set([...rawOutput.riskTags, "acceptance_source_evidence_unverified"])],
+      actionStateChecks: audit.checks,
+      actionStateAuditIssues: audit.coverageIssues,
+      progressionChecks: progression.checks,
+      progressionAuditIssues: progression.coverageIssues,
+      sceneCausalityVerdicts: reconcileSceneActionVerdicts(rawOutput.sceneCausalityVerdicts ?? [], audit.checks).map((row) =>
+        row.verdict === "earned" && audit.coverageIssues.some((issue) => issue.endsWith(`:${row.sceneKey}`))
+          ? { ...row, verdict: "insufficient_evidence" as const, explanation: "关键行动状态核验缺失或重复，不能认证因果已成立。" }
+          : row),
+    };
+  },
   postValidate: (output, input) => {
-    const expected = input.expectedSceneKeys ?? [];
-    const actual = (output.sceneCausalityVerdicts ?? []).map((row) => row.sceneKey);
-    if (actual.length !== expected.length || new Set(actual).size !== actual.length
-      || expected.some((key) => !actual.includes(key))) {
-      throw new Error(`sceneCausalityVerdicts 必须逐一覆盖指定场景，不得缺漏或重复：${expected.join(", ") || "无；返回空数组"}`);
-    }
+    validateAcceptanceIssueSources(output.blockingIssues, input);
+    validateAcceptanceSceneCoverage(output, input);
     const audit = validateActionStateEvidence(output.actionStateChecks ?? [], input);
     const progression = validateProgressionEvidence(output.progressionChecks ?? [], input);
     return {
@@ -389,7 +458,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       "2. 只有严重越过章节任务、关键连续性断裂、角色行为严重失真、受保护信息提前泄露、正文无法阅读时，才使用 needs_manual_review。",
       "3. 可通过局部补丁解决的问题使用 repairable，并给出 repairDirectives。",
       "4. 章节可以继续但存在后续风险时使用 continue_with_risk，并用 riskTags 说明风险。",
-      "5. blockingIssues 保留最关键的 0-5 条，每条必须有明确证据和可执行修复建议。",
+      "5. blockingIssues 保留所有已确认且独立的问题，每条必须有明确证据和可执行修复建议；repairDirectives逐问题覆盖，不因一次补丁容量限制而省略问题。每条blockingIssue必须含sourceEvidence数组，格式{source,sourceId,quote}，至少一条current_prose本章准确引文。跨章冲突同时给established_context前章引文；不可将前章发生的事当作本章发生的事。证据不足应记riskTags，不把推测写成确定缺陷。",
       "6. obligation contract 是本章硬合同。must hit now 与 forbidden crossing 缺口必须写入 missingObligations；可后续承接的 payoff、角色露面或目标变化缺口，只有会影响下一章入口时才写入 missingObligations，否则放入 riskTags。",
       "7. repairability 只能用 none、patchable_obligation_gap、rewrite_needed、plan_misalignment。局部漏写但不阻断下一章时优先 continue_with_risk；只有需要当前章节立刻补齐时才用 patchable_obligation_gap。",
       "8. style_contract 或反 AI 要求属于强约束；发现明显来源实体泄露、模板腔、总结腔时归入 voice。",
@@ -406,6 +475,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       "19. verdict 只能使用 earned（因果有正文/上下文证据支持）、unearned（结果发生但缺关键成因）、contradicted（与已知条件矛盾）、insufficient_evidence（提供的文本不足以判断）。prerequisiteEvidence 和 constraintEvidence 是简短证据数组；其他证据字段和 explanation 是字符串，各不超过240字符。引用实际短句并说明作用，不能抄合同当正文证据；条件不存在时数组可空，但证据不足必须明确说明缺口，不得编造引文。",
       "20. 对 scene_causality 的每个前提对照来源核实，检查建立是否早于使用、人物动机是否支持选择、阻力方回应是否符合其能力和利益、outcomeMechanism 是否实际写出、既有及新增代价是否限制后续行动。没有战斗、没有成功、安静的关系变化均可 earned，关键是其机制成立。",
       "21. 先给逐场证据结论，再汇总分数。unearned/contradicted 必须进入 blockingIssues 和可执行的 repairDirectives；insufficient_evidence 必须保留可追踪风险，不能因总分高而消失。局部缺口优先 repairable/continue_with_risk，遵守既有继续策略，不自行升级为全局停止。",
+      "22. 审查对象只有末尾的当前章节正文。written_evidence是早于本章的事实，任务表是计划：逐条先定位来源再判断。声称本章没有某动作/人物不知道某事之前，检查本章全部相关段落与句子限定范围；知道任务却不知道物品位置，不等于不知道任务。不能把前章交付方式替换成本章交付方式。重复事件的判定、解释、状态和修复要求须一致，保留当前真正新增的行动与人物情绪。",
       "关键行动状态审查：",
       ...CAPABILITY_AUTHORIZATION_RULES,
       ...ACTION_STATE_AUDIT_RULES,
@@ -425,7 +495,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       "分层上下文：",
       renderSelectedContextBlocks(context),
       "",
-      "正文：",
+      "以下才是本次审查的当前章节正文（current_prose）；前述已写章节只作对照：",
       input.content,
     ].join("\n")),
   ],

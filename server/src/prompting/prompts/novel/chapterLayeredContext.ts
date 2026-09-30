@@ -477,7 +477,7 @@ export function buildChapterRepairContext(input: {
   const writeContext = normalizeChapterWriteContext(input.writeContext);
   return {
     writeContext,
-    issues: input.issues.slice(0, 8).map((issue) => ({
+    issues: input.issues.map((issue) => ({
       severity: issue.severity,
       category: issue.category,
       evidence: compactText(issue.evidence),

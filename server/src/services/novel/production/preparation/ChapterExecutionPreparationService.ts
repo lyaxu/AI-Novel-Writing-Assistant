@@ -8,7 +8,7 @@ import { NovelVolumeService } from "../../volume/NovelVolumeService";
 
 export interface ChapterExecutionPreparationResult {
   status: "ready";
-  mode: "manual" | "full_book_autopilot";
+  mode: NonNullable<ChapterRuntimeRequestInput["controlPolicy"]>["advanceMode"];
   planId: string;
   preparedArtifacts: Array<"chapter_execution_contract" | "chapter_plan">;
 }
@@ -28,10 +28,13 @@ export class ChapterExecutionPreparationService {
     chapterId: string,
     request: ChapterRuntimeRequestInput,
   ): Promise<ChapterExecutionPreparationResult> {
-    const isAutopilot = request.controlPolicy?.advanceMode === "full_book_autopilot";
+    const mode = request.controlPolicy?.advanceMode ?? "manual";
+    const isAutopilot = mode === "full_book_autopilot";
     const preparedArtifacts: ChapterExecutionPreparationResult["preparedArtifacts"] = [];
-    if (isAutopilot) {
-      const estimatedChapterCount = await this.deps.loadEstimatedChapterCount(novelId);
+    if (mode !== "manual") {
+      const estimatedChapterCount = isAutopilot
+        ? await this.deps.loadEstimatedChapterCount(novelId)
+        : null;
       await this.deps.chapterPlanJITService.ensureExecutionReady(novelId, chapterId, {
         endOrder: request.controlPolicy?.autoExecutionRange?.end ?? undefined,
         min: 3,
@@ -40,7 +43,8 @@ export class ChapterExecutionPreparationService {
         model: request.model,
         temperature: request.temperature,
         taskId: request.workflowTaskId,
-        completionProfile: buildDirectorCompletionProfile(estimatedChapterCount ?? 80),
+        prepareRouteWindow: isAutopilot,
+        completionProfile: isAutopilot ? buildDirectorCompletionProfile(estimatedChapterCount ?? 80) : undefined,
       });
       preparedArtifacts.push("chapter_execution_contract");
     }
@@ -48,7 +52,7 @@ export class ChapterExecutionPreparationService {
     preparedArtifacts.push("chapter_plan");
     return {
       status: "ready",
-      mode: isAutopilot ? "full_book_autopilot" : "manual",
+      mode,
       planId: plan.id,
       preparedArtifacts,
     };
