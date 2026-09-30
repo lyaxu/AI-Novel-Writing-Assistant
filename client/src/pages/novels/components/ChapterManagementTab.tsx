@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import AiButton from "@/components/common/AiButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { buildReplanRecommendationFromAuditReports } from "../chapterPlanning.shared";
@@ -105,7 +106,13 @@ export default function ChapterManagementTab(props: ChapterTabViewProps) {
 
   const [assetTab, setAssetTab] = useState<AssetTabKey>("content");
   const [queueFilter, setQueueFilter] = useState<QueueFilterKey>("all");
-  const [rightRailTab, setRightRailTab] = useState<"insights" | "reference" | "agent">("insights");
+  const [rightRailTab, setRightRailTab] = useState<"insights" | "reference" | "agent">("agent");
+  const nextUnwrittenChapter = useMemo(
+    () => [...chapters].sort((a, b) => a.order - b.order).find((chapter) => !chapter.content?.trim()),
+    [chapters],
+  );
+  const writingBusy = isStreaming || isRepairStreaming || isRepairingChapter
+    || isGeneratingChapterPlan || isReplanningChapter || isGeneratingTaskSheet || isGeneratingSceneCards;
 
   const openAuditIssues = useMemo(
     () => chapterAuditReports.flatMap((report) => report.issues.filter((issue) => issue.status === "open").map((issue) => ({
@@ -151,13 +158,37 @@ export default function ChapterManagementTab(props: ChapterTabViewProps) {
           <div className="space-y-1">
             <CardTitle>章节执行</CardTitle>
             <div className="text-sm leading-6 text-muted-foreground">
-              把这里收成真正的主工作台：左侧只管切章，中间完整承接正文，右侧专心放 AI 动作和策略。
+              选择已有章节后生成正文，AI 会先检查并准备写作计划。连续写多章可从页顶「AI 自动导演接管」选择续写范围。
             </div>
           </div>
-          <Button onClick={onCreateChapter} disabled={isCreatingChapter}>
-            {isCreatingChapter ? "创建中..." : "新建章节"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedChapter && !selectedChapter.content?.trim() ? (
+              <AiButton
+                onClick={onGenerateSelectedChapter}
+                disabled={!hasCharacters || writingBusy || selectedChapter.chapterStatus === "generating"}
+              >
+                {isStreaming && streamingChapterId === selectedChapter.id
+                  ? `正在生成第${selectedChapter.order}章…`
+                  : `生成第${selectedChapter.order}章正文`}
+              </AiButton>
+            ) : null}
+            {nextUnwrittenChapter && nextUnwrittenChapter.id !== selectedChapterId ? (
+              <Button variant="secondary" onClick={() => {
+                setQueueFilter("all");
+                onSelectChapter(nextUnwrittenChapter.id);
+                setRightRailTab("agent");
+              }}>
+                前往第{nextUnwrittenChapter.order}章（待写）
+              </Button>
+            ) : null}
+            <Button variant="ghost" onClick={onCreateChapter} disabled={isCreatingChapter || writingBusy}>
+              {isCreatingChapter ? "创建中..." : "手动添加空白章"}
+            </Button>
+          </div>
         </div>
+        <p className="text-xs leading-5 text-muted-foreground">
+          每写完一章，点击「前往待写章」继续已有章节。手动添加空白章只会在目录末尾新增空章，不会生成正文。
+        </p>
       </CardHeader>
 
       <CardContent className="space-y-4 px-0 pt-5">
