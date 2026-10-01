@@ -2,7 +2,7 @@
 
 最新核验：**2026-10-01（工具优化本轮完整推进窗口）**。完整读磁盘AGENTS.md → [长期上下文](PROJECT_CONTEXT.md) → [完整交接包](2026-10-01_1153Z_three-chapter-audit_thread_handoff.md) → [工作台账](WORK_LEDGER.md) → [工具优化目标任务书](../plans/tool-improvement-roadmap.md)。旧Sept30包归档保留。
 
-- 唯一应用仓库 D:/novel/AI-Novel-Writing-Assistant；分支 **codex/book-story-foundation**，HEAD **0e91b0cd**（最新）。未push、未beta/main晋级、desktop仍0.4.28。保留原有10项untracked，不切外层master。
+- 唯一应用仓库 D:/novel/AI-Novel-Writing-Assistant；分支 **codex/book-story-foundation**，HEAD **最新提交见 git log -1**。未push、未beta/main晋级、desktop仍0.4.28。保留原有10项untracked，不切外层master。
 - 用户确认长期方向：多题材小说（修仙/武侠/穿越武侠/都市修仙/民俗悬疑/科幻/末世），投稿番茄/七猫/起点，后续用自研AIGC工具"语宙"改编漫剧。问题在工具而非模型能力。已建立活跃[工具优化目标任务书](../plans/tool-improvement-roadmap.md)分阶段推进。
 
 ## 本轮已完成（均已提交）
