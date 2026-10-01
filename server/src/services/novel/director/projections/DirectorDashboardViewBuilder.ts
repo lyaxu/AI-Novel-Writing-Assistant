@@ -192,7 +192,8 @@ function descriptionForMode(mode: DirectorDashboardMode, displayState: DirectorD
     case "waiting_user":
       return "当前导演流程停在需要确认的位置。你可以先查看结果，再决定是否继续。";
     case "recovering":
-      return "后台执行器连接中断后正在恢复，系统会优先从最近进度继续。";
+      return displayState.mode === "needs_recovery" ? displayState.description
+        : "后台执行器连接中断后正在恢复，系统会优先从最近进度继续。";
     case "failed":
       return "当前导演流程停在最近一步。可以先查看执行详情，再决定是否重试或继续。";
     case "completed":
@@ -259,6 +260,10 @@ function buildCurrentAction(input: {
     ),
   );
   if (input.mode === "recovering") {
+    if (input.task.pendingManualRecovery) {
+      return input.task.checkpointSummary?.trim() || input.task.lastError?.trim()
+        || "请回到源工作区确认后继续。";
+    }
     return input.task.lastError?.trim()
       || input.projection?.blockingReason?.trim()
       || input.projection?.lastEventSummary?.trim()
@@ -398,7 +403,8 @@ export function buildDirectorDashboardView(input: {
   });
   const liveRunning = hasLiveRunningEvidence(input);
   const actions = buildActions(mode);
-  const requiresUserAction = mode === "waiting_user";
+  const requiresUserAction = mode === "waiting_user"
+    || (mode === "recovering" && Boolean(input.task.pendingManualRecovery) && !liveRunning);
   return {
     mode,
     statusLabel: statusLabel(mode),

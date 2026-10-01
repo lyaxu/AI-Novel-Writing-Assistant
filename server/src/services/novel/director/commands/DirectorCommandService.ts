@@ -39,7 +39,8 @@ import {
 } from "./DirectorCommandServiceHelpers";
 import { taskDispatcher } from "../../../../workers/TaskDispatcher";
 import { DirectorCommandLeaseService } from "./leases/DirectorCommandLeaseService";
-import { assertPlanningRepairResumeAllowed } from "../recovery/planningRepair/planningRepairRecovery";
+import { assertPlanningRepairResumeAllowed, readPlanningRepairSeed } from "../recovery/planningRepair/planningRepairRecovery";
+import { isPlanningRepairTaskPaused } from "@ai-novel/shared/types/planningRepair/recovery";
 
 const ACTIVE_COMMAND_STATUSES: DirectorRunCommandStatus[] = ["queued", "leased", "running"];
 const EXECUTION_COMMAND_TYPES: DirectorRunCommandType[] = [
@@ -304,11 +305,62 @@ export class DirectorCommandService {
   }
 
   async enqueuePlanningRepairRecoveryCommand(taskId: string, repairKey: string, idempotencyKey: string) {
+    const row = await this.workflowService.getTaskByIdWithoutHealing(taskId);
+    if (!row) throw new AppError("Task not found.", 404);
+    const { seed, repair, recovery } = readPlanningRepairSeed(row.seedPayloadJson);
+    if (row.lane !== "auto_director" || row.status === "cancelled" || row.cancelRequestedAt
+      || !repair || repair.key !== repairKey || !idempotencyKey
+      || recovery?.idempotencyKey !== idempotencyKey) {
+      throw new AppError("规划修复授权与当前任务不一致，请刷新工作区后重试。", 409);
+    }
+    if (repair.pendingOperation || recovery.pendingGrant) {
+      throw new AppError("规划修复仍有待核实的执行，请先确认当前结果。", 409);
+    }
+    const baseKey = `planning_repair:${hashPayload({ taskId, repairKey, idempotencyKey })}`;
+    const previous = await prisma.directorRunCommand.findFirst({
+      where: { taskId, commandType: "continue", OR: [
+        { idempotencyKey: baseKey }, { idempotencyKey: { startsWith: `${baseKey}:after:` } },
+      ] },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    let dispatchKey = baseKey;
+    if (previous) {
+      if (parsePayload(previous.payloadJson).planningRepairRecoveryKey !== idempotencyKey) {
+        throw new AppError("规划修复命令与当前授权不一致，请检查运行记录。", 409);
+      }
+      if (ACTIVE_COMMAND_STATUSES.some((status) => status === previous.status) || repair.phase === "committed") {
+        return toAcceptedResponse(previous, null);
+      }
+      assertPlanningRepairResumeAllowed(row.seedPayloadJson, idempotencyKey);
+      const active = await prisma.directorRunCommand.findFirst({
+        where: { taskId, status: { in: ACTIVE_COMMAND_STATUSES } },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      });
+      if (active) {
+        if (parsePayload(active.payloadJson).planningRepairRecoveryKey !== idempotencyKey) {
+          throw new AppError("任务正在执行另一项操作，请等待该操作结束。", 409);
+        }
+        return toAcceptedResponse(active, null);
+      }
+      const autoExecution = seed.autoExecution as { pipelineJobId?: string | null } | undefined;
+      const job = autoExecution?.pipelineJobId
+        ? await prisma.generationJob.findUnique({ where: { id: autoExecution.pipelineJobId } }) : null;
+      const linkedPausedJob = Boolean(job && job.novelId === row.novelId
+        && parseSeedPayload<Record<string, unknown>>(job.payload)?.workflowTaskId === taskId
+        && ["queued", "running"].includes(job.status) && job.pendingManualRecovery
+        && !job.cancelRequestedAt && !job.executionOwner && !job.executionLeaseExpiresAt);
+      // A task pause cannot authorize interrupting a live pipeline worker.
+      const liveJob = job && ["queued", "running"].includes(job.status) && !linkedPausedJob;
+      if (liveJob || (!isPlanningRepairTaskPaused(row) && !linkedPausedJob)) {
+        return toAcceptedResponse(previous, null);
+      }
+      dispatchKey = `${baseKey}:after:${previous.id}`;
+    }
     return this.enqueueExecutionCommand({
       taskId,
       commandType: "continue",
       payload: { continuationMode: "resume", forceResume: true, planningRepairRecoveryKey: idempotencyKey },
-      idempotencyKey: `planning_repair:${hashPayload({ taskId, repairKey, idempotencyKey })}`,
+      idempotencyKey: dispatchKey,
     });
   }
 

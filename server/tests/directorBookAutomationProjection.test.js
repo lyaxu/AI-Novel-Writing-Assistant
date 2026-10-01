@@ -15,6 +15,9 @@ const {
 function createHarness(overrides = {}) {
   const latestTask = {
     id: "task-1",
+    novelId: "novel-1",
+    lane: "auto_director",
+    cancelRequestedAt: null,
     title: "AI 自动导演",
     status: "running",
     progress: 40,
@@ -120,6 +123,8 @@ function createHarness(overrides = {}) {
     taskFindFirst: prisma.novelWorkflowTask.findFirst,
     runFindFirst: prisma.directorRun.findFirst,
     commandFindMany: prisma.directorRunCommand.findMany,
+    commandFindFirst: prisma.directorRunCommand.findFirst,
+    jobFindUnique: prisma.generationJob.findUnique,
     eventFindMany: prisma.directorEvent.findMany,
     stepFindMany: prisma.directorStepRun.findMany,
     approvalFindMany: prisma.autoDirectorAutoApprovalRecord.findMany,
@@ -151,6 +156,15 @@ function createHarness(overrides = {}) {
     return commands;
   };
   prisma.directorEvent.findMany = async () => events;
+  prisma.directorRunCommand.findFirst = async ({ where }) => {
+    assert.equal(where.taskId, "task-1");
+    assert.deepEqual(where.status.in, ["queued", "leased", "running"]);
+    return overrides.activeCommand ?? null;
+  };
+  prisma.generationJob.findUnique = async ({ where }) => {
+    assert.equal(where.id, "job-1");
+    return overrides.pipelineJob ?? null;
+  };
   prisma.directorStepRun.findMany = async () => steps;
   prisma.autoDirectorAutoApprovalRecord.findMany = async ({ where }) => {
     assert.equal(where.novelId, "novel-1");
@@ -193,6 +207,8 @@ function createHarness(overrides = {}) {
       prisma.novelWorkflowTask.findFirst = originals.taskFindFirst;
       prisma.directorRun.findFirst = originals.runFindFirst;
       prisma.directorRunCommand.findMany = originals.commandFindMany;
+      prisma.directorRunCommand.findFirst = originals.commandFindFirst;
+      prisma.generationJob.findUnique = originals.jobFindUnique;
       prisma.directorEvent.findMany = originals.eventFindMany;
       prisma.directorStepRun.findMany = originals.stepFindMany;
       prisma.autoDirectorAutoApprovalRecord.findMany = originals.approvalFindMany;
@@ -201,6 +217,43 @@ function createHarness(overrides = {}) {
     },
   };
 }
+
+test("book-level cockpit exposes the owned manual pause and source repair route despite stale running steps", async () => {
+  const seed = {
+    runMode: "full_book_autopilot", autoExecution: { enabled: true, pipelineJobId: "job-1", range: { startOrder: 1, endOrder: 3 } },
+    planningRepair: { novelId: "novel-1", key: "repair", phase: "reviewing", rounds: 1, maxRounds: 2,
+      volumeId: "volume-1", chapterId: "chapter-3", recoveryAction: { requestId: "authorized" } },
+    planningRepairRecovery: { repairKey: "repair", idempotencyKey: "authorized", guidance: "复核当前计划",
+      resumePhase: "chapter_execution", executionMode: "review_existing" },
+  };
+  const harness = createHarness({
+    latestTask: { status: "queued", checkpointType: null, checkpointSummary: null,
+      pendingManualRecovery: false, seedPayloadJson: JSON.stringify(seed) },
+    commands: [],
+    pipelineJob: { id: "job-1", novelId: "novel-1", status: "queued", pendingManualRecovery: true,
+      payload: JSON.stringify({ workflowTaskId: "task-1" }), executionOwner: null, executionLeaseExpiresAt: null },
+  });
+  try {
+    const projection = await harness.service.getProjection("novel-1");
+    assert.equal(projection.latestTask.status, "waiting_approval");
+    assert.equal(projection.latestTask.pendingManualRecovery, true);
+    assert.equal(projection.status, "waiting_recovery");
+    assert.equal(projection.requiresUserAction, true);
+    assert.equal(projection.dashboardView.mode, "recovering");
+    assert.equal(projection.dashboardView.requiresUserAction, true);
+    assert.match(projection.dashboardView.currentAction, /已确认的规划修复/);
+    assert.doesNotMatch(projection.dashboardView.description, /正在恢复/);
+    assert.equal(projection.workerHealth.derivedState, "failed_recoverable");
+    assert.match(projection.userReason, /已确认的规划修复/);
+    assert.equal(projection.primaryAction.type, "open_novel");
+    assert.equal(projection.primaryAction.commandPayload, undefined);
+    const href = new URL(projection.primaryAction.target.href, "http://local");
+    assert.equal(href.pathname, "/novels/novel-1/edit");
+    assert.equal(href.searchParams.get("stage"), "structured");
+    assert.equal(href.searchParams.get("directorTaskId"), "task-1");
+    assert.equal(href.searchParams.get("chapterId"), "chapter-3");
+  } finally { harness.restore(); }
+});
 
 test("book automation projection aggregates task, command, event, approval and artifact state by novel", async () => {
   const harness = createHarness();

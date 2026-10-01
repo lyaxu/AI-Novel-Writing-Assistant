@@ -63,6 +63,24 @@ function isActivePipelineStatus(status: string | null | undefined): status is "q
   return status === "queued" || status === "running";
 }
 
+export function isOwnedAutoDirectorPipelineJob(job: {
+  novelId?: string | null; payload?: string | null;
+}, taskId: string, novelId: string): boolean {
+  const ownerTaskId = parsePipelineWorkflowTaskId(job.payload);
+  return job.novelId === novelId && (!ownerTaskId || ownerTaskId === taskId);
+}
+
+/** Reading a paused batch must never authorize healing it into an active director run. */
+export async function hasPausedAutoDirectorPipelineJob(taskId: string, row: {
+  novelId?: string | null; seedPayloadJson?: string | null;
+}): Promise<boolean> {
+  const jobId = parseSeedPayload<DirectorWorkflowSeedPayload>(row.seedPayloadJson)?.autoExecution?.pipelineJobId?.trim();
+  if (!jobId || !row.novelId) return false;
+  const job = await prisma.generationJob.findUnique({ where: { id: jobId } });
+  return Boolean(job && isOwnedAutoDirectorPipelineJob(job, taskId, row.novelId)
+    && (job.pendingManualRecovery || job.cancelRequestedAt));
+}
+
 export async function resolveActiveAutoDirectorAutoExecution(input: {
   taskId: string;
   row: {
@@ -85,7 +103,8 @@ export async function resolveActiveAutoDirectorAutoExecution(input: {
   const job = await prisma.generationJob.findUnique({
     where: { id: pipelineJobId },
   });
-  if (!job || job.novelId !== novelId || !isActivePipelineStatus(job.status)) {
+  if (!job || !isOwnedAutoDirectorPipelineJob(job, input.taskId, novelId)
+    || job.pendingManualRecovery || job.cancelRequestedAt || !isActivePipelineStatus(job.status)) {
     return null;
   }
   const payloadTaskId = parsePipelineWorkflowTaskId(job.payload);

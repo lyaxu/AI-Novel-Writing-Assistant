@@ -2,6 +2,7 @@ import { prisma } from "../../../../db/prisma";
 import { parseSeedPayload } from "../../workflow/novelWorkflow.shared";
 import type { DirectorWorkflowSeedPayload } from "../runtime/novelDirectorHelpers";
 import { ChapterExecutionProgressInspector, type ChapterExecutionProgressSummary } from "../runtime/ChapterExecutionProgressInspector";
+import { readPipelinePauseProjection } from "../recovery/pipelinePause";
 
 export interface DirectorCanonicalState {
   task: {
@@ -73,7 +74,7 @@ export class DirectorStateReader {
   }
 
   async readByTaskId(taskId: string): Promise<DirectorCanonicalState | null> {
-    const task = await prisma.novelWorkflowTask.findUnique({
+    const storedTask = await prisma.novelWorkflowTask.findUnique({
       where: { id: taskId },
       select: {
         id: true,
@@ -92,7 +93,7 @@ export class DirectorStateReader {
         seedPayloadJson: true,
       },
     });
-    if (!task) {
+    if (!storedTask) {
       return null;
     }
     const [run, latestCommand, activeStep] = await Promise.all([
@@ -111,6 +112,7 @@ export class DirectorStateReader {
         select: { idempotencyKey: true, nodeKey: true, label: true, status: true },
       }).catch(() => null),
     ]);
+    const task = await readPipelinePauseProjection(storedTask, latestCommand);
     const suppressActiveStep = shouldSuppressRuntimeActiveStep(task);
     const effectiveActiveStep = suppressActiveStep ? null : activeStep;
     const chapterProgress = task.novelId

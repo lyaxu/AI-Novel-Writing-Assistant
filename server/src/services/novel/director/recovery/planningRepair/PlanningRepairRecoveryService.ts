@@ -5,6 +5,7 @@ import { buildNovelEditResumeTarget } from "../../../workflow/novelWorkflow.shar
 import { readPlanningRepairSeed, resolvePlanningRepairResumePhase } from "./planningRepairRecovery";
 import { PlanningRepairStore } from "../../../volume/planningRepair/PlanningRepairStore";
 import { isPlanningRepairConfirmationPhase, isPlanningRepairTaskPaused } from "@ai-novel/shared/types/planningRepair/recovery";
+import { readPipelinePauseProjection } from "../pipelinePause";
 
 export class PlanningRepairRecoveryService {
   constructor(
@@ -30,11 +31,13 @@ export class PlanningRepairRecoveryService {
     const row = await prisma.novelWorkflowTask.findUnique({ where: { id: taskId } });
     if (!row || row.lane !== "auto_director") throw new AppError("自动导演任务不存在。", 404);
     const { repair, recovery } = readPlanningRepairSeed(row.seedPayloadJson);
+    const view = await readPipelinePauseProjection(row);
     const recoveryRequest = recovery?.idempotencyKey && recovery.guidance
-      && repair && (recovery.pendingGrant || !["waiting_confirmation", "uncertain", "committed"].includes(repair.phase))
-      && isPlanningRepairTaskPaused(row)
+      && repair && (recovery.pendingGrant || !["waiting_confirmation", "uncertain", "committed"].includes(repair.phase)
+        || (view !== row && view.currentItemKey === "planning_repair_confirmation"))
+      && isPlanningRepairTaskPaused(view)
       ? { idempotencyKey: recovery.idempotencyKey, guidance: recovery.guidance, executionMode: recovery.executionMode, affectedChapterIds: recovery.affectedChapterIds } : null;
-    return { taskId, novelId: row.novelId, status: row.status, pendingManualRecovery: row.pendingManualRecovery, cancelRequestedAt: row.cancelRequestedAt, planningRepair: repair, recoveryRequest };
+    return { taskId, novelId: row.novelId, status: view.status, pendingManualRecovery: view.pendingManualRecovery, cancelRequestedAt: row.cancelRequestedAt, planningRepair: repair, recoveryRequest };
   }
 
   async pauseAfterFailure(taskId: string, error?: unknown): Promise<void> {

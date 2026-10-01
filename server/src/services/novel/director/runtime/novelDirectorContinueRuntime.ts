@@ -193,6 +193,7 @@ export class NovelDirectorContinueRuntime {
     previousFailureMessage?: string | null;
     allowSkipReviewBlockedChapter?: boolean;
     approveAutoExecutionScope: boolean;
+    resumePendingManualRecovery?: boolean;
   }): Promise<void> {
     const adapter = getDirectorExecutionNodeAdapter("chapter_execution");
     const snapshot = await this.deps.directorRuntime.getSnapshot(input.taskId).catch(() => null);
@@ -218,6 +219,7 @@ export class NovelDirectorContinueRuntime {
             previousFailureMessage: input.previousFailureMessage,
             allowSkipReviewBlockedChapter: input.allowSkipReviewBlockedChapter,
             approveAutoExecutionScope: input.approveAutoExecutionScope,
+            resumePendingManualRecovery: input.resumePendingManualRecovery,
           });
         },
       },
@@ -346,7 +348,14 @@ export class NovelDirectorContinueRuntime {
     if (assetFirstRecovery?.type === "auto_execution") {
       // Asset readiness is not consent to start prose or choose its range.
       // Recovery can bypass the structured-outline phase that normally saves this gate.
-      if (seedPayload.productionExperience !== "simple" && seedPayload.productionExperience !== "professional") {
+      // A keyed planning recovery continues an already saved execution scope; legacy tasks
+      // may lack the presentation preference, which must not turn recovery into first-run setup.
+      const resumesAuthorizedExecution = planningRepairRecovery?.resumePhase === "chapter_execution"
+        && seedPayload.autoExecution?.enabled === true
+        && Boolean(input?.planningRepairRecoveryKey)
+        && planningRepairSeed.recovery?.idempotencyKey === input?.planningRepairRecoveryKey;
+      if (!resumesAuthorizedExecution
+        && seedPayload.productionExperience !== "simple" && seedPayload.productionExperience !== "professional") {
         const target = mergeResumeTargets(
           parseResumeTargetLike(row.resumeTargetJson),
           parseResumeTargetLike(seedPayload.resumeTarget),
@@ -486,6 +495,7 @@ export class NovelDirectorContinueRuntime {
             previousFailureMessage: row.lastError ?? null,
             allowSkipReviewBlockedChapter: canSkipReviewBlockedChapter,
             approveAutoExecutionScope: requestedAutoExecutionContinue || isFullBookAutopilot,
+            resumePendingManualRecovery: input?.forceResume === true,
           });
           return;
         }

@@ -118,7 +118,7 @@ function buildMode(input: {
 function buildDescription(mode: DirectorDisplayMode): string {
   switch (mode) {
     case "needs_recovery":
-      return "后台执行器连接中断后正在恢复，系统会优先从最近进度继续。";
+      return "章节执行已暂停，确认后会从已保存的进度继续。";
     case "waiting":
       return "当前导演流程停在需要确认的位置。你可以先查看结果，再决定是否继续。";
     case "failed":
@@ -166,10 +166,11 @@ function buildCurrentAction(input: {
   }
   if (input.mode === "needs_recovery") {
     return (
-      input.task.lastError?.trim()
+      input.task.checkpointSummary?.trim()
+      || input.task.lastError?.trim()
       || input.projection?.blockingReason?.trim()
       || input.projection?.lastEventSummary?.trim()
-      || "系统会从最近进度继续恢复。"
+      || "请回到源工作区确认后继续。"
     );
   }
   if (

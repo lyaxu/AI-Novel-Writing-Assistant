@@ -42,6 +42,8 @@ import {
   resolveActiveAutoDirectorAutoExecution,
   syncActiveAutoDirectorAutoExecutionTaskState,
   syncAutoDirectorChapterBatchCheckpoint,
+  hasPausedAutoDirectorPipelineJob,
+  isOwnedAutoDirectorPipelineJob,
 } from "./novelWorkflowAutoDirectorReconciliation";
 import { repairAutoDirectorCandidateSeedPayload } from "./novelWorkflowCandidateSeedRepair";
 import { buildNovelCreateResumeTarget, mergeSeedPayload, parseResumeTarget, stringifyResumeTarget, parseSeedPayload } from "./novelWorkflow.shared";
@@ -214,6 +216,10 @@ export class NovelWorkflowHealingService {
       return false;
     }
     if (row?.pendingManualRecovery) {
+      return false;
+    }
+    const sourceRow = row ?? await this.workflow.getTaskByIdWithoutHealing(taskId);
+    if (sourceRow?.lane === "auto_director" && await hasPausedAutoDirectorPipelineJob(taskId, sourceRow)) {
       return false;
     }
     const brokenSeedHealed = await this.healBrokenAutoDirectorCandidateSeedPayload(taskId, row);
@@ -513,12 +519,17 @@ export class NovelWorkflowHealingService {
         id: true,
         status: true,
         progress: true,
+        novelId: true,
+        pendingManualRecovery: true,
+        cancelRequestedAt: true,
         currentStage: true,
         currentItemLabel: true,
         payload: true,
       },
     });
-    if (!job || (job.status !== "queued" && job.status !== "running")) {
+    if (!job || !isOwnedAutoDirectorPipelineJob(job, taskId, existing.novelId)
+      || job.pendingManualRecovery || job.cancelRequestedAt
+      || (job.status !== "queued" && job.status !== "running")) {
       return false;
     }
 

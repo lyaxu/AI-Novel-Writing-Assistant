@@ -35,6 +35,8 @@ import {
 } from "./DirectorBookAutomationProjectionModel";
 import { buildDirectorDashboardView } from "./DirectorDashboardViewBuilder";
 import { buildDirectorDisplayState } from "./DirectorDisplayStateBuilder";
+import { readPipelinePauseProjection } from "../recovery/pipelinePause";
+import { parseResumeTarget, resumeTargetToRoute } from "../../workflow/novelWorkflow.shared";
 
 type RuntimeProjectionLoader = (taskId: string) => Promise<DirectorRuntimeProjection | null>;
 
@@ -222,7 +224,7 @@ export class DirectorBookAutomationProjectionService {
         title: true,
       },
     });
-    const latestTask = await prisma.novelWorkflowTask.findFirst({
+    let latestTask = await prisma.novelWorkflowTask.findFirst({
       where: {
         novelId,
         lane: "auto_director",
@@ -230,6 +232,9 @@ export class DirectorBookAutomationProjectionService {
       orderBy: { updatedAt: "desc" },
       select: {
         id: true,
+        novelId: true,
+        lane: true,
+        cancelRequestedAt: true,
         title: true,
         status: true,
         progress: true,
@@ -241,6 +246,7 @@ export class DirectorBookAutomationProjectionService {
         pendingManualRecovery: true,
         lastError: true,
         seedPayloadJson: true,
+        resumeTargetJson: true,
         updatedAt: true,
       },
     });
@@ -342,6 +348,11 @@ export class DirectorBookAutomationProjectionService {
       }),
       directorArtifactLedgerQueryService.getBookSummary(novelId),
     ]);
+    if (latestTask) {
+      latestTask = await readPipelinePauseProjection(latestTask,
+        commands.find((command) => command.taskId === latestTask?.id
+          && ["queued", "leased", "running"].includes(command.status)));
+    }
     const usageTelemetry = await directorUsageTelemetryQueryService.getBookUsage({
       novelId,
       taskIds,
@@ -434,7 +445,13 @@ export class DirectorBookAutomationProjectionService {
       blockedReason,
       detail,
     });
-    const primaryAction = buildPrimaryAction({
+    const primaryAction = latestTask?.pendingManualRecovery
+      && latestTask.checkpointType === "step_review_required"
+      && latestTask.currentItemKey === "planning_repair_confirmation"
+      ? { type: "open_novel" as const, label: "回到节奏板继续修复", emphasis: "primary" as const,
+        target: { novelId, taskId: latestTask.id, tab: "structured" as const,
+          href: resumeTargetToRoute(parseResumeTarget(latestTask.resumeTargetJson)) } }
+      : buildPrimaryAction({
       novelId,
       status,
       task: latestTask ? { id: latestTask.id, checkpointType: latestTask.checkpointType } : null,

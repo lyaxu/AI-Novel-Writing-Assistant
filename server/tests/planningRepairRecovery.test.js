@@ -369,6 +369,58 @@ test("authorized recovery resumes original phase and never invokes replan or ass
   }
 });
 
+test("authorized chapter recovery preserves the saved range without a production experience field", async () => {
+  const repair = state({ phase: "reviewing" });
+  const seed = {
+    planningRepair: repair,
+    planningRepairRecovery: { repairKey: repair.key, resumePhase: "chapter_execution", idempotencyKey: "grant" },
+    directorInput: { runMode: "full_book_autopilot", candidate: { workingTitle: "Book", targetChapterCount: 30 } },
+    autoExecution: { enabled: true, mode: "book", startOrder: 1, endOrder: 30,
+      pipelineJobId: "old-paused-job", pipelineStatus: "queued", nextChapterOrder: 3 },
+  };
+  async function attempt({ patch = {}, key = "grant", continuationMode = "resume" } = {}) {
+    const currentSeed = { ...seed, ...patch };
+    const row = { id: "task-1", novelId: "novel-1", lane: "auto_director", status: "waiting_approval",
+      pendingManualRecovery: true, checkpointType: "step_review_required", seedPayloadJson: JSON.stringify(currentSeed) };
+    let scheduled; let run; let checkpoint; let saved;
+    const runtime = new NovelDirectorContinueRuntime({
+      workflowService: { getTaskById: async () => row, bootstrapTask: async () => {},
+        markTaskRunning: async (_id, input) => { saved = input.seedPayload; },
+        recordCheckpoint: async (_id, input) => { checkpoint = input; } },
+      directorRuntime: { initializeRun: async () => {}, recordRunResumed: async () => {},
+        getSnapshot: async () => null, runNode: async node => node.run() },
+      continueCandidateStageTask: async () => false,
+      resolveAssetFirstRecovery: async () => ({ type: "auto_execution", resumeCheckpointType: "chapter_batch_ready" }),
+      buildDirectorSeedPayload: (_input, _novel, extra) => extra,
+      scheduleBackgroundRun: (_id, fn) => { scheduled = fn; },
+      autoExecutionRuntime: { runFromReady: async input => { run = input; } },
+    });
+    await runtime.continueTask("task-1", { planningRepairRecoveryKey: key, forceResume: true, continuationMode });
+    if (scheduled) await scheduled();
+    return { run, checkpoint, saved };
+  }
+  for (const continuationMode of ["resume", "auto_execute_range"]) {
+    const { run, checkpoint, saved } = await attempt({ continuationMode });
+    assert.equal(checkpoint, undefined);
+    assert.equal(run.existingPipelineJobId, null);
+    assert.deepEqual(run.existingState, { ...seed.autoExecution, pipelineJobId: null, pipelineStatus: null });
+    assert.equal(run.resumePendingManualRecovery, true);
+    assert.equal(run.skipCurrentQualityRepair ?? false, false);
+    assert.equal(saved.productionExperience, undefined);
+  }
+  await assert.rejects(attempt({ key: "wrong-key" }), { statusCode: 409 });
+  await assert.rejects(attempt({ patch: { planningRepair: state({ phase: "waiting_confirmation" }) } }), { statusCode: 409 });
+  for (const input of [
+    { key: undefined, patch: { planningRepair: undefined, planningRepairRecovery: undefined } },
+    { key: "", patch: {} },
+    { patch: { autoExecution: { ...seed.autoExecution, enabled: false } } },
+  ]) {
+    const { checkpoint, run } = await attempt(input);
+    assert.equal(checkpoint.checkpointType, "production_experience_required");
+    assert.equal(run, undefined);
+  }
+});
+
 test("HTTP handlers validate guidance and idempotency, GET is read-only, pause never dispatches", async () => {
   const calls = [];
   const recovery = {

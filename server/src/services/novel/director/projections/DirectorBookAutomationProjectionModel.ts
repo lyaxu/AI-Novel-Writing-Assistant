@@ -201,7 +201,8 @@ export function buildDetail(input: {
   } | null;
 }): string | null {
   if (input.status === "waiting_recovery") {
-    return input.task?.lastError?.trim() || "后台执行中断后保留了进度点，确认恢复后会从最近进展继续。";
+    return input.task?.lastError?.trim() || input.task?.checkpointSummary?.trim()
+      || "后台执行中断后保留了进度点，确认恢复后会从最近进展继续。";
   }
   if (input.status === "cancelled") {
     return "自动导演任务已取消。";
