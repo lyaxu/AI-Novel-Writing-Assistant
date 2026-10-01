@@ -63,7 +63,16 @@
 - **旧章节恢复失败**：检查兼容读取是否错误使用了只适用于新生成结果的严格 schema。
 - **普通读感问题阻断全书**：检查验收是否把读者体验缺口错误升级为 `needs_manual_review` 或 `replan_required`。
 
-## Related Modules
+## Emotion Presence (Q11)
+
+情绪规则与读者体验合同配合使用。`readerExperience.emotionalShift` 指定本章的情绪位移方向，但该字段只是标签；`context/emotionPresence.ts` 中的规则约束情绪如何在正文中**落地**：
+
+- **写作向规则**（`CHAPTER_EMOTION_RULES`，注入 writer prompt）：情绪必须在同一段落内改变说话方式/动作选择/判断；处境压力须在行为中有可见痕迹；不强制命名情绪；不堆砌同义词。
+- **审查向规则**（`CHAPTER_EMOTION_AUDIT_RULES`，注入 acceptance/review/repair prompt）：每处情绪标签后检查行为后果；克制和未命名的情绪获准；不把情绪词密度当质量指标。
+
+规则通用（无题材/角色硬编码）。已验证覆盖四条链路：writer → acceptance → review → repair。
+
+
 
 - `shared/types/novel/readerExperience.ts`
 - `shared/types/chapterLengthControl.ts`
