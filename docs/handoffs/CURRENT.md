@@ -2,6 +2,7 @@
 
 最新核验：**2026-10-01（工具优化本轮完整推进窗口）**。完整读磁盘AGENTS.md → [长期上下文](PROJECT_CONTEXT.md) → [完整交接包](2026-10-01_1153Z_three-chapter-audit_thread_handoff.md) → [工作台账](WORK_LEDGER.md) → [工具优化目标任务书](../plans/tool-improvement-roadmap.md)。旧Sept30包归档保留。
 
+- **Q27 用户实跑阻断已修**：新书《外卖送到墓门口》每章交接时以 `The task changed concurrently; reload planning repair before continuing.` 失败。根因是 `PlanningRepairStore.casSeed` 用事务较早读取的旧行（原始status+逐字节seed）做精确CAS，而自动执行同步会在修复窗口内写入 queued↔running 投影并重写seed；读取侧 `current()` 本已宽容判定，两侧不一致。修复：事务内重读→同两个权威比较→rebase到最新种子→以最新行做精确CAS。`planningRepairStore.test.js` 122/122，新增竞态用例并已确证可复现（旧基准下121/122）。证据 `.codex-run/cas-race-20261001/summary.json`。
 - 唯一应用仓库 D:/novel/AI-Novel-Writing-Assistant；分支 **codex/book-story-foundation**，HEAD **最新提交见 git log -1**。未push、未beta/main晋级、desktop仍0.4.28。保留原有10项untracked，不切外层master。
 - 用户确认长期方向：多题材小说（修仙/武侠/穿越武侠/都市修仙/民俗悬疑/科幻/末世），投稿番茄/七猫/起点，后续用自研AIGC工具"语宙"改编漫剧。问题在工具而非模型能力。已建立活跃[工具优化目标任务书](../plans/tool-improvement-roadmap.md)分阶段推进。
 

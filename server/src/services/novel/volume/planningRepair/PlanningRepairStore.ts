@@ -397,11 +397,47 @@ function validateState(previous: PlanningRepairState, next: PlanningRepairState,
   if (previous.phase === "committed" || next.phase === "committed") conflict("Only commit may finalize a repair session.");
 }
 
+/**
+ * Write the repair seed with a CAS that separates real ownership changes from ordinary
+ * progress projections.
+ *
+ * A repair window can span a chapter hand-off: the auto-execution sync rewrites `status`
+ * (queued <-> running) and the `autoExecution` / `directorSession` / `resumeTarget`
+ * heartbeat keys. Comparing the raw status or the exact seed bytes read earlier treats
+ * that normal progress as a concurrent edit and fails the whole chapter batch, even
+ * though the read-side guard (`current`) already tolerates it.
+ *
+ * So re-read inside this transaction and verify the same two authorities the session guard
+ * uses: `executionIdentity` for ownership (pause, cancel, takeover and rerun still reject)
+ * and `repairSeedAuthority` for protected generation inputs. The caller's intended changes
+ * are then rebased onto the freshest seed so concurrent heartbeat projections survive.
+ */
 async function casSeed(tx: Prisma.TransactionClient, task: NovelWorkflowTask, seed: Seed) {
-  const raw = JSON.stringify(seed);
-  const state = readState(seed);
+  const fresh = await tx.novelWorkflowTask.findUnique({ where: { id: task.id } });
+  if (!fresh) conflict("The repair task disappeared; reload planning repair before continuing.");
+  // queued <-> running is one execution's progress, not a new owner; anything else is real.
+  if (hash(executionIdentity(fresh)) !== hash(executionIdentity(task))) {
+    conflict("The task changed concurrently; reload planning repair before continuing.");
+  }
+  const previousSeed = parseSeed(task.seedPayloadJson);
+  const freshSeed = parseSeed(fresh.seedPayloadJson);
+  if (repairSeedAuthority(freshSeed) !== repairSeedAuthority(previousSeed)) {
+    conflict("The repair seed or protected generation inputs changed concurrently; reload it.");
+  }
+  // Rebase onto the freshest seed: keep heartbeat/progress keys the caller did not intend to change.
+  const merged: Seed = { ...freshSeed };
+  for (const key of new Set([...Object.keys(previousSeed), ...Object.keys(seed)])) {
+    if (hash(previousSeed[key]) === hash(seed[key])) continue;
+    if (seed[key] === undefined) delete merged[key];
+    else merged[key] = seed[key];
+  }
+  const raw = JSON.stringify(merged);
+  const state = readState(merged);
   const changed = await tx.novelWorkflowTask.updateMany({
-    where: { ...owner(task), pendingManualRecovery: task.pendingManualRecovery, seedPayloadJson: task.seedPayloadJson },
+    // Exact CAS, but against the row read inside this transaction: a change landing after that
+    // read (a real takeover, or a second projection) still fails instead of being clobbered.
+    // The earlier read is deliberately not reused — it can predate a chapter hand-off.
+    where: { ...owner(fresh), pendingManualRecovery: fresh.pendingManualRecovery, seedPayloadJson: fresh.seedPayloadJson },
     data: { seedPayloadJson: raw, ...(state?.summary ? { currentItemLabel: state.summary } : {}) },
   });
   if (changed.count !== 1) conflict("The task changed concurrently; reload planning repair before continuing.");

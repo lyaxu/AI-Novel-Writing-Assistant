@@ -73,6 +73,10 @@ function fixture({ active = true, materialized = true, realPersistence = false }
   let failure;
   let casFailure = false;
   let invalidShape = false;
+  // Simulates a concurrent writer (the auto-execution progress sync) committing between the
+  // repair's session read and its CAS write. It fires on the Nth novelWorkflowTask.findUnique
+  // of the transaction: the store reads the row once for the session guard, once for casSeed.
+  let taskReadRace = null;
   let counter = 10;
   const events = [];
   const chapterWrites = [];
@@ -88,7 +92,17 @@ function fixture({ active = true, materialized = true, realPersistence = false }
     generationJob: { findFirst: async () => db.activeJob ?? null },
     directorRunCommand: { findFirst: async () => db.activeCommand ?? null },
     novelWorkflowTask: {
-      findUnique: async ({ where }) => db.task.id === where.id ? copy(db.task) : null,
+      findUnique: async ({ where }) => {
+        if (taskReadRace && db.task.id === where.id) {
+          taskReadRace.remaining -= 1;
+          if (taskReadRace.remaining <= 0) {
+            const mutate = taskReadRace.mutate;
+            taskReadRace = null;
+            mutate(db.task);
+          }
+        }
+        return db.task.id === where.id ? copy(db.task) : null;
+      },
       findMany: async ({ where }) => copy(otherTasks.filter((row) => matches(row, where))),
       updateMany: async ({ where, data }) => {
         if (casFailure || !matches(db.task, where)) return { count: 0 };
@@ -214,6 +228,7 @@ function fixture({ active = true, materialized = true, realPersistence = false }
     invalidateShape: () => { invalidShape = true; },
     ensureWorkspace: () => persistence.ensureVolumeWorkspaceDocument({ novelId: "n", getLegacySource: async () => { throw new Error("Unexpected legacy migration"); } }),
     fail: (at) => { failure = at; }, failCAS: () => { casFailure = true; },
+    raceTaskRead: (nth, mutate) => { taskReadRace = { remaining: nth, mutate }; },
     state: () => JSON.parse(db.task.seedPayloadJson).planningRepair,
     ready: async (session, value = candidate()) => store.save(session, { ...session.state, phase: "ready", quality: passedQuality() }, value),
   };
@@ -1215,5 +1230,67 @@ for (const change of ["old contract", "old row", "new prose", "new task sheet", 
     if (change === "budget") h.db.novel.defaultChapterLength = 4000;
     await assert.rejects(h.store.rebaseCommittedRouteAppend(input));
     assert.equal(h.db.task.seedPayloadJson, input.expectedSeedPayloadJson);
+  });
+}
+
+// A chapter hand-off can land while a repair window is open: the auto-execution sync rewrites
+// `status` (queued <-> running) and the autoExecution / directorSession / resumeTarget heartbeat
+// keys after the repair read the row but before its CAS write. That is ordinary progress, not a
+// new owner. Treating it as a concurrent edit failed the whole chapter batch with
+// "The task changed concurrently; reload planning repair before continuing."
+test("a chapter hand-off landing before the CAS write does not fail the repair", async () => {
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  await h.ready(session);
+  assert.equal(h.db.task.status, "running");
+  let raced = false;
+  h.raceTaskRead(2, (task) => {
+    const seed = JSON.parse(task.seedPayloadJson);
+    seed.autoExecution = { pipelineStatus: "running", completedChapterCount: 2 };
+    seed.directorSession = { phase: "chapter_execution", isBackgroundRunning: true, updatedAt: "race" };
+    seed.resumeTarget = { stage: "pipeline", chapterId: "c2", progress: 2 };
+    task.seedPayloadJson = JSON.stringify(seed);
+    task.status = "queued";
+    task.heartbeatAt = "heartbeat-race";
+    task.updatedAt = "heartbeat-race";
+    raced = true;
+  });
+
+  await h.store.save(session, { ...session.state, summary: "章节交接继续" });
+
+  assert.ok(raced, "the concurrent progress projection must have landed mid-transaction");
+  const saved = JSON.parse(h.db.task.seedPayloadJson);
+  // The progress projection survives the write instead of being rejected or reverted.
+  assert.deepEqual(saved.autoExecution, { pipelineStatus: "running", completedChapterCount: 2 });
+  assert.deepEqual(saved.directorSession, { phase: "chapter_execution", isBackgroundRunning: true, updatedAt: "race" });
+  assert.deepEqual(saved.resumeTarget, { stage: "pipeline", chapterId: "c2", progress: 2 });
+  assert.equal(h.db.task.status, "queued");
+  assert.equal(saved.planningRepair.summary, "章节交接继续");
+});
+
+// A tolerant CAS must still reject every real ownership change, or takeovers would be swallowed.
+for (const [name, mutate] of [
+  ["a pause", (task) => { task.status = "waiting_approval"; }],
+  ["a cancellation", (task) => { task.status = "cancelled"; task.cancelRequestedAt = epoch; }],
+  ["a new execution generation", (task) => { task.attemptCount = 2; }],
+  ["a manual-recovery pause", (task) => { task.pendingManualRecovery = true; }],
+  ["a protected generation input", (task) => {
+    const seed = JSON.parse(task.seedPayloadJson);
+    seed.model = "another-model";
+    seed.autoExecution = { pipelineStatus: "running" };
+    task.seedPayloadJson = JSON.stringify(seed);
+  }],
+]) {
+  test(`a concurrent ${name} still rejects the repair write`, async () => {
+    const h = fixture();
+    const session = await h.store.begin(h.input);
+    await h.ready(session);
+    const before = copy(h.db);
+    h.raceTaskRead(2, mutate);
+    await assert.rejects(
+      h.store.save(session, { ...session.state, summary: "Must not overwrite" }),
+      /changed concurrently/,
+    );
+    assert.deepEqual(h.db, before);
   });
 }

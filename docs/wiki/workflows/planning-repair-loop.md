@@ -39,6 +39,10 @@
 
 修复会话的执行身份不能直接使用可变的排队/运行投影。queued↔running是同次执行的正常进度，身份比较将二者视作同一活跃状态；任务/小说/工作区归属、attemptCount、startedAt、取消与人工暂停仍严格比较，其他阶段不能套用兼容。事务写入依然使用最新原始status、人工暂停标记与完整seed的精确CAS，不能以身份归一化放宽并发写条件。
 
+精确CAS的取值基准必须是**本事务内、紧邻写入之前重读的那一行**，不能复用事务较早阶段（如会话守卫读取）的旧行。修复窗口可以跨越一次章节交接：自动执行同步会在窗口内存入 `status` 的 queued↔running 投影，以及 `autoExecution`、`directorSession`、`resumeTarget` 等心跳键。若以窗口开始时的旧行作CAS基准，这些正常进度会被误判成并发编辑，导致 `casSeed` 命中0行并让整批章节执行以 "The task changed concurrently; reload planning repair before continuing." 失败——这不是真实冲突，而是把进度投影当成了换执行者。
+
+正确顺序是：事务内重读最新行 → 用与会话守卫相同的两个权威比较（`executionIdentity` 判归属、`repairSeedAuthority` 判受保护生成输入）→ 把调用方意图rebase到最新种子上写回（保留并发心跳，而不是回退它）→ 以最新行的原始status与完整seed做精确CAS。真正的暂停、取消、换执行（attemptCount/startedAt 变化）、人工暂停与受保护输入变化仍然拒绝写入。回归见 `server/tests/planningRepairStore.test.js` 的 `raceTaskRead` 用例组。
+
 规划冲突的类型化错误必须在流水线边界收束，不能只保存英文消息后依赖repair.phase恢复：会话失效时，Coordinator可能连technical_failed也无法安全写入，原阶段仍可为reviewing。流水线只有在当前任务、执行、授权与job绑定都匹配捕获的边界时，才保存structured人工暂停；候选、轮次、历史和未知pendingOperation原样保留。身份或授权已变则不写新执行。导演监督也必须在写回前确认仍属于原执行和原job，旧失败不得覆盖新执行。无可靠身份捕获不猜测归属。
 
 捕获监督身份前必须完成工作流首次开始登记。创建、接管、继续和获准校准的章节步骤都遵守这一顺序；仅登记步骤开始不等于workflow.startedAt已初始化。初始化不能解除人工暂停、取消或其他小说归属，不得通过放宽null→时间戳的身份比较掩盖入口遗漏。
