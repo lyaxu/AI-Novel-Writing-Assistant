@@ -36,7 +36,7 @@
 |---|------|------|---------|
 | P2-A | 书级终局锚点进入写作上下文 | 🔲 待做 | writer prompt 包含书级终局目标和当前卷阶段目标；可在生成章节中验证 |
 | P2-B | 本章必须兑现一件事（immediatePayoff 字段） | 🔲 待做 | chapterTaskSheet schema 加非空 immediatePayoff；规划审查验证字段存在 |
-| P2-C | **Q11** 情绪最小实现：落地规则注入写作 prompt | ✅ 已完成（待提交） | 新建 `context/emotionPresence.ts`（`CHAPTER_EMOTION_RULES` 4条）；注入 `chapterWriter.prompts.ts`（【情绪落地要求】段落）；8/8 离线验证通过 |
+| P2-C | **Q11** 情绪最小实现：写作+验收双端规则注入 | ✅ 已完成（待提交） | 新建 `context/emotionPresence.ts`（写作向4条 + 审查向4条）；注入 `chapterWriter.prompts.ts` 与 `chapterAcceptance.prompts.ts`；13/13 离线验证通过 |
 
 ### 阶段 P3：语义质量与跨题材泛化（P2 完成后）
 
@@ -139,7 +139,7 @@
 | 2026-10-01 | P1-A Q26 | b0563f7b 前 | ✅ 服务编译通过；166/166 loader entries 版本一致；acceptance@v7/patch@v6 焦点键正确解析 | `ComicFactService` 内联 prompt 是 Q14 历史债，与本次无关 |
 | 2026-10-01 | P1-B Q24 | b0563f7b 前 | ✅ 服务编译通过；隔离验证 12/12 通过 | 现场逐写因果仍无 trace；P1-C 新书验证待用户操作 |
 | 2026-10-01 | P3-A Q25（第一阶段） | b0563f7b | ✅ 跨字段矛盾门禁 + 服务编译；8/8 隔离验证通过 | 深层语义（行动者/时序/指令前提）属第二阶段 |
-| 2026-10-01 | P2-C Q11 | 待提交 | ✅ 情绪落地规则注入 writer prompt；8/8 离线验证通过 | acceptance/repair 侧共用模块但尚未注入 |
+| 2026-10-01 | P2-C Q11 acceptance侧 | 待提交 | ✅ `emotionPresence.ts` 增加 `CHAPTER_EMOTION_AUDIT_RULES`（审查向4条）；注入 `chapterAcceptance.prompts.ts`；13/13 离线验证通过（包含 acceptance 渲染 + 审查规则全出现在 SystemMessage + 前后章推进审查段落回归无删除） | repair prompt 尚未注入 |
 
 ### P2-A / P2-B 调查结论（重要：均无需新增字段）
 
