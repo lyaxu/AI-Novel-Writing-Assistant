@@ -156,9 +156,12 @@ test("production generation wiring performs exactly proposal plus review with al
     invocations.push(request);
     if (invocations.length === 1) return { output: output() };
     const prepared = semanticReview.prepareAdviceSemanticReviewContext(f.source.context);
-    return { output: { issueAssessments: [], ...output(), checks: [{ optionId: "a", verdict: "supported", rationale: "核对完成", evidence: [
-      { evidenceId: prepared.evidenceCatalog[0].evidenceId, relation: "supports" },
-    ] }] } };
+    const advice = output();
+    return { output: { issueAssessments: [], ...advice, options: advice.options.map(option => ({ ...option,
+      check: { verdict: "supported", rationale: "核对完成", evidence: [
+        { evidenceId: prepared.evidenceCatalog[0].evidenceId, relation: "supports" },
+      ] },
+    })) } };
   });
   await f.service.request("t", { repairKey: "r", idempotencyKey: "two-stage" }); await settle();
   assert.equal((await f.service.status("t")).status, "ready");
@@ -460,10 +463,10 @@ const parse = (value, contract = prompt.planningRepairAdvicePrompt.outputSchema,
   label: "advice-offline", strategy: "prompt_json", profile: {}, maxRepairAttempts: 0, finishReason: "stop", ...extra,
 });
 
-test("v10 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
+test("v11 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
   const asset = prompt.planningRepairAdvicePrompt;
   const text = asset.render({ contextJson: "{}" })[0].content;
-  assert.equal(asset.version, "v10"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
+  assert.equal(asset.version, "v11"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
   const jsonSchema = JSON.parse(text.split("完整输出契约（minItems/maxItems是数量，minLength/maxLength是字符数）：\n")[1].split("\n输出格式示例")[0]);
   const fields = jsonSchema.properties.options.items.properties;
   assert.deepEqual(fields.diagnosis.enum, schema.planningRepairAdviceDiagnoses);
@@ -473,7 +476,9 @@ test("v10 prompt renders the full shared contract and example, with explicit pai
   assert.equal(schema.planningRepairAdviceOutputSchema.safeParse(prompt.planningRepairAdviceExample).success, true);
   assert.match(text, /不得超过4000字符/); assert.match(text, /采用一个可执行方案即明确授权追加1轮/);
   assert.match(text, /不要让写作新手查询服务器schema/);
-  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v10/);
+  assert.match(text, /planning_contract_before_prose/);
+  assert.match(text, /historical_claim_requires_current_verification/);
+  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v11/);
 });
 
 test("real rejected response keeps every action under wider non-safety limits but still rejects invented diagnoses", async () => {

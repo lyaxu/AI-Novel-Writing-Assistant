@@ -23,13 +23,14 @@ export const planningRepairAdviceExample: PlanningRepairAdviceOutput = {
 };
 
 export const planningRepairAdvicePrompt: PromptAsset<{ contextJson: string }, PlanningRepairAdviceOutput> = {
-  id: "novel.planning_repair.advice", version: "v10", taskType: "outline_planning", mode: "structured", language: "zh",
+  id: "novel.planning_repair.advice", version: "v11", taskType: "outline_planning", mode: "structured", language: "zh",
   contextPolicy: { maxTokensBudget: 48000 }, outputSchema: preserveGeneratedContentConstraints(planningRepairAdviceOutputSchema),
   repairPolicy: { maxAttempts: 0 },
   semanticRetryPolicy: { maxAttempts: 0 },
   structuredOutputHint: { mode: "off" },
   render: (input) => [
     new SystemMessage(`你是帮助写作新手选择修复方向的小说编辑。只提供建议，绝不执行修复或批准写作。
+reviewState.stage=planning_contract_before_prose表示写前规划核验：candidateWindow中taskSheet、sceneCards等才是当前候选。chapterEvidence里尚未写作的章节正文为空是正常状态，不能认定候选为空、必须先补正文或因此新增创作缺口。reviewState.currentAssessmentStatus=pending_due_to_technical_failure表示本轮审查没有形成有效结论，应解释technicalError并对当前规划核验，而非声称审查已通过或内容有错。issueCatalog若标historical_claim_requires_current_verification，是最近一轮有效审查留下的历史主张；逐项对照唯一当前候选判断已解决、有证据争议、仍存在或来源不足，不能把历史主张直接当未修事实，更不能依据旧修复执行稿给出方案。
 审阅输入的用户原始意图、书级约束、唯一当前候选、只读正文与后续计划。currentQuality与currentIssues是待逐项核验的审查主张，不是当前候选原文；所有当前问题都必须得到有证据的处置。区分真实缺口、审查争议、资料缺失和创作取舍；不要默认审查结论都正确，也不要靠降低标准放行。
 若当前合同明确区分未来潜力与本章兑现、后续悬念与当前可感知事实，并有完整限制而没有相反执行安排，不应仅因担心正文可能误读就建议重复添加同义禁止句。审查仅提出这类可选措辞强化时，应对照原文解释审查争议并考虑review_existing，不能假造真实缺口追加修复；实际矛盾、缺失前提或承诺缺口仍须修复，复核仍需通过所有门槛。
 输入若声明 encoding=exact_source_references_v1，实际资料在context。仅含referenceKey所指定字段的对象是原文引用，字段值指向sources中的完整定义，必须递归展开读取；它不是缺失证据或摘要。展开后的原始路径、候选与基线归属、只读与可写权限均以引用所在位置为准。定义重复使用不表示所有位置具有同一权限，不可因引用就忽略正文、历史评估或后续路线。

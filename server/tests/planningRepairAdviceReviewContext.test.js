@@ -20,7 +20,8 @@ function raw(evidenceId) {
     affectedChapterIds: ["c1"], changesHardConstraints: false, requiresSourceEdit: false,
     blockerResolution: { status: "complete", remainingBlockers: [], rationale: "Complete direction" },
     guidance: { intent: "Repair", actions: ["Repair current gap"], preserve: [], verification: ["Check current source"] },
-  }], checks: [{ optionId: "a", verdict: "supported", rationale: "Current evidence", evidence: [{ evidenceId, relation: "supports" }] }] };
+    check: { verdict: "supported", rationale: "Current evidence", evidence: [{ evidenceId, relation: "supports" }] },
+  }] };
 }
 test("review context removes competing versions and old advice while preserving current authority", () => {
   const input = source(); const before = JSON.stringify(input); const prepared = prepareAdviceSemanticReviewContext(input);
@@ -36,7 +37,7 @@ test("catalog selection restores exact current quote and rejects invented IDs or
   assert.deepEqual(output.checks[0].evidence, [{ sourcePath: entry.sourcePath, quote: entry.quote, relation: "supports" }]);
   assert.doesNotThrow(() => validateAdviceSemanticReview(output, input));
   assert.throws(() => resolveAdviceSemanticReview(raw("old-version-id"), prepared), /不存在/);
-  const forged = raw(entry.evidenceId); forged.checks[0].evidence[0].quote = "OLD BASELINE";
+  const forged = raw(entry.evidenceId); forged.options[0].check.evidence[0].quote = "OLD BASELINE";
   assert.throws(() => resolveAdviceSemanticReview(forged, prepared));
   const changed = source(); changed.candidateWindow[0].chapters[0].exclusiveEvent = "Changed source C";
   assert.throws(() => resolveAdviceSemanticReview(raw(entry.evidenceId), prepareAdviceSemanticReviewContext(changed)), /不存在/);
@@ -48,7 +49,7 @@ test("readonly body and future plan catalog items cannot replace candidate chapt
   assert.equal(readonly.length, 2);
   const model = raw(readonly[0].evidenceId);
   assert.throws(() => validateAdviceSemanticReview(resolveAdviceSemanticReview(model, prepared), input), /每个候选章节/);
-  model.checks[0].evidence.push(...[candidate, readonly[1]].map(e => ({ evidenceId: e.evidenceId, relation: "supports" })));
+  model.options[0].check.evidence.push(...[candidate, readonly[1]].map(e => ({ evidenceId: e.evidenceId, relation: "supports" })));
   assert.doesNotThrow(() => validateAdviceSemanticReview(resolveAdviceSemanticReview(model, prepared), input));
 });
 test("long written evidence uses exact bounded windows and retains passage endings", () => {
@@ -111,13 +112,44 @@ test("review rejection retains the actual second-pass wire response privately", 
   });
 });
 
-test("flat model wire preserves the complete shared advice validation and rejects nested wrappers", () => {
+test("option-owned checks preserve the complete shared advice validation and reject old wrappers", () => {
   const prepared = prepareAdviceSemanticReviewContext(source()); const entry = prepared.evidenceCatalog.find(e => e.authority === "current_candidate");
   const wire = raw(entry.evidenceId);
   assert.doesNotThrow(() => resolveAdviceSemanticReview(wire, prepared));
   const { summary, recommendedOptionId, options, ...review } = wire;
   assert.throws(() => resolveAdviceSemanticReview({ ...review, advice: { summary, recommendedOptionId, options } }, prepared));
   assert.throws(() => resolveAdviceSemanticReview({ ...wire, recommendedOptionId: "not-an-option" }, prepared));
+});
+
+test("removing a draft alternative removes its check by construction while persisted reviews stay compatible", () => {
+  const input = source(); const prepared = prepareAdviceSemanticReviewContext(input);
+  const entry = prepared.evidenceCatalog.find(e => e.authority === "current_candidate");
+  const draft = raw(entry.evidenceId);
+  draft.options.push({ ...structuredClone(draft.options[0]), id: "b" });
+  const final = structuredClone(draft); final.options.pop();
+  const resolved = resolveAdviceSemanticReview(final, prepared);
+  assert.deepEqual(resolved.advice.options.map(option => option.id), ["a"]);
+  assert.deepEqual(resolved.checks.map(check => check.optionId), ["a"]);
+  assert.equal(Object.hasOwn(resolved.advice.options[0], "check"), false);
+  assert.doesNotThrow(() => validateAdviceSemanticReview(JSON.parse(JSON.stringify(resolved)), input));
+  assert.throws(() => resolveAdviceSemanticReview({ ...final, checks: [{ optionId: "b", ...draft.options[1].check }] }, prepared));
+  const missing = structuredClone(final); delete missing.options[0].check;
+  assert.throws(() => resolveAdviceSemanticReview(missing, prepared));
+  const renamed = structuredClone(final); renamed.options[0].id = "c"; renamed.recommendedOptionId = "c";
+  assert.deepEqual(resolveAdviceSemanticReview(renamed, prepared).checks.map(check => check.optionId), ["c"]);
+});
+
+test("binding a check to an option never bypasses blocked or contradictory review-only semantics", () => {
+  const input = source(); const prepared = prepareAdviceSemanticReviewContext(input);
+  const entry = prepared.evidenceCatalog.find(e => e.authority === "current_candidate");
+  const wire = raw(entry.evidenceId);
+  wire.options[0].check.verdict = "blocked";
+  assert.throws(() => validateAdviceSemanticReview(resolveAdviceSemanticReview(wire, prepared), input), /来源工作区/);
+  Object.assign(wire.options[0], { executionMode: "review_existing", diagnosis: "review_disagreement", changes: [],
+    candidateVersionId: "current-v", candidateEvidence: [{ sourcePath: entry.sourcePath, quote: entry.quote }] });
+  wire.options[0].check.verdict = "corrected";
+  wire.options[0].check.evidence[0].relation = "contradicts";
+  assert.throws(() => validateAdviceSemanticReview(resolveAdviceSemanticReview(wire, prepared), input), /反证/);
 });
 
 test("window issues use real chapter scope and cannot disappear from mandatory assessments", () => {
@@ -135,7 +167,7 @@ test("window issues use real chapter scope and cannot disappear from mandatory a
   model.issueAssessments = [{ issueId: issue.issueId, status: "present", evidenceIds: [evidence.evidenceId], rationale: "Current window still has a mismatch" }];
   assert.throws(() => resolveAdviceSemanticReview(model, prepared), /独立覆盖/);
   model.options[0].affectedChapterIds = ["c1", "c2"];
-  model.checks[0].evidence.push({ evidenceId: next.evidenceId, relation: "supports" });
+  model.options[0].check.evidence.push({ evidenceId: next.evidenceId, relation: "supports" });
   const output = resolveAdviceSemanticReview(model, prepared);
   assert.deepEqual(output.issueAssessments[0].affectedChapterIds, ["c1", "c2"]);
   assert.doesNotThrow(() => validateAdviceSemanticReview(output, input));
@@ -152,8 +184,43 @@ test("mutually exclusive alternatives cannot jointly cover remaining chapter iss
   const model = raw(first.evidenceId);
   model.issueAssessments = prepared.issueCatalog.map((issue, i) => ({ issueId: issue.issueId, status: "present", evidenceIds: [(i ? second : first).evidenceId], rationale: "A current remaining gap" }));
   model.options.push({ ...structuredClone(model.options[0]), id: "b", affectedChapterIds: ["c2"] });
-  model.checks.push({ ...structuredClone(model.checks[0]), optionId: "b", evidence: [{ evidenceId: second.evidenceId, relation: "supports" }] });
+  model.options[1].check.evidence = [{ evidenceId: second.evidenceId, relation: "supports" }];
   assert.throws(() => resolveAdviceSemanticReview(model, prepared), /不能由多个备选拼接覆盖/);
   model.options.forEach(option => { option.executionMode = "source_edit"; option.requiresSourceEdit = true; });
   assert.doesNotThrow(() => validateAdviceSemanticReview(resolveAdviceSemanticReview(model, prepared), input));
+});
+
+test("historical claims require complete current-source dispositions before review-only advice can execute", () => {
+  const input = source();
+  input.repair.phase = "technical_failed";
+  input.repair.quality = { chapters: {} };
+  input.repair.lastCompletedAssessmentClaims = { authority: "historical_claim_requires_current_verification", kind: "assessment", round: 0,
+    assessment: { chapters: { c1: { issues: [{ id: "old-a", summary: "Earlier missing implementation" }, { id: "old-b", summary: "Earlier handoff concern" }] } } } };
+  const prepared = prepareAdviceSemanticReviewContext(input);
+  const entry = prepared.evidenceCatalog.find(e => e.authority === "current_candidate");
+  const model = raw(entry.evidenceId);
+  Object.assign(model.options[0], { executionMode: "review_existing", diagnosis: "review_disagreement", changes: [],
+    candidateVersionId: "current-v", candidateEvidence: [{ sourcePath: entry.sourcePath, quote: entry.quote }] });
+  assert.throws(() => resolveAdviceSemanticReview(model, prepared), /完整且不重复/);
+  model.issueAssessments = prepared.issueCatalog.map((issue, i) => ({ issueId: issue.issueId,
+    status: i ? "disputed" : "resolved", rationale: "Current implementation supersedes this historical claim", evidenceIds: [entry.evidenceId] }));
+  assert.doesNotThrow(() => validateAdviceSemanticReview(resolveAdviceSemanticReview(model, prepared), input));
+  model.issueAssessments[1].status = "present";
+  assert.throws(() => resolveAdviceSemanticReview(model, prepared), /不能仅复核/);
+});
+
+const technicalCapture = path.resolve(__dirname, "../../.codex-run/advice-coverage-20260930/source-input.json");
+test("actual technical-stop input retains both historical claims and explicit planning stage within the existing capacity", {
+  skip: !fs.existsSync(technicalCapture),
+}, t => {
+  const input = JSON.parse(fs.readFileSync(technicalCapture, "utf8"));
+  const { buildAdviceContext } = require("../dist/services/novel/director/recovery/planningRepair/advice/AdviceContext");
+  const prepared = prepareAdviceSemanticReviewContext(buildAdviceContext(input));
+  assert.deepEqual(prepared.issueCatalog.map(row => row.sourceIssueId), ["linghu_tracking_prerequisite_missing", "box_absorption_trigger_missing"]);
+  assert.ok(prepared.issueCatalog.every(row => row.authority === "historical_claim_requires_current_verification"));
+  assert.ok(prepared.contextJson.includes("planning_contract_before_prose"));
+  assert.ok(prepared.contextJson.includes("pending_due_to_technical_failure"));
+  assert.ok(prepared.contextJson.includes("Promise storyPrototype.openingChain[0]"));
+  assert.ok(prepared.contextJson.length <= 160000);
+  t.diagnostic(`actual isolated chars=${prepared.contextJson.length}; issues=${prepared.issueCatalog.length}; evidence=${prepared.evidenceCatalog.length}`);
 });

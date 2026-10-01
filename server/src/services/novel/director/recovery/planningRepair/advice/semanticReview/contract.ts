@@ -30,14 +30,18 @@ export const planningRepairAdviceReviewModelOutputSchema = z.object({
     issueId: z.string().min(1), status: issueStatus,
     evidenceIds: z.array(z.string().min(1)).max(8), rationale: z.string().min(1).max(1000),
   }).strict()),
-  checks: z.array(z.object({
-    optionId: z.string().min(1), verdict: z.enum(["supported", "corrected", "blocked"]),
-    rationale: z.string().min(1).max(1600),
-    evidence: z.array(z.object({ evidenceId: z.string().min(1).max(100),
-      relation: z.enum(["supports", "contradicts"]),
-    }).strict()).max(8),
-  }).strict()).min(1).max(3),
   ...planningRepairAdviceOutputSchema.shape,
+  // The final option owns its check: deleting a draft option cannot leave an
+  // orphan check, and the model does not repeat another independently mutable ID.
+  options: z.array(planningRepairAdviceOutputSchema.shape.options.element.extend({
+    check: z.object({
+      verdict: z.enum(["supported", "corrected", "blocked"]),
+      rationale: z.string().min(1).max(1600),
+      evidence: z.array(z.object({ evidenceId: z.string().min(1).max(100),
+        relation: z.enum(["supports", "contradicts"]),
+      }).strict()).max(8),
+    }).strict(),
+  }).strict()).min(1).max(3),
 }).strict().superRefine((value, ctx) => {
   const parsed = planningRepairAdviceOutputSchema.safeParse({ summary: value.summary,
     recommendedOptionId: value.recommendedOptionId, options: value.options });

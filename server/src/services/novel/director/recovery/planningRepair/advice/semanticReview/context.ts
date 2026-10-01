@@ -10,7 +10,8 @@ export interface AdviceReviewEvidence {
   evidenceId: string; sourcePath: string; quote: string;
   authority: "current_candidate" | "written_prose" | "readonly_current_plan";
 }
-export interface AdviceReviewIssue { issueId: string; chapterId: string; scope: "chapter" | "window"; affectedChapterIds: string[]; sourceIssueId: string | null; claim: unknown }
+export interface AdviceReviewIssue { issueId: string; chapterId: string; scope: "chapter" | "window"; affectedChapterIds: string[]; sourceIssueId: string | null; claim: unknown;
+  authority?: "historical_claim_requires_current_verification"; sourceRound?: unknown; provenance?: string }
 export interface PreparedAdviceSemanticReviewContext { contextJson: string; evidenceCatalog: AdviceReviewEvidence[]; issueCatalog: AdviceReviewIssue[] }
 
 function leaves(value: unknown, path: string, emit: (path: string, text: string) => void): void {
@@ -24,20 +25,32 @@ function leaves(value: unknown, path: string, emit: (path: string, text: string)
 
 export function buildCurrentAdviceReviewIssues(input: unknown): AdviceReviewIssue[] {
   const repair = object(object(input).repair);
+  const current = object(repair.quality);
+  const hasCurrentAssessment = Object.keys(object(current.chapters)).length > 0 || current.window !== undefined;
+  const historical = object(repair.lastCompletedAssessmentClaims);
+  const useHistorical = !hasCurrentAssessment && ["technical_failed", "uncertain"].includes(String(repair.phase))
+    && historical.authority === "historical_claim_requires_current_verification";
+  const quality = useHistorical ? object(historical.assessment) : current;
+  const provenance = useHistorical ? { authority: "historical_claim_requires_current_verification" as const,
+    sourceRound: historical.round, provenance: `repair.history:${String(historical.kind)}:${String(historical.round)}` } : {};
   const issueCatalog: AdviceReviewIssue[] = [];
-  for (const [chapterId, value] of Object.entries(object(object(repair.quality).chapters))) {
+  for (const [chapterId, value] of Object.entries(object(quality.chapters))) {
     const issues = object(value).issues;
     if (!Array.isArray(issues)) continue;
+    if (useHistorical && issues.length && (!Array.isArray(object(input).eligibleChapterIds)
+      || !(object(input).eligibleChapterIds as unknown[]).includes(chapterId))) {
+      throw new Error("历史审查问题的章节超出当前授权范围，请补齐当前规划来源后再获取建议。");
+    }
     issues.forEach((issue, index) => {
       const item = object(issue);
       const issueId = `issue_${createHash("sha256").update(JSON.stringify([chapterId, index, item.id ?? null, item.summary ?? issue])).digest("hex").slice(0, 24)}`;
-      issueCatalog.push({ issueId, chapterId, scope: "chapter", affectedChapterIds: [chapterId], sourceIssueId: typeof item.id === "string" ? item.id : null, claim: issue });
+      issueCatalog.push({ issueId, chapterId, scope: "chapter", affectedChapterIds: [chapterId], sourceIssueId: typeof item.id === "string" ? item.id : null, claim: issue, ...provenance });
     });
   }
-  const windowIssues = object(object(repair.quality).window).issues;
+  const windowIssues = object(quality.window).issues;
   if (Array.isArray(windowIssues) && windowIssues.length) {
     const reviewed = Array.isArray(repair.affectedChapterIds) ? repair.affectedChapterIds
-      : Object.keys(object(object(repair.quality).chapters)).length ? Object.keys(object(object(repair.quality).chapters))
+      : Object.keys(object(quality.chapters)).length ? Object.keys(object(quality.chapters))
         : typeof repair.chapterId === "string" ? [repair.chapterId] : [];
     const eligible = object(input).eligibleChapterIds;
     const affectedChapterIds = [...new Set(reviewed.filter((id): id is string => typeof id === "string" && Boolean(id.trim())))];
@@ -45,7 +58,7 @@ export function buildCurrentAdviceReviewIssues(input: unknown): AdviceReviewIssu
     if (!affectedChapterIds.length) throw new Error("窗口问题缺少可定位的授权章节，请补齐当前规划来源。");
     windowIssues.forEach((claim, index) => {
       const issueId = `issue_${createHash("sha256").update(JSON.stringify(["window", affectedChapterIds, index, claim])).digest("hex").slice(0, 24)}`;
-      issueCatalog.push({ issueId, chapterId: affectedChapterIds[0], scope: "window", affectedChapterIds, sourceIssueId: null, claim });
+      issueCatalog.push({ issueId, chapterId: affectedChapterIds[0], scope: "window", affectedChapterIds, sourceIssueId: null, claim, ...provenance });
     });
   }
   return issueCatalog;
@@ -85,6 +98,14 @@ export function prepareAdviceSemanticReviewContext(input: unknown): PreparedAdvi
     userIntent: { directorInput: intent.directorInput, selectedCandidate: intent.selectedCandidate },
     eligibleChapterIds: source.eligibleChapterIds,
     currentQuality: { authority: "review_claims_to_verify_not_candidate_text", assessment: repair.quality ?? null },
+    reviewState: {
+      stage: "planning_contract_before_prose", phase: repair.phase ?? null,
+      technicalError: repair.technicalError ?? null,
+      currentAssessmentStatus: Object.keys(object(object(repair.quality).chapters)).length || object(repair.quality).window !== undefined
+        ? "available" : ["technical_failed", "uncertain"].includes(String(repair.phase))
+          ? "pending_due_to_technical_failure" : "not_available",
+      rule: "本次核验授权章节的写前规划合同，不是验收未写正文。candidateWindow的taskSheet/sceneCards等是待核验对象；chapterEvidence中授权未写章节正文为空是正常阶段，不等于候选为空或创作缺口。技术失败不证明规划合格或不合格。历史问题必须对当前候选逐项判断present/resolved/disputed/insufficient，不能直接认定仍未修，也不能建议先写正文来完成规划审查。",
+    },
     obligationPolicy: "已应用义务映射由运行时保留。新修订必须以当前候选引用为来源，按同章revise显式记录，不能重放历史错误原句。",
     issueCatalog,
     scopeNotice: "只有eligibleChapterIds可修改。candidateWindow是唯一当前候选；后续路线与已写正文只读。核验主张需逐项验证，不是当前执行内容。", missingEvidence: source.missingEvidence,
@@ -96,6 +117,7 @@ export function prepareAdviceSemanticReviewContext(input: unknown): PreparedAdvi
 /** Model cannot rewrite source text: only identifiers from this invocation resolve. */
 function resolveReview(raw: unknown, prepared: PreparedAdviceSemanticReviewContext): PlanningRepairAdviceReviewOutput {
   const parsed = planningRepairAdviceReviewModelOutputSchema.parse(raw);
+  const options = parsed.options.map(({ check: _check, ...option }) => option);
   const catalog = new Map(prepared.evidenceCatalog.map(entry => [entry.evidenceId, entry]));
   if (catalog.size !== prepared.evidenceCatalog.length) throw new Error("语义核验证据目录标识重复。");
   const resolve = (evidenceId: string) => {
@@ -111,12 +133,12 @@ function resolveReview(raw: unknown, prepared: PreparedAdviceSemanticReviewConte
   const issueAssessments = parsed.issueAssessments.map(assessment => {
     const issue = prepared.issueCatalog.find(item => item.issueId === assessment.issueId)!;
     if (assessment.status !== "insufficient" && !assessment.evidenceIds.length) throw new Error("问题判断缺少本次原文证据。");
-    assertAdviceIssueCoverage(assessment.status, issue, parsed.options);
+    assertAdviceIssueCoverage(assessment.status, issue, options);
     return { issueId: issue.issueId, chapterId: issue.chapterId, scope: issue.scope, affectedChapterIds: issue.affectedChapterIds, status: assessment.status,
       rationale: assessment.rationale, evidence: assessment.evidenceIds.map(resolve) };
   });
-  return planningRepairAdviceReviewOutputSchema.parse({ issueAssessments, advice: { summary: parsed.summary, recommendedOptionId: parsed.recommendedOptionId, options: parsed.options }, checks: parsed.checks.map(check => ({
-    ...check, evidence: check.evidence.map(evidence => ({ ...resolve(evidence.evidenceId), relation: evidence.relation })),
+  return planningRepairAdviceReviewOutputSchema.parse({ issueAssessments, advice: { summary: parsed.summary, recommendedOptionId: parsed.recommendedOptionId, options }, checks: parsed.options.map(option => ({
+    optionId: option.id, ...option.check, evidence: option.check.evidence.map(evidence => ({ ...resolve(evidence.evidenceId), relation: evidence.relation })),
   })) });
 }
 

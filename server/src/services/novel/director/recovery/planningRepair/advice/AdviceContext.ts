@@ -48,6 +48,14 @@ export function buildAdviceContext(input: {
   seed: Data; eligibleChapterIds: string[];
 }) {
   const repair = object(input.seed.planningRepair);
+  const history = Array.isArray(repair.history) ? repair.history.map(object) : [];
+  let refreshBoundary = -1;
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].kind === "evidence_refresh") { refreshBoundary = i; break; }
+  }
+  const latestAssessment = history.slice(refreshBoundary + 1).reverse().find(entry =>
+    ["assessment", "review"].includes(String(entry.kind))
+    && (Object.keys(object(object(entry.result).chapters)).length > 0 || object(entry.result).window !== undefined));
   const snapshot = object(input.seed.planningRepairSnapshot);
   const allowed = new Set(input.eligibleChapterIds);
   const relevant = new Set(allowed);
@@ -103,6 +111,10 @@ export function buildAdviceContext(input: {
     chapterEvidence: input.chapters.map(object).filter((c) => materialized.has(String(c.id)) || relevant.has(String(c.id)))
       .map((c) => pick(c, ["id", "order", "title", "expectation", "summary", "content", "taskSheet", "sceneCards", "chapterStatus"])),
     repair: { ...pick(repair, ["key", "chapterId", "affectedChapterIds", "rounds", "maxRounds", "phase", "summary", "guidance", "quality", "candidateVersionId", "obligationMoves", "technicalError", "reviewTargets", "remainingRisks"]),
+      // Read the current evidence epoch before selecting; the display limit must
+      // not erase claims, and a source refresh must not revive obsolete claims.
+      lastCompletedAssessmentClaims: latestAssessment ? { round: latestAssessment.round, kind: latestAssessment.kind,
+        assessment: latestAssessment.result, authority: "historical_claim_requires_current_verification" } : undefined,
       recentHistory: Array.isArray(repair.history) ? repair.history.slice(-6).map((entry) => {
         const item = historyForDiagnosis(entry);
         return { ...item, provenance: { authoritativeForCurrentCandidate: false,
