@@ -66,6 +66,11 @@ export function validateProgressionEvidence(checks: ChapterProgressionCheck[], i
       && (check.repeatsEstablishedBeat === false || check.addsNewConsequence === false)) invalid.push("justified_repetition_conflicts_with_semantic_findings");
     if (check.status === "stalled" && check.addsNewConsequence === true) invalid.push("stalled_conflicts_with_new_consequence");
     if (check.addsNewConsequence === true && !check.newConsequence.trim()) invalid.push("declared_consequence_missing");
+    // Q25: symmetric contradiction. "progressed" asserts a real change occurred, so it cannot
+    // sit together with an explicit "no new consequence" finding. Mirrors the existing
+    // stalled_conflicts_with_new_consequence guard in the opposite direction.
+    if (check.status === "progressed" && check.addsNewConsequence === false
+      && !check.repeatsEstablishedBeat) invalid.push("progressed_but_consequence_denied");
     // A later chapter without earlier prose cannot certify absence of an inherited goal/repetition.
     if (check.status === "not_applicable" && input.chapterOrder > 1 && !prior.size) invalid.push("previous_prose_unavailable");
     if (coverageIssues.some((issue) => issue.endsWith(`:${check.dimension}`))) invalid.push("dimension_coverage_invalid");
