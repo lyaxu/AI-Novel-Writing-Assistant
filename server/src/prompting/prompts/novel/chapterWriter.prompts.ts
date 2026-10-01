@@ -4,6 +4,7 @@ import { renderSelectedContextBlocks } from "../../core/renderContextBlocks";
 import { NOVEL_PROMPT_BUDGETS } from "./promptBudgetProfiles";
 import { CHAPTER_PROSE_QUALITY_RULES } from "@ai-novel/shared/types/chapterProseContract";
 import { CAPABILITY_AUTHORIZATION_RULES } from "./context/capabilityAuthorization";
+import { CHAPTER_EMOTION_RULES } from "./context/emotionPresence";
 
 export interface ChapterWriterPromptInput {
   novelTitle: string;
@@ -331,6 +332,8 @@ export const chapterWriterPrompt: PromptAsset<ChapterWriterPromptInput, string, 
         "1f. 写关键动作前先核对人物身体、物品、能力、知识和位置：当前能否做、凭什么知道、资源从何处取得。解除限制的动作或规则必须早于使用，不能先消费成功后才会得到的自由或能力；合理魔法、治疗或借力可以改变状态，但要有已建立的机制和实际过渡。",
         "1g. written_evidence 提供可核对的前文正文；角色推测、计划与资源摘要不自动成为已发生事实。保持部位、持有者与消耗状态连续；区分明确授权的能力获得与只为解局临时发明能力。",
         ...CAPABILITY_AUTHORIZATION_RULES,
+        "【情绪落地要求】",
+        ...CHAPTER_EMOTION_RULES,
         "2. 必须严格服从 chapter mission、mustAdvance、mustPreserve 与 ending hook。",
         "3. obligation contract 中的 must hit now、required payoff touches、required character appearances、required goal changes 都是本章必达项，必须在正文中让读者可见。",
       "4. character_hard_facts 是不可违背的人物硬事实，角色身份、阵营、立场、境界/战力、当前位置和可出场状态不得写反。",

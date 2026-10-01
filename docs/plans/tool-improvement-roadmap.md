@@ -36,7 +36,7 @@
 |---|------|------|---------|
 | P2-A | 书级终局锚点进入写作上下文 | 🔲 待做 | writer prompt 包含书级终局目标和当前卷阶段目标；可在生成章节中验证 |
 | P2-B | 本章必须兑现一件事（immediatePayoff 字段） | 🔲 待做 | chapterTaskSheet schema 加非空 immediatePayoff；规划审查验证字段存在 |
-| P2-C | **Q11** 情绪最小实现 | 🔲 待做 | writer prompt 每个出场人物加"处境压力→影响行动/说话"描述；不堆表情词 |
+| P2-C | **Q11** 情绪最小实现：落地规则注入写作 prompt | ✅ 已完成（待提交） | 新建 `context/emotionPresence.ts`（`CHAPTER_EMOTION_RULES` 4条）；注入 `chapterWriter.prompts.ts`（【情绪落地要求】段落）；8/8 离线验证通过 |
 
 ### 阶段 P3：语义质量与跨题材泛化（P2 完成后）
 
@@ -136,5 +136,24 @@
 
 | 日期 | 阶段 | 提交 | 结果 | 备注 |
 |------|------|------|------|------|
-| 2026-10-01 | P1-A Q26 | 待提交 | ✅ 服务编译通过；166/166 loader entries 版本一致；acceptance@v7/patch@v6 焦点键正确解析 | `ComicFactService` 内联 prompt 是 Q14 历史债，与本次无关 |
-| 2026-10-01 | P1-B Q24 | 待提交 | ✅ 服务编译通过；隔离验证 12/12 通过（旧步骤不触发/合法步骤正常 heal/并发批准拦截/活跃命令拦截/活跃执行拦截/pendingManualRecovery 保护/非 running 不触发） | 现场逐写因果仍无 trace；P1-C 新书验证待用户操作 |
+| 2026-10-01 | P1-A Q26 | b0563f7b 前 | ✅ 服务编译通过；166/166 loader entries 版本一致；acceptance@v7/patch@v6 焦点键正确解析 | `ComicFactService` 内联 prompt 是 Q14 历史债，与本次无关 |
+| 2026-10-01 | P1-B Q24 | b0563f7b 前 | ✅ 服务编译通过；隔离验证 12/12 通过 | 现场逐写因果仍无 trace；P1-C 新书验证待用户操作 |
+| 2026-10-01 | P3-A Q25（第一阶段） | b0563f7b | ✅ 跨字段矛盾门禁 + 服务编译；8/8 隔离验证通过 | 深层语义（行动者/时序/指令前提）属第二阶段 |
+| 2026-10-01 | P2-C Q11 | 待提交 | ✅ 情绪落地规则注入 writer prompt；8/8 离线验证通过 | acceptance/repair 侧共用模块但尚未注入 |
+
+### P2-A / P2-B 调查结论（重要：均无需新增字段）
+
+**P2-A 书级终局锚点进写作上下文：已接线，非代码缺陷。**
+
+- `chapterLayeredContext.ts`:556-565 已把 `writeContext.macroConstraints.bookStoryFoundation` 作为 `story_macro` 组注入，`priority: 98`、`required: Boolean(bookStoryFoundation)`。
+- 当前书《外卖箱闯金庸》的 `StoryMacroPlan.constraintEngineJson` 实测含完整 `bookStoryFoundation`：`throughline.centralQuestion` 有明确全书问题，`endingChoice` 有具体终局选择，`progression.escalationLogic` 有升级逻辑。
+- 结论：writer 已经能看到终局方向。若某本书写作时该字段为 null，那是**开书阶段没有生成宏观规划**的数据问题，不是写作上下文缺字段。
+
+**P2-B 本章必须兑现一件事：字段已存在且强制，非缺失。**
+
+- `readerExperience.netChange` / `promisedReward` / `keyTurn` / `rewardLevel` 均为 `conciseRequiredText`（`z.string().trim().min(1).max(240)`），见 `chapterDetailSchemas.ts`:5-18。
+- writer prompt 规则 1a 明确要求这些在正文中可见；验收 prompt 第 16 条要求逐项检查。
+- `chapterTaskSheetQuality` v16 已有 `progressionChecks` 三维校验（event_repetition / knowledge_repetition / prior_goal_followthrough），在**写前**就能识别"整章重复铺垫"。
+- 结论：无需新增 `immediatePayoff` 字段；现有字段已覆盖。若仍出现"多章办同一小事"，应查该检查在实际运行中是否被触发、其结论是否被下游采纳，而不是加字段。
+
+**修正后的后续重点**：P2-B 的下一步不是加字段，而是验证 `chapterTaskSheetQuality` 的 `progressionChecks=stalled` 是否真正阻断或修正了规划。

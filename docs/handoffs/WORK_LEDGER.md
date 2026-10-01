@@ -18,7 +18,7 @@
 | Q08 | 新书第一章前引用停顿：修复完成，并被随后用户实际续写覆盖 | 0aed0312；74通过2跳过；第二轮真实只读回放通过；正式日志第一章planner v4随后成功 | 旧Payoff错误不再是当前停点；旧queued job仍残留，禁止直接清库 |
 | Q09 | 新书第一章后/第2章前停顿：只读确认，未修 | promiseChecks覆盖校验失败；planningRepair uncertain/0 of2；3次模型stop响应在本机日志 | 先比对实际选定来源与返回清单，修严格校验反馈/恢复语义，保留真重复问题；原稿及已写章保护，不能清pending绕过 |
 | Q10 | 第一章补写越过职责：证据确认，未定位实现根因 | 两次writer输出2410+1732+2换行=4144保存正文；合同禁止取药但后段取药 | 追补写目标/合同注入、验收修复及接受质量债；不得删掉用户认可的推进，邻章应承接事实而非重演 |
-| Q11 | 情绪与人物鲜活：用户最新明确质量要求，未做代码/改稿 | 第一章已全文审读，开头有疲惫窝火，后半情绪同质且NPC偏功能化 | 查现有emotionBeat/emotionalShift/角色心理/文风上下文如何进入写作和修复；用同剧情对照看情绪是否改变言语、选择和互动，不按表情词计数 |
+| Q11 | 情绪与人物鲜活：**情绪落地规则已实施（writer prompt）** | 新建 `context/emotionPresence.ts`，定义 `CHAPTER_EMOTION_RULES` 四条通用规则（情绪驱动行动/语言/判断；处境压力须有可见痕迹；不强制情绪命名；不堆砌同义词）；注入 `chapterWriter.prompts.ts`（【情绪落地要求】段落，位于 CAPABILITY_AUTHORIZATION_RULES 之后）。服务端编译通过；离线 8/8 通过（模块加载、无题材硬编码、无固定情绪曲线强制、writer 渲染不报错、header 与全部4条规则出现在 SystemMessage）。证据 `.codex-run/tool-roadmap-20261001/q11-verify.log` | 当前只注入了 writer。acceptance/repair prompts 共用同一模块但尚未注入，下次可在 chapterAcceptance.prompts.ts 的 CHAPTER_PROGRESSION_AUDIT_RULES 前追加，或在 review 时引用 |
 | Q12 | 卷级多线因果、长线人物/关系回归、按需事实召回、单书文风校准：部分既有基础，专项未完成 | 两参考项目静态研究及质量计划 | 先书→卷→正文，AI优先，跨七题材；需用户安排下一阶段，不机械导入外部Skill |
 | Q13 | 长篇质量验收：未做 | 开篇和局部片段证据仅支持局部进步 | 中段、高潮、终局、多读者盲评、误报漏检、成本延时；不把模型高分当好故事 |
 | Q14 | 历史误报/验证债：未全部解决 | prose_negative_flip固定句式；旧全量测试契约/资源上限；comic内联prompt治理违规 | 各自先复现基线再修；不扩大为当前阻塞，不声称全套全绿 |
