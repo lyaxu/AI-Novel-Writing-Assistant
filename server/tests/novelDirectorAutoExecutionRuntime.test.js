@@ -52,7 +52,7 @@ test("sample range remains bounded after completion and restart despite unwritte
         findActivePipelineJobForRange: async () => null,
       },
       workflowService: {
-        bootstrapTask: async () => {}, getTaskById: async () => ({ status: "waiting_approval" }),
+        bootstrapTask: async () => {}, getTaskById: async () => ({ status: "running" }),
         recordCheckpoint: async (_id, value) => checkpoints.push(value),
       },
       buildDirectorSeedPayload: (_request, _novelId, extra) => extra ?? {},
@@ -400,7 +400,7 @@ test("runFromReady completes immediately when repaired chapters leave no remaini
         calls.push(["bootstrapTask", input.seedPayload.autoExecution.remainingChapterCount]);
       },
       async getTaskById() {
-        return { status: "waiting_approval" };
+        return { status: "running" };
       },
       async markTaskRunning() {
         calls.push(["markTaskRunning"]);
@@ -473,7 +473,7 @@ test("runFromReady keeps partial structured outline windows resumable after the 
         calls.push(["bootstrapTask", input.seedPayload.autoExecution.volumeChapterListComplete]);
       },
       async getTaskById() {
-        return { status: "waiting_approval" };
+        return { status: "running" };
       },
       async markTaskRunning() {
         calls.push(["markTaskRunning"]);
@@ -658,7 +658,7 @@ test("runFromReady treats explicit range continuation as approval for quality-al
         ]);
       },
       async getTaskById() {
-        return { status: "waiting_approval" };
+        return { status: "running" };
       },
       async markTaskRunning(taskId, input) {
         calls.push(["markTaskRunning", taskId, input.itemKey]);

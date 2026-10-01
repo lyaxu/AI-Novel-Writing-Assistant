@@ -15,6 +15,18 @@ export type AutomationLedgerEventPort = Pick<
   "recordEvent" | "recordCircuitBreakerOpened"
 >;
 
+export interface AutoExecutionTaskIdentityRow {
+  status: string;
+  id?: string;
+  novelId?: string | null;
+  lane?: string;
+  attemptCount?: number;
+  startedAt?: Date | null;
+  seedPayloadJson?: string | null;
+  pendingManualRecovery?: boolean;
+  cancelRequestedAt?: Date | null;
+}
+
 export interface NovelDirectorAutoExecutionWorkflowPort {
   bootstrapTask(input: {
     workflowTaskId: string;
@@ -23,7 +35,8 @@ export interface NovelDirectorAutoExecutionWorkflowPort {
     title: string;
     seedPayload?: Record<string, unknown>;
   }): Promise<unknown>;
-  getTaskById(taskId: string): Promise<{ status: string } | null>;
+  getTaskById(taskId: string): Promise<AutoExecutionTaskIdentityRow | null>;
+  getTaskByIdWithoutHealing?(taskId: string): Promise<AutoExecutionTaskIdentityRow | null>;
   markTaskRunning(taskId: string, input: {
     stage: "chapter_execution" | "quality_repair";
     itemLabel: string;

@@ -1,6 +1,16 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
+// Do not initialize SQLite or allow an unstubbed model operation in this suite.
+const blockedPrisma = new Proxy({}, { get(target, model) {
+  if (!(model in target)) target[model] = new Proxy({}, { get(methods, method) {
+    if (!(method in methods)) methods[method] = () => { throw new Error(`Unexpected database call: ${String(model)}.${String(method)}`); };
+    return methods[method];
+  } });
+  return target[model];
+} });
+require.cache[require.resolve("../../dist/db/prisma.js")] = { exports: { prisma: blockedPrisma } };
+
 const { prisma } = require("../../dist/db/prisma.js");
 const { novelEventBus } = require("../../dist/events/index.js");
 const {
@@ -11,6 +21,9 @@ const {
 } = require("../../dist/services/novel/production/NovelPipelineExecutor.js");
 const { ChapterRouteWindowService } = require("../../dist/services/novel/planning/ChapterRouteWindowService.js");
 const { ChapterExecutionPreparationService } = require("../../dist/services/novel/production/preparation/ChapterExecutionPreparationService.js");
+const { PlanningRepairRecoveryService } = require("../../dist/services/novel/director/recovery/planningRepair/PlanningRepairRecoveryService.js");
+const directorIssues = require("../../dist/services/novel/director/issues/DirectorIssueTaskContext.js");
+const pipelineGovernance = require("../../dist/services/novel/production/issueGovernance/PipelineIssueGovernance.js");
 
 function createExecutorHarness({
   used = 0,
@@ -182,6 +195,55 @@ const options = {
   repairMode: "light_repair",
   controlPolicy: { advanceMode: "full_book_autopilot" },
 };
+
+for (const code of ["PLANNING_REPAIR_CONFLICT", "PLANNING_REPAIR_CONFIRMATION_REQUIRED"]) {
+  for (const pauseOutcome of ["paused", "rejected", "cas_conflict"]) {
+    test(`typed ${code} closes the actual executor without retry when pause is ${pauseOutcome}`, async () => {
+      const original = {
+        findTask: prisma.novelWorkflowTask.findUnique,
+        capture: PlanningRepairRecoveryService.prototype.capturePipelineFailureBoundary,
+        pause: PlanningRepairRecoveryService.prototype.pauseAfterPipelineFailure,
+        loadIssues: directorIssues.loadDirectorIssueTaskContext,
+        report: pipelineGovernance.reportPipelineIssue,
+      };
+      const capture = { id: "task-1", attemptCount: 3, seedPayloadJson: "captured-state" };
+      const error = Object.assign(new Error("planning ownership conflict"), { code });
+      const pauses = []; const captures = []; let governanceCalls = 0;
+      prisma.novelWorkflowTask.findUnique = async ({ where }) => {
+        assert.equal(where.id, "task-1"); return { lane: "auto_director", directorRun: { id: "run-1" } };
+      };
+      directorIssues.loadDirectorIssueTaskContext = async () => null;
+      pipelineGovernance.reportPipelineIssue = async () => { governanceCalls++; throw new Error("Planning errors cannot enter generic governance"); };
+      PlanningRepairRecoveryService.prototype.capturePipelineFailureBoundary = async id => { captures.push(id); return capture; };
+      PlanningRepairRecoveryService.prototype.pauseAfterPipelineFailure = async (...args) => {
+        pauses.push(args);
+        if (pauseOutcome === "cas_conflict") throw new Error("pause CAS changed");
+        return pauseOutcome === "paused";
+      };
+      const harness = createExecutorHarness({
+        executeOptions: { ...options, workflowTaskId: "task-1" },
+        runChapter: async () => { throw error; },
+      });
+      try {
+        await harness.execute();
+        assert.deepEqual(captures, ["task-1"]);
+        assert.equal(pauses.length, 1);
+        assert.deepEqual(pauses[0].slice(0, 2), ["task-1", "job-1"]);
+        assert.strictEqual(pauses[0][2], error); assert.strictEqual(pauses[0][3], capture);
+        assert.equal(harness.chapterCalls, 1); assert.deepEqual(harness.claims, []);
+        assert.equal(governanceCalls, 0);
+        assert.equal(harness.jobState.status, "failed"); assert.equal(harness.jobState.error, error.message);
+        assert.equal(harness.updates.at(-1).data.status, "failed");
+      } finally {
+        harness.restore(); prisma.novelWorkflowTask.findUnique = original.findTask;
+        PlanningRepairRecoveryService.prototype.capturePipelineFailureBoundary = original.capture;
+        PlanningRepairRecoveryService.prototype.pauseAfterPipelineFailure = original.pause;
+        directorIssues.loadDirectorIssueTaskContext = original.loadIssues;
+        pipelineGovernance.reportPipelineIssue = original.report;
+      }
+    });
+  }
+}
 
 for (const endOrder of [1, 3]) {
   test(`autopilot honors requested 1-${endOrder} despite an 80-chapter novel estimate`, async () => {

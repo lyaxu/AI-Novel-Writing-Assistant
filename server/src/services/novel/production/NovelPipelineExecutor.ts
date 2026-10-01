@@ -10,6 +10,7 @@ import { runWithLlmUsageTracking } from "../../../llm/usageTracking";
 import { buildDirectorCompletionProfile } from "@ai-novel/shared/types/directorCompletion";
 import { ChapterRouteWindowService } from "../planning/ChapterRouteWindowService";
 import { ChapterRuntimeCoordinator } from "../runtime/ChapterRuntimeCoordinator";
+import { PlanningRepairRecoveryService, isPlanningRepairConfirmationError } from "../director/recovery/planningRepair";
 import { CHAPTER_ARTIFACT_BOUNDARY_TYPE } from "../runtime/artifactSync";
 import { isChapterEmptyContentError } from "../runtime/chapterEmptyContentError";
 import { ChapterContentPersistenceError } from "../runtime/lifecycle";
@@ -248,6 +249,9 @@ export class NovelPipelineExecutor {
       }).catch(() => null)
       : null;
     const shouldRecordDirectorTelemetry = directorTelemetryTask?.lane === "auto_director";
+    const planningRecovery = new PlanningRepairRecoveryService();
+    const planningFailureBoundary = shouldRecordDirectorTelemetry && runtimePayload.workflowTaskId
+      ? await planningRecovery.capturePipelineFailureBoundary(runtimePayload.workflowTaskId) : null;
     const snapshottedIssueGovernance = runtimePayload.issueGovernanceVersion === DIRECTOR_ISSUE_GOVERNANCE_VERSION
       && runtimePayload.issuePolicySnapshot
       ? {
@@ -886,6 +890,14 @@ export class NovelPipelineExecutor {
       }
 
       const message = error instanceof Error ? error.message : "流水线执行失败";
+      if (isPlanningRepairConfirmationError(error) && runtimePayload.workflowTaskId) {
+        await planningRecovery.pauseAfterPipelineFailure(
+          runtimePayload.workflowTaskId, jobId, error, planningFailureBoundary,
+        ).catch((pauseError) => {
+          logPipelineWarn("规划修复暂停未应用，保留当前任务归属。", { jobId, novelId,
+            error: pauseError instanceof Error ? pauseError.message : String(pauseError) });
+        });
+      }
       if (error && typeof error === "object" && "code" in error && ["LLM_OUTPUT_LIMIT", "PLANNING_REPAIR_CONFLICT", "PLANNING_REPAIR_CONFIRMATION_REQUIRED"].includes(String(error.code))) {
         await this.updateJobSafe(jobId, {
           status: "failed", error: message, finishedAt: new Date(),

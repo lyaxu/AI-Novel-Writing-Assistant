@@ -167,6 +167,7 @@ Open-source AI novel writing assistant and long-form production studio.
 
 - 继续已确认的规划修复时沿用原写作范围，避免写完章节后被送回首次开写选择。
 - 挂起的写作任务保留暂停原因和节奏板入口，避免持续显示执行却没有推进；继续操作复用原授权，重复点击合并处理。
+- 规划修复可随正常排队与运行状态继续；发生执行冲突时保留候选和轮次，回到节奏板确认，避免旧任务结果影响新的执行。
 
 完整更新历史见 [版本更新说明](docs/releases/release-notes.md)。
 

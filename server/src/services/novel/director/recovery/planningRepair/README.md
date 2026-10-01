@@ -1,6 +1,7 @@
 # 规划修复的人工恢复边界
 
 - 修复候选、质量判定、章节窗口和原子提交由 volume/planningRepair 管理。本模块只负责导演暂停、明确授权和原入口恢复。
+- 正文生产模块通过本目录 `index.ts` 使用恢复服务和类型化错误识别，不读取内部恢复种子或修改规划候选。
 - `PLANNING_REPAIR_CONFIRMATION_REQUIRED` 与 `PLANNING_REPAIR_CONFLICT` 均保存为 `waiting_approval / step_review_required / pendingManualRecovery`。源页面是 `structured`，不是 pipeline 重规划。
 - HTTP 状态查询不调用 workflow healing。恢复按钮只在节奏 / 拆章工作区出现；导演进度提供导航，运行记录不提供操作。
 - 手动追加需要 repairKey、非空 guidance、幂等请求标识。先 CAS 预留请求，再读取最新工作区并 rebase，最后 CAS 追加一轮。保留 rounds、历史与不受影响的数据。失败不追加预算。
@@ -10,6 +11,8 @@
 - seed.planningRepairRecovery 保存原 `structured_outline` 或 `chapter_execution` 锚点。前者恢复指定章规划，后者清掉失败 job 引用并重新走 JIT，不调用 replanNovel，不跳过当前章。
 - 已开启自动执行且恢复键严格匹配时，章节规划恢复复用原范围。历史任务缺少 `productionExperience` 显示偏好不能把恢复退回首次开写选择；没有授权键或没有已开启执行范围的任务仍需经过首次生产确认。批准章节节点也必须传递明确的人工恢复标识。
 - pipeline job 丢失异常 code 时，通过 durable planningRepair 的 waiting_confirmation / uncertain / technical_failed 状态补回导演暂停。技术失败保留原阶段及技术原因，不能归入普通质量修复后让源页面失去操作。生产执行器仍必须立即收束该异常，不得降级为成功或继续下一章。
+- 执行器还持有异常发生前的只读身份快照。类型化规划冲突仅在小说、执行次数、启动时间、repairKey、授权幂等键及当前 job 绑定均未变化时暂停；候选、历史、轮次和 pendingOperation 原样保留，原始错误进入 technicalError。新授权、取消、待完成授权或并发 CAS 变化必须拒绝旧写回。
+- 自动执行监督使用原始只读任务状态，不触发 healing；正常 queued/running 切换可继续，人工暂停、换执行/授权/job 时旧监督退出。获准运行的章节步骤必须先登记开始，初始化 startedAt 后再捕获身份；初始化本身不得清除人工暂停。
 - 暂停状态由前后端共享判断：waiting_approval / failed，或历史 running / queued 且明确 pendingManualRecovery；取消中的任务不可恢复。历史兼容只读展示，不在GET中清挂起标记或修复数据库。是否允许生成建议还需核对可修复阶段、任务归属及后台执行冲突。
 - 已挂起的批次不是活跃生成。建议入口只忽略seed中本导演当前pipelineJobId指向、pendingManualRecovery且无executionOwner/执行租约的job；其他任务、仍有执行归属或租约的job和活跃命令仍阻止建议，不能按所有pending记录一概放行。
 - 离线测试 `server/tests/planningRepairRecovery.test.js` 在导入服务前封锁数据库模块，验证 HTTP、CAS、错误映射和两类恢复路径；`PLANNING_REPAIR_TEST_SOURCE=1` 可直接转译最新源码测试而不触发 server build。

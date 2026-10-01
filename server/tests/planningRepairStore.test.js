@@ -717,6 +717,37 @@ test("existing session rejects execution-owner changes but begin resumes the sam
   await h.store.commit(resumed, resumed.candidate);
 });
 
+test("queued and running progress transitions preserve the same repair execution and budget", async () => {
+  for (const initialStatus of ["queued", "running"]) {
+    const h = fixture(); h.db.task.status = initialStatus;
+    h.db.chapters[0].content = "Protected prose";
+    const session = await h.store.begin(h.input);
+    const { rounds, maxRounds } = session.state;
+    h.db.task.status = initialStatus === "queued" ? "running" : "queued";
+    await h.ready(session);
+    h.db.task.status = initialStatus;
+    await h.store.commit(session, session.candidate);
+    assert.equal(h.state().phase, "committed");
+    assert.equal(h.state().rounds, rounds);
+    assert.equal(h.state().maxRounds, maxRounds);
+    assert.equal(h.db.chapters[0].content, "Protected prose");
+  }
+});
+
+test("active display compatibility does not permit another execution, manual pause or terminal state to write", async () => {
+  for (const mutate of [
+    task => { task.attemptCount++; }, task => { task.startedAt = "new-execution"; },
+    task => { task.lane = "manual"; }, task => { task.novelId = "another"; },
+    task => { task.pendingManualRecovery = true; }, task => { task.cancelRequestedAt = "cancelled"; },
+    ...["waiting_approval", "failed", "succeeded", "cancelled"].map(status => task => { task.status = status; }),
+  ]) {
+    const h = fixture(); const session = await h.store.begin(h.input); await h.ready(session);
+    mutate(h.db.task); const before = copy(h.db);
+    await assert.rejects(h.store.commit(session, session.candidate), /ownership changed|does not own|inactive|cancelled|completed/);
+    assert.deepEqual(h.db, before);
+  }
+});
+
 test("another live unresolved repair blocks a second task for the same novel", async () => {
   const h = fixture();
   const session = await h.store.begin(h.input);

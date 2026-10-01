@@ -329,6 +329,17 @@ export class DirectorCoreStepModuleRuntime {
     allowSkipReviewBlockedChapter?: boolean;
     resumePendingManualRecovery?: boolean;
   }): Promise<void> {
+    // The module runner has already accepted its execution policy. Calibration can
+    // enter here before the workflow has ever started; initialize that execution
+    // before the supervisor captures its identity, while keeping manual pauses intact.
+    const task = await this.workflowService.getTaskByIdWithoutHealing(input.taskId);
+    if (!task || task.novelId !== input.novelId || task.lane !== "auto_director"
+      || task.pendingManualRecovery || task.cancelRequestedAt || task.status === "cancelled") return;
+    if (!task.startedAt || !["queued", "running"].includes(task.status)) {
+      await this.workflowService.markTaskRunning(input.taskId, {
+        stage: "chapter_execution", itemKey: "chapter_execution", itemLabel: "正在生成章节正文", progress: 0.93,
+      });
+    }
     await this.autoExecutionRuntime.runFromReady({
       taskId: input.taskId,
       novelId: input.novelId,

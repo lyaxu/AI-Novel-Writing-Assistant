@@ -194,6 +194,15 @@ function owner(task: NovelWorkflowTask) {
   };
 }
 
+function executionIdentity(task: NovelWorkflowTask) {
+  // Queued/running are progress projections within one execution, not a new owner.
+  // Keep the exact owner fields in casSeed so a pause or takeover racing a write still rejects it.
+  return { ...owner(task),
+    status: task.status === "queued" || task.status === "running" ? "active" : task.status,
+    pendingManualRecovery: Boolean(task.pendingManualRecovery),
+  };
+}
+
 async function readTask(tx: Prisma.TransactionClient, taskId: string, novelId: string, allowCancelled = false) {
   const task = await tx.novelWorkflowTask.findUnique({ where: { id: taskId } });
   if (!task || task.novelId !== novelId) return conflict("Repair task does not own this novel.");
@@ -392,7 +401,7 @@ async function casSeed(tx: Prisma.TransactionClient, task: NovelWorkflowTask, se
   const raw = JSON.stringify(seed);
   const state = readState(seed);
   const changed = await tx.novelWorkflowTask.updateMany({
-    where: { ...owner(task), seedPayloadJson: task.seedPayloadJson },
+    where: { ...owner(task), pendingManualRecovery: task.pendingManualRecovery, seedPayloadJson: task.seedPayloadJson },
     data: { seedPayloadJson: raw, ...(state?.summary ? { currentItemLabel: state.summary } : {}) },
   });
   if (changed.count !== 1) conflict("The task changed concurrently; reload planning repair before continuing.");
@@ -692,12 +701,12 @@ export class PlanningRepairStore {
             snapshotToken: source.token, effectiveDefaultChapterLength: source.effectiveDefaultChapterLength,
             candidateHash: hash(candidate), writtenSourceFingerprint: writtenFingerprint, selectedCandidateFingerprint };
           const raw = await casSeed(tx, task, { ...seed, planningRepair: next, [SNAPSHOT_KEY]: renewed });
-          return { session: this.session(next, renewed, candidate), raw, owner: hash(owner(task)) };
+          return { session: this.session(next, renewed, candidate), raw, owner: hash(executionIdentity(task)) };
         }
         const candidate = await this.loadCandidate(tx, previous, snapshot);
         const raw = state === previous && !upgradeBudget ? task.seedPayloadJson
           : await casSeed(tx, task, { ...seed, planningRepair: state, [SNAPSHOT_KEY]: snapshot });
-        return { session: this.session(state, snapshot, candidate), raw, owner: hash(owner(task)) };
+        return { session: this.session(state, snapshot, candidate), raw, owner: hash(executionIdentity(task)) };
       }
       if (input.document.novelId !== input.novelId) conflict("Input document belongs to another novel.");
       const { chapter, eligible } = eligibleWindow(input.document, input.volumeId, input.chapterId, source);
@@ -719,7 +728,7 @@ export class PlanningRepairStore {
         effectiveDefaultChapterLength: source.effectiveDefaultChapterLength,
       };
       const raw = await casSeed(tx, task, { ...seed, planningRepair: state, [SNAPSHOT_KEY]: snapshot });
-      return { session: this.session(state, snapshot), raw, owner: hash(owner(task)) };
+      return { session: this.session(state, snapshot), raw, owner: hash(executionIdentity(task)) };
     });
     this.seeds.set(result.session, result.raw);
     this.owners.set(result.session, result.owner);
@@ -767,7 +776,7 @@ export class PlanningRepairStore {
         ...(changed ? { candidateVersionId: undefined, affectedChapterIds: undefined, obligationMoves: [], repairOutputPending: undefined } : {}),
       };
       const raw = await casSeed(tx, task, { ...seed, planningRepair: state, [SNAPSHOT_KEY]: nextSnapshot });
-      return { session: this.session(state, nextSnapshot, candidate), raw, owner: hash(owner(task)) };
+      return { session: this.session(state, nextSnapshot, candidate), raw, owner: hash(executionIdentity(task)) };
     });
     this.seeds.set(result.session, result.raw);
     this.owners.set(result.session, result.owner);
@@ -901,7 +910,7 @@ export class PlanningRepairStore {
   private async current(tx: Prisma.TransactionClient, session: RepairSession) {
     if (!this.seeds.has(session)) return conflict("Unknown repair session; call begin before writing.");
     const task = await readTask(tx, session.taskId, session.state.novelId);
-    if (this.owners.get(session) !== hash(owner(task))) conflict("Repair task ownership changed; reopen the session.");
+    if (this.owners.get(session) !== hash(executionIdentity(task))) conflict("Repair task ownership changed; reopen the session.");
     const seed = parseSeed(task.seedPayloadJson);
     const expectedSeed = parseSeed(this.seeds.get(session) ?? null);
     if (repairSeedAuthority(seed) !== repairSeedAuthority(expectedSeed)) {

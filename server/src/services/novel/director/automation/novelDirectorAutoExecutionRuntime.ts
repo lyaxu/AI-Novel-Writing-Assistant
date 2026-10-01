@@ -33,7 +33,7 @@ import {
   resolveSingleChapterExecutionRange,
   shouldClearAutoExecutionCheckpoint,
 } from "./novelDirectorAutoExecutionRuntimeUtils";
-import { prepareRequestedAutoExecution as prepareRequestedAutoExecutionState, resolveAutoExecutionRuntimeRangeAndState, shouldStopAutoExecution } from "./novelDirectorAutoExecutionRuntimePreparation";
+import { prepareRequestedAutoExecution as prepareRequestedAutoExecutionState, readAutoExecutionIdentity, resolveAutoExecutionRuntimeRangeAndState, shouldStopAutoExecution } from "./novelDirectorAutoExecutionRuntimePreparation";
 import type { NovelDirectorAutoExecutionRuntimeDeps, PipelineJobSnapshot } from "./novelDirectorAutoExecutionRuntimePorts";
 import { prisma } from "../../../../db/prisma";
 
@@ -60,6 +60,8 @@ export class NovelDirectorAutoExecutionRuntime {
     skipCurrentQualityRepair?: boolean;
     resumePendingManualRecovery?: boolean;
   }): Promise<void> {
+    const executionIdentity = await readAutoExecutionIdentity(this.deps, input.taskId);
+    if (!executionIdentity || await shouldStopAutoExecution(this.deps, input.taskId, null, executionIdentity)) return;
     const allowLazyChapterPlanning = isFullBookAutopilotRunMode(input.request.runMode);
     let { range, autoExecution, pipelineJobId } = await prepareRequestedAutoExecutionState(this.deps, {
       novelId: input.novelId,
@@ -70,6 +72,7 @@ export class NovelDirectorAutoExecutionRuntime {
       allowSkipReviewBlockedChapter: input.allowSkipReviewBlockedChapter,
     });
     let knownPipelineJob: PipelineJobSnapshot = null;
+    if (await shouldStopAutoExecution(this.deps, input.taskId, pipelineJobId || null, executionIdentity)) return;
     if (pipelineJobId) {
       knownPipelineJob = await this.deps.novelService.getPipelineJobById(pipelineJobId);
       if (knownPipelineJob?.pendingManualRecovery && input.resumePendingManualRecovery) {
@@ -114,7 +117,7 @@ export class NovelDirectorAutoExecutionRuntime {
         isBackgroundRunning: true,
         resumeStage: input.resumeStage,
       });
-      if (await shouldStopAutoExecution(this.deps, input.taskId, pipelineJobId || null)) {
+      if (await shouldStopAutoExecution(this.deps, input.taskId, pipelineJobId || null, executionIdentity)) {
         return;
       }
 
@@ -154,6 +157,7 @@ export class NovelDirectorAutoExecutionRuntime {
 
       autoExecutionLoop:
       while (true) {
+      if (await shouldStopAutoExecution(this.deps, input.taskId, pipelineJobId || null, executionIdentity)) return;
       if (!pipelineJobId) {
         ({ range, autoExecution } = await resolveAutoExecutionRuntimeRangeAndState(this.deps, {
           novelId: input.novelId,
@@ -162,6 +166,7 @@ export class NovelDirectorAutoExecutionRuntime {
           pipelineStatus: "queued",
           allowLazyChapterPlanning,
         }));
+        if (await shouldStopAutoExecution(this.deps, input.taskId, null, executionIdentity)) return;
         if ((autoExecution.remainingChapterCount ?? 0) === 0) {
           await recordCompletedCheckpoint(this.deps, {
             taskId: input.taskId,
@@ -241,13 +246,14 @@ export class NovelDirectorAutoExecutionRuntime {
       }
 
       while (pipelineJobId) {
-        if (await shouldStopAutoExecution(this.deps, input.taskId, pipelineJobId)) {
+        if (await shouldStopAutoExecution(this.deps, input.taskId, pipelineJobId, executionIdentity)) {
           return;
         }
         const job = await this.deps.novelService.getPipelineJobById(pipelineJobId);
         if (!job) {
           throw new Error("自动执行章节批次时未能找到对应的批量任务。");
         }
+        if (await shouldStopAutoExecution(this.deps, input.taskId, pipelineJobId, executionIdentity)) return;
         if ((job.pendingManualRecovery || job.status === "failed")
           && await this.deps.pausePlanningRepairIfNeeded?.(input.taskId)) return;
         if (job.pendingManualRecovery) {
@@ -532,6 +538,7 @@ export class NovelDirectorAutoExecutionRuntime {
           pipelineJobId,
           pipelineStatus: job.status,
         }, failureCircuitBreaker);
+        if (await shouldStopAutoExecution(this.deps, input.taskId, pipelineJobId, executionIdentity)) return;
         if (isDirectorCircuitBreakerOpen(failureCircuitBreaker)) {
           await stopAutoExecutionForCircuitBreaker(this.deps, {
             taskId: input.taskId,

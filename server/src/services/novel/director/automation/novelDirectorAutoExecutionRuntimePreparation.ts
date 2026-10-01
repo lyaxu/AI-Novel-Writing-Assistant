@@ -11,7 +11,20 @@ import {
 } from "./novelDirectorAutoExecutionScopeRuntime";
 import { isSkippableAutoExecutionReviewFailure } from "./novelDirectorAutoExecutionFailure";
 import type { DirectorAutoExecutionRange } from "./novelDirectorAutoExecution";
-import type { NovelDirectorAutoExecutionRuntimeDeps } from "./novelDirectorAutoExecutionRuntimePorts";
+import type { AutoExecutionTaskIdentityRow, NovelDirectorAutoExecutionRuntimeDeps } from "./novelDirectorAutoExecutionRuntimePorts";
+
+export async function readAutoExecutionIdentity(deps: NovelDirectorAutoExecutionRuntimeDeps, taskId: string) {
+  return deps.workflowService.getTaskByIdWithoutHealing
+    ? deps.workflowService.getTaskByIdWithoutHealing(taskId)
+    : deps.workflowService.getTaskById(taskId);
+}
+
+function executionSeed(row: AutoExecutionTaskIdentityRow) {
+  try { return JSON.parse(row.seedPayloadJson || "{}") as {
+    autoExecution?: { pipelineJobId?: string | null };
+    planningRepairRecovery?: { repairKey?: string; idempotencyKey?: string };
+  }; } catch { return null; }
+}
 
 export async function resolveAutoExecutionRuntimeRangeAndState(
   deps: NovelDirectorAutoExecutionRuntimeDeps,
@@ -91,13 +104,24 @@ export async function shouldStopAutoExecution(
   deps: NovelDirectorAutoExecutionRuntimeDeps,
   taskId: string,
   pipelineJobId?: string | null,
+  expected?: AutoExecutionTaskIdentityRow | null,
 ): Promise<boolean> {
-  const row = await deps.workflowService.getTaskById(taskId);
-  if (!row || row.status !== "cancelled") {
-    return false;
+  const row = await readAutoExecutionIdentity(deps, taskId);
+  if (!row) return true;
+  if (expected) {
+    const currentSeed = executionSeed(row);
+    const expectedSeed = executionSeed(expected);
+    if (!currentSeed || !expectedSeed || row.id !== expected.id || row.novelId !== expected.novelId
+      || row.lane !== expected.lane || row.attemptCount !== expected.attemptCount
+      || row.startedAt?.getTime() !== expected.startedAt?.getTime()
+      || currentSeed.planningRepairRecovery?.repairKey !== expectedSeed.planningRepairRecovery?.repairKey
+      || currentSeed.planningRepairRecovery?.idempotencyKey !== expectedSeed.planningRepairRecovery?.idempotencyKey
+      || (pipelineJobId && currentSeed.autoExecution?.pipelineJobId
+        && currentSeed.autoExecution.pipelineJobId !== pipelineJobId)) return true;
   }
-  if (pipelineJobId) {
-    await deps.novelService.cancelPipelineJob(pipelineJobId).catch(() => null);
+  if (row.status === "cancelled" || row.cancelRequestedAt) {
+    if (pipelineJobId) await deps.novelService.cancelPipelineJob(pipelineJobId).catch(() => null);
+    return true;
   }
-  return true;
+  return Boolean(row.pendingManualRecovery || !["queued", "running"].includes(row.status));
 }

@@ -2,7 +2,7 @@ import { prisma } from "../../../../../db/prisma";
 import { AppError } from "../../../../../middleware/errorHandler";
 import { NovelWorkflowService } from "../../../workflow/NovelWorkflowService";
 import { buildNovelEditResumeTarget } from "../../../workflow/novelWorkflow.shared";
-import { readPlanningRepairSeed, resolvePlanningRepairResumePhase } from "./planningRepairRecovery";
+import { isPlanningRepairConfirmationError, readPlanningRepairSeed, resolvePlanningRepairResumePhase } from "./planningRepairRecovery";
 import { PlanningRepairStore } from "../../../volume/planningRepair/PlanningRepairStore";
 import { isPlanningRepairConfirmationPhase, isPlanningRepairTaskPaused } from "@ai-novel/shared/types/planningRepair/recovery";
 import { readPipelinePauseProjection } from "../pipelinePause";
@@ -12,6 +12,38 @@ export class PlanningRepairRecoveryService {
     private readonly workflow = new NovelWorkflowService(),
     private readonly repairStore: Pick<PlanningRepairStore, "rebase"> = new PlanningRepairStore(),
   ) {}
+
+  async capturePipelineFailureBoundary(taskId: string) {
+    return this.workflow.getTaskByIdWithoutHealing(taskId);
+  }
+
+  async pauseAfterPipelineFailure(taskId: string, pipelineJobId: string, error: unknown,
+    expected: Awaited<ReturnType<PlanningRepairRecoveryService["capturePipelineFailureBoundary"]>>,
+  ): Promise<boolean> {
+    if (!expected || !isPlanningRepairConfirmationError(error) || expected.pendingManualRecovery
+      || expected.cancelRequestedAt || !["queued", "running"].includes(expected.status)) return false;
+    const row = await this.workflow.getTaskByIdWithoutHealing(taskId);
+    if (!row || row.id !== expected.id || row.novelId !== expected.novelId || row.lane !== "auto_director"
+      || row.lane !== expected.lane || !["queued", "running"].includes(row.status)
+      || row.pendingManualRecovery || row.cancelRequestedAt
+      || row.attemptCount !== expected.attemptCount
+      || row.startedAt?.getTime() !== expected.startedAt?.getTime()) return false;
+    const current = readPlanningRepairSeed(row.seedPayloadJson);
+    const original = readPlanningRepairSeed(expected.seedPayloadJson);
+    if (!original.repair || !current.repair || current.repair.novelId !== row.novelId || current.repair.phase === "committed"
+      || current.repair.key !== original.repair.key
+      || current.recovery?.idempotencyKey !== original.recovery?.idempotencyKey
+      || current.recovery?.pendingGrant) return false;
+    const execution = current.seed.autoExecution as { pipelineJobId?: string } | undefined;
+    if (execution?.pipelineJobId !== pipelineJobId) return false;
+    const job = await prisma.generationJob.findUnique({ where: { id: pipelineJobId } });
+    if (!job || job.novelId !== row.novelId || job.cancelRequestedAt || job.status === "cancelled") return false;
+    let payload: { workflowTaskId?: string };
+    try { payload = JSON.parse(job.payload || "{}"); } catch { return false; }
+    if (payload.workflowTaskId !== taskId) return false;
+    await this.pauseAfterFailure(taskId, error, row);
+    return true;
+  }
 
   async statusByNovel(novelId: string) {
     const rows = await this.workflow.getVisibleRowsByNovelIdRaw(novelId, "auto_director");
@@ -40,14 +72,23 @@ export class PlanningRepairRecoveryService {
     return { taskId, novelId: row.novelId, status: view.status, pendingManualRecovery: view.pendingManualRecovery, cancelRequestedAt: row.cancelRequestedAt, planningRepair: repair, recoveryRequest };
   }
 
-  async pauseAfterFailure(taskId: string, error?: unknown): Promise<void> {
-    let row = await this.workflow.getTaskByIdWithoutHealing(taskId);
+  async pauseAfterFailure(taskId: string, error?: unknown,
+    expectedRow?: Awaited<ReturnType<PlanningRepairRecoveryService["capturePipelineFailureBoundary"]>>,
+  ): Promise<void> {
+    let row = expectedRow ?? await this.workflow.getTaskByIdWithoutHealing(taskId);
     if (!row || row.status === "cancelled" || row.cancelRequestedAt) return;
     const { seed, repair, recovery } = readPlanningRepairSeed(row.seedPayloadJson);
     if (!repair) throw new AppError("规划修复缺少持久化状态。", 409);
     if (repair.novelId !== row.novelId || repair.phase === "committed") throw new AppError("规划修复归属或状态已变化。", 409);
-    const summary = error instanceof Error ? error.message : repair.summary ?? "规划修复需要确认。";
-    const waitingRepair = { ...repair, phase: repair.phase === "technical_failed" ? "technical_failed" : repair.phase === "uncertain" ? "uncertain" : "waiting_confirmation", summary };
+    const technicalError = error instanceof Error ? error.message : undefined;
+    const executionConflict = expectedRow && error && typeof error === "object" && "code" in error
+      && error.code === "PLANNING_REPAIR_CONFLICT";
+    const summary = executionConflict
+      ? "章节规划修复的执行状态发生变化。候选和修复轮次已保留，请回到节奏 / 拆章工作区确认后继续。"
+      : technicalError ?? repair.summary ?? "规划修复需要确认。";
+    const waitingRepair = { ...repair, phase: repair.phase === "technical_failed" ? "technical_failed" : repair.phase === "uncertain" ? "uncertain" : "waiting_confirmation", summary,
+      ...(expectedRow && technicalError ? { technicalError } : {}),
+    };
     const resumeTarget = buildNovelEditResumeTarget({
       novelId: repair.novelId, taskId, stage: "structured", volumeId: repair.volumeId, chapterId: repair.chapterId,
     });
