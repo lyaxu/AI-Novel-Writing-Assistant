@@ -26,8 +26,8 @@
 
 | # | 问题 | 状态 | 验收标准 |
 |---|------|------|---------|
-| P1-A | **Q26** Prompt 加载目录版本声明漂移 | ✅ 已修（待提交） | loader 声明与资产版本一致；166/166 校验通过 |
-| P1-B | **Q24** 旧等待步骤覆盖新执行 | ✅ 已修（待提交） | 新鲜度（run_resumed 分界）+活跃执行判定+写入前重读；隔离 12/12 通过 |
+| P1-A | **Q26** Prompt 加载目录版本声明漂移 | ✅ 已修（2a8ae404） | loader 声明与资产版本一致；166/166 校验通过 |
+| P1-B | **Q24** 旧等待步骤覆盖新执行 | ✅ 已修（2a8ae404） | 新鲜度（run_resumed 分界）+活跃执行判定+写入前重读；隔离 12/12 通过 |
 | P1-C | 新开一本书跑第3→4章完整链路验证 | 🔲 待做（用户操作） | 导演能从第3章自动推进到第4章规划并等待批准，不回退 |
 
 ### 阶段 P2：让故事向前推进（P1 完成后）
@@ -120,13 +120,12 @@
 ## 四、交接要点（窗口满时直接引用）
 
 - 仓库：`D:/novel/AI-Novel-Writing-Assistant`，分支 `codex/book-story-foundation`
-- 当前代码 HEAD：ce06f384（文档提交），代码基线 94315b5d
+- 当前代码 HEAD：**02180f8d**（最新）；代码基线 94315b5d
 - 未 push、未晋级 beta/main，desktop 0.4.28
 - 保留 10 项 untracked，不清理、不切分支
 - 当前样本书《外卖箱闯金庸》`cmuocysv9000c4ww0dqghfyhk`，第3章 drafted/needs_repair，导演 waiting_approval
 - 不自动恢复导演、不采用旧候选、不改已有正文
-- Q24/Q25/Q26 是本窗口新发现的工具 bug，见 WORK_LEDGER 和三章观察文件
-- 详细失败历史/验收边界/授权台账见 `docs/handoffs/2026-10-01_1153Z_three-chapter-audit_thread_handoff.md`
+- P1（Q24/Q26）、P2-C（Q11）、P3-A Q25第一阶段 均已完成并提交，详见完成记录
 
 ---
 
@@ -139,7 +138,7 @@
 | 2026-10-01 | P1-A Q26 | b0563f7b 前 | ✅ 服务编译通过；166/166 loader entries 版本一致；acceptance@v7/patch@v6 焦点键正确解析 | `ComicFactService` 内联 prompt 是 Q14 历史债，与本次无关 |
 | 2026-10-01 | P1-B Q24 | b0563f7b 前 | ✅ 服务编译通过；隔离验证 12/12 通过 | 现场逐写因果仍无 trace；P1-C 新书验证待用户操作 |
 | 2026-10-01 | P3-A Q25（第一阶段） | b0563f7b | ✅ 跨字段矛盾门禁 + 服务编译；8/8 隔离验证通过 | 深层语义（行动者/时序/指令前提）属第二阶段 |
-| 2026-10-01 | P2-C Q11 review/repair侧 | 待提交 | ✅ 注入 `review.prompts.ts` 两个入口（chapterReviewPrompt/chapterRepairPrompt）；17/17 离线验证通过 | 四条链路（writer/acceptance/review/repair）规则层已完备 |
+| 2026-10-01 | P2-C Q11 review/repair侧 | 0e91b0cd / 02180f8d | ✅ 注入 `review.prompts.ts` 两个入口；17/17 离线验证通过；wiki 更新 | 四链路全覆盖 |
 
 ### P2-A / P2-B 调查结论（重要：均无需新增字段）
 
