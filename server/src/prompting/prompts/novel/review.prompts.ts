@@ -1,5 +1,6 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { CAPABILITY_AUTHORIZATION_RULES } from "./context/capabilityAuthorization";
+import { CHAPTER_EMOTION_AUDIT_RULES } from "./context/emotionPresence";
 import { z } from "zod";
 import type { PromptAsset } from "../../core/promptTypes";
 import { renderSelectedContextBlocks } from "../../core/renderContextBlocks";
@@ -125,6 +126,9 @@ export const chapterReviewPrompt: PromptAsset<
       "不能脑补未给出的前文、设定或隐藏剧情。",
       ...CAPABILITY_AUTHORIZATION_RULES,
       "",
+      "【情绪落地审查】",
+      ...CHAPTER_EMOTION_AUDIT_RULES,
+      "",
       "【评分要求】",
       "score 必须完整包含：coherence、repetition、pacing、voice、engagement、overall。",
       "每项评分都应基于正文实际表现，不得凭印象打分。",
@@ -217,6 +221,9 @@ export const chapterRepairPrompt: PromptAsset<ChapterRepairPromptInput, string, 
       "修文以‘最小必要修改’为原则，不要无关重写，不要把原章整体推翻重来。",
       ...CAPABILITY_AUTHORIZATION_RULES,
       "不得引入新的核心角色、重大设定、主线转向或与上下文冲突的内容。",
+      "",
+      "【情绪落地要求】",
+      ...CHAPTER_EMOTION_AUDIT_RULES,
       "",
       "【修复原则】",
       "1. 优先修复 issuesJson 中明确指出的关键问题。",
