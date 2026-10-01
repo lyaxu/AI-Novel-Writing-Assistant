@@ -4,6 +4,8 @@
 
 后续进展：《外卖箱通武侠，我送一单得一门武功》后来完成三章，用户认可紧凑度但指出二三章重复，随后授权三项通用修复。该书替代导演已完成、原导演已取消，Q09停点是历史；旧 promiseChecks 根因不因此销账。用户允许换书，不再围绕这本改稿。之后新书《外卖箱闯金庸》也有三章正文，但第三章来自单章生成、仍needs_repair，当前导演waiting_approval，并未完成恢复验收。最新全文、运行及隔离复现见[三章核验](../evals/framework-quality/observations/2026-10-01-chapter-three-quality-and-tool-audit.md)。Q11情绪专项仍未实施。
 
+**2026-10-01 新一轮（工具优化目标任务书）**：用户确认长期方向是多题材小说创作并投稿/改编漫剧，问题根因在工具而非模型，要求有序推进并留可查记录。已建立活跃任务书 [工具优化目标任务书](../plans/tool-improvement-roadmap.md)，并完成 P1 前两步：**Q26 已修并全量校验（166/166 loader 版本一致）**、**Q24 已修并隔离验证（12/12）**。两步均通过服务端编译，尚未真实导演验收，也尚未本地提交。下一步 P1-C 由用户新开一本书跑第3→4章链路验收。
+
 | 编号 | 事项与状态 | 已完成及证据 | 下一步与验收边界 |
 | --- | --- | --- | --- |
 | Q01 | 书级大底、世界边界、人物主线：工程完成，文学未全面验收 | db49bce0；book-story-foundation wiki；七题材14候选为人工开发材料 | 多题材真实构思/留出盲评；字段存在不等于大底好。不得强制所有题材用同一情节模板 |
@@ -29,9 +31,9 @@
 | Q21 | 规划恢复无推进却显示执行：工程完成，用户继续已越过原门禁 | cd2dbd09；原授权误到production_experience_required、GET用人工挂起job覆盖停点已修；119回归+编译，见[运行停顿记录](../evals/framework-quality/observations/2026-10-01-director-resume-phantom-running.md)。08:56新job越过旧门禁后遇Q22 | 用户认可二章“可圈可点”。最新三章已由单章入口生成，导演仍等确认；新Q24是旧步骤投影路径，不冒充原job修复无效或全链通过 |
 | Q22 | 正常进度误报归属：工程完成，导演真实恢复仍待验收 | 94315b5d；归属与精确CAS分离，类型化规划异常、候选/预算暂停、旧监督及首次登记保护；编译+258独立回归（212复用同轮未变覆盖），见[执行归属记录](../evals/framework-quality/observations/2026-10-01-planning-repair-execution-ownership.md) | 最新第三章有正文，但POST单章生成，不是v5提交/导演恢复证据；当前waiting_approval、pending=0、原授权/1 of2/v5保留。先新事实取证，不能覆盖已写章或清预算 |
 | Q23 | 新书三章质量与实际生成：全文核验完成，局部接收仍有质量债 | 第一/二章2901/2556 approved，三章3529 drafted/needs_repair；交药、拿甲、新单有进展，无二三章重复赶路。writer v12/acceptance v7各一次，无第三章patch；timeline抽取degraded | 保存不等于批准/事实资产齐全；不自动改书/续写。时间、回忆、说话人、物件及情绪问题见最新观察，模型83分不作文学评级 |
-| Q24 | 旧等待步骤覆盖新执行：源码+隔离3情形机制确认，未修 | NovelWorkflowHealingService.healRuntimeGateApprovalState取旧step，无新鲜度/节点/执行身份，写入仅id；旧step覆盖新running及并发授权，对照活跃command不写。私有复现与源码哈希保留 | 优先通用修复当前门禁识别及CAS，保留真实质量优先/规划暂停；现场哪次GET写入缺trace。禁止直接改DB、清pending或忽略全部等待 |
+| Q24 | 旧等待步骤覆盖新执行：**已修，隔离验证通过** | `healRuntimeGateApprovalState` 增加三重通用保护：以最新 `run_resumed` 事件为执行代次新鲜度边界（旧 step 不再产生恢复决定）、本任务活跃 `DirectorRuntimeExecution` 判定、写入前重读软 CAS。服务编译通过；离线隔离 12/12 通过（旧步骤零写入、合法步骤仍可 heal、并发批准拦截、活跃命令/执行/pendingManualRecovery/非running 各自拦截）。证据 `.codex-run/tool-roadmap-20261001/` | 现场逐写因果仍缺 trace；不宣称已捕获那一次因果。真实全链由新书第3→4章验收。禁止直接改DB、清pending或忽略全部等待 |
 | Q25 | 语义结论/修复前提与最终选稿核对：漏检和错误建议确认，未修 | 15/15引文存在仍漏时间/未发生回忆/发言/物件；传信阻塞与后果等级不清；令狐冲观察引用不足；“空药瓶”修复备选无持有依据。没有执行该补丁或证明真实资产污染 | 扩AI合同核对行动者、时序、事实/推断/计划、指令前提及选稿后每项效果；不能硬编码剧情词。旧独立审查合同不自动认为已迁移 |
-| Q26 | Prompt加载目录版本声明漂移：静态确认，未修 | loader声明acceptance v6/patch v5，资产实际v7/v6；registry按真实资产版本缓存，本次v7确已运行 | 校对按需加载/精确版本查找与通用目录一致性；不误报为仍调用旧Prompt |
+| Q26 | Prompt加载目录版本声明漂移：**已修，全量校验通过** | loader 声明 `acceptance_assessment@v7`、`review.patch@v6`（原 v6/v5），与资产实际版本一致。服务编译通过；离线遍历全部 166 条 loader entry 逐条比对声明与资产 `version`：0 错位、0 加载失败，两个焦点键经 `getRegisteredPromptAsset(id, version)` 正确解析。证据 `.codex-run/tool-roadmap-20261001/` | `prompting-governance.test.js` 仍有 `ComicFactService.ts:39/48` 内联 prompt 一项失败，属 Q14 历史债，本次未触碰该文件 |
 
 ## 授权台账
 

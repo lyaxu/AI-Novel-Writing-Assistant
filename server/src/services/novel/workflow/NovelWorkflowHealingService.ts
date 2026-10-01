@@ -292,6 +292,18 @@ export class NovelWorkflowHealingService {
     if (await resolveActiveAutoDirectorAutoExecution({ taskId, row: candidate })) {
       return false;
     }
+    // Guard: if there is an active runtime execution belonging to this task,
+    // the pipeline is still running — do not project it as waiting.
+    const activeExecution = await prisma.directorRuntimeExecution.findFirst({
+      where: {
+        workflowTaskId: taskId,
+        status: { in: ["queued", "running"] },
+      },
+      select: { id: true },
+    });
+    if (activeExecution) {
+      return false;
+    }
     const latestStep = await prisma.directorStepRun.findFirst({
       where: { taskId },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
@@ -299,14 +311,44 @@ export class NovelWorkflowHealingService {
         status: true,
         label: true,
         policyDecisionJson: true,
+        updatedAt: true,
       },
     });
     if (!latestStep || (latestStep.status !== "waiting_approval" && latestStep.status !== "blocked_scope")) {
       return false;
     }
+    // Freshness guard: use the latest run_resumed event as the execution-cycle
+    // boundary. A step that was last updated BEFORE the most recent resume means
+    // it belongs to an older execution cycle and must not overwrite the current
+    // running state (e.g. a stale 06:13Z waiting step must not undo an 11:35Z
+    // approval). This mirrors the pattern in healRuntimeFailedState.
+    const latestResume = await prisma.directorEvent.findFirst({
+      where: { taskId, type: "run_resumed" },
+      orderBy: { occurredAt: "desc" },
+      select: { occurredAt: true },
+    });
+    const stepUpdatedAt = latestStep.updatedAt instanceof Date
+      ? latestStep.updatedAt
+      : (latestStep.updatedAt ? new Date(latestStep.updatedAt as string) : null);
+    if (latestResume && stepUpdatedAt && stepUpdatedAt < latestResume.occurredAt) {
+      // The step predates the current execution cycle — skip to avoid a stale
+      // gate overwriting a newer approved/running transition.
+      return false;
+    }
     const reason = parseRuntimeGateReason(latestStep.policyDecisionJson)
       ?? candidate.checkpointSummary
       ?? "当前自动导演步骤需要确认后继续。";
+    // Soft CAS: re-read the latest row immediately before writing to ensure the
+    // task is still "running". The healing path is driven by periodic GET calls
+    // (not a high-concurrency write path), so a re-read here is sufficient to
+    // prevent a stale-gate step from clobbering a concurrent approval command
+    // that already advanced the status to "waiting_approval" or "succeeded".
+    // We use updateTaskWithRetry (which includes the planningRepair write guard)
+    // rather than updateTaskManyWithRetry so that repair-owned state is protected.
+    const freshRow = await this.workflow.getTaskByIdWithoutHealing(taskId);
+    if (!freshRow || freshRow.status !== "running") {
+      return false;
+    }
     await this.workflow.updateTaskWithRetry({
       where: { id: taskId },
       data: {

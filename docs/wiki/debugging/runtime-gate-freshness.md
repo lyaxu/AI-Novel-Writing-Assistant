@@ -4,11 +4,19 @@
 
 自动导演同时持久化任务、命令、章节job、步骤审查和恢复授权。读取阶段的healing会尝试修正失配状态；如果把历史等待步骤当成当前门禁，新批准任务在命令完成后可能又回到等待，且界面只有通用“确认后继续”。章节有正文或命令succeeded都不能证明导演范围完成。
 
-## 当前规则与实现缺口
+## 当前规则与实现（已修复）
 
 有效门禁必须属于当前阶段和执行代次。不能仅以本任务最新步骤的waiting_approval/blocked_scope覆盖运行任务；历史步骤可以保留，但没有新鲜度、节点、授权及执行身份凭据时不应产生新的恢复决定。真实规划确认与质量优先人工暂停仍须保留，不能为解决假等待统一改running。
 
-当前 NovelWorkflowHealingService.healRuntimeGateApprovalState 仅选择step状态、标签与policyDecisionJson，缺少上述凭据；updateTaskWithRetry的where仅id，查询后并发批准仍可能被覆盖。该路径是待修缺口，本页不表示已落地新鲜度/CAS保护。
+**NovelWorkflowHealingService.healRuntimeGateApprovalState 已于 2026-10-01 修复**，增加三重通用保护：
+
+1. **执行代次新鲜度分界**：以本任务最新 `run_resumed` 事件时间为边界（与 `healRuntimeFailedState` 一致）。最新 DirectorStepRun 的 `updatedAt` 若早于该事件，判定为旧代次步骤，跳过 healing，不产生恢复决定。
+2. **活跃运行时执行判定**：查询本任务下状态为 queued/running 的 `DirectorRuntimeExecution`；若存在，说明管线仍在执行，跳过投影写入。
+3. **写入前重读软 CAS**：提交写入前重读最新任务行；若状态已不是 `running`（例如并发批准已落地），则放弃写入。写入仍走带 `planningRepair` 写保护的 `updateTaskWithRetry`。
+
+原有保护不变：`pendingManualRecovery=true`（质量优先人工暂停）、活跃 `DirectorRunCommand`、取消请求、非 running 状态均仍跳过。
+
+隔离验证 12/12 通过，证据：`.codex-run/tool-roadmap-20261001/q24-verification-result.json`。
 
 ## 推荐诊断顺序
 
