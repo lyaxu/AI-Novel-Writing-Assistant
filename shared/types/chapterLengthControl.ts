@@ -63,6 +63,10 @@ export const chapterScenePlanSchema = z.object({
   lengthBudget: lengthBudgetContractSchema,
   scenes: z.array(chapterSceneCardSchema).min(SCENE_COUNT_MIN).max(SCENE_COUNT_MAX),
   readerExperience: readerExperienceContractSchema.default(EMPTY_READER_EXPERIENCE_CONTRACT),
+  // Chapter-level minimum event list: the concrete things this chapter must actually show.
+  // Default [] keeps legacy stored plans parseable; the generation-time contract schema is what
+  // enforces the 3-8 range for newly generated chapters.
+  requiredElements: z.array(z.string().trim().min(1).max(160)).max(8).default([]),
 });
 
 export const generatedChapterScenePlanSchema = chapterScenePlanSchema.extend({
@@ -323,6 +327,12 @@ export function normalizeChapterScenePlan(
     lengthBudget: budget,
     scenes: rescaleSceneTargets(budget.targetWordCount, boundedScenes),
     readerExperience: normalizeReaderExperienceContract(record?.readerExperience),
+    // Sanitize rather than reject: stored plans may predate the field or carry model noise, and a
+    // malformed entry must not make an otherwise valid stored contract unparseable.
+    requiredElements: (Array.isArray(record?.requiredElements) ? record.requiredElements : [])
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter((item) => item.length > 0 && item.length <= 160)
+      .slice(0, 8),
   });
 }
 

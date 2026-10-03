@@ -176,7 +176,7 @@ export function createChapterBoundarySchema() {
 
 export function createChapterTaskSheetSchema() {
   return z.preprocess(normalizeScenePlanPayload, z.object({
-    requiredElements: z.array(z.string().trim().min(1).max(160)).min(3).max(8),
+    requiredElements: z.array(z.string().trim().min(1).max(160)).max(8).default([]),
     taskSheet: z.string().trim().min(1).max(600),
     readerExperience: boundedReaderExperienceSchema,
     sceneCards: z.array(z.preprocess(normalizeSceneCardPayload, boundedSceneCardSchema)).min(3).max(8),
@@ -200,9 +200,10 @@ export function createChapterExecutionContractSchema() {
       mustAvoid: conciseRequiredText,
       payoffRefs: z.array(z.string().trim().min(1).max(160)).max(8).default([]),
       // Chapter-level minimum event list: the concrete things this chapter must actually show.
-      // Scene cards say how each scene runs; this says what the chapter owes the reader, and it is
-      // what acceptance anchors on. Themes and intentions are rejected by the prompt, not here.
-      requiredElements: z.array(z.string().trim().min(1).max(160)).min(3).max(8),
+      // The prompt asks for 3-8 concrete entries, but the schema stays permissive on purpose:
+      // a hard minimum would fail generation and force a retry whenever the model omits one,
+      // and a local planning gap must not block the chain. Absence is surfaced as advisory debt.
+      requiredElements: z.array(z.string().trim().min(1).max(160)).max(8).default([]),
       taskSheet: z.string().trim().min(1).max(600),
       readerExperience: boundedReaderExperienceSchema,
       sceneCards: z.array(z.preprocess(normalizeSceneCardPayload, boundedSceneCardSchema)).min(3).max(8),

@@ -42,6 +42,8 @@ export interface ChapterExecutionContractQualityCandidate {
   targetWordCount?: number | null;
   mustAvoid?: string | null;
   payoffRefs?: string[] | null;
+  /** Chapter-level minimum event list; also mirrored inside the persisted scene plan. */
+  requiredElements?: string[] | null;
   taskSheet?: string | null;
   sceneCards?: string | null;
 }

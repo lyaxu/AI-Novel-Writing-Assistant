@@ -123,6 +123,8 @@ export async function generateChapterTaskSheetDetail(params: {
   targetWordCount: number;
   mustAvoid: string;
   payoffRefs: string[];
+  /** Chapter-level minimum event list, mirrored into the persisted scene plan when produced. */
+  requiredElements?: string[];
   taskSheet: string;
   sceneCards: string;
 }> {
@@ -156,6 +158,7 @@ export async function generateChapterTaskSheetDetail(params: {
       targetWordCount: existingChapter.targetWordCount ?? 2200,
       mustAvoid: existingChapter.mustAvoid?.trim() || "避免偏离本章任务单和卷节奏。",
       payoffRefs: existingChapter.payoffRefs,
+      requiredElements: scenePlan.requiredElements,
       taskSheet: existingChapter.taskSheet?.trim() ?? "",
       sceneCards: serializeChapterScenePlan(scenePlan),
     };
@@ -208,6 +211,7 @@ export async function generateChapterTaskSheetDetail(params: {
         {
           scenes: generated.output.sceneCards,
           readerExperience: generated.output.readerExperience,
+          requiredElements: generated.output.requiredElements,
         },
         generated.output.targetWordCount ?? promptInput.targetChapter.targetWordCount,
       );
@@ -227,6 +231,9 @@ export async function generateChapterTaskSheetDetail(params: {
         targetWordCount: generated.output.targetWordCount,
         mustAvoid: generated.output.mustAvoid,
         payoffRefs: generated.output.payoffRefs,
+        // Omit rather than set undefined: the candidate is JSON round-tripped through the repair
+        // feedback, and an explicit undefined key would not survive that trip.
+        ...(generated.output.requiredElements ? { requiredElements: generated.output.requiredElements } : {}),
         taskSheet: generated.output.taskSheet,
         sceneCards: serializeChapterScenePlan(scenePlan),
       };
@@ -253,6 +260,7 @@ export async function generateChapterTaskSheetDetail(params: {
         targetWordCount: generated.output.targetWordCount,
         mustAvoid: generated.output.mustAvoid.trim(),
         payoffRefs: generated.output.payoffRefs,
+        ...(generated.output.requiredElements ? { requiredElements: generated.output.requiredElements } : {}),
         taskSheet: generated.output.taskSheet.trim(),
         sceneCards: serializeChapterScenePlan(scenePlan),
       };
