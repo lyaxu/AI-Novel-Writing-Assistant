@@ -130,3 +130,31 @@ test("a volume with nothing to reveal passes trivially instead of reporting a fa
   assert.equal(report.unmappedCount, 0);
   assert.ok(report.meetsRequiredRate);
 });
+
+const { renderForeshadowObligationsContext } = require("../dist/services/payoff/foreshadowRevealObligations.js");
+
+test("the rendered duty block names each promise with its token and forbids prose leakage", () => {
+  const obligations = selectVolumeRevealObligations([
+    item({ ledgerKey: "L1", targetEndChapterOrder: 12 }),
+    item({ ledgerKey: "L2", targetEndChapterOrder: 9 }),
+  ], { startOrder: 8, endOrder: 20 });
+  const text = renderForeshadowObligationsContext(obligations, 12);
+
+  // Sorted by reveal deadline, so the overdue one comes first.
+  assert.ok(text.indexOf("[伏笔:L2]") < text.indexOf("[伏笔:L1]"));
+  assert.match(text, /已逾期/);
+  assert.match(text, /requiredElements/);
+  // The token is a planning convention: the instruction must say it never reaches the prose.
+  assert.match(text, /正文里绝对不能出现/);
+  // Recovery is not a full reveal, and later volumes' truths must not be spent early.
+  assert.match(text, /回收不等于一次揭光/);
+  assert.match(text, /不得提前说出/);
+  // Padding the list with a marker for a promise the chapter cannot recover is called out.
+  assert.match(text, /不要挂标记充数/);
+});
+
+test("an empty duty block must not invite spending a later volume's reveal", () => {
+  const text = renderForeshadowObligationsContext([], 5);
+  assert.match(text, /没有到期的伏笔回收义务/);
+  assert.match(text, /不要为了填满这里而提前揭晓留待后卷的真相/);
+});

@@ -143,6 +143,37 @@ export function findForeshadowTokenLeaks(prose: string | null | undefined): stri
   return extractForeshadowTokens(prose);
 }
 
+/**
+ * Render this chapter's foreshadow reveal duties for the planning prompt.
+ *
+ * The token convention travels with the data rather than living in a static prompt rule, so the
+ * planner is told exactly which promises to cite and how. The instruction to keep tokens out of
+ * the prose is repeated here because this is the last place before the writer sees the plan.
+ */
+export function renderForeshadowObligationsContext(
+  obligations: readonly VolumeRevealObligation[],
+  chapterOrder: number,
+): string {
+  if (!obligations.length) {
+    return `本章（第 ${chapterOrder} 章）没有到期的伏笔回收义务。不要为了填满这里而提前揭晓留待后卷的真相。`;
+  }
+  const lines = obligations.map((item) => {
+    const timing = item.revealByChapterOrder < chapterOrder
+      ? `原定第 ${item.revealByChapterOrder} 章回收，已逾期`
+      : `第 ${item.revealByChapterOrder} 章前须回收`;
+    const intensity = item.payoffIntensity ? `；预定力度 ${item.payoffIntensity}` : "";
+    return `- ${formatForeshadowToken(item.ledgerKey)} ${item.title}（${timing}${intensity}）\n  ${item.summary}`;
+  });
+  return [
+    `本章到期的伏笔回收义务，共 ${obligations.length} 条：`,
+    ...lines,
+    "",
+    `其中每条都必须在 requiredElements 里有一条对应项，并在该项末尾原样带上它前面的标记（形如 ${formatForeshadowToken("L001")}）。标记是规划层与校验用的内部约定：它指明这条要素在回收哪一条承诺，正文里绝对不能出现。`,
+    "回收不等于一次揭光：按本卷安排可以只推进、部分揭示或给出反证，但必须让读者看到相对于前文的新信息，并写清由谁在什么处境下得知。留待后卷的真相不得提前说出。",
+    "这一章确实回收不了的，不要挂标记充数；把缺口留给审查记录，而不是用一句「留待后文」带过。",
+  ].join("\n");
+}
+
 export interface VolumeRevealLedger {
   /** Share of this volume's obligations carried by some chapter's event list, 0..1. */
   plannedRate: number;

@@ -57,6 +57,7 @@ import { PlanningRepairCoordinator } from "./planningRepair/PlanningRepairCoordi
 import { loadPlanningWrittenEvidence } from "./writtenEvidence";
 import { selectDuePromises, renderPayoffCadenceContext } from "../../payoff/payoffCadence";
 import { mapPayoffLedgerRow } from "../../payoff/payoffLedgerShared";
+import { selectVolumeRevealObligations, renderForeshadowObligationsContext } from "../../payoff/foreshadowRevealObligations";
 import { loadSelectedPlanningDirection } from "./planningPromises";
 import { formatChapterDetailModeLabel } from "./chapterDetailModeLabel";
 import {
@@ -508,11 +509,26 @@ async function generateChapterList(params: {
  * A cadence lookup is context enrichment: if the ledger cannot be read the chapter is still
  * detailed, but the failure is logged instead of silently pretending nothing is due.
  */
-async function loadPayoffCadence(novelId: string, chapterOrder: number) {
+async function loadPayoffCadence(
+  novelId: string,
+  chapterOrder: number,
+  volumeRange: { startOrder: number; endOrder: number },
+) {
   try {
     const rows = await prisma.payoffLedgerItem.findMany({ where: { novelId }, orderBy: [{ ledgerKey: "asc" }] });
-    const due = selectDuePromises(rows.map((row) => mapPayoffLedgerRow(row as never)), chapterOrder);
-    return { dueCount: due.length, text: renderPayoffCadenceContext(due, chapterOrder) };
+    const items = rows.map((row) => mapPayoffLedgerRow(row as never));
+    const due = selectDuePromises(items, chapterOrder);
+    // Only obligations whose reveal deadline has arrived belong in this chapter's brief; the rest
+    // stay this volume's business for a later chapter.
+    const obligations = selectVolumeRevealObligations(items, volumeRange)
+      .filter((row) => row.revealByChapterOrder <= chapterOrder);
+    return {
+      dueCount: due.length + obligations.length,
+      text: [
+        renderPayoffCadenceContext(due, chapterOrder),
+        renderForeshadowObligationsContext(obligations, chapterOrder),
+      ].join("\n\n"),
+    };
   } catch (error) {
     console.warn("[volume.generate] payoff cadence unavailable", { novelId, chapterOrder, error: error instanceof Error ? error.message : String(error) });
     return { dueCount: 0, text: renderPayoffCadenceContext([], chapterOrder) };
@@ -530,7 +546,10 @@ async function generateChapterDetail(params: {
   const targetVolume = getTargetVolume(document, options.targetVolumeId);
   const targetChapter = getTargetChapter(targetVolume, options.targetChapterId);
   const writtenEvidence = await loadPlanningWrittenEvidence(document.novelId, targetChapter.chapterOrder);
-  const payoffCadence = await loadPayoffCadence(document.novelId, targetChapter.chapterOrder);
+  const payoffCadence = await loadPayoffCadence(document.novelId, targetChapter.chapterOrder, (() => {
+    const orders = targetVolume.chapters.map((chapter) => chapter.chapterOrder).filter((order) => Number.isFinite(order));
+    return { startOrder: Math.min(...orders), endOrder: Math.max(...orders) };
+  })());
   const detailMode = options.detailMode;
   if (!detailMode) {
     throw new Error("生成章节细化时必须指定 detailMode。");
