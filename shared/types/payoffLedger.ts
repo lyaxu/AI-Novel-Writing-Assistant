@@ -46,6 +46,12 @@ export interface PayoffLedgerItem {
   riskSignals: PayoffLedgerRiskSignal[];
   statusReason?: string | null;
   confidence?: number | null;
+  /** How often the promise must move forward, in chapters. Declared when it is first registered. */
+  progressEvery?: number | null;
+  /** The chapter at which the next forward move is due; the chapter contract must map it. */
+  nextProgressChapter?: number | null;
+  /** Intended strength of the eventual payoff. */
+  payoffIntensity?: "tiny" | "small" | "medium" | "major" | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -453,6 +453,9 @@ export class PayoffLedgerSyncService {
               riskSignalsJson: serializeLedgerJson(riskSignals),
               statusReason: item.statusReason?.trim() || null,
               confidence: item.confidence ?? null,
+              progressEvery: item.progressEvery ?? null,
+              nextProgressChapter: item.nextProgressChapter ?? null,
+              payoffIntensity: item.payoffIntensity ?? null,
               updatedAt: now,
             },
             update: {
@@ -473,6 +476,9 @@ export class PayoffLedgerSyncService {
               riskSignalsJson: serializeLedgerJson(riskSignals),
               statusReason: item.statusReason?.trim() || null,
               confidence: item.confidence ?? null,
+              progressEvery: item.progressEvery ?? null,
+              nextProgressChapter: item.nextProgressChapter ?? null,
+              payoffIntensity: item.payoffIntensity ?? null,
               updatedAt: now,
             },
           });

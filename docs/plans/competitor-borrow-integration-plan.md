@@ -11,7 +11,7 @@
 |---|---|---|
 | **阶段 0：建议容量硬停** | ✅ 已完成 | `b17151e3`；真实输入 154956 → 122304；`planningRepairAdviceReviewContext.test.js` 15/15 |
 | **阶段 A1：承诺节奏 DB 列 + 备份** | ✅ 已完成 | `server/src/prisma/schema{,.sqlite}.prisma` 加 `progressEvery`/`nextProgressChapter`/`payoffIntensity`；备份 `.codex-run/phase-a-20261002/dev-before-phase-a.db`（1.03GB，integrity ok，sha256 `77cad662…`）；`db push` 无数据丢失；行数不变 180/5/21 |
-| 阶段 A2：AI 声明节奏并持久化 | 🔲 待做 | `shared/types/payoffLedger.ts` + payoffLedgerSync prompt schema + 两处 upsert（`PayoffLedgerSyncService:429`、`ChapterArtifactDeltaService:1025`） |
+| 阶段 A2：AI 声明节奏并持久化 | ✅ 已完成 | sync prompt schema + `shared/types/payoffLedger.ts` + `mapPayoffLedgerRow` + 两处 upsert（Sync/Delta）均带三字段；prompt 升 `novel.payoff_ledger.sync@v7`（loader 与 `prompting.test.js` 同步）；shared/server 编译通过；`prompting.test.js` 50 通过 0 失败 |
 | 阶段 A3：到期承诺进入写前合同 + 审查 | 🔲 待做 | 章节任务单生成注入「本章到期清单」；审查校验未映射；违例走 `repair_contract` 不升 `replan_window` |
 | 阶段 B：章级 requiredElements | 🔲 待做 | |
 | 阶段 C：伏笔落进 requiredElements | 🔲 待做 | 依赖 B |

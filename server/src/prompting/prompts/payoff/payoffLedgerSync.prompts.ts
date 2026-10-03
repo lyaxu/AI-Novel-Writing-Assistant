@@ -39,6 +39,9 @@ const PAYOFF_LEDGER_SYNC_EXAMPLE = {
       ],
       statusReason: "已建立核心铺垫，但仍未进入明确兑现窗口。",
       confidence: 0.82,
+      progressEvery: 5,
+      nextProgressChapter: 12,
+      payoffIntensity: "medium",
     },
   ],
 };
@@ -67,7 +70,7 @@ export const payoffLedgerSyncPrompt: PromptAsset<
   z.infer<typeof payoffLedgerSyncOutputSchema>
 > = {
   id: "novel.payoff_ledger.sync",
-  version: "v6",
+  version: "v7",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -85,6 +88,7 @@ export const payoffLedgerSyncPrompt: PromptAsset<
       "禁止输出旧别名 chapter_payoff 或 volume_open。",
       "scopeType 只能是 book、volume、chapter。",
       "confidence 只能是 0-1 数字；拿不准就省略。",
+      "仍在推进的承诺要给出进度节奏：progressEvery（每隔多少章必须向前动一次，通常 3-8，仅全书终局承诺可更长）、nextProgressChapter（下一次应推进的章号，不早于当前章）、payoffIntensity（tiny/small/medium/major）。已 paid_off 或 failed 的条目不填。",
     ].join(" "),
   },
   outputSchema: payoffLedgerSyncOutputSchema,
@@ -102,6 +106,7 @@ export const payoffLedgerSyncPrompt: PromptAsset<
       "3. scopeType 只能是：book、volume、chapter。",
       "4. confidence 不是必填；只有明确有把握时才写，而且必须是 0-1 的数字。",
       "5. sourceRefs、evidence、riskSignals 即使只有一项也必须输出数组，不能输出对象或字符串。",
+      "6. progressEvery / nextProgressChapter / payoffIntensity 只描述仍在推进的承诺。nextProgressChapter 表示“最迟在这一章要看到推进”，不得早于当前章，也不得把它当成重复登记上一章已经写过的推进；承诺被推进后应把它推到更后面的章号。nextProgressChapter 为空表示这条承诺没有硬期限，不要为了填满字段而编造期限。",
       "",
       "任务目标：",
       "1. 把 major payoffs、open payoffs、chapter payoff refs、foreshadow states、open conflicts 和 payoff audit issues 归并成唯一账本项。",

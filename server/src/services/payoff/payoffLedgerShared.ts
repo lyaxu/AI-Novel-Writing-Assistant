@@ -28,6 +28,9 @@ type PayoffLedgerRowLike = {
   riskSignalsJson: string | null;
   statusReason: string | null;
   confidence: number | null;
+  progressEvery: number | null;
+  nextProgressChapter: number | null;
+  payoffIntensity: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -217,6 +220,9 @@ export function mapPayoffLedgerRow(row: PayoffLedgerRowLike): PayoffLedgerItem {
     riskSignals: safeParseJson<PayoffLedgerRiskSignal[]>(row.riskSignalsJson, []),
     statusReason: row.statusReason,
     confidence: row.confidence,
+    progressEvery: row.progressEvery,
+    nextProgressChapter: row.nextProgressChapter,
+    payoffIntensity: row.payoffIntensity as PayoffLedgerItem["payoffIntensity"],
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

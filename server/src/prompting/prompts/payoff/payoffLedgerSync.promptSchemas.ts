@@ -76,6 +76,12 @@ export const payoffLedgerSyncItemSchema = z.object({
   riskSignals: z.array(payoffLedgerSyncRiskSignalSchema).default([]).transform((items) => items.slice(0, 2)),
   statusReason: z.string().trim().optional().nullable(),
   confidence: z.preprocess(normalizeOptionalConfidence, z.number().min(0).max(1).optional().nullable()),
+  // Cadence: how often this promise must move forward, when it is next due, and how strong the
+  // eventual payoff is meant to be. The chapter contract uses these to require an explicit
+  // promiseActions mapping instead of leaving the promise to a post-hoc warning.
+  progressEvery: z.number().int().min(1).max(50).optional().nullable(),
+  nextProgressChapter: z.number().int().min(1).optional().nullable(),
+  payoffIntensity: z.enum(["tiny", "small", "medium", "major"]).optional().nullable(),
 });
 
 export const payoffLedgerSyncOutputSchema = z.object({

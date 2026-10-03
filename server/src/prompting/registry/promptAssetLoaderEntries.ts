@@ -522,7 +522,7 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/novel/ideaConstellation/ideaConstellation.prompts").directorIdeaConstellationComposePrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.payoff_ledger.sync@v6",
+    key: "novel.payoff_ledger.sync@v7",
     load: () => require("../prompts/payoff/payoffLedgerSync.prompts").payoffLedgerSyncPrompt as UnknownPromptAsset,
   },
   {
