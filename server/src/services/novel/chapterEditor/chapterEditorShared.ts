@@ -332,6 +332,14 @@ export function buildPresetIntent(
         emotionAdjustment: "维持现有情绪基调",
         reasoningSummary: "这次改写重点是补细节和体验感，但不改变原段任务。",
         ...shared,
+        // Controlled expansion: inventing events is what turns "细腻" into padding that advances
+        // nothing and quietly commits the book to things the plan never agreed to.
+        mustAvoid: [
+          ...shared.mustAvoid,
+          "不得新增人物、场景、支线或伏笔",
+          "不得让剧情向前推进：扩写只补足本段已经发生的事",
+          "不得提前兑现后续章节的安排",
+        ],
       };
     case "compress":
       return {
@@ -342,6 +350,13 @@ export function buildPresetIntent(
         emotionAdjustment: "保留现有情绪信号，不额外拔高",
         reasoningSummary: "这次改写重点是去掉拖慢推进的内容，让读者更快进入下一步。",
         ...shared,
+        // Compression must not buy pace by dropping the events the chapter exists to deliver.
+        mustAvoid: [
+          ...shared.mustAvoid,
+          "不得删除已发生的事件、关键选择或其后果",
+          "不得为了让篇幅变短而省略因果桥，导致结果来得没有来由",
+          "不得把细腻的心理与关系变化压成流水账",
+        ],
       };
     case "emotion":
       return {
