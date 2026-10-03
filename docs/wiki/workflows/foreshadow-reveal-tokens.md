@@ -25,8 +25,12 @@
 1. **覆盖判定按显式标记，绝不按文字相似度。** 某章用文字描述了同一件事但没带标记，
    仍然判为未覆盖。理由是"看着像写了"与"确实安排了"是两件事；用相似度判定会让检查
    变成猜谜，也无法在正文改动后稳定复现。
-2. **标记只属于规划层。** 成稿正文里出现标记即报告为缺陷（`findForeshadowTokenLeaks`），
-   因为那等于把账目暴露给读者。
+2. **标记只属于规划层。** 成稿正文里出现标记即报告为缺陷。调用点：
+   `services/novel/runtime/proseQuality/ProseQualityDetector.ts` 的
+   `prose_foreshadow_token_leak`（severity `critical`，与 `prose_placeholder_leak` 同级——
+   两者都是"读者看见了账目"）。它随 `detectProseQuality` 在验收时一起跑，
+   因此复用了既有的确定性正文检查管线，而不是另建一条通路。
+   未闭合标记不算泄漏；正常叙述里提到「伏笔」一词也不算（那是 soft 工程词信号）。
 3. **重复引用只计一次**，最早章节胜。
 4. **引用卷外承诺记为 `unexpectedTokens`**，不静默接受——这通常意味着 planner 引用了
    不属于本卷的义务。

@@ -2,6 +2,7 @@ import type {
   RuntimeAuditIssue,
   RuntimeAuditReport,
 } from "@ai-novel/shared/types/chapterRuntime";
+import { extractForeshadowTokens } from "../../../payoff/foreshadowRevealObligations";
 
 export type ProseQualityIssueCode =
   | "prose_negative_flip"
@@ -12,6 +13,7 @@ export type ProseQualityIssueCode =
   | "prose_truncation"
   | "prose_ai_self_reference"
   | "prose_placeholder_leak"
+  | "prose_foreshadow_token_leak"
   | "prose_engineering_term_leak";
 
 export interface ProseQualityFinding {
@@ -82,6 +84,7 @@ export function detectProseQuality(content: string): ProseQualityReport {
     scanDashOrEllipsis(segment, addFinding);
     scanAiSelfReference(segment, addFinding);
     scanPlaceholderLeak(segment, addFinding);
+    scanForeshadowTokenLeak(segment, addFinding);
     scanEngineeringTermLeak(segment, addFinding);
     scanPeriodStutter(segment, addFinding);
     scanLongParagraph(segment, addFinding);
@@ -230,6 +233,26 @@ function scanPlaceholderLeak(
     message: "正文包含占位、待补或省略提示。",
     excerpt: formatExcerpt(segment.text),
     fixSuggestion: "补成完整可读的剧情内容，不能把占位符留给读者。",
+  });
+}
+
+function scanForeshadowTokenLeak(
+  segment: TextSegment,
+  addFinding: (finding: ProseQualityFinding) => void,
+): void {
+  const leaked = extractForeshadowTokens(segment.text);
+  if (leaked.length === 0) {
+    return;
+  }
+  const index = segment.text.indexOf("[伏笔:");
+  addFinding({
+    code: "prose_foreshadow_token_leak",
+    severity: "critical",
+    line: segment.line,
+    column: Math.max(0, index) + 1,
+    message: `正文泄漏了伏笔账目标记（${leaked.map((key) => `[伏笔:${key}]`).join("、")}）。`,
+    excerpt: formatExcerpt(segment.text),
+    fixSuggestion: "删去标记本身，只保留它描述的事件；读者不应看到任何账目编号。",
   });
 }
 
