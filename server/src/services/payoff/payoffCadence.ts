@@ -1,4 +1,5 @@
 import type { PayoffLedgerItem } from "@ai-novel/shared/types/payoffLedger";
+import { formatPromiseToken, extractPromiseTokens } from "./planningToken";
 
 /** A promise whose own declared cadence says it must move forward at or before this chapter. */
 export interface DuePromise {
@@ -106,6 +107,45 @@ export function rollForwardNextProgressChapter(input: {
 }
 
 /**
+ * Whether each due promise is carried by some chapter's minimum event list.
+ *
+ * Same contract as the foreshadow coverage check: matching is by explicit token, never by prose
+ * similarity — a passing result means the link was authored, not inferred. Without this, a planner
+ * that ignores the cadence block entirely would leave no trace and nothing would notice.
+ */
+export function checkPromiseCoverage(
+  due: readonly DuePromise[],
+  chapters: readonly { chapterOrder: number; requiredElements: readonly string[] }[],
+): {
+  mapped: Array<{ ledgerKey: string; chapterOrder: number }>;
+  unmapped: DuePromise[];
+  unexpectedTokens: Array<{ chapterOrder: number; ledgerKey: string }>;
+} {
+  const expected = new Map(due.map((item) => [item.ledgerKey, item]));
+  const mapped: Array<{ ledgerKey: string; chapterOrder: number }> = [];
+  const unexpectedTokens: Array<{ chapterOrder: number; ledgerKey: string }> = [];
+  const seen = new Set<string>();
+  for (const chapter of [...chapters].sort((a, b) => a.chapterOrder - b.chapterOrder)) {
+    for (const element of chapter.requiredElements ?? []) {
+      for (const key of extractPromiseTokens(element)) {
+        if (!expected.has(key)) {
+          unexpectedTokens.push({ chapterOrder: chapter.chapterOrder, ledgerKey: key });
+          continue;
+        }
+        if (seen.has(key)) continue;
+        seen.add(key);
+        mapped.push({ ledgerKey: key, chapterOrder: chapter.chapterOrder });
+      }
+    }
+  }
+  return {
+    mapped,
+    unmapped: due.filter((item) => !seen.has(item.ledgerKey)),
+    unexpectedTokens,
+  };
+}
+
+/**
  * Render the due promises for a chapter planning prompt.
  *
  * The contract must map each returned promise explicitly. The wording deliberately says the
@@ -123,14 +163,15 @@ export function renderPayoffCadenceContext(due: readonly DuePromise[], chapterOr
     const deadline = item.targetEndChapterOrder !== null ? `；硬截止第 ${item.targetEndChapterOrder} 章` : "";
     const touched = item.lastTouchedChapterOrder !== null ? `；上次推进第 ${item.lastTouchedChapterOrder} 章` : "；尚无推进记录";
     const intensity = item.payoffIntensity ? `；预定兑现强度 ${item.payoffIntensity}` : "";
-    return `- [${item.ledgerKey}] ${item.title}（${item.currentStatus}，${timing}${deadline}${touched}${intensity}）\n  ${item.summary}`;
+    return `- ${formatPromiseToken(item.ledgerKey)} ${item.title}（${item.currentStatus}，${timing}${deadline}${touched}${intensity}）\n  ${item.summary}`;
   });
   return [
     `本章（第 ${chapterOrder} 章）到期的账本承诺，共 ${due.length} 条：`,
     ...lines,
     "",
-    "每一条都必须在本章合同里有明确落点：写出它这一章向前动了哪一步、由谁在什么处境下推动、以及这一步带来什么可见后果。只写「记得这件事」「准备去办」不算推进。",
+    `每一条都必须在本章合同里有明确落点：写出它这一章向前动了哪一步、由谁在什么处境下推动、以及这一步带来什么可见后果。只写「记得这件事」「准备去办」不算推进。`,
+    `落点要写成 requiredElements 里的一条，并在该项末尾原样带上它前面的标记（形如 ${formatPromiseToken("L001")}）。标记是规划层与校验用的内部约定，它把这条要素和承诺对上号；正文里绝对不能出现。`,
     "推进不等于兑现：允许只完成其中一步、付出代价、受阻改道或得到新的理解，但必须让读者看到相对上一章的实际变化。长期承诺不要求本章全部兑现。",
-    "如果本章确实无法推进某条到期承诺，必须说明是什么具体阻力或取舍挡住了它，并给出它下一次应当推进的章号；不得用「以后再说」带过，也不得为了满足清单而临时新造能力、道具或人物。",
+    "如果本章确实无法推进某条到期承诺，必须说明是什么具体阻力或取舍挡住了它，并给出它下一次应当推进的章号；不得用「以后再说」带过，也不得为了满足清单而临时新造能力、道具或人物。确实推进不了的不要挂标记充数，把缺口留给审查记录。",
   ].join("\n");
 }

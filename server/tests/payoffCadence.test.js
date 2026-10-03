@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { selectDuePromises, renderPayoffCadenceContext, rollForwardNextProgressChapter } = require("../dist/services/payoff/payoffCadence.js");
+const { selectDuePromises, renderPayoffCadenceContext, rollForwardNextProgressChapter, checkPromiseCoverage } = require("../dist/services/payoff/payoffCadence.js");
 
 const item = (overrides = {}) => ({
   id: "p1",
@@ -147,4 +147,48 @@ test("a rolled-forward promise stops being reported as due", () => {
     progressEvery: 5, nextProgressChapter: 7, lastTouchedChapterOrder: 7, currentStatus: "pending_payoff",
   });
   assert.deepEqual(selectDuePromises([item({ progressEvery: 5, nextProgressChapter: next, lastTouchedChapterOrder: 7 })], 8), []);
+});
+
+test("the rendered cadence block asks for a promise token, not just a landing point", () => {
+  const due = selectDuePromises([item({ ledgerKey: "L1", nextProgressChapter: 9 })], 9);
+  const text = renderPayoffCadenceContext(due, 9);
+  assert.match(text, /\[承诺:L1\]/);
+  assert.match(text, /requiredElements/);
+  assert.match(text, /正文里绝对不能出现/);
+  // A promise the chapter genuinely cannot advance must not be marked to pad the list.
+  assert.match(text, /不要挂标记充数/);
+});
+
+test("promise coverage matches by explicit token, never by prose similarity", () => {
+  const due = selectDuePromises([
+    item({ ledgerKey: "L1", nextProgressChapter: 9 }),
+    item({ ledgerKey: "L2", nextProgressChapter: 9 }),
+  ], 9);
+  const coverage = checkPromiseCoverage(due, [
+    { chapterOrder: 9, requiredElements: ["把药包交给黄蓉并拿到回执 [承诺:L1]"] },
+    // Describes the same business in words but never links it: still unmapped.
+    { chapterOrder: 9, requiredElements: ["顺便把欠账的事提一提"] },
+  ]);
+  assert.deepEqual(coverage.mapped, [{ ledgerKey: "L1", chapterOrder: 9 }]);
+  assert.deepEqual(coverage.unmapped.map((row) => row.ledgerKey), ["L2"]);
+});
+
+test("a promise token for a promise that is not due is reported, not silently accepted", () => {
+  const due = selectDuePromises([item({ ledgerKey: "L1", nextProgressChapter: 9 })], 9);
+  const coverage = checkPromiseCoverage(due, [
+    { chapterOrder: 9, requiredElements: ["[承诺:L1] 推进", "[承诺:NOT-DUE] 顺手带一句"] },
+  ]);
+  assert.deepEqual(coverage.unexpectedTokens, [{ chapterOrder: 9, ledgerKey: "NOT-DUE" }]);
+  assert.deepEqual(coverage.mapped.map((row) => row.ledgerKey), ["L1"]);
+});
+
+test("a planner that ignores the cadence block leaves every promise unmapped", () => {
+  // This is the case the check exists for: without it the omission left no trace at all.
+  const due = selectDuePromises([
+    item({ ledgerKey: "L1", nextProgressChapter: 9 }),
+    item({ ledgerKey: "L2", nextProgressChapter: 9 }),
+  ], 9);
+  const coverage = checkPromiseCoverage(due, [{ chapterOrder: 9, requiredElements: ["主角继续赶路", "遇到一个熟人"] }]);
+  assert.deepEqual(coverage.mapped, []);
+  assert.equal(coverage.unmapped.length, 2);
 });

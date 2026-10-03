@@ -1,4 +1,4 @@
-# 伏笔回收标记约定（[伏笔:<key>]）
+# 规划标记约定（[承诺:<key>] / [伏笔:<key>]）
 
 ## 背景
 
@@ -10,11 +10,16 @@
 
 ## 决策
 
-标记形态：`[伏笔:<ledgerKey>]`，其中 `ledgerKey` 就是 `PayoffLedgerItem.ledgerKey`。
+标记形态：`[伏笔:<ledgerKey>]`（伏笔回收）与 `[承诺:<ledgerKey>]`（承诺推进），
+其中 `ledgerKey` 就是 `PayoffLedgerItem.ledgerKey`。
 
-**形态只在 `formatForeshadowToken()` 一处定义。** planner 渲染、覆盖检查、正文泄漏
-守卫三方共用同一个函数，避免三处各自拼字符串导致形态漂移（一处改了、另两处没跟上，
-检查会静默失效）。
+**形态只在 `services/payoff/planningToken.ts` 一处定义。** planner 渲染、覆盖检查、
+正文泄漏守卫三方共用同一个函数，避免三处各自拼字符串导致形态漂移（一处改了、另两处
+没跟上，检查会静默失效）。伏笔模块 `foreshadowRevealObligations.ts` 只做 re-export，
+不保留自己的实现——**同一个约定不允许存在两份实现**。
+
+**承诺与伏笔共用同一套机制。** 两者都是"这一章欠账本的一件事"，判定、覆盖检查、
+泄漏检查与出口完全一致，因此不建第二套通道。
 
 **不需要新增数据库列。** `PayoffLedgerItem` 已有的 `targetStartChapterOrder` /
 `targetEndChapterOrder` + `currentStatus` 足以表达"本卷必须回收"：窗口落在本卷章节区间

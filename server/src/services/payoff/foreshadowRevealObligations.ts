@@ -1,4 +1,7 @@
 import type { PayoffLedgerItem } from "@ai-novel/shared/types/payoffLedger";
+import { formatForeshadowToken, extractForeshadowTokens } from "./planningToken";
+
+export { formatForeshadowToken, extractForeshadowTokens };
 
 /**
  * Phase C — making foreshadowing land in a chapter's `requiredElements`.
@@ -12,32 +15,10 @@ import type { PayoffLedgerItem } from "@ai-novel/shared/types/payoffLedger";
  *
  * The token is planning-only. It must never reach the prose, which is why the same module also
  * exposes a leak check for finished chapter text.
+ *
+ * The token shape itself lives in `./planningToken`; this module re-exports it so existing callers
+ * keep importing from here.
  */
-
-const TOKEN_PREFIX = "[伏笔:";
-const TOKEN_SUFFIX = "]";
-
-/** The one place the token shape is defined, so the planner, the checker and the leak guard agree. */
-export function formatForeshadowToken(ledgerKey: string): string {
-  return `${TOKEN_PREFIX}${ledgerKey.trim()}${TOKEN_SUFFIX}`;
-}
-
-/** Extract every foreshadow token in a text, preserving order and dropping duplicates. */
-export function extractForeshadowTokens(text: string | null | undefined): string[] {
-  if (typeof text !== "string" || !text) return [];
-  const found: string[] = [];
-  let cursor = 0;
-  while (cursor < text.length) {
-    const start = text.indexOf(TOKEN_PREFIX, cursor);
-    if (start < 0) break;
-    const end = text.indexOf(TOKEN_SUFFIX, start + TOKEN_PREFIX.length);
-    if (end < 0) break;
-    const key = text.slice(start + TOKEN_PREFIX.length, end).trim();
-    if (key) found.push(key);
-    cursor = end + TOKEN_SUFFIX.length;
-  }
-  return [...new Set(found)];
-}
 
 export interface VolumeRevealObligation {
   ledgerKey: string;
