@@ -31,6 +31,8 @@ const prompts = source("../src/prompting/prompts/novel/chapterAcceptance.prompts
   "../../core/renderContextBlocks": { renderSelectedContextBlocks: () => "已写正文" },
   "./promptBudgetProfiles": { NOVEL_PROMPT_BUDGETS: { chapterAcceptance: 1200 } },
   "./context/capabilityAuthorization": source("../src/prompting/prompts/novel/context/capabilityAuthorization.ts"),
+  "./context/emotionPresence": source("../src/prompting/prompts/novel/context/emotionPresence.ts"),
+  "./context/typography": source("../src/prompting/prompts/novel/context/typography.ts"),
   "./acceptance/actionStateEvidence": evidence,
   "@ai-novel/shared/types/novel/progression/index": progressionSchema,
   "./acceptance/progressionEvidence": progressionEvidence,
