@@ -73,7 +73,10 @@ export function prepareAdviceSemanticReviewContext(input: unknown): PreparedAdvi
     for (let start = 0; start < text.length; start += 480) {
       const quote = text.slice(start, start + 600);
       if (!quote.trim()) continue;
-      const evidenceId = `ev_${createHash("sha256").update(JSON.stringify([sourcePath, quote])).digest("hex").slice(0, 24)}`;
+      // Keep the id content-addressed: it must stop resolving once the source text changes, or a
+      // stale id from another context would be silently accepted. Ten hex characters preserve that
+      // property while saving ~14 characters on every one of several hundred entries.
+      const evidenceId = `ev${createHash("sha256").update(JSON.stringify([sourcePath, quote])).digest("hex").slice(0, 10)}`;
       if (!evidenceCatalog.some(entry => entry.evidenceId === evidenceId)) evidenceCatalog.push({ evidenceId, sourcePath, quote, authority });
       if (start + 600 >= text.length) break;
     }
@@ -109,7 +112,13 @@ export function prepareAdviceSemanticReviewContext(input: unknown): PreparedAdvi
     obligationPolicy: "已应用义务映射由运行时保留。新修订必须以当前候选引用为来源，按同章revise显式记录，不能重放历史错误原句。",
     issueCatalog,
     scopeNotice: "只有eligibleChapterIds可修改。candidateWindow是唯一当前候选；后续路线与已写正文只读。核验主张需逐项验证，不是当前执行内容。", missingEvidence: source.missingEvidence,
-    evidenceCatalog,
+    // The catalog names quotable locations only. Every quoted window is a literal slice of a field
+    // that already appears in this same payload, so repeating the quote here doubled the payload for
+    // no added information and pushed real requests against the capacity guard.
+    evidenceCatalog: {
+      note: "每个条目是一个可引用位置：id 用于引用，path 是该原文所在字段的路径，authority 是来源等级。引文不在此重复；请到 path 指向的字段中逐字复制连续原文，不改写、不拼接、不跨过叙述插入语。引用前先读该字段的实际表述。",
+      entries: evidenceCatalog.map(entry => ({ id: entry.evidenceId, path: entry.sourcePath, authority: entry.authority })),
+    },
   };
   return { contextJson: prepareAdviceContext(isolated), evidenceCatalog, issueCatalog };
 }

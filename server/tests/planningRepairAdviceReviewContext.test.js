@@ -224,3 +224,29 @@ test("actual technical-stop input retains both historical claims and explicit pl
   assert.ok(prepared.contextJson.length <= 160000);
   t.diagnostic(`actual isolated chars=${prepared.contextJson.length}; issues=${prepared.issueCatalog.length}; evidence=${prepared.evidenceCatalog.length}`);
 });
+
+test("wire evidence catalog names locations instead of repeating quoted text, keeping headroom under the cap", {
+  skip: !fs.existsSync(technicalCapture),
+}, t => {
+  const input = JSON.parse(fs.readFileSync(technicalCapture, "utf8"));
+  const { buildAdviceContext } = require("../dist/services/novel/director/recovery/planningRepair/advice/AdviceContext");
+  const prepared = prepareAdviceSemanticReviewContext(buildAdviceContext(input));
+  const findCatalog = (node) => {
+    if (!node || typeof node !== "object") return null;
+    if (node.evidenceCatalog && Array.isArray(node.evidenceCatalog.entries)) return node.evidenceCatalog;
+    for (const child of Object.values(node)) { const hit = findCatalog(child); if (hit) return hit; }
+    return null;
+  };
+  const wire = findCatalog(JSON.parse(prepared.contextJson));
+  assert.ok(wire, "the wire payload must expose a catalog of quotable locations");
+  assert.equal(wire.entries.length, prepared.evidenceCatalog.length);
+  // Every quoted window is a literal slice of a field already present in this same payload.
+  // Repeating it inside the catalog doubled the payload and pushed real requests at the capacity
+  // guard, so the wire form must stay a list of locations only.
+  assert.ok(wire.entries.every(entry => typeof entry.id === "string" && typeof entry.path === "string"
+    && entry.quote === undefined && entry.evidenceId === undefined));
+  // Ids stay content-addressed: a stale id from another context must not silently resolve.
+  assert.ok(prepared.evidenceCatalog.every(entry => /^ev[0-9a-f]{10}$/.test(entry.evidenceId)));
+  assert.ok(prepared.contextJson.length <= 130000, `expected a slimmer payload, got ${prepared.contextJson.length}`);
+  t.diagnostic(`wire chars=${prepared.contextJson.length}; catalog entries=${wire.entries.length}`);
+});

@@ -1,0 +1,235 @@
+# 竞品机制整合方案（Novel Studio → 我们的工具）
+
+创建：2026-10-02。配套研究见 [novel-studio-competitor-review.md](novel-studio-competitor-review.md)。
+
+**本方案只借鉴机制，不复制对方源码或 prompt 原文**；所有落地内容用我们自己的 Prompt Registry 与 schema 重写。用户已确认对方作者允许评论者免费使用、本人不商业化，但把他人 prompt 原文搬进本仓库仍会留下版权尾巴，故按下述方式处理。
+
+**状态：待用户确认后实施。本文只做规划，未改任何代码。**
+
+---
+
+## 一、直接来自对方 prompt 的关键机制（已读取打包资源确认）
+
+从对方 `app.asar` 中 `production-src/desktop/main.mjs` 解码后读到的真实约束（概括，非原文照抄）：
+
+### 1. 三层契约
+
+- **书级**：`openingContract`（前三章 beats，`hookDeadlineChineseChars` 建议 300 / `coreQuestion` / `firstChoice` / `firstPayoff` / `revealBoundary`）+ `promises` + `payoffSystem` + `mysteries` + `styleGuide` + `reviewPolicy`
+- **卷级**：`chapterBlueprints`（`phase` + `plannedRewardIntensity`）、`mysteryPlan`
+- **章级**：16 个必填字段（见下）
+
+### 2. 章级 16 字段（它推进感的来源）
+
+`number, title, summary, pov, day, requiredElements, tags, endHook, sceneGoal, conflict, turn, consequence, readerReward, promiseActions, characterChecks, continuityRequirements`
+
+其中三条是硬约束：
+
+- **`requiredElements` 至少三项，且必须是正文中可明确落实的专名、事件或动作** —— 不是主题。
+- **`promiseActions`**：`{promiseId, action(introduce/progress/payoff/hold), expectedEffect}`，**凡本章到期或卷内负责的承诺必须映射**。
+- **`readerReward`**：`{type, setup, payoff, intensity(tiny/small/medium/major), required}`，**每章至少一次与题材匹配的有效进展或情绪兑现，不得用无后果争吵、重复震惊或机械打脸冒充爽点**。
+
+### 3. 承诺账本带推进节奏
+
+`promises[]` 每项：`progressEvery`、`nextProgressChapter`、`payoffDeadlineChapter`、`majorPayoffVolume`，且**所有期限必须落在全书章数内**。
+
+`payoffSystem`：`smallWithinChapters: 5`、`mediumWithinChapters: 20`、`majorPerVolume: 1`、`genreSpecific`（**爽点按题材自适应**：悬疑用线索与局部揭谜、言情用关系确认、经营用成果落地）。
+
+### 4. 伏笔必须落进 `requiredElements`
+
+- `mysteries[]`：`{id, question, truth, readerInfo, status, plannedRevealVolume}`，**最多 20 条、建议 8—15 条**；"普通线索、一次性证据、场景细节和临时疑问放入章节状态更新，不得新增为独立伏笔"。
+- `mysteryPlan[]`：`{mysteryId, action(埋设/推进/部分揭示/回收/保留), chapterNumbers, expectedPayoff}`。
+- **关键一招**："凡 `plannedRevealVolume` 等于本卷的伏笔，必须在对应章节的 `requiredElements` 中明确写出回收动作与真相揭示要求，不能只写在 mysteryPlan"。
+- 系统保留 `[伏笔:<id>]` 内部标记驱动映射，但**标记绝不能出现在正文**。
+- 回收率：第一卷可只埋设推进；**从第二卷起，本卷负责的既有伏笔至少 60% 必须安排回收**。
+- `foreshadowingPolicy: "strict-v1"` = 逐章回收记录 + 分卷回收率 + 完结校验；结尾最多保留一条开放主线伏笔。
+
+### 5. 卷蓝图节奏
+
+`chapterBlueprints` 每项含 `phase` 与 `plannedRewardIntensity`，并强制：**每 3—5 章形成一个有进展的小阶段；至少一章为 major；不得用重复危机填充章节**。
+
+### 6. 人物声音卡与不变量
+
+- `voiceProfile: {tone, sentenceStyle, vocabulary, habits, taboos}`，并要求"描述活人的说话差异，而不是工作流程或决策清单"，明确列出"对亲近者与陌生人的差别、常见停顿/口头填充/称呼、愤怒心虚放松时如何变化"。
+- **明确禁止**："不得让所有人物都'先确认事实、再给结论、最后列方案'"。
+- `voiceMarkers`：3—6 条**可迁移的口语行为提示**（例："担心时绕着问吃没吃饭""被戳中心事会突然缩短回答"），**不得写成格言、标准台词或口号**。
+- `invariants: {coreValues, moralBoundaries, decisionPattern, protectedTraits}` + `stateVariables: {knowledge, resources, wounds, relationships, currentGoal}`；**核心不变量不能被普通章节更新直接覆盖，变化必须由人物弧中的明确事件触发**。
+
+### 7. 质量门禁：分数只观察，阻断要证据
+
+`reviewPolicy.thresholds` **"只作观察参考，不直接阻断"**；`maxRevisionAttempts` 固定 2（初稿后最多一次正文返修）；`scoringMode: "advisory"`、`blockerMode: "evidence"`。
+
+实例：某章审稿模型提出阻断项，但因引文证据不完整被程序**忽略并降级为 warning**，章节 PASS。
+
+### 8. 长度双向控制 + 外科修复
+
+- 太短 → **受控扩写**："必须在原文已经发生的场景、事件与因果链内补足；不得新增人物、场景、支线、第二场冲突、设定、伏笔和结局"。
+- 太长 → **压缩**："不得续写，不得增加新事件，不得改变故事"，且必须保留全部人物/事件顺序/决定/冲突结果/线索/伏笔/数字/时间/地点/物品归属/**人物知识边界**/结尾钩子。
+- 连续性冲突 → **外科修复（rescueMode）**："只修复有证据的连续性冲突，优先替换最少量的日期、时刻、先后词、知识来源或因果连接；不得增加新情节，不得改变人物选择，不得重新安排场景，不得顺便润色"。
+
+### 9. 排版硬规则
+
+段间两个换行；普通叙述段 40—120 汉字；**单段超 160 字必须拆分**；说话人变化必须换段。
+
+### 10. 卷级闭环
+
+`AGENTS.md` 三条关卡：全书框架未确认→不许出卷纲；本卷大纲未确认→不许写正文；**本卷未完成并验收→不许生成下一卷正式详细大纲**。
+
+---
+
+## 二、与我们的现状对照
+
+| 能力 | 我们现有 | 缺口 |
+|---|---|---|
+| 书级大底 | `bookStoryFoundation`（throughline/worldBoundary/characterDynamics/viewpoint/progression） | 缺**前三章契约**（结构化 beats + 完成证据） |
+| 卷级 | `VolumeChapterPlan`、卷策略、节奏板 | 缺**卷级终点 gate**；缺蓝图 `phase`/`plannedRewardIntensity` |
+| 章级必达 | 场景卡内 `mustAdvance` / `mustPreserve`（数组，非章级强制） | 缺**章级 `requiredElements`**（≥3 项且可落实） |
+| 读者回报 | `readerExperience`（promisedReward/rewardLevel/keyTurn/netChange/…） | 缺 `intensity` 分级与**"每章至少一次"强制** |
+| 承诺 | `PayoffLedgerItem`（targetStart/EndChapterOrder/currentStatus）+ `chapterPayoffDecisionSchema` | 缺 `progressEvery`/`nextProgressChapter`；缺 **cadence 配置**；缺**章→承诺显式映射** |
+| 伏笔 | payoff/foreshadowing 目标窗口 | 缺 `plannedRevealVolume`、缺**落进 requiredElements**、缺回收率与总量上限 |
+| 人物 | `currentGoal`/`resources`/`toneGuardrails`/`CharacterMindSnapshot` | 缺 `voiceProfile`/`voiceMarkers`/`invariants`/`stateVariables` |
+| 状态机 | `actionStateChecks`（body/item/ability/knowledge/location + 时序证据）——**比对方细** | 保留优势 |
+| 因果 | `sceneCausalityVerdicts`（earned/unearned/contradicted/insufficient_evidence） | 保留优势 |
+| 推进审查 | `progressionChecks` 三维（event/knowledge/prior_goal） | 保留优势；但 **`insufficient_evidence` 也进阻断**需复核 |
+| 长度控制 | `structured-output-budget-recovery` | 缺**受控扩写**；缺外科修复模式 |
+| 治理 | Prompt Registry 完整 | 保留优势 |
+
+---
+
+## 三、整合方案（六阶段，按价值/风险排序）
+
+约束（全程遵守 AGENTS）：AI 结构化理解优先，不堆关键词规则；保留两轮预算、来源指纹、已写章/锁定保护；局部质量债与结构性重规划分开；每阶段窄回归 + wiki + 台账 + 本地提交不 push。
+
+---
+
+### 阶段 A：承诺推进节奏（最高价值，改动最小）
+
+**目标**：让"逾期未推进的承诺"变成**写前规划必须处理**的东西，而不是事后 warning。
+
+**改动点**
+1. `shared/types/novel/payoffPlanning.ts`（或新建 `payoffCadence.ts`）：新增
+   - `payoffCadenceSchema = { smallWithinChapters, mediumWithinChapters, majorPerVolume }`
+   - 承诺项增加 `progressEvery: int≥1`、`nextProgressChapter: int`、`intensity: tiny|small|medium|major`
+2. `PayoffLedgerItem`（Prisma）：加 `progressEvery`、`nextProgressChapter`、`payoffIntensity` 三列；迁移走 `prisma db push` 需**先备份**（AGENTS 数据保护）。
+3. 写前任务单生成（`chapterDetail.prompts.ts`）：注入"本章到期承诺清单"，要求 `promiseActions` 逐项映射（`introduce/progress/payoff/hold` + `expectedEffect`）。
+4. 规划审查（`chapterTaskSheetQuality.prompts.ts`）：校验
+   - 到期承诺必须被映射，否则 `issues`（AI 判断，非关键词）
+   - cadence 违例（如连续 `hold` 超过 `progressEvery`）出 `issueChecks`
+5. **执行层分级**：cadence 违例默认进 `repair_contract`（可修），**不直接 `replan_window`**——避免重演"弱证据卡死整批"。
+
+**验收**：离线隔离测试（构造到期/未到期/连续 hold 三种），服务端编译；真实跑书观察第 6 章是否自动带上第 1 章承诺的推进项。
+
+**风险**：加 DB 列必须备份；`PayoffLedgerItem` 现有 14 条数据需 seed 合理默认值（`progressEvery=5`、`nextProgressChapter=当前+5`）。
+
+---
+
+### 阶段 B：章级最小事件清单升格
+
+**目标**：`requiredElements` 从"场景卡内可选数组"升格为**章级强制清单**，且写进写作 prompt。
+
+**改动点**
+1. `chapterDetailSchemas.ts`：`createChapterTaskSheetSchema` 增加章级 `requiredElements: z.array(conciseRequiredText).min(3).max(8)`。
+2. 场景卡 `mustAdvance` 保留（场景级），章级 `requiredElements` 作为**验收锚点**。
+3. `chapterDetail.prompts.ts`：要求"每项必须是正文中可明确落实的**专名、事件或动作**，不得写主题或意图"。
+4. `chapterWriter.prompts.ts`：在【任务边界】显式列出 `requiredElements`（我们现在只有 mustAdvance）。
+5. 验收 `chapterAcceptance.prompts.ts`：新增逐项核对——**但出口是 warning/quality debt，不是阻断**（对齐对方的做法）。
+
+**验收**：schema 拒绝 <3 项的候选；离线测试构造"主题式"与"事件式"两组，确认 AI 判断（非正则）能区分。
+
+---
+
+### 阶段 C：伏笔计划卷 + 落进 requiredElements
+
+**目标**：让伏笔从"账本里的承诺"变成"某一章必须写出来的动作"。
+
+**改动点**
+1. 伏笔/谜题类型加 `plannedRevealVolume: int`、`readerInfo` 与 `truth` **分开**（我们目前倾向于混在一条）。
+2. 卷纲生成：`mysteryPlan` 每项 `{mysteryId, action, chapterNumbers, expectedPayoff}`，章号必须是全书绝对章号。
+3. **核心规则**：`plannedRevealVolume === 本卷` 的伏笔，**必须在对应章的 `requiredElements` 中写出回收动作**（阶段 B 的字段）。
+4. 内部映射标记（如 `[伏笔:<id>]`）随 `requiredElements` 保存，但写作 prompt 明确**禁止出现在正文**。
+5. 卷末校验：回收率（第二卷起 ≥60%）、未回收总量上限。
+
+**验收**：离线构造"本卷该回收但没写进 requiredElements"的候选，确认审查判 `issues`；确认标记不泄漏到正文（写作 prompt 反向检查）。
+
+**依赖**：阶段 B 先落地。
+
+---
+
+### 阶段 D：人物声音卡与不变量（Q11 的更彻底实现）
+
+**目标**：把"人物鲜活"从规则文本变成**结构化人物资产**。
+
+**改动点**
+1. `shared/types/novelCharacter.ts`：加
+   - `voiceProfile: {tone, sentenceStyle, vocabulary, habits, taboos}`
+   - `voiceMarkers: string[]`（3—6 条可迁移口语行为）
+   - `invariants: {coreValues, moralBoundaries, decisionPattern, protectedTraits}`
+   - `stateVariables: {knowledge, resources, wounds, relationships, currentGoal}`
+2. 人物生成 prompt：加入"描述活人的说话差异"要求，并**明确禁止**"所有人都先确认事实、再给结论、最后列方案"。
+3. `chapterWriter.prompts.ts`：注入"人物身份锁"块（姓名/简称/性别/代词严格一致，未登记简称禁用）+ 各角色 `voiceMarkers`。
+4. **不变量保护**：普通章节更新不得覆盖 `invariants`，只有人物弧明确事件可改——在我们的 `characterSync` 写入路径加校验。
+
+**验收**：离线验证"未登记简称"能被检出；验证 `invariants` 不被普通 state update 覆盖。真实跑书对比人物对话区分度（**由用户阅读判断，不用分数**）。
+
+**说明**：这是我们现有 Q11 情绪规则的升级版——Q11 注入的是通用规则，这里给的是**逐人物的具体声音**。
+
+---
+
+### 阶段 E：卷级终点 gate
+
+**目标**：给写作一个可到达的终点，避免"一直写下去"。
+
+**改动点**
+1. 卷状态机：`VOLUME_OUTLINE_REVIEW → READY_TO_WRITE ⇄ WRITING → VOLUME_REVIEW`（复用我们现有 `DirectorStepRun`/checkpoint 机制，不新造运行时）。
+2. Gate：**本卷未验收不得生成下一卷正式详细大纲**；卷验收需要人工确认（源页面操作，符合我们"质量优先人工暂停"规则）。
+3. 与 `completionProfile`（书级 80 章）并存：书级仍是总目标，卷级是分段终点。
+
+**验收**：离线验证 gate 拒绝越卷；确认不破坏现有书级范围恢复逻辑。
+
+**风险**：触碰自动导演状态机，**风险最高**，建议放最后且单独窄回归。
+
+---
+
+### 阶段 F：门禁分级复核 + 长度双向控制
+
+**改动点**
+1. **复核 `insufficient_evidence` 是否该阻断**：对齐对方"证据不足的阻断项被忽略并留 warning"的做法。保留真阻断（`contradicted`/`unearned` 且有证据）。
+2. 新增**受控扩写** prompt：补足现有场景内的行动/对话/阻力/后果，禁止新增人物/场景/支线/伏笔。
+3. 新增**外科修复模式**：只修有证据的连续性冲突，优先替换最小量的时间词/知识来源/因果连接。
+4. 排版硬规则进 writer prompt：段间两换行、段长 40—120、**超 160 字拆分**、说话人变化换段。
+
+**验收**：离线验证扩写 prompt 不含"新增"路径；排版规则渲染进 SystemMessage。
+
+---
+
+## 四、建议执行顺序与理由
+
+```
+A 承诺节奏  ──┐
+              ├─→ C 伏笔落章 ──→ E 卷级 gate
+B 章级清单  ──┘
+D 人物声音   （独立，可与 A/B 并行）
+F 门禁复核   （独立，低风险，可随时插入）
+```
+
+- **A + B 先做**：直接对抗"兜转"，改动集中在类型与 prompt，不动状态机。
+- **C 依赖 B**。
+- **D 独立**，且是 Q11 的自然升级。
+- **E 风险最高**，放最后。
+- **F 可随时插入**，其中"排版规则"和"受控扩写"是低成本高收益项。
+
+每阶段节奏：**改类型/schema → 改 prompt → 服务端编译 → 离线隔离验证 → 更新 wiki/台账 → 本地提交（不 push）**。真实效果一律留给用户读稿判断，不以分数替代。
+
+---
+
+## 五、明确不做的事
+
+- 不照搬对方的 `payoffCadence` 具体数值（5/20/1）——应作为**可配置默认值**，按题材调整（对方自己也有 `genreSpecific`）。
+- 不引入 `[伏笔:id]` 这类"标记写进正文再靠程序剥离"的做法——我们的写作 prompt 应直接产出自然文本，标记只存在于规划层。
+- 不为任何单一题材或样本书写专用分支。
+- 不因为"它能跑完一卷"就放松我们已有的 `actionStateChecks`/`sceneCausalityVerdicts` 证据校验——那两项我们比它细。
+
+## 六、待确认
+
+1. 六个阶段是否按上述顺序全部做，还是先做 A+B 看效果？
+2. 阶段 A 需要加数据库列（`PayoffLedgerItem` 三列）。**加列前我会先做备份并报告路径**，是否需要你额外确认？
+3. 阶段 D 的人物声音卡是否要同时生成一份"人物卡.md"给人看（对方有 `docs/02_人物卡.md`），还是只做内部资产？
