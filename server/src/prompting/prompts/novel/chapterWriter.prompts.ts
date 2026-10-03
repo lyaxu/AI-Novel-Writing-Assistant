@@ -5,6 +5,7 @@ import { NOVEL_PROMPT_BUDGETS } from "./promptBudgetProfiles";
 import { CHAPTER_PROSE_QUALITY_RULES } from "@ai-novel/shared/types/chapterProseContract";
 import { CAPABILITY_AUTHORIZATION_RULES } from "./context/capabilityAuthorization";
 import { CHAPTER_EMOTION_RULES } from "./context/emotionPresence";
+import { CHAPTER_TYPOGRAPHY_RULES } from "./context/typography";
 
 export interface ChapterWriterPromptInput {
   novelTitle: string;
@@ -334,6 +335,8 @@ export const chapterWriterPrompt: PromptAsset<ChapterWriterPromptInput, string, 
         ...CAPABILITY_AUTHORIZATION_RULES,
         "【情绪落地要求】",
         ...CHAPTER_EMOTION_RULES,
+        "【排版要求】",
+        ...CHAPTER_TYPOGRAPHY_RULES,
         "2. 必须严格服从 chapter mission、mustAdvance、mustPreserve 与 ending hook。",
         "3. obligation contract 中的 must hit now、required payoff touches、required character appearances、required goal changes 都是本章必达项，必须在正文中让读者可见。",
       "4. character_hard_facts 是不可违背的人物硬事实，角色身份、阵营、立场、境界/战力、当前位置和可出场状态不得写反。",

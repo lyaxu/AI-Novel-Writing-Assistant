@@ -9,6 +9,7 @@ import { actionStateCheckSchema, sceneCausalityVerdictSchema } from "@ai-novel/s
 import { ACTION_STATE_AUDIT_RULES, reconcileSceneActionVerdicts, validateActionStateEvidence } from "./acceptance/actionStateEvidence";
 import { chapterProgressionCheckSchema } from "@ai-novel/shared/types/novel/progression/index";
 import { CHAPTER_EMOTION_AUDIT_RULES } from "./context/emotionPresence";
+import { CHAPTER_TYPOGRAPHY_AUDIT_RULES } from "./context/typography";
 import { CHAPTER_PROGRESSION_AUDIT_RULES, validateProgressionEvidence, validateAcceptanceIssueSources } from "./acceptance/progressionEvidence";
 
 const acceptanceSourceEvidenceSchema = z.object({
@@ -486,6 +487,8 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       ...CHAPTER_PROSE_QUALITY_AUDIT_RULES.map((rule, index) => `${index + 1}. ${rule}`),
       "情绪落地审查：",
       ...CHAPTER_EMOTION_AUDIT_RULES,
+      "排版与说话人审查：",
+      ...CHAPTER_TYPOGRAPHY_AUDIT_RULES,
     ].join("\n")),
     new HumanMessage([
       `小说：${input.novelTitle}`,

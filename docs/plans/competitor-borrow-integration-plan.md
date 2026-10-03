@@ -17,7 +17,7 @@
 | 阶段 C：伏笔落进 requiredElements | 🔲 待做 | 依赖 B |
 | 阶段 D：人物声音卡与不变量 | 🔲 待做 | 内部资产，不导出人读文档 |
 | 阶段 E：卷级终点 gate | 🔲 待做 | 风险最高，放最后 |
-| 阶段 F：门禁分级 + 长度控制 + 排版 | 🔲 待做 | 可随时插入 |
+| 阶段 F：门禁分级 + 长度控制 + 排版 | 🟡 F1（排版）已完成，F2/F3 待做 | **F1（已完成）**：新增 `prompting/prompts/novel/context/typography.ts` —— `CHAPTER_TYPOGRAPHY_RULES`（写作侧：段间空行、叙述段 40-120 汉字、单段超 160 必须拆、说话人一换必须换段、对白密集处须标清说话人）与 `CHAPTER_TYPOGRAPHY_AUDIT_RULES`（审查侧：查未拆长段/叙述挤成一块/说话人混排，属可局部修复，不升级为全局重写或停止；不因段落偏短或场景安静判罚）。注入 writer（【排版要求】）、acceptance（排版与说话人审查）、chapterReview、chapterRepair 四处。5/5 测试（含通用性检查：无题材硬编码、不禁短段）。**F2 待做**：门禁分级复核——`insufficient_evidence` 是否应从阻断降级为提醒（对齐竞品「证据不足的阻断项被忽略并留 warning」）。**F3 待做**：受控扩写 prompt（在已发生场景内补足，禁止新增人物/场景/支线/伏笔） |
 
 **用户已确认的四点**：
 

@@ -1,6 +1,7 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { CAPABILITY_AUTHORIZATION_RULES } from "./context/capabilityAuthorization";
 import { CHAPTER_EMOTION_AUDIT_RULES } from "./context/emotionPresence";
+import { CHAPTER_TYPOGRAPHY_AUDIT_RULES } from "./context/typography";
 import { z } from "zod";
 import type { PromptAsset } from "../../core/promptTypes";
 import { renderSelectedContextBlocks } from "../../core/renderContextBlocks";
@@ -128,6 +129,8 @@ export const chapterReviewPrompt: PromptAsset<
       "",
       "【情绪落地审查】",
       ...CHAPTER_EMOTION_AUDIT_RULES,
+      "【排版与说话人审查】",
+      ...CHAPTER_TYPOGRAPHY_AUDIT_RULES,
       "",
       "【评分要求】",
       "score 必须完整包含：coherence、repetition、pacing、voice、engagement、overall。",
@@ -224,6 +227,9 @@ export const chapterRepairPrompt: PromptAsset<ChapterRepairPromptInput, string, 
       "",
       "【情绪落地要求】",
       ...CHAPTER_EMOTION_AUDIT_RULES,
+      "",
+      "【排版与说话人要求】",
+      ...CHAPTER_TYPOGRAPHY_AUDIT_RULES,
       "",
       "【修复原则】",
       "1. 优先修复 issuesJson 中明确指出的关键问题。",
