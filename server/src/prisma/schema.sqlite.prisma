@@ -2782,6 +2782,12 @@ model PayoffLedgerItem {
   riskSignalsJson       String?
   statusReason          String?
   confidence            Float?
+  // Cadence declared when the promise is first registered: how often it must move forward and
+  // when it is next due. A promise whose nextProgressChapter has arrived must be mapped by the
+  // chapter contract instead of being left to a post-hoc warning.
+  progressEvery         Int?
+  nextProgressChapter   Int?
+  payoffIntensity       String?
   novel                 Novel                 @relation(fields: [novelId], references: [id], onDelete: Cascade)
   lastTouchedChapter    Chapter?              @relation("PayoffLedgerLastTouchedChapter", fields: [lastTouchedChapterId], references: [id], onDelete: SetNull)
   setupChapter          Chapter?              @relation("PayoffLedgerSetupChapter", fields: [setupChapterId], references: [id], onDelete: SetNull)
