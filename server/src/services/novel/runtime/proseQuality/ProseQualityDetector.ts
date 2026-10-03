@@ -2,7 +2,7 @@ import type {
   RuntimeAuditIssue,
   RuntimeAuditReport,
 } from "@ai-novel/shared/types/chapterRuntime";
-import { extractForeshadowTokens } from "../../../payoff/foreshadowRevealObligations";
+import { extractForeshadowTokens, extractPromiseTokens } from "../../../payoff/planningToken";
 
 export type ProseQualityIssueCode =
   | "prose_negative_flip"
@@ -14,6 +14,7 @@ export type ProseQualityIssueCode =
   | "prose_ai_self_reference"
   | "prose_placeholder_leak"
   | "prose_foreshadow_token_leak"
+  | "prose_promise_token_leak"
   | "prose_engineering_term_leak";
 
 export interface ProseQualityFinding {
@@ -85,6 +86,7 @@ export function detectProseQuality(content: string): ProseQualityReport {
     scanAiSelfReference(segment, addFinding);
     scanPlaceholderLeak(segment, addFinding);
     scanForeshadowTokenLeak(segment, addFinding);
+    scanPromiseTokenLeak(segment, addFinding);
     scanEngineeringTermLeak(segment, addFinding);
     scanPeriodStutter(segment, addFinding);
     scanLongParagraph(segment, addFinding);
@@ -251,6 +253,26 @@ function scanForeshadowTokenLeak(
     line: segment.line,
     column: Math.max(0, index) + 1,
     message: `正文泄漏了伏笔账目标记（${leaked.map((key) => `[伏笔:${key}]`).join("、")}）。`,
+    excerpt: formatExcerpt(segment.text),
+    fixSuggestion: "删去标记本身，只保留它描述的事件；读者不应看到任何账目编号。",
+  });
+}
+
+function scanPromiseTokenLeak(
+  segment: TextSegment,
+  addFinding: (finding: ProseQualityFinding) => void,
+): void {
+  const leaked = extractPromiseTokens(segment.text);
+  if (leaked.length === 0) {
+    return;
+  }
+  const index = segment.text.indexOf("[承诺:");
+  addFinding({
+    code: "prose_promise_token_leak",
+    severity: "critical",
+    line: segment.line,
+    column: Math.max(0, index) + 1,
+    message: `正文泄漏了承诺账目标记（${leaked.map((key) => `[承诺:${key}]`).join("、")}）。`,
     excerpt: formatExcerpt(segment.text),
     fixSuggestion: "删去标记本身，只保留它描述的事件；读者不应看到任何账目编号。",
   });
