@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { selectDuePromises, renderPayoffCadenceContext } = require("../dist/services/payoff/payoffCadence.js");
+const { selectDuePromises, renderPayoffCadenceContext, rollForwardNextProgressChapter } = require("../dist/services/payoff/payoffCadence.js");
 
 const item = (overrides = {}) => ({
   id: "p1",
@@ -97,4 +97,54 @@ test("an empty cadence block must not invite new promises", () => {
   const text = renderPayoffCadenceContext([], 4);
   assert.match(text, /没有到期的账本承诺/);
   assert.match(text, /不要为了填满这个清单而新造承诺/);
+});
+
+test("a promise touched at or after its due chapter rolls forward by its own cadence", () => {
+  assert.equal(rollForwardNextProgressChapter({
+    progressEvery: 5, nextProgressChapter: 7, lastTouchedChapterOrder: 7, currentStatus: "pending_payoff",
+  }), 12);
+  // touched past the due point also rolls, otherwise it would stay permanently due
+  assert.equal(rollForwardNextProgressChapter({
+    progressEvery: 5, nextProgressChapter: 7, lastTouchedChapterOrder: 9, currentStatus: "hinted",
+  }), 14);
+});
+
+test("a due chapter still ahead of the last touch is left alone", () => {
+  assert.equal(rollForwardNextProgressChapter({
+    progressEvery: 5, nextProgressChapter: 12, lastTouchedChapterOrder: 7, currentStatus: "pending_payoff",
+  }), 12);
+});
+
+test("without a cadence or a touch record the reported value stands, never invented", () => {
+  assert.equal(rollForwardNextProgressChapter({
+    progressEvery: null, nextProgressChapter: 7, lastTouchedChapterOrder: 9, currentStatus: "pending_payoff",
+  }), 7);
+  assert.equal(rollForwardNextProgressChapter({
+    progressEvery: 5, nextProgressChapter: 7, lastTouchedChapterOrder: null, currentStatus: "pending_payoff",
+  }), 7);
+  assert.equal(rollForwardNextProgressChapter({
+    progressEvery: 5, nextProgressChapter: null, lastTouchedChapterOrder: null, currentStatus: "pending_payoff",
+  }), null);
+});
+
+test("a missing due chapter is derived once the cadence and touch are known", () => {
+  assert.equal(rollForwardNextProgressChapter({
+    progressEvery: 4, nextProgressChapter: null, lastTouchedChapterOrder: 6, currentStatus: "setup",
+  }), 10);
+});
+
+test("terminal promises keep whatever the model reported", () => {
+  assert.equal(rollForwardNextProgressChapter({
+    progressEvery: 5, nextProgressChapter: 3, lastTouchedChapterOrder: 20, currentStatus: "paid_off",
+  }), 3);
+  assert.equal(rollForwardNextProgressChapter({
+    progressEvery: 5, nextProgressChapter: 3, lastTouchedChapterOrder: 20, currentStatus: "failed",
+  }), 3);
+});
+
+test("a rolled-forward promise stops being reported as due", () => {
+  const next = rollForwardNextProgressChapter({
+    progressEvery: 5, nextProgressChapter: 7, lastTouchedChapterOrder: 7, currentStatus: "pending_payoff",
+  });
+  assert.deepEqual(selectDuePromises([item({ progressEvery: 5, nextProgressChapter: next, lastTouchedChapterOrder: 7 })], 8), []);
 });

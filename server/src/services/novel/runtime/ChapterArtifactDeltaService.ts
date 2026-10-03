@@ -1072,9 +1072,11 @@ export class ChapterArtifactDeltaService {
             riskSignalsJson: serializeLedgerJson(riskSignals),
             statusReason: item.statusReason?.trim() || null,
             confidence: item.confidence ?? null,
-            progressEvery: item.progressEvery ?? null,
-            nextProgressChapter: item.nextProgressChapter ?? null,
-            payoffIntensity: item.payoffIntensity ?? null,
+            // A chapter delta is not the cadence authority: it must not erase a cadence the ledger
+            // sync declared. Only an explicitly reported value overwrites what is already stored.
+            progressEvery: item.progressEvery ?? previous?.progressEvery ?? null,
+            nextProgressChapter: item.nextProgressChapter ?? previous?.nextProgressChapter ?? null,
+            payoffIntensity: item.payoffIntensity ?? previous?.payoffIntensity ?? null,
             updatedAt: now,
           },
         });

@@ -77,6 +77,35 @@ export function selectDuePromises(
 }
 
 /**
+ * Keep `nextProgressChapter` coherent with the promise's own cadence after a sync.
+ *
+ * Without this, a promise that was just advanced keeps its old due chapter and is reported as due
+ * on every subsequent chapter — the same promise would be re-listed forever, which trains the
+ * planner to ignore the list. The rule is deterministic and only fires when the cadence and the
+ * last touch are both known:
+ *
+ *   - terminal promises keep whatever the model reported (no cadence applies)
+ *   - without `progressEvery` there is nothing to derive, so the reported value stands
+ *   - with no touch record there is nothing to roll forward from, so the reported value stands
+ *   - once a touch has happened at or after the due chapter, the next due chapter becomes
+ *     `lastTouchedChapterOrder + progressEvery`
+ */
+export function rollForwardNextProgressChapter(input: {
+  progressEvery: number | null | undefined;
+  nextProgressChapter: number | null | undefined;
+  lastTouchedChapterOrder: number | null | undefined;
+  currentStatus: PayoffLedgerItem["currentStatus"];
+}): number | null {
+  const reported = asOrder(input.nextProgressChapter);
+  if (!OPEN_STATUSES.has(input.currentStatus)) return reported;
+  const every = asOrder(input.progressEvery);
+  const touched = asOrder(input.lastTouchedChapterOrder);
+  if (every === null || touched === null) return reported;
+  if (reported !== null && reported > touched) return reported;
+  return touched + every;
+}
+
+/**
  * Render the due promises for a chapter planning prompt.
  *
  * The contract must map each returned promise explicitly. The wording deliberately says the

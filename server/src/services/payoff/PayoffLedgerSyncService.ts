@@ -21,6 +21,7 @@ import {
 } from "./payoffLedgerChapterRefs";
 import { resolveSupersededBookContractLedgerKeys } from "./domain/payoffLedgerSourceLifecycle";
 import { buildBookContractPayoffSources } from "./sources/bookContractPayoffSources";
+import { rollForwardNextProgressChapter } from "./payoffCadence";
 
 interface PayoffLedgerSyncOptions {
   provider?: LLMProvider;
@@ -426,6 +427,14 @@ export class PayoffLedgerSyncService {
             severity: signal.severity,
             summary: signal.summary,
           }))));
+          // Keep the due chapter coherent with the promise's own cadence: a promise that was just
+          // advanced must not stay permanently due, or the planner learns to ignore the due list.
+          const nextProgressChapter = rollForwardNextProgressChapter({
+            progressEvery: item.progressEvery ?? previous?.progressEvery ?? null,
+            nextProgressChapter: item.nextProgressChapter ?? previous?.nextProgressChapter ?? null,
+            lastTouchedChapterOrder: item.lastTouchedChapterOrder ?? previous?.lastTouchedChapterOrder ?? null,
+            currentStatus: item.currentStatus,
+          });
           await tx.payoffLedgerItem.upsert({
             where: {
               novelId_ledgerKey: {
@@ -453,9 +462,9 @@ export class PayoffLedgerSyncService {
               riskSignalsJson: serializeLedgerJson(riskSignals),
               statusReason: item.statusReason?.trim() || null,
               confidence: item.confidence ?? null,
-              progressEvery: item.progressEvery ?? null,
-              nextProgressChapter: item.nextProgressChapter ?? null,
-              payoffIntensity: item.payoffIntensity ?? null,
+              progressEvery: item.progressEvery ?? previous?.progressEvery ?? null,
+              nextProgressChapter,
+              payoffIntensity: item.payoffIntensity ?? previous?.payoffIntensity ?? null,
               updatedAt: now,
             },
             update: {
@@ -476,9 +485,9 @@ export class PayoffLedgerSyncService {
               riskSignalsJson: serializeLedgerJson(riskSignals),
               statusReason: item.statusReason?.trim() || null,
               confidence: item.confidence ?? null,
-              progressEvery: item.progressEvery ?? null,
-              nextProgressChapter: item.nextProgressChapter ?? null,
-              payoffIntensity: item.payoffIntensity ?? null,
+              progressEvery: item.progressEvery ?? previous?.progressEvery ?? null,
+              nextProgressChapter,
+              payoffIntensity: item.payoffIntensity ?? previous?.payoffIntensity ?? null,
               updatedAt: now,
             },
           });
