@@ -338,11 +338,11 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/novel/volume/chapterDetail.prompts").volumeChapterBoundaryPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.chapter_task_sheet@v8",
+    key: "novel.volume.chapter_task_sheet@v9",
     load: () => require("../prompts/novel/volume/chapterDetail.prompts").volumeChapterTaskSheetPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.chapter_execution_contract@v9",
+    key: "novel.volume.chapter_execution_contract@v10",
     load: () => require("../prompts/novel/volume/chapterDetail.prompts").volumeChapterExecutionContractPrompt as UnknownPromptAsset,
   },
   {

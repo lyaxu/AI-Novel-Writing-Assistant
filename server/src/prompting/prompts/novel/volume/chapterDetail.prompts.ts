@@ -253,7 +253,8 @@ function createVolumeDetailSystemPrompt(detailMode: VolumeChapterDetailPromptInp
   return [
     "你是资深网文章节编辑。",
     "当前任务是生成可直接交给正文生成器的章节执行合同。",
-    "只输出严格 JSON，且只包含 taskSheet、readerExperience、sceneCards 三个字段。",
+    "只输出严格 JSON，且只包含 requiredElements、taskSheet、readerExperience、sceneCards 四个字段。",
+    "requiredElements 是本章的最小事件清单，3-8 条，每一条都必须是正文里能被读者看见的具体专名、事件或动作。禁止写主题、意图、情绪或评价（「展现成长」「节奏更紧凑」这类无法验收）；清单要能说清这一章实际发生了什么。",
     "taskSheet 是给用户读的简洁执行摘要，需要覆盖情绪基调、冲突对象、关键推进和收尾要求。",
     selectedDirectionRule,
     progressionRule,
@@ -298,7 +299,8 @@ function createExecutionContractSystemPrompt(): string {
     selectedDirectionRule,
     progressionRule,
     intensityScaleRule,
-    "只输出严格 JSON，必须同时包含 purpose、exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、targetWordCount、mustAvoid、payoffRefs、taskSheet、readerExperience、sceneCards。",
+    "只输出严格 JSON，必须同时包含 purpose、exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、targetWordCount、mustAvoid、payoffRefs、requiredElements、taskSheet、readerExperience、sceneCards。",
+    "requiredElements 是本章的最小事件清单，3-8 条，每一条都必须是正文里能被读者看见的具体专名、事件或动作，例如「假丘处机在城外验货时暴露口音破绽」。禁止写主题、意图、情绪或评价，例如「展现主角的成长」「节奏更紧凑」「体现江湖险恶」——这些无法被验收。清单合起来要能说清这一章实际发生了什么，而不是它想表达什么。",
     "purpose 用一句话说明本章到底要推进什么，不要写成摘要复述。",
     "exclusiveEvent / endingState / nextChapterEntryState 等字段不可缺失，它们是章节的硬边界合同。",
     "taskSheet 是给正文写作器的简洁执行指令，sceneCards 是 3-8 个场景卡的执行拆解。",
@@ -380,7 +382,7 @@ export const volumeChapterTaskSheetPrompt: PromptAsset<
   ReturnType<typeof createChapterTaskSheetSchema>["_output"]
 > = {
   id: "novel.volume.chapter_task_sheet",
-  version: "v8",
+  version: "v9",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -401,7 +403,7 @@ export const volumeChapterExecutionContractPrompt: PromptAsset<
   ReturnType<typeof createChapterExecutionContractSchema>["_output"]
 > = {
   id: "novel.volume.chapter_execution_contract",
-  version: "v9",
+  version: "v10",
   taskType: "planner",
   mode: "structured",
   language: "zh",

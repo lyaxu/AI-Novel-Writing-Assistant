@@ -176,6 +176,7 @@ export function createChapterBoundarySchema() {
 
 export function createChapterTaskSheetSchema() {
   return z.preprocess(normalizeScenePlanPayload, z.object({
+    requiredElements: z.array(z.string().trim().min(1).max(160)).min(3).max(8),
     taskSheet: z.string().trim().min(1).max(600),
     readerExperience: boundedReaderExperienceSchema,
     sceneCards: z.array(z.preprocess(normalizeSceneCardPayload, boundedSceneCardSchema)).min(3).max(8),
@@ -186,6 +187,7 @@ export function createChapterExecutionContractSchema() {
   return z.preprocess(
     (raw) => normalizeScenePlanPayload(normalizeBoundaryPayload(normalizeObjectAlias(raw, {
       purpose: ["章节目标", "chapterGoal", "goal", "objective"],
+      requiredElements: ["requiredBeats", "mustHappen", "chapterRequiredElements", "必须落实"],
     }))),
     z.object({
       purpose: conciseRequiredText,
@@ -197,6 +199,10 @@ export function createChapterExecutionContractSchema() {
       targetWordCount: z.number().int().min(200).max(20000),
       mustAvoid: conciseRequiredText,
       payoffRefs: z.array(z.string().trim().min(1).max(160)).max(8).default([]),
+      // Chapter-level minimum event list: the concrete things this chapter must actually show.
+      // Scene cards say how each scene runs; this says what the chapter owes the reader, and it is
+      // what acceptance anchors on. Themes and intentions are rejected by the prompt, not here.
+      requiredElements: z.array(z.string().trim().min(1).max(160)).min(3).max(8),
       taskSheet: z.string().trim().min(1).max(600),
       readerExperience: boundedReaderExperienceSchema,
       sceneCards: z.array(z.preprocess(normalizeSceneCardPayload, boundedSceneCardSchema)).min(3).max(8),
