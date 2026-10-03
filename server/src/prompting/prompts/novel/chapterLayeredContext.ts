@@ -218,7 +218,10 @@ function buildCompatibleReaderExperienceContract(input: {
   };
 }
 
-export function buildChapterMissionContext(contextPackage: GenerationContextPackage): ChapterMissionContext {
+export function buildChapterMissionContext(
+  contextPackage: GenerationContextPackage,
+  options: { requiredElements?: readonly string[] } = {},
+): ChapterMissionContext {
   const stateGoal = contextPackage.chapterStateGoal;
   return {
     chapterId: contextPackage.chapter.id,
@@ -236,10 +239,13 @@ export function buildChapterMissionContext(contextPackage: GenerationContextPack
     targetWordCount: contextPackage.chapter.targetWordCount ?? null,
     planRole: contextPackage.plan?.planRole ?? null,
     hookTarget: compactText(contextPackage.plan?.hookTarget, "Leave a fresh tension point at the ending."),
+    // The chapter's own minimum event list comes first: it is this chapter's contract and must
+    // survive the cap, so a long conflict list can never crowd it out of the writer's brief.
     mustAdvance: sanitizeCreativeMustAdvanceItems(takeUnique([
+      ...(options.requiredElements ?? []),
       ...(stateGoal?.targetConflicts ?? []),
       ...(contextPackage.plan?.mustAdvance ?? []),
-    ], 5)),
+    ], 8)),
     mustPreserve: takeUnique([
       ...(stateGoal?.targetRelationships ?? []),
       ...(contextPackage.plan?.mustPreserve ?? []),
@@ -331,7 +337,9 @@ export function buildChapterWriteContext(input: {
   const scenePlan = parseChapterScenePlan(input.contextPackage.chapter.sceneCards, {
     targetWordCount: input.contextPackage.chapter.targetWordCount ?? undefined,
   });
-  const chapterMission = buildChapterMissionContext(input.contextPackage);
+  const chapterMission = buildChapterMissionContext(input.contextPackage, {
+    requiredElements: scenePlan?.requiredElements ?? [],
+  });
   const chapterBoundary = buildChapterBoundaryContract(input.contextPackage, scenePlan);
   const openConflictSummaries = summarizeOpenConflicts(input.contextPackage);
   const readerExperience = buildCompatibleReaderExperienceContract({

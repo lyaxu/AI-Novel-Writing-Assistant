@@ -1157,3 +1157,33 @@ test("chapter context only supplies mind and active dialogue guidance to actual 
   assert.doesNotMatch(guidanceBlock.content, /暂时避开冲突/);
   assert.ok(writeContext.characterHardFacts.some((fact) => fact.characterId === "char-1"));
 });
+
+const { buildChapterMissionContext } = require("../dist/prompting/prompts/novel/chapterLayeredContext.js");
+
+test("a chapter's requiredElements reach the writer's must-advance brief", () => {
+  const contextPackage = {
+    chapter: { id: "c1", order: 3, title: "测试章", expectation: "推进当前章任务", taskSheet: "任务单", targetWordCount: 2800 },
+    plan: null,
+    chapterStateGoal: null,
+  };
+  const elements = [
+    "假丘处机在城外验货时露出北方口音破绽",
+    "劳梓凡把药包交到黄蓉手上并拿到回执",
+  ];
+  assert.ok(!buildChapterMissionContext(contextPackage).mustAdvance.includes(elements[0]));
+
+  const mission = buildChapterMissionContext(contextPackage, { requiredElements: elements });
+  for (const element of elements) assert.ok(mission.mustAdvance.includes(element), `missing: ${element}`);
+});
+
+test("the chapter's own event list survives the cap even when conflicts are numerous", () => {
+  const contextPackage = {
+    chapter: { id: "c1", order: 3, title: "测试章", expectation: "推进", taskSheet: "任务", targetWordCount: 2800 },
+    plan: null,
+    chapterStateGoal: { targetConflicts: Array.from({ length: 10 }, (_, i) => `冲突 ${i + 1}`) },
+  };
+  const mission = buildChapterMissionContext(contextPackage, { requiredElements: ["本章必须交付的那件事"] });
+  // The chapter contract must not be crowded out by an unrelated conflict list.
+  assert.ok(mission.mustAdvance.includes("本章必须交付的那件事"));
+  assert.ok(mission.mustAdvance.length <= 8);
+});
