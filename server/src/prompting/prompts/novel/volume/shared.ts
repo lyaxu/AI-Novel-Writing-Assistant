@@ -76,6 +76,9 @@ export interface VolumeChapterListPromptInput {
 export interface VolumeChapterDetailPromptInput {
   contractRepairFeedback?: string;
   writtenEvidence?: import("@ai-novel/shared/types/novel/writtenEvidence").PlanningWrittenEvidence;
+  /** Ledger promises whose declared cadence says they must move forward at or before this chapter.
+   *  Carried as rendered text so the prompt layer stays independent of the payoff service. */
+  payoffCadence?: { dueCount: number; text: string };
   novel: VolumeGenerationNovel;
   workspace: VolumeWorkspace;
   storyMacroPlan: StoryMacroPlan | null;

@@ -307,6 +307,7 @@ function createExecutionContractSystemPrompt(): string {
     "sceneCards 除原字段外还必须包含 resistance、turn、emotionalShift、readerValue，确保每个场景都有阻力、转折和读者价值。",
     ...sceneCausalityRules,
     "taskSheet 和 sceneCards 只能执行当前章的合同，不得提前占用相邻章的一次性事件，也不得重写上一章已经完成的里程碑。",
+    "payoff_cadence 列出本章到期的账本承诺。每一条都必须在本章合同里有明确落点：purpose、mustAdvance 或 readerExperience 要写出它这一章向前动了哪一步、由谁在什么处境下推动、带来什么可见后果。只写「记得这件事」「准备去办」不算推进。推进不等于兑现，长期承诺不要求本章全部兑现；确实推不动时说明具体阻力或取舍，并不要为凑清单新造能力、道具、人物或提前兑现远期安排。",
     "如果 conflict_level_curve 标出用户锚定的 conflictLevel，该数值是硬约束，不得改写。",
     "如果最近章节已经连续使用相同开场、相同推进路数或同类钩子，本章必须通过 sceneCards 主动做出差异化。",
     "purpose、边界字段和 readerExperience 各字段只写 1 句，单字段不超过 120 个汉字；taskSheet 不超过 300 个汉字。",
@@ -328,7 +329,7 @@ function buildChapterDetailPrompt(contextText: string, detailMode: VolumeChapter
 const baseContextPolicy = {
   maxTokensBudget: NOVEL_PROMPT_BUDGETS.volumeChapterDetail,
   requiredGroups: ["book_contract", "target_volume", "chapter_neighbors", "chapter_detail_draft"],
-  preferredGroups: ["recent_execution_contracts", "macro_constraints", "target_beat_sheet", "volume_window"],
+  preferredGroups: ["recent_execution_contracts", "macro_constraints", "target_beat_sheet", "payoff_cadence", "volume_window"],
   dropOrder: ["volume_window"],
 };
 
@@ -379,7 +380,7 @@ export const volumeChapterTaskSheetPrompt: PromptAsset<
   ReturnType<typeof createChapterTaskSheetSchema>["_output"]
 > = {
   id: "novel.volume.chapter_task_sheet",
-  version: "v7",
+  version: "v8",
   taskType: "planner",
   mode: "structured",
   language: "zh",

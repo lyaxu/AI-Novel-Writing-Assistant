@@ -415,3 +415,33 @@ test("boundary post-validate rejects duplicated exclusive event and mirrored sta
     /独占事件|endingState 与 nextChapterEntryState/,
   );
 });
+
+test("due ledger promises become a required planning block only when something is actually due", () => {
+  const base = createPromptInput();
+
+  const withDue = buildVolumeChapterDetailContextBlocks({
+    ...base,
+    payoffCadence: { dueCount: 2, text: "本章（第 3 章）到期的账本承诺，共 2 条：\n- [L1] 首单结算" },
+  });
+  const dueBlock = withDue.find((item) => item.id === "payoff_cadence");
+  assert.ok(dueBlock, "a due list must reach the planning prompt");
+  assert.equal(dueBlock.group, "payoff_cadence");
+  assert.equal(dueBlock.required, true);
+  assert.match(dueBlock.content, /\[L1\] 首单结算/);
+
+  // Nothing due must stay optional and must not invite inventing work to fill the slot.
+  const empty = buildVolumeChapterDetailContextBlocks({
+    ...base,
+    payoffCadence: { dueCount: 0, text: "本章（第 3 章）没有到期的账本承诺。" },
+  });
+  const emptyBlock = empty.find((item) => item.id === "payoff_cadence");
+  assert.ok(emptyBlock);
+  assert.equal(emptyBlock.required, false);
+
+  // Absent cadence data behaves like an empty list rather than silently dropping the block.
+  const absent = buildVolumeChapterDetailContextBlocks(base);
+  const absentBlock = absent.find((item) => item.id === "payoff_cadence");
+  assert.ok(absentBlock);
+  assert.equal(absentBlock.required, false);
+  assert.match(absentBlock.content, /不要为了填满这个位置而新造承诺/);
+});

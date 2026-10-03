@@ -378,6 +378,15 @@ export function buildVolumeChapterDetailContextBlocks(input: VolumeChapterDetail
       content: `Existing draft:\n${buildChapterDetailDraft(input.targetChapter, input.detailMode)}`,
     }),
     createContextBlock({
+      id: "payoff_cadence",
+      group: "payoff_cadence",
+      priority: 97,
+      required: Boolean(input.payoffCadence?.dueCount),
+      allowSummary: false,
+      content: `Due ledger promises:\n${input.payoffCadence?.text
+        ?? "本章没有到期的账本承诺。不要为了填满这个位置而新造承诺或提前兑现远期安排。"}`,
+    }),
+    createContextBlock({
       id: "volume_window",
       group: "volume_window",
       priority: 82,
