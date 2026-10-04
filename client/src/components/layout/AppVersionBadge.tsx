@@ -1,6 +1,7 @@
 import { Download, RefreshCw, RotateCw } from "lucide-react";
 import { APP_RUNTIME, APP_VERSION } from "@/lib/constants";
 import { useDesktopUpdater } from "@/lib/desktop";
+import { useServerRuntime } from "@/lib/useServerRuntime";
 import { cn } from "@/lib/utils";
 import DesktopUpdateDialog from "./DesktopUpdateDialog";
 import { formatDesktopVersion } from "./desktopUpdaterPresentation";
@@ -11,9 +12,31 @@ interface AppVersionBadgeProps {
 
 export default function AppVersionBadge({ className }: AppVersionBadgeProps) {
   const updater = useDesktopUpdater();
+  const runtime = useServerRuntime();
   const versionLabel = formatDesktopVersion(APP_VERSION);
   const isDesktop = APP_RUNTIME === "desktop";
   const currentDesktopVersion = updater.currentVersion === "0.0.0" ? versionLabel : formatDesktopVersion(updater.currentVersion);
+
+  // A server still running pre-edit code behaves differently from what the source says. Without
+  // this, that state is indistinguishable from "the change did not work", so it takes precedence
+  // over the version badge: knowing which code is actually answering matters more than the number.
+  if (runtime?.stale) {
+    const files = runtime.newerSources.slice(0, 3).join("、");
+    return (
+      <span
+        className={cn(
+          "inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-400/70 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-900",
+          className,
+        )}
+        title={`服务仍在运行修改前的代码，重启后才能生效。改动过的文件：${runtime.newerSources.join("、")}`}
+        aria-label={`服务正在运行旧代码，需重启后才能生效，共 ${runtime.newerSources.length} 个文件被改动`}
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+        需重启服务
+        <span className="sr-only">{files}</span>
+      </span>
+    );
+  }
 
   if (isDesktop) {
     const isAvailable = updater.status === "update-available";
