@@ -23,6 +23,14 @@ const CACHE_TTL_MS = 5_000;
 const MAX_REPORTED_FILES = 5;
 const MAX_WALKED_FILES = 20_000;
 
+/**
+ * The commit this process started from, captured once.
+ *
+ * Reading HEAD at request time would report commits made after startup, which would tell a reader
+ * the running code is newer than it is — the exact misreading this module exists to prevent.
+ */
+const STARTUP_GIT_HEAD = readGitHead(resolveWorkspaceRoot());
+
 // The shape lives in shared/types so the client renders exactly what the server reports.
 export interface SourceFileStamp {
   file: string;
@@ -139,7 +147,8 @@ function computeIdentity(): RuntimeIdentity {
     nodeVersion: process.version,
     executionMode: isExecutedFromSource() ? "source" : "compiled",
     ...staleness,
-    gitHead: readGitHead(workspaceRoot),
+    gitHead: STARTUP_GIT_HEAD,
+    currentGitHead: readGitHead(workspaceRoot),
   };
 }
 

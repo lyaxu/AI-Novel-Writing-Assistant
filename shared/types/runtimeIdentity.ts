@@ -17,7 +17,14 @@ export interface RuntimeIdentity {
   /** Source files modified after this process started. Non-empty means a restart is required. */
   newerSources: string[];
   stale: boolean;
+  /**
+   * The commit this process started from. This is the one that describes the running code; reading
+   * it at request time would report whatever was committed since, which is exactly the confusion
+   * this type exists to remove.
+   */
   gitHead: string | null;
+  /** The commit on disk right now, for comparison. Informational only. */
+  currentGitHead: string | null;
 }
 
 export interface HealthPayload {

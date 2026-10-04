@@ -48,16 +48,31 @@ test("an empty source tree reports unknown rather than a false all-clear", () =>
 test("the human message says which state the server is in", () => {
   const fresh = describeRuntimeIdentity({
     pid: 1, startedAt: "2026-10-04T11:41:56.800Z", nodeVersion: "v24", executionMode: "source",
-    newestSourceMtime: "2026-10-04T11:41:52.435Z", newerSources: [], stale: false, gitHead: "abc123",
+    newestSourceMtime: "2026-10-04T11:41:52.435Z", newerSources: [], stale: false,
+    gitHead: "abc123", currentGitHead: "abc123",
   });
   assert.match(fresh, /已加载最新代码/);
+  // It must name the commit the process started from, not whatever is on disk now.
   assert.match(fresh, /abc123/);
 
   const stale = describeRuntimeIdentity({
     pid: 1, startedAt: "2026-10-04T11:41:56.800Z", nodeVersion: "v24", executionMode: "source",
-    newestSourceMtime: null, newerSources: ["server/src/a.ts", "server/src/b.ts"], stale: true, gitHead: null,
+    newestSourceMtime: null, newerSources: ["server/src/a.ts", "server/src/b.ts"], stale: true,
+    gitHead: null, currentGitHead: null,
   });
   assert.match(stale, /正在运行旧代码/);
   assert.match(stale, /需重启/);
   assert.match(stale, /server\/src\/a\.ts/);
+});
+
+test("the reported commit is the one the process started from, not the current HEAD", () => {
+  // Reading HEAD at request time would claim the running code is newer than it is — the exact
+  // misreading this module exists to prevent.
+  const message = describeRuntimeIdentity({
+    pid: 7, startedAt: "2026-10-04T11:41:56.800Z", nodeVersion: "v24", executionMode: "source",
+    newestSourceMtime: null, newerSources: [], stale: false,
+    gitHead: "started0000", currentGitHead: "newer11111",
+  });
+  assert.match(message, /started0000/);
+  assert.ok(!message.includes("newer11111"), "the message must not present the current HEAD as loaded");
 });
