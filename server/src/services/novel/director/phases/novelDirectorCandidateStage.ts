@@ -159,6 +159,21 @@ function replaceBatchInList(
   return batches.map((batch) => (batch.id === nextBatch.id ? nextBatch : batch));
 }
 
+/**
+ * Output budget for one candidate batch.
+ *
+ * The candidate schema is large per item (story prototype, opening chain, early payoff, hook
+ * strategy, production foundation) and the batch size varies at runtime, so a fixed budget
+ * truncates exactly when the batch is biggest — a flat 10000 cut a 4-candidate batch off
+ * mid-response. Budget one candidate's worth per requested candidate plus one candidate of
+ * headroom for the surrounding envelope, capped so a runaway request cannot ask for an output
+ * size the provider rejects outright.
+ */
+export function candidateBatchMaxTokens(count: number): number {
+  const safeCount = Number.isFinite(count) && count > 0 ? Math.floor(count) : 1;
+  return Math.min(24_000, 6_000 * (safeCount + 1));
+}
+
 export class NovelDirectorCandidateStageService {
   constructor(private readonly workflowService: WorkflowDependency) {}
 
@@ -214,7 +229,8 @@ export class NovelDirectorCandidateStageService {
         taskId: context.workflowTaskId,
         stage: "auto_director",
         itemKey: "candidate_direction_batch",
-        maxTokens: 10000,
+        // See candidateBatchMaxTokens: a fixed budget truncated the largest batches.
+        maxTokens: candidateBatchMaxTokens(context.count),
         entrypoint: "auto_director_create",
       },
     });
