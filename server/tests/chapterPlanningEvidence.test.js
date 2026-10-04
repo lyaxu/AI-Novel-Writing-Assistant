@@ -144,3 +144,28 @@ test("historical rejected review retains evidence projection without satisfying 
   assert.ok(projected.issues.some(issue => issue.id === "opening_chain_deferred_handoff"));
   assert.equal(schema.mapSemanticAssessmentToQualityGate(projected, "full_book_autopilot").canEnterExecution, false);
 });
+
+test("a field carried by both the chapter and its scene plan is not ambiguous when the text matches", () => {
+  // requiredElements is part of the chapter contract and is also carried inside the scene plan, and
+  // both are projected into one root namespace. That used to throw "Ambiguous evidence source path:
+  // requiredElements[0]" and stopped every auto-director book at chapter 1.
+  const elements = ["劳梓凡深夜送外卖到祥和里三号楼", "客户电话催单并威胁差评", "楼道灯坏了两层"];
+  const candidate = {
+    requiredElements: elements,
+    sceneCards: JSON.stringify({ requiredElements: elements, scenes: [{ key: "s1", turn: "原句" }] }),
+  };
+  const index = evidence.buildChapterEvidenceIndex(candidate);
+  // The path must still resolve to exactly one value, which is what evidence matching needs.
+  assert.equal(index.leaves.get("requiredElements[0]"), elements[0]);
+  assert.equal(index.leaves.get("requiredElements[2]"), elements[2]);
+});
+
+test("the same path with different text is still reported as ambiguous", () => {
+  // Guarding this case is the point of the check: identical text resolves unambiguously, differing
+  // text does not, and silently picking one would mis-attribute evidence.
+  const candidate = {
+    requiredElements: ["章节合同里的说法"],
+    sceneCards: JSON.stringify({ requiredElements: ["场景计划里的另一种说法"], scenes: [{ key: "s1", turn: "原句" }] }),
+  };
+  assert.throws(() => evidence.buildChapterEvidenceIndex(candidate), /Ambiguous evidence source path: requiredElements\[0\]/);
+});

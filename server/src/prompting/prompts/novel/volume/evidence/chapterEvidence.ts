@@ -21,7 +21,15 @@ export function buildChapterEvidenceIndex(candidate: unknown) {
         const parsed: unknown = JSON.parse(value);
         if (parsed && typeof parsed === "object") { add(path, parsed); return; }
       } catch { /* An ordinary text leaf. */ }
-      if (leaves.has(path)) throw new Error(`Ambiguous evidence source path: ${path}`);
+      // The chapter object and its parsed sceneCards share one root namespace, so a field that
+      // exists in both reaches the same path twice — `requiredElements` is one, because it is part
+      // of the chapter contract and also carried inside the scene plan.
+      //
+      // Identical text at the same path is not ambiguous: the path still resolves to exactly one
+      // value, which is all evidence matching needs. Differing text is genuinely ambiguous and
+      // still throws, because that is the case this guard exists for.
+      const existing = leaves.get(path);
+      if (existing !== undefined && existing !== value) throw new Error(`Ambiguous evidence source path: ${path}`);
       leaves.set(path, value);
     } else if (Array.isArray(value)) {
       groups.set(path, []);
