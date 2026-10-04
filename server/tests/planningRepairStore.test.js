@@ -518,9 +518,47 @@ for (const protection of ["body", "generating", "approved"]) {
     const session = await h.store.begin(h.input);
     assert.deepEqual(session.eligibleChapterIds, ["p2"]);
     const bad = h.candidate(); bad.volumes[0].chapters[3].summary = "Beyond lock";
-    await assert.rejects(h.ready(session, bad), /protected workspace/);
+    await assert.rejects(h.ready(session, bad), (error) => {
+      assert.match(error.message, /protected workspace/);
+      // The rejection must name what changed. A generic sentence leaves nothing to diagnose, and
+      // the candidate itself is never persisted, so this message is the only surviving evidence.
+      assert.match(error.message, /Differences:/);
+      assert.match(error.message, /volumes\[0\]\.chapters\[3\]\.summary/);
+      return true;
+    });
   });
 }
+
+test("a rejected candidate reports the protected field it touched, not just a generic refusal", async () => {
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  const bad = h.candidate();
+  // Touch a protected document-level field and an out-of-window chapter at once.
+  bad.activeVersionId = "a-different-version";
+  bad.volumes[0].chapters[3].openPayoffs = ["smuggled"];
+
+  await assert.rejects(h.ready(session, bad), (error) => {
+    assert.match(error.message, /Differences:/);
+    assert.match(error.message, /activeVersionId/);
+    assert.match(error.message, /chapters\[3\]\.openPayoffs/);
+    // The message stays readable: it is shown to a user and stored as the run's technicalError.
+    assert.ok(error.message.length < 900, `message too long: ${error.message.length}`);
+    return true;
+  });
+});
+
+test("a rejected candidate never leaves the stored document changed", async () => {
+  const h = fixture();
+  // Same setup as the window-lock cases: prose in chapter index 2 makes index 3 out of window,
+  // which is what turns its fields into protected ones.
+  h.db.chapters[2].content = "Existing prose";
+  const session = await h.store.begin(h.input);
+  const before = JSON.parse(JSON.stringify(h.db));
+  const bad = h.candidate();
+  bad.volumes[0].chapters[3].summary = "Beyond lock";
+  await assert.rejects(h.ready(session, bad), /protected workspace/);
+  assert.deepEqual(h.db, before, "a refused candidate must not be written");
+});
 
 test("window stops at the end of its volume", async () => {
   const h = fixture();

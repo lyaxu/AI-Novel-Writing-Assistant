@@ -346,6 +346,49 @@ function committedSourceHash(source: Source): string {
   return hash({ plan: semanticDocument(rows), contracts, defaultLength: source.effectiveDefaultChapterLength });
 }
 
+/**
+ * Path-level description of what actually differs between two projected documents.
+ *
+ * Why this exists: the guard used to reject a candidate with one generic sentence, and the
+ * candidate is never persisted. A rejection therefore left no evidence at all — there was nothing
+ * to inspect afterwards, so the same failure could only be reported as "it stopped again".
+ * Naming the differing paths turns that into a diagnosis, and because the message is stored as the
+ * repair session's `technicalError`, it survives the run and can be read back later.
+ */
+const MAX_REPORTED_DIFF_PATHS = 6;
+
+function previewValue(value: unknown): string {
+  if (value === undefined) return "(absent)";
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  if (text == null) return String(value);
+  return text.length > 48 ? `${text.slice(0, 48)}…` : text;
+}
+
+function describeProjectedDiff(before: unknown, after: unknown, limit = MAX_REPORTED_DIFF_PATHS): string {
+  const diffs: string[] = [];
+  const walk = (a: unknown, b: unknown, path: string): void => {
+    if (diffs.length >= limit) return;
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) diffs.push(`${path}.length ${a.length}->${b.length}`);
+      for (let index = 0; index < Math.min(a.length, b.length) && diffs.length < limit; index += 1) {
+        walk(a[index], b[index], `${path}[${index}]`);
+      }
+      return;
+    }
+    if (record(a) && record(b)) {
+      const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
+      for (const key of keys) {
+        if (diffs.length >= limit) return;
+        walk(a[key], b[key], path ? `${path}.${key}` : key);
+      }
+      return;
+    }
+    if (a !== b) diffs.push(`${path || "(root)"} ${previewValue(a)} -> ${previewValue(b)}`);
+  };
+  walk(before, after, "");
+  return diffs.join("; ");
+}
+
 function validateCandidate(snapshot: StoredSnapshot, candidate: VolumePlanDocument): string[] {
   const baseline = snapshot.baselineDocument;
   const allowed = new Set(snapshot.eligibleChapterIds);
@@ -375,8 +418,14 @@ function validateCandidate(snapshot: StoredSnapshot, candidate: VolumePlanDocume
       }),
     })),
   });
-  if (hash(project(baseline, true)) !== hash(project(candidate, false))) {
-    return conflict("Candidate changes protected workspace fields or chapters outside the repair window.");
+  const projectedBaseline = project(baseline, true);
+  const projectedCandidate = project(candidate, false);
+  if (hash(projectedBaseline) !== hash(projectedCandidate)) {
+    const detail = describeProjectedDiff(projectedBaseline, projectedCandidate);
+    return conflict(
+      "Candidate changes protected workspace fields or chapters outside the repair window."
+      + (detail ? ` Differences: ${detail}` : " (no path-level difference could be derived.)"),
+    );
   }
   return affected;
 }
@@ -393,7 +442,10 @@ function validateState(previous: PlanningRepairState, next: PlanningRepairState,
     || hash(next.history.slice(0, previous.history.length)) !== hash(previous.history)) {
     conflict("Accepted repair history is append-only.");
   }
-  if (next.affectedChapterIds?.some((id) => !eligible.includes(id))) conflict("Affected chapter is outside the repair window.");
+  if (next.affectedChapterIds?.some((id) => !eligible.includes(id))) {
+    const outside = next.affectedChapterIds.filter((id) => !eligible.includes(id));
+    conflict(`Affected chapter is outside the repair window. Outside: ${outside.join(", ")}. Allowed: ${eligible.join(", ") || "(none)"}.`);
+  }
   if (previous.phase === "committed" || next.phase === "committed") conflict("Only commit may finalize a repair session.");
 }
 
