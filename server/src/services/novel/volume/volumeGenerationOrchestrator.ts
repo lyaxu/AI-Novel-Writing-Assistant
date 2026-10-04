@@ -56,6 +56,8 @@ import { buildVolumeWorkspaceDocument } from "./volumeWorkspaceDocument";
 import { PlanningRepairCoordinator } from "./planningRepair/PlanningRepairCoordinator";
 import { loadPlanningWrittenEvidence } from "./writtenEvidence";
 import { selectDuePromises, renderPayoffCadenceContext } from "../../payoff/payoffCadence";
+import { evaluateVolumeAcceptance, deriveVolumeOutcomes, decideVolumeGate } from "./volumeAcceptanceEvaluation";
+import { VolumeGenerationGateError } from "./volumeGenerationGateError";
 import { mapPayoffLedgerRow } from "../../payoff/payoffLedgerShared";
 import { selectVolumeRevealObligations, renderForeshadowObligationsContext } from "../../payoff/foreshadowRevealObligations";
 import { loadSelectedPlanningDirection } from "./planningPromises";
@@ -535,6 +537,58 @@ async function loadPayoffCadence(
   }
 }
 
+/**
+ * Phase E2: block only the next volume's outline when the previous volume is not finished.
+ *
+ * Chosen policy (product owner): planning-only gate. Written prose is never rolled back, and a
+ * volume that merely carries recorded debt still passes — blocking on debt would stop the chain on
+ * almost every volume. See `decideVolumeGate` for the full rationale.
+ */
+async function assertPreviousVolumeSettled(
+  novelId: string,
+  volumes: ReadonlyArray<{
+    id: string;
+    sortOrder?: number | null;
+    chapters?: ReadonlyArray<{ chapterOrder: number }> | null;
+  }>,
+  targetVolumeId: string | null | undefined,
+): Promise<void> {
+  const target = targetVolumeId ? volumes.find((volume) => volume.id === targetVolumeId) : null;
+  const targetOrder = target?.sortOrder ?? Number.POSITIVE_INFINITY;
+  const previous = volumes
+    .filter((volume) => volume.id !== target?.id && (volume.sortOrder ?? 0) < targetOrder)
+    .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0))
+    .at(-1);
+  if (!previous) return;
+
+  const orders = (previous.chapters ?? []).map((chapter) => chapter.chapterOrder).filter((order) => Number.isFinite(order));
+  if (!orders.length) return;
+
+  // A lookup failure must not block planning: the gate is a safety net, not a dependency.
+  let rows: Array<{ order: number; chapterStatus: string | null }>;
+  try {
+    rows = await prisma.chapter.findMany({
+      where: { novelId, order: { in: orders } },
+      select: { order: true, chapterStatus: true },
+    });
+  } catch (error) {
+    console.warn("[volume.generate] previous volume gate unavailable", {
+      novelId, volumeId: previous.id, error: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+  if (!rows.length) return;
+
+  const report = evaluateVolumeAcceptance(deriveVolumeOutcomes(rows));
+  const decision = decideVolumeGate(report, `上一卷（第 ${previous.sortOrder} 卷）`);
+  if (decision.blocked) {
+    throw new VolumeGenerationGateError(decision.message);
+  }
+  if (report.verdict === "accepted_with_debt") {
+    console.warn("[volume.generate] previous volume carried debt", { novelId, volumeId: previous.id, reasons: report.reasons });
+  }
+}
+
 async function generateChapterDetail(params: {
   document: VolumePlanDocument;
   novel: VolumeGenerationNovel;
@@ -672,6 +726,7 @@ export async function generateVolumePlanDocument(params: {
     activeVersionId: workspace.activeVersionId,
   });
   assertScopeReadiness(baseDocument, scope, options.targetVolumeId);
+  await assertPreviousVolumeSettled(novelId, baseDocument.volumes, options.targetVolumeId);
   await notifyVolumeGenerationPhase({
     novelId,
     scope,

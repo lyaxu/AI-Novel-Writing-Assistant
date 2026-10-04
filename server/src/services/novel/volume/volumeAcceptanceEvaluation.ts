@@ -27,6 +27,62 @@ export interface VolumeChapterOutcome {
 
 export type VolumeAcceptanceVerdict = "accepted" | "accepted_with_debt" | "needs_attention";
 
+export interface VolumeGateDecision {
+  blocked: boolean;
+  /** Shown to the user when blocked, and used as the warning when not. */
+  message: string;
+}
+
+/**
+ * The policy half of phase E, chosen by the product owner: block only the *next volume's outline*.
+ *
+ * Rationale for the three-way split:
+ *   - `needs_attention` blocks. Something in this volume was never finished, and planning the next
+ *     one on top of it would bake the gap into the book.
+ *   - `accepted_with_debt` does NOT block. Debt is already recorded and visible; blocking on it
+ *     would stop the chain on nearly every volume, which is the "硬停" behaviour we are avoiding.
+ *   - `accepted` passes silently.
+ *
+ * This deliberately gates planning only. Written prose is never rolled back or rewritten here.
+ */
+export function decideVolumeGate(report: VolumeAcceptanceReport, label = "上一卷"): VolumeGateDecision {
+  if (report.verdict !== "needs_attention") {
+    return {
+      blocked: false,
+      message: report.verdict === "accepted_with_debt"
+        ? `${label}带质量债完成，可以继续规划下一卷；债已记录：${report.reasons.join(" ")}`
+        : `${label}已通过验收。`,
+    };
+  }
+  return {
+    blocked: true,
+    message: `${label}还没有真正完成，暂不生成下一卷大纲。${report.reasons.join(" ")}处理方式：回到该卷补齐未完成的章节，或在确认可以带着这些问题继续时再重新生成。已写的正文不会被改动。`,
+  };
+}
+
+/**
+ * Derive per-chapter outcomes from what the chapter row actually stores.
+ *
+ * Honest limitation: the row carries `chapterStatus` but not unresolved-issue counts or missing
+ * obligations — those live in acceptance reports, which this path does not load. The derived
+ * outcome therefore reports zero for both and only distinguishes finished from unfinished work.
+ * That is enough to stop a volume whose chapters were never completed, and is deliberately not
+ * claimed to be an exhaustive acceptance review.
+ */
+export function deriveVolumeOutcomes(
+  chapters: readonly { order: number; chapterStatus?: string | null }[],
+): VolumeChapterOutcome[] {
+  return chapters
+    .map((chapter) => ({
+      chapterOrder: chapter.order,
+      accepted: chapter.chapterStatus === "completed",
+      blockingIssueCount: 0,
+      hasQualityDebt: chapter.chapterStatus === "needs_repair" || chapter.chapterStatus === "pending_generation",
+      missingObligationCount: 0,
+    }))
+    .sort((left, right) => left.chapterOrder - right.chapterOrder);
+}
+
 export interface VolumeAcceptanceReport {
   verdict: VolumeAcceptanceVerdict;
   chapterCount: number;
