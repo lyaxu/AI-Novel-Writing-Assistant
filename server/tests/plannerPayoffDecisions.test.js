@@ -30,6 +30,32 @@ test("deferral requires an exact future chapter reference, not an invented later
   assert.equal(validateChapterPayoffDecisions({ ...input, decisions: [{ ...decision, operation: "out_of_scope", reason: "当前任务单属于另一条支线" }] })[0].operation, "out_of_scope");
 });
 
+test("a verbatim quote from sceneCards is accepted even though raw JSON escapes it", () => {
+  // Reported failure at chapter 3: "Payoff decision cites absent current chapter contract evidence".
+  // The quote was verbatim, but the check searched the raw JSON serialization, where a quotation
+  // mark is escaped and newlines are not literal. The follow-up check in the same function already
+  // searched decoded leaves; this keeps both halves consistent.
+  const quote = '他说"这葫芦有问题"';
+  const sceneCards = JSON.stringify({ scenes: [{ key: "s1", turn: quote, requiredElements: ["检查葫芦"] }] });
+  assert.ok(!sceneCards.includes(quote), "precondition: the raw serialization escapes the quote");
+
+  const sceneDecision = { ...decision, authorizedScope: quote, contractEvidence: { sourcePath: "sceneCards", quote } };
+  assert.deepEqual(
+    validateChapterPayoffDecisions({ ...input, contract: { sceneCards }, decisions: [sceneDecision] }),
+    [sceneDecision],
+  );
+});
+
+test("a quote that appears nowhere in the contract is still rejected", () => {
+  // The guard must keep rejecting invented evidence: only the search method changed, not the bar.
+  const sceneCards = JSON.stringify({ scenes: [{ key: "s1", turn: "他摸了摸葫芦" }] });
+  assert.throws(
+    () => validateChapterPayoffDecisions({ ...input, contract: { sceneCards },
+      decisions: [{ ...decision, contractEvidence: { sourcePath: "sceneCards", quote: "他确认葫芦是茅山信物" } }] }),
+    /cites absent current chapter contract evidence/,
+  );
+});
+
 test("legacy plan, contract changes and rewritten prior prose cannot authorize stale payoff", () => {
   const evidenceHash = buildPayoffEvidenceHash({ chapters: [{ content: "旧前文" }] });
   const key = { contractHash: "current", evidenceHash };

@@ -31,6 +31,25 @@ export function buildPayoffEvidenceHash(evidence: unknown): string {
   return createHash("sha256").update(JSON.stringify(evidence)).digest("hex");
 }
 
+/**
+ * The searchable text of a contract field.
+ *
+ * Contract fields hold either plain text (`expectation`, `hook`, `mustAvoid`) or serialized JSON
+ * (`sceneCards`). A verbatim quote must be findable in the *decoded* text: the raw serialization
+ * escapes quotes and newlines and is formatted differently from what the model was shown, so a
+ * byte-for-byte check against the raw string rejects quotes that are in fact verbatim. The
+ * follow-up check below already searches decoded leaves; this keeps both halves of the same
+ * function consistent.
+ */
+function contractFieldText(value: string | null | undefined): string[] {
+  if (typeof value !== "string" || !value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (parsed && typeof parsed === "object") return stringLeaves(parsed);
+  } catch { /* Plain text, not JSON. */ }
+  return [value];
+}
+
 export interface ChapterPayoffValidationInput {
   contract: Contract;
   candidates: Array<{ ledgerKey: string; currentStatus: string; targetEndChapterOrder?: number | null }>;
@@ -54,7 +73,8 @@ export function validateChapterPayoffDecisions(
     if (due && ["seed", "touch", "pressure"].includes(decision.operation) && !decision.followUp) {
       throw new Error(`Unpaid due payoff requires a concrete follow-up even when applying pressure: ${decision.ledgerKey}`);
     }
-    if (!input.contract[decision.contractEvidence.sourcePath]?.includes(decision.contractEvidence.quote)) {
+    if (!contractFieldText(input.contract[decision.contractEvidence.sourcePath])
+      .some((leaf) => leaf.includes(decision.contractEvidence.quote))) {
       throw new Error(`Payoff decision cites absent current chapter contract evidence: ${decision.ledgerKey}. Copy one continuous verbatim quote from ${decision.contractEvidence.sourcePath}; preserve numbering and punctuation, never join separate clauses.`);
     }
     if (decision.followUp) {
