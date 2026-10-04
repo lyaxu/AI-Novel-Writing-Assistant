@@ -17,10 +17,10 @@
 - **阶段 B 章级 requiredElements**：**端到端完成**（`c4e5d484`/`6c46470a`/`5a10599e`）。生成→落库→进 writer 的 mustHitNow；验收侧经核查为"由构造闭合"，不另建检查。
 - **阶段 C 伏笔落进 requiredElements**：**完成**（`3c8e7c55`/`2e357f11`/`ba3314e1`）。不需要新增 DB 列；覆盖按显式标记而非文字相似度；正文标记泄漏检查已接入既有确定性正文检查管线。
 - **阶段 D 人物声音卡与不变量**：**口径已修正**（`b0b1e683`）。`Character.voiceTexture` 已存在、已由 AI 生成、已注入写作上下文，不再新建 voiceProfile；实测 30 个角色中 personality 29 个、voiceTexture 12 个，真实缺口是一致性。**仅 `invariants`/`stateVariables` 仍是空白。**
-- **阶段 E 卷级终点 gate**：未做，方案中标注风险最高，建议放最后。
+- **阶段 E 卷级终点 gate**：**完成**（`ab08f264`/`ab6419e1`）。E1 判定（`volumeAcceptanceEvaluation.ts`，无法评估时返回 `needs_attention` 而非通过）；E2 策略由用户选定 **C：只卡下一卷大纲**——`needs_attention` 阻断并说明原因与出路，`accepted_with_debt` **不阻断**（债已记录且可见，对它硬停会让几乎每卷都停），已写正文永不回滚。接线在 `generateVolumePlanDocument` 的 `assertScopeReadiness` 之后，查找失败只告警不阻断。
 - **阶段 F 门禁分级/长度/排版**：**全部完成**（`b4e123b1`/`fa49118b`/`89ec7b38`）。排版合同注入四条链路；门禁分级经核查无需改码（证据不足一律 medium，阻断只收 high/critical）；扩写与压缩补上双向边界。
 
-**六阶段只剩两项**：D 的不变量部分、E 卷级 gate。
+**六阶段已全部完成**（0 / A / B / C / D / E / F）。D 的结论是"已具备、无需新建"（`characterHardFacts` 即不变量）；D 唯一遗留是 `voiceTexture` 填充率 40% 对 `personality` 97% 的一致性问题，属数据补齐，不是能力缺失，**未做也不阻塞任何阶段**。
 
 **尚未由真实运行验证的一件事**：planner 是否确实按指令在 `requiredElements` 里写下 `[承诺:<key>]` / `[伏笔:<key>]` 标记。机制、落库、注入、检查四条链路均已通过测试验证，但"机制存在 ≠ 机制生效"——这一条只能由用户实跑观测。
 
