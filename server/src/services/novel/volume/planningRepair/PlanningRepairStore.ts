@@ -106,10 +106,18 @@ const PHASES = new Set([
   "assessing", "repairing", "reviewing", "ready", "committed",
   "waiting_confirmation", "uncertain", "technical_failed",
 ]);
+// Fields an eligible chapter may legitimately be rewritten in by generation or repair.
+//
+// KEEP IN SYNC with the object returned by `generateChapterTaskSheetDetail`
+// (services/novel/volume/chapterDetail/chapterExecutionContractGeneration.ts): every field that
+// function writes is applied onto the chapter document, so any field missing here makes the guard
+// reject a perfectly valid generation as a protected-field change. That is exactly what happened
+// when `requiredElements` was added to the contract without being added here: every auto-director
+// book then failed at the first chapter with "changes protected workspace fields".
 const MUTABLE_CHAPTER_FIELDS = new Set([
   "title", "summary", "purpose", "exclusiveEvent", "endingState", "nextChapterEntryState",
   "conflictLevel", "conflictLevelSource", "revealLevel", "targetWordCount", "mustAvoid",
-  "taskSheet", "sceneCards", "styleContract", "payoffRefs",
+  "taskSheet", "sceneCards", "styleContract", "payoffRefs", "requiredElements",
 ]);
 
 function clone<T>(value: T): T {

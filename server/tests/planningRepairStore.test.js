@@ -547,6 +547,37 @@ test("a rejected candidate reports the protected field it touched, not just a ge
   });
 });
 
+test("every field the chapter generator writes is allowed on an eligible chapter", async () => {
+  // The fields `generateChapterTaskSheetDetail` writes onto the chapter document. The planning
+  // repair guard must allow all of them on a chapter inside the window.
+  //
+  // This test exists because it did not, once: `requiredElements` was added to the generated
+  // contract without being added to MUTABLE_CHAPTER_FIELDS, so the guard classified a legitimate
+  // generation as a protected-field change and every auto-director book stopped at chapter 1 with
+  // "Candidate changes protected workspace fields or chapters outside the repair window."
+  const contractFields = {
+    purpose: "Purpose", exclusiveEvent: "Exclusive event", endingState: "Ending state",
+    nextChapterEntryState: "Entry state", conflictLevel: 3, revealLevel: 4, targetWordCount: 2000,
+    mustAvoid: "Avoid this", payoffRefs: [], taskSheet: "Generated contract",
+    sceneCards: null, requiredElements: ["具体事件一", "具体事件二", "具体事件三"],
+  };
+
+  for (const [field, value] of Object.entries(contractFields)) {
+    const h = fixture();
+    const session = await h.store.begin(h.input);
+    // The fixture's current chapter is p2, so the window is chapters[1..3]; write to the current
+    // chapter, which is where generation actually lands.
+    assert.ok(session.eligibleChapterIds.includes("p2"));
+    const candidate = h.candidate();
+    candidate.volumes[0].chapters[1][field] = value;
+    try {
+      await h.ready(session, candidate);
+    } catch (error) {
+      assert.fail(`generator-written field "${field}" was rejected: ${error.message}`);
+    }
+  }
+});
+
 test("a rejected candidate never leaves the stored document changed", async () => {
   const h = fixture();
   // Same setup as the window-lock cases: prose in chapter index 2 makes index 3 out of window,
