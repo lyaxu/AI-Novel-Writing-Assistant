@@ -221,6 +221,8 @@ function normalizeChapterListItemPayload(raw: unknown, expectedBeatKey?: string)
     title: ["chapterTitle", "name"],
     summary: ["description", "content", "outline"],
     beatKey: ["beat", "beat_key", "stageKey", "stage_key"],
+    protagonistAction: ["protagonist_action", "leadAction", "action", "主动行动", "主角行动"],
+    chapterPayoff: ["chapter_payoff", "payoff", "turn", "阶段性兑现", "本章兑现"],
   });
   if (
     expectedBeatKey
@@ -399,15 +401,34 @@ const generatedVolumeSkeletonSchema = z.object({
   openPayoffs: z.array(z.string().trim().min(1).max(120)).max(8).default([]),
 });
 
+/**
+ * The two facts a chapter's function is judged on, declared by the model itself.
+ *
+ * A keyword table used to guess these from `summary` (a list of Chinese regexes for "active" and
+ * "passive" verbs). That is a fixed string rule standing in for a reading judgement, which this
+ * project forbids, and it was wrong in both directions: a summary can describe a decisive choice
+ * without using any listed verb, and it can contain one while the chapter is still passive.
+ *
+ * Declared rather than inferred. Optional in the schema so an older or terser model response is not
+ * rejected outright; the chapter-list validation asks for them and names the chapter that is missing
+ * them, so the existing retry loop supplies them instead of the call failing at the schema boundary.
+ */
+const chapterFunctionFields = {
+  protagonistAction: z.string().trim().max(120).optional(),
+  chapterPayoff: z.string().trim().max(120).optional(),
+};
+
 const generatedChapterListItemSchema = z.object({
   title: z.string().trim().min(1).max(32),
   summary: z.string().trim().min(1).max(240),
+  ...chapterFunctionFields,
 });
 
 const generatedChapterBeatBlockItemSchema = z.preprocess((raw) => normalizeChapterListItemPayload(raw), z.object({
   title: z.string().trim().min(1).max(32),
   summary: z.string().trim().min(1).max(240),
   beatKey: z.string().trim().min(1).max(64),
+  ...chapterFunctionFields,
 }));
 
 const generatedVolumeStrategyVolumeSchema = z.object({

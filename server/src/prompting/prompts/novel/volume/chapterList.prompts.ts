@@ -42,14 +42,14 @@ function classifyChapterListRetryIssue(reason: string): string {
   if (isBlockingChapterTitleQualityIssue(reason)) {
     return "标题基础质量：标题必须短促客观，不能第一人称、不能过长、不能写成完整剧情句。";
   }
-  if (reason.includes("章节中主角或核心视角角色的主动行动不足") || reason.includes("连续多章呈现被动推进")) {
-    return "章节功能：重排每章职责，让核心视角角色主动选择、试探、反击、布局、交换、隐忍或承担代价。";
+  if (reason.includes("必须声明主角的主动行动与本章交付")) {
+    return "章节功能：为被点名的每一章补上 protagonistAction（这一章主角主动做了什么）和 chapterPayoff（这一章交付了什么推进或转折），写具体动作与结果，不要复述摘要。";
   }
-  if (reason.includes("过多章节摘要偏空泛")) {
-    return "摘要推进：每章 summary 必须写出新增信息、局面变化、冲突推进、关系变化、资源得失或风险转向。";
+  if (reason.includes("声明了同一个主动行动") || reason.includes("声明了同一个推进")) {
+    return "章节功能：相邻两章不能重复同一个动作或同一个结果，请重新分配每章职责，使推进逐章向前。";
   }
-  if (reason.includes("当前节奏段缺少阶段性兑现") || reason.includes("结尾章缺少当前 beat")) {
-    return "结尾牵引：最后一章必须完成当前 beat 的阶段兑现、明确转向或进入下一 beat 的阅读压力。";
+  if (reason.includes("摘要写的是同一件事")) {
+    return "摘要推进：相邻两章必须写不同的事，每章 summary 要写出新增信息、局面变化、冲突推进、关系变化、资源得失或风险转向。";
   }
   return "综合质量：按失败原因重排标题、章节功能和摘要推进，保证每章都有新增变化。";
 }
@@ -105,154 +105,71 @@ function resolvePromptConfig(
  * - chapterFunctionDiversity.ts
  * - 或一个独立 LLM quality critic 节点。
  */
+/** Whitespace- and punctuation-insensitive comparison, for spotting a declared repeat. */
+function sameChapterFunctionText(left: string | undefined, right: string | undefined): boolean {
+  const normalize = (value: string | undefined) =>
+    (value ?? "").replace(/[\s，。、；：！？“”‘’（）()【】\[\],.;:!?"']+/g, "");
+  const a = normalize(left);
+  const b = normalize(right);
+  return a.length > 0 && a === b;
+}
+
+/**
+ * Structural checks on the chapter function the model declares.
+ *
+ * This replaced six Chinese keyword tables that guessed "is this chapter active enough" from the
+ * summary text. Deciding that from a word list is a reading judgement performed by fixed string
+ * rules, which this project forbids, and the verdict was unreliable in both directions: a summary can
+ * describe a decisive choice without using any listed verb, and it can contain one while the chapter
+ * is still passive.
+ *
+ * The model now states, per chapter, what the protagonist actively does and what the chapter
+ * delivers. Code checks only that the statement exists and that neighbours are not declaring the
+ * same thing — which the keyword tables could not see at all, and which is exactly the repetition
+ * that reached a finished chapter in a real run.
+ */
 function getChapterFunctionQualityIssue(
   chapters: Array<{
     title: string;
     summary: string;
     beatKey: string;
+    protagonistAction?: string;
+    chapterPayoff?: string;
   }>,
 ): string | null {
   if (!chapters.length) {
     return "章节列表不能为空。";
   }
 
-  const summaries = chapters.map((chapter) => chapter.summary.trim());
-  const titles = chapters.map((chapter) => chapter.title.trim());
-
-  const vagueSummaryPatterns = [
-    /进一步推动/,
-    /逐渐展开/,
-    /局势变得复杂/,
-    /为后续.*铺垫/,
-    /埋下伏笔/,
-    /产生影响/,
-    /意识到.*重要/,
-    /发现.*不简单/,
-    /开始重视/,
-  ];
-
-  const passivePatterns = [
-    /得知/,
-    /听说/,
-    /被告知/,
-    /发现/,
-    /意识到/,
-    /察觉/,
-    /局势.*变化/,
-    /危机.*出现/,
-  ];
-
-  const activePatterns = [
-    /决定/,
-    /选择/,
-    /试探/,
-    /反击/,
-    /布局/,
-    /交换/,
-    /逼迫/,
-    /隐瞒/,
-    /揭穿/,
-    /设局/,
-    /追查/,
-    /拒绝/,
-    /承认/,
-    /利用/,
-    /夺回/,
-    /放弃/,
-    /承担/,
-    /压下/,
-    /转向/,
-  ];
-
-  const payoffPatterns = [
-    /兑现/,
-    /反转/,
-    /揭开/,
-    /坐实/,
-    /落定/,
-    /反击/,
-    /胜出/,
-    /败露/,
-    /失控/,
-    /转向/,
-    /代价/,
-    /后手/,
-    /陷阱/,
-    /威胁/,
-    /逼到/,
-    /不得不/,
-  ];
-
-  const hookPatterns = [
-    /但/,
-    /却/,
-    /反而/,
-    /没想到/,
-    /真正/,
-    /背后/,
-    /代价/,
-    /后手/,
-    /陷阱/,
-    /更大的/,
-    /新的/,
-    /逼迫/,
-    /不得不/,
-    /暴露/,
-    /留下/,
-  ];
-
-  const vagueCount = summaries.filter((summary) =>
-    vagueSummaryPatterns.some((pattern) => pattern.test(summary)),
-  ).length;
-
-  if (chapters.length >= 4 && vagueCount >= Math.ceil(chapters.length / 2)) {
-    return "过多章节摘要偏空泛，不能大量使用“进一步推动 / 局势复杂 / 为后续铺垫 / 埋下伏笔”等低信息密度表达。";
+  const incomplete = chapters
+    .map((chapter, index) => ({ chapter, index }))
+    .filter(({ chapter }) => !(chapter.protagonistAction ?? "").trim() || !(chapter.chapterPayoff ?? "").trim());
+  if (incomplete.length) {
+    const named = incomplete.slice(0, 6).map(({ chapter, index }) => {
+      const missing = [
+        (chapter.protagonistAction ?? "").trim() ? null : "protagonistAction（主角这一章主动做了什么）",
+        (chapter.chapterPayoff ?? "").trim() ? null : "chapterPayoff（这一章交付了什么推进或转折）",
+      ].filter(Boolean).join("、");
+      return `第${index + 1}章《${chapter.title}》缺 ${missing}`;
+    }).join("；");
+    return `每章都必须声明主角的主动行动与本章交付，不能只写摘要：${named}。`;
   }
 
-  const activeCount = summaries.filter((summary) =>
-    activePatterns.some((pattern) => pattern.test(summary)),
-  ).length;
-
-  if (chapters.length >= 4 && activeCount < Math.ceil(chapters.length / 3)) {
-    return "章节中主角或核心视角角色的主动行动不足，不能让多数章节只是外部事件发生或角色被动得知信息。";
-  }
-
-  let consecutivePassive = 0;
-  for (const summary of summaries) {
-    const isPassive = passivePatterns.some((pattern) => pattern.test(summary));
-    const isActive = activePatterns.some((pattern) => pattern.test(summary));
-
-    if (isPassive && !isActive) {
-      consecutivePassive += 1;
-    } else {
-      consecutivePassive = 0;
+  for (let index = 1; index < chapters.length; index += 1) {
+    const previous = chapters[index - 1];
+    const current = chapters[index];
+    if (sameChapterFunctionText(previous.protagonistAction, current.protagonistAction)) {
+      return `第${index}章《${previous.title}》与第${index + 1}章《${current.title}》声明了同一个主动行动（${(current.protagonistAction ?? "").trim()}）：相邻两章不能重复同一个动作。`;
     }
-
-    if (consecutivePassive >= 3) {
-      return "连续多章呈现被动推进，例如只是发现、得知、意识到或局势变化，需要改成主动选择、试探、反击、布局或承担代价。";
+    if (sameChapterFunctionText(previous.chapterPayoff, current.chapterPayoff)) {
+      return `第${index}章《${previous.title}》与第${index + 1}章《${current.title}》声明了同一个推进（${(current.chapterPayoff ?? "").trim()}）：相邻两章不能交付同一个结果。`;
     }
   }
 
-  if (chapters.length >= 5) {
-    const hasPayoffOrTurn = summaries.some((summary) =>
-      payoffPatterns.some((pattern) => pattern.test(summary)),
-    );
-
-    if (!hasPayoffOrTurn) {
-      return "当前节奏段缺少阶段性兑现、转折、反击、代价或局面反转，不能全是平滑铺垫。";
+  for (let index = 1; index < chapters.length; index += 1) {
+    if (sameChapterFunctionText(chapters[index - 1].summary, chapters[index].summary)) {
+      return `第${index}章《${chapters[index - 1].title}》与第${index + 1}章《${chapters[index].title}》的摘要写的是同一件事：相邻两章必须有不同的内容。`;
     }
-  }
-
-  const lastSummary = summaries[summaries.length - 1] ?? "";
-  const lastTitle = titles[titles.length - 1] ?? "";
-
-  const lastHasPayoffOrHook =
-    payoffPatterns.some((pattern) => pattern.test(lastSummary)) ||
-    hookPatterns.some((pattern) => pattern.test(lastSummary)) ||
-    hookPatterns.some((pattern) => pattern.test(lastTitle));
-
-  if (chapters.length >= 3 && !lastHasPayoffOrHook) {
-    return "结尾章缺少当前 beat 的阶段兑现、明确转向或进入下一 beat 的阅读牵引。";
   }
 
   return null;
@@ -289,7 +206,7 @@ export function createVolumeChapterListPrompt(
 
   return {
     id: "novel.volume.chapter_list",
-    version: "v12",
+    version: "v13",
     taskType: "planner",
     mode: "structured",
     language: "zh",
@@ -376,7 +293,7 @@ export function createVolumeChapterListPrompt(
           "",
           "二、硬性输出约束",
           "1. 顶层必须输出 beatKey、beatLabel、chapterCount、chapters 四个字段。",
-          "2. 每章只能包含 title、summary、beatKey 三个字段，不得新增字段。",
+          "2. 每章包含 title、summary、beatKey、protagonistAction、chapterPayoff 五个字段，不得新增其他字段。",
           `3. beatKey 必须严格等于 ${targetBeatKey}。`,
           `4. beatLabel 必须严格等于 ${targetBeatLabel}。`,
           `5. chapterCount 与 chapters.length 必须严格等于 ${targetChapterCount}。`,
@@ -391,6 +308,10 @@ export function createVolumeChapterListPrompt(
           "3. 当前节奏段的章节拆分要体现网文阅读感，但不能机械平均切分。",
           "4. 章节必须形成连续递进，不能出现只是换说法、没有新增推进的信息重复章。",
           "5. 每章 summary 不只要写“发生了什么”，还要写“因此改变了什么”。",
+          "6. protagonistAction 写这一章主角（核心视角角色）主动做的具体动作：选择、试探、反击、布局、交换、隐瞒、承担代价等。不能写“得知”“听说”“意识到”这类被动接受，也不能写成摘要的复述。",
+          "7. chapterPayoff 写这一章交付给读者的推进或转折：兑现了什么、反转了什么、付出了什么代价、局面因此向哪边移动。每一章都必须有，不能只在结尾章出现。",
+          "8. protagonistAction 与 chapterPayoff 必须逐章不同。相邻两章写同一个动作或同一个结果，等同于没有推进，会被判为失败并要求重排。",
+          "9. 这两项是章节功能的正式声明，由你自己判断，不要为了通过检查而套用固定句式；它们必须与 summary 描述的是同一件事。",
           "",
           "四、章节功能分配要求",
           "1. 生成前必须在脑内把当前 beat 拆成若干章节功能：承接、加压、试探、发现、转折、反击、兑现、余波或钩子。",
