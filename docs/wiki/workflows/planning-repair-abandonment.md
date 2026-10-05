@@ -25,8 +25,10 @@
   `isTerminalPlanningRepairPhase`（`shared/types/planningRepair/recovery.ts`）是唯一入口，
   不要再在调用点直接写 `phase === "committed"`——曾经有十处这样写，加终态时必须逐处记得，
   已经漏过一次。
-- **写入路径**：`commit` 与 `abandon` 各有独立守卫的写入路径；`validateState` 只守 `rebase`，
-  rebase 既不能进入也不能离开终态。
+- **写入路径**：`commit` 与 `abandon` 各有独立守卫的写入路径。
+  **注意 `validateState` 守的是 `save`，不是 `rebase`**（这一点曾在本 wiki 里写错，并因此漏掉一个真实缺口）。
+  因此 `rebase` 必须单独加终态守卫：否则它可以复活一个已放弃的会话，吸收态在该路径上形同虚设。
+  已补上 `previous.phase === "abandoned"` 的前置拒绝。
 - **begin 的复用规则**：`begin` 在 `previous.phase !== "committed"` 时会复用上一会话。
   `abandoned` **必须排除**在外。吸收态 + 复用 = 该章永远无法再修复，这是本设计最容易出错的一处。
 - **候选与工作区**：候选丢弃，不写入任何计划表；章节计划与正文完全不动。

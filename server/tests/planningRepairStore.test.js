@@ -1464,3 +1464,17 @@ test("a committed repair still holds nothing back either", async () => {
     seedPayloadJson: JSON.stringify({ planningRepair: { ...session.state, phase: "committed" } }) });
   await h.store.begin(h.input);
 });
+
+test("a given-up session cannot be revived by rebasing it", async () => {
+  // The absorbing half of the contract, and the other half of the acceptance criterion: giving up is
+  // final. `validateState` guards the rebase path, so a rebase is the natural way to try to revive it.
+  const h = fixture();
+  await h.store.begin(h.input);
+  const abandonedAt = (await h.store.abandon({ taskId: "t" })).abandonedAt;
+
+  await assert.rejects(h.store.rebase(h.input), /cannot be revived/);
+
+  const after = h.state();
+  assert.equal(after.phase, "abandoned", "the session stays given up");
+  assert.equal(after.abandonedAt, abandonedAt, "and the record of when is unchanged");
+});

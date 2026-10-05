@@ -102,6 +102,9 @@ if (repair && !TERMINAL_REPAIR_PHASES.has(repair.phase)) conflict(...)
 - `abandoned → 任何` **拒绝**（终态不可复活）
 - 其余 `validateState` 不变量继续生效（`rounds` 单调、`history` 只追加、`affectedChapterIds` 在窗口内）
 
+**实施更正**：`validateState` 实际由 `save` 调用，不由 `rebase` 调用（设计初版写反了）。
+因此 `rebase` 另需一道终态前置拒绝，否则可复活已放弃的会话。已补。
+
 `validateState` 需放宽一处：目前无条件拒绝任何触及 `committed` 的写入，新终态要按同一逻辑处理，并且**必须允许 `abandoned` 作为终态写入**（否则无法记录）。
 
 ### D3b：完整触碰点清单（初版设计漏了这些，逐处核实后补上）

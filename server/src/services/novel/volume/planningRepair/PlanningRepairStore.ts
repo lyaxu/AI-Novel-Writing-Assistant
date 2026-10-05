@@ -878,6 +878,10 @@ export class PlanningRepairStore {
       if (!previous || previous.novelId !== input.novelId || previous.volumeId !== input.volumeId) {
         return conflict("Explicit recovery must target the existing repair session.");
       }
+      // A given-up session is final. Recovery entry points already refuse terminal phases, but a
+      // store must not rely on callers having checked: `validateState` guards `save`, not this path,
+      // so without this a rebase silently revived the session the user had just given up.
+      if (previous.phase === "abandoned") return conflict("A given-up repair session cannot be revived.");
       const snapshot = readSnapshot(seed, task.id);
       const source = await readSource(tx, input.novelId, task);
       if (input.expectedSourceToken !== undefined && input.expectedSourceToken !== source.token) {
