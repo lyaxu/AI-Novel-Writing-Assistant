@@ -24,7 +24,7 @@ const invoke = () => invokePlannerLLM({ options: {}, scopeLabel: "章节规划",
   contextBlocks: [buildPayoffPlanningEvidenceBlock(payoffValidation, [])] });
 
 test("real joined payoff quote fails exact validation and gets one semantic repair through planner invocation", async () => {
-  assert.throws(() => validateChapterPayoffDecisions({ ...payoffValidation, decisions: output(joined).payoffDecisions }), /continuous verbatim/);
+  assert.throws(() => validateChapterPayoffDecisions({ ...payoffValidation, decisions: output(joined).payoffDecisions }), /连续原文/);
   const calls = [];
   setPromptRunnerStructuredInvokerForTests(async (request) => {
     calls.push(request);
@@ -34,7 +34,9 @@ test("real joined payoff quote fails exact validation and gets one semantic repa
     const result = await invoke();
     assert.equal(calls.length, 2);
     assert.equal(calls[1].promptMeta.semanticRetryAttempts, 1);
-    assert.match(String(calls[1].messages.at(-1).content), /continuous verbatim/);
+    // The instruction is what the model is told to fix; it is written in Chinese now, like the rest
+  // of the guidance, but it still has to say "copy one continuous quote".
+  assert.match(String(calls[1].messages.at(-1).content), /连续原文/);
     assert.equal(result.payoffDecisions[0].contractEvidence.quote, exact);
     assert.deepEqual(validateChapterPayoffDecisions({ ...payoffValidation, decisions: result.payoffDecisions }), result.payoffDecisions);
   } finally { setPromptRunnerStructuredInvokerForTests(); }

@@ -50,6 +50,25 @@ function contractFieldText(value: string | null | undefined): string[] {
   return [value];
 }
 
+/**
+ * Compare a quote ignoring whitespace only.
+ *
+ * Plain-text fields (`mustAvoid`, `expectation`, `hook`) hold prose the model reformats when it reads
+ * them: a line break or an indentation space reappears as a space, and a byte-exact substring test
+ * then rejects a quote that is word-for-word correct. Whitespace carries no meaning for the question
+ * being asked here — "does the contract actually say this" — so it is stripped from both sides.
+ * Everything else (punctuation, numbering, clause order) still has to match exactly.
+ */
+function withoutWhitespace(value: string): string {
+  return value.replace(/\s+/g, "");
+}
+
+function citesQuote(leaves: readonly string[], quote: string): boolean {
+  const needle = withoutWhitespace(quote);
+  if (!needle) return false;
+  return leaves.some((leaf) => withoutWhitespace(leaf).includes(needle));
+}
+
 export interface ChapterPayoffValidationInput {
   contract: Contract;
   candidates: Array<{ ledgerKey: string; currentStatus: string; targetEndChapterOrder?: number | null }>;
@@ -73,9 +92,19 @@ export function validateChapterPayoffDecisions(
     if (due && ["seed", "touch", "pressure"].includes(decision.operation) && !decision.followUp) {
       throw new Error(`Unpaid due payoff requires a concrete follow-up even when applying pressure: ${decision.ledgerKey}`);
     }
-    if (!contractFieldText(input.contract[decision.contractEvidence.sourcePath])
-      .some((leaf) => leaf.includes(decision.contractEvidence.quote))) {
-      throw new Error(`Payoff decision cites absent current chapter contract evidence: ${decision.ledgerKey}. Copy one continuous verbatim quote from ${decision.contractEvidence.sourcePath}; preserve numbering and punctuation, never join separate clauses.`);
+    const evidenceLeaves = contractFieldText(input.contract[decision.contractEvidence.sourcePath]);
+    if (!citesQuote(evidenceLeaves, decision.contractEvidence.quote)) {
+      // Show what the field actually says. The message previously only asked for a verbatim quote,
+      // so a near miss was indistinguishable from citing the wrong field entirely and the same
+      // rejection came back on every retry with nothing to correct against.
+      const source = decision.contractEvidence.sourcePath;
+      const actual = evidenceLeaves.join(" / ").slice(0, 200) || "(该字段为空)";
+      throw new Error(
+        `Payoff decision cites absent current chapter contract evidence: ${decision.ledgerKey}.`
+        + ` 引用：${JSON.stringify(decision.contractEvidence.quote.slice(0, 120))}`
+        + ` ｜ ${source} 实际内容：${actual}`
+        + ` 请从 ${source} 复制一段连续原文（标点与编号照抄，不要把不相邻的句子拼在一起）。`,
+      );
     }
     if (decision.followUp) {
       const targets = findFutureChapter(input.planningWindow, decision.followUp.chapterOrder);
