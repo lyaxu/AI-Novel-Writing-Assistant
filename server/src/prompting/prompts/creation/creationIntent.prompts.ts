@@ -42,19 +42,24 @@ const creationIntentSchema = z.object({
 function validateInterpretation(output: z.output<typeof creationIntentSchema>): CreationIntentInterpretation {
   const [first, second] = output.directions;
   if (first.id === second.id || first.title === second.title || first.premise === second.premise) {
-    throw new Error("两个创作方向必须具有不同标识、标题和故事前提。");
+    {
+      const [first, second] = output.directions ?? [];
+      const sameFields = (["id", "title", "premise"] as const).filter((field) => first && second && first[field] === second[field]);
+      throw new Error(`两个创作方向必须具有不同标识、标题和故事前提。实际相同的字段：${JSON.stringify(sameFields)}；`
+        + `第一个 ${JSON.stringify({ id: first?.id ?? null, title: first?.title ?? null })}，第二个 ${JSON.stringify({ id: second?.id ?? null, title: second?.title ?? null })}。`);
+    }
   }
   if (
     output.recommendedNarrativeForm === "short_story"
     && (output.recommendedTargetWordCount < 3000 || output.recommendedTargetWordCount > 30000)
   ) {
-    throw new Error("短篇推荐字数必须在 3000 到 30000 字之间。");
+    throw new Error(`短篇推荐字数必须在 3000 到 30000 字之间。实际返回 ${JSON.stringify(output.recommendedTargetWordCount ?? null)}。`);
   }
   if (output.recommendedNarrativeForm === "long_novel" && output.recommendedTargetWordCount <= 30000) {
-    throw new Error("长篇推荐字数必须高于 30000 字。");
+    throw new Error(`长篇推荐字数必须高于 30000 字。实际返回 ${JSON.stringify(output.recommendedTargetWordCount ?? null)}。`);
   }
   if (!supportsWritingPlatformForm(output.recommendedWritingPlatform, output.recommendedNarrativeForm)) {
-    throw new Error("推荐平台必须支持推荐的作品规模。");
+    throw new Error(`推荐平台必须支持推荐的作品规模。实际推荐平台=${JSON.stringify(output.recommendedWritingPlatform ?? null)}，推荐形态=${JSON.stringify(output.recommendedNarrativeForm ?? null)}。`);
   }
   return output;
 }
@@ -65,7 +70,7 @@ export const creationIntentInterpretPrompt: PromptAsset<
   CreationIntentInterpretation
 > = {
   id: "creation.intent.interpret",
-  version: "v2",
+  version: "v3",
   taskType: "planner",
   mode: "structured",
   language: "zh",

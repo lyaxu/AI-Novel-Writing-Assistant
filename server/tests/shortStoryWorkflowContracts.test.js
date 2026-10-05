@@ -52,10 +52,10 @@ test("creation studio resume routes preserve pre-creation tasks and short story 
 test("all creation and short story prompts are registered structured assets", () => {
   const assets = new Map(listRegisteredPromptAssets().map((asset) => [`${asset.id}@${asset.version}`, asset]));
   const keys = [
-    "creation.intent.interpret@v2",
-    "novel.short_story.plan@v2",
+    "creation.intent.interpret@v3",
+    "novel.short_story.plan@v3",
     "novel.short_story.segment.write@v2",
-    "novel.short_story.full.audit@v2",
+    "novel.short_story.full.audit@v3",
     "novel.short_story.patch.repair@v2",
     "novel.short_story.revision.impact@v2",
   ];

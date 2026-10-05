@@ -84,29 +84,36 @@ function validatePlan(
   input: ShortStoryPlanPromptInput,
 ): z.output<typeof planSchema> {
   if (input.requiredSegmentCount && output.segments.length !== input.requiredSegmentCount) {
-    throw new Error(`重新规划必须保持 ${input.requiredSegmentCount} 个内部片段。`);
+    throw new Error(`重新规划必须保持 ${input.requiredSegmentCount} 个内部片段。实际返回 ${output.segments.length} 个：重新规划只改内容，不改片段数量。`);
   }
   const orders = output.segments.map((segment) => segment.order);
   if (orders.some((order, index) => order !== index + 1)) {
-    throw new Error("短篇片段顺序必须从 1 连续递增。");
+    throw new Error(`短篇片段顺序必须从 1 连续递增。实际 order 依次为 ${JSON.stringify(orders)}，应为 ${JSON.stringify(output.segments.map((_, index) => index + 1))}。`);
   }
   const budget = output.segments.reduce((sum, segment) => sum + segment.targetWordCount, 0);
   const tolerance = Math.max(500, Math.round(input.targetWordCount * 0.08));
   if (Math.abs(budget - input.targetWordCount) > tolerance) {
-    throw new Error("片段字数预算之和必须接近目标总字数。");
+    throw new Error(`片段字数预算之和必须接近目标总字数。各片段预算合计 ${budget}，目标 ${input.targetWordCount}，允许偏差 ±${tolerance}，实际相差 ${Math.abs(budget - input.targetWordCount)}。`);
   }
   if (Math.abs(output.targetWordCount - input.targetWordCount) > tolerance) {
-    throw new Error("计划目标字数必须服从用户确认的目标。");
+    throw new Error(`计划目标字数必须服从用户确认的目标。计划返回 targetWordCount=${output.targetWordCount}，用户确认 ${input.targetWordCount}，允许偏差 ±${tolerance}。`);
   }
   const segmentCount = output.segments.length;
   if (!output.causalContract) {
-    throw new Error("短篇计划必须包含因果与伏笔台账。");
+    throw new Error(`短篇计划必须包含因果与伏笔台账（causalContract）。实际收到 ${JSON.stringify(output.causalContract ?? null)}。`);
   }
   if (output.causalContract.setupPayoffs.some((item) => (
     item.setupSegmentOrder > item.payoffSegmentOrder
     || item.payoffSegmentOrder > segmentCount
   ))) {
-    throw new Error("伏笔必须先于兑现，并且落在有效的内部片段内。");
+    {
+      const bad = output.causalContract.setupPayoffs.filter((item) => (
+        item.setupSegmentOrder > item.payoffSegmentOrder || item.payoffSegmentOrder > segmentCount
+      ));
+      throw new Error(`伏笔必须先于兑现，并且落在有效的内部片段内。共 ${output.causalContract.setupPayoffs.length} 条，其中 ${bad.length} 条不合法：`
+        + JSON.stringify(bad.map(item => ({ setupSegmentOrder: item.setupSegmentOrder, payoffSegmentOrder: item.payoffSegmentOrder })))
+        + `；本计划只有 ${segmentCount} 个片段（1..${segmentCount}）。`);
+    }
   }
   return {
     ...output,
@@ -122,10 +129,15 @@ function validateAudit(
   const wordCount = input.content.replace(/\s+/g, "").length;
   const targetWordCount = input.plan.targetWordCount;
   if (output.decision === "accepted" && wordCount < Math.round(targetWordCount * 0.7)) {
-    throw new Error("成稿明显低于目标字数，不能判定为可直接交付。");
+    throw new Error(`成稿明显低于目标字数，不能判定为可直接交付。实际正文 ${wordCount} 字，目标 ${targetWordCount} 字，低于七成（${Math.round(targetWordCount * 0.7)} 字）。`);
   }
   if (output.decision === "accepted" && output.issues.some((issue) => issue.severity === "critical")) {
-    throw new Error("存在关键因果或事实问题时不能判定为可直接交付。");
+    {
+      const critical = output.issues.filter((issue) => issue.severity === "critical");
+      throw new Error(`存在关键因果或事实问题时不能判定为可直接交付。实际有 ${critical.length} 条 critical：`
+        + JSON.stringify(critical.slice(0, 5).map(issue => ({ code: issue.code ?? null, description: String(issue.description ?? "").slice(0, 60), segments: issue.affectedSegmentOrders })))
+        + "。要么修掉这些问题，要么把 decision 改成不直接交付。");
+    }
   }
   return output as z.output<typeof auditSchema>;
 }
@@ -136,7 +148,7 @@ export const shortStoryPlanPrompt: PromptAsset<
   ShortStoryPlanContract
 > = {
   id: "novel.short_story.plan",
-  version: "v2",
+  version: "v3",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -322,7 +334,7 @@ export const shortStoryFullAuditPrompt: PromptAsset<
   ShortStoryQualityResult
 > = {
   id: "novel.short_story.full.audit",
-  version: "v2",
+  version: "v3",
   taskType: "review",
   mode: "structured",
   language: "zh",
