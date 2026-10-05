@@ -38,7 +38,7 @@ export default function ContractProseAuditPanel({ novelId }: { novelId: string }
         {running ? "正在核对…" : "核对章节计划与正文"}
       </Button>
       <span className="text-xs text-muted-foreground">
-        检查已写章节是否做到了计划里要求的事。只读，不会改动计划或正文；有正文的章节每章调用一次模型。
+        检查已写章节是否做到了计划里要求的事。只读，不会改动计划或正文；有正文的章节每章调用两次模型（核对做到没有、再查写作问题），所以章数多时等待较久。
       </span>
     </div>
     {error ? <p role="alert" className="break-words text-sm text-destructive">{error}</p> : null}

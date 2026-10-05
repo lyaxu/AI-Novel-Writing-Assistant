@@ -52,6 +52,15 @@ export interface ContractProseAuditReport {
 }
 
 const MAX_PROSE_CHARS_PER_CALL = 24_000;
+/**
+ * Chapters audited per request.
+ *
+ * Each chapter with prose costs two model calls (delivery check, then the writing-defect pass), so a
+ * full-length book would run for well over the client's request timeout and lose the whole result
+ * when it did. Bounding the run keeps the request answerable; what was left out is reported rather
+ * than silently dropped.
+ */
+const MAX_AUDITED_CHAPTERS = 40;
 
 function deterministicChapterFindings(input: {
   requiredElementCount: number;
@@ -224,7 +233,18 @@ export async function auditNovelContracts(input: {
     findings: [],
   };
 
-  for (const chapter of chapters) {
+  // Chapters arrive in reading order, so the tail is the most recently written stretch — the part a
+  // writer is actually asking about. Report the omission instead of quietly auditing a subset.
+  const audited = chapters.length > MAX_AUDITED_CHAPTERS ? chapters.slice(-MAX_AUDITED_CHAPTERS) : chapters;
+  if (audited.length < chapters.length) {
+    report.findings.push({
+      chapterOrder: audited[0]?.order ?? 1, chapterTitle: audited[0]?.title ?? "",
+      kind: "contract", severity: "low",
+      message: `本次只核对了最近 ${audited.length} 章（全书共 ${chapters.length} 章）。每章需要两次模型调用，一次核对过多会拉长等待；排查更早的章节可指定章节号单独运行。`,
+    });
+  }
+
+  for (const chapter of audited) {
     const prose = (chapter.content ?? "").trim();
     const scenePlan = parseChapterScenePlan(chapter.sceneCards, { targetWordCount: chapter.targetWordCount ?? undefined });
     const required = scenePlan?.requiredElements ?? [];
