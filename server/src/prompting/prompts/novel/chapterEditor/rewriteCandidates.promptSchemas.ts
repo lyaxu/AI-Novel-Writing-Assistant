@@ -11,7 +11,11 @@ export const chapterEditorRewriteCandidateSchema = z.object({
 
 export const chapterEditorRewriteCandidatesSchema = z.object({
   macroAlignmentNote: z.string().trim().min(1).max(220).optional(),
-  candidates: z.array(chapterEditorRewriteCandidateSchema).min(2).max(3),
+  // min(1), not min(2): a whole-chapter rewrite is produced one candidate per call, because asking
+  // for two or three complete copies of a chapter in one reply overruns the model's output ceiling
+  // (a real run stopped at 8192 tokens on a 4300-character chapter). The selection path still asks
+  // for 2-3 candidates in one call, which is small enough to fit.
+  candidates: z.array(chapterEditorRewriteCandidateSchema).min(1).max(3),
 });
 
 export type ChapterEditorRewriteCandidatesParsed = z.infer<typeof chapterEditorRewriteCandidatesSchema>;

@@ -15,6 +15,7 @@ import {
   chapterEditorRewriteCandidatesPrompt,
   type ChapterEditorRewriteCandidatesPromptInput,
 } from "../../../prompting/prompts/novel/chapterEditor/rewriteCandidates.prompts";
+import type { ChapterEditorRewriteCandidatesParsed } from "../../../prompting/prompts/novel/chapterEditor/rewriteCandidates.promptSchemas";
 import {
   chapterEditorUserIntentPrompt,
   type ChapterEditorUserIntentPromptInput,
@@ -33,6 +34,12 @@ import {
 } from "./chapterEditorShared";
 
 const FULL_CHAPTER_REVISION_LIMIT = 8000;
+
+/**
+ * How many whole-chapter candidates to offer. Each one costs its own model call, because a reply
+ * can only carry the chapter once without overrunning the output ceiling.
+ */
+const FULL_CHAPTER_CANDIDATE_COUNT = 3;
 
 const OPERATION_LABELS: Record<ChapterEditorOperation, string> = {
   polish: "优化表达",
@@ -138,47 +145,86 @@ export class NovelChapterEditorService {
       ? input.context ?? buildParagraphWindow(content, targetRange)
       : { beforeParagraphs: [], afterParagraphs: [] };
 
-    const result = await this.promptRunner({
-      asset: chapterEditorRewriteCandidatesPrompt,
-      promptInput: {
-        operation: input.presetOperation ?? (input.source === "freeform" ? "custom" : "polish"),
-        operationLabel: input.presetOperation ? OPERATION_LABELS[input.presetOperation] : "按用户要求修正",
-        scope: input.scope,
-        customInstruction: input.instruction?.trim() || undefined,
-        selectedText: targetRange.text,
-        beforeParagraphs: contextWindow.beforeParagraphs,
-        afterParagraphs: contextWindow.afterParagraphs,
-        goalSummary: context.chapterPlan?.objective?.trim() || context.chapter.expectation?.trim() || null,
-        chapterSummary: context.chapterSummary,
-        styleSummary: context.styleSummary || null,
-        characterStateSummary: buildCharacterStateSummary(context.latestStateSnapshot),
-        worldConstraintSummary: context.macroContext.worldConstraintSummary,
-        macroContextSummary: buildMacroContextSummary(context.macroContext),
-        resolvedIntentSummary: buildIntentSummary(resolvedIntent),
-        constraintsText: buildConstraintsText(input.constraints),
-      } satisfies ChapterEditorRewriteCandidatesPromptInput,
-      options: {
-        provider: input.provider ?? "deepseek",
-        model: input.model,
-        temperature: input.temperature ?? 0.45,
-      },
-    });
+    const promptInput = {
+      operation: input.presetOperation ?? (input.source === "freeform" ? "custom" : "polish"),
+      operationLabel: input.presetOperation ? OPERATION_LABELS[input.presetOperation] : "按用户要求修正",
+      scope: input.scope,
+      customInstruction: input.instruction?.trim() || undefined,
+      selectedText: targetRange.text,
+      beforeParagraphs: contextWindow.beforeParagraphs,
+      afterParagraphs: contextWindow.afterParagraphs,
+      goalSummary: context.chapterPlan?.objective?.trim() || context.chapter.expectation?.trim() || null,
+      chapterSummary: context.chapterSummary,
+      styleSummary: context.styleSummary || null,
+      characterStateSummary: buildCharacterStateSummary(context.latestStateSnapshot),
+      worldConstraintSummary: context.macroContext.worldConstraintSummary,
+      macroContextSummary: buildMacroContextSummary(context.macroContext),
+      resolvedIntentSummary: buildIntentSummary(resolvedIntent),
+      constraintsText: buildConstraintsText(input.constraints),
+    } satisfies Omit<ChapterEditorRewriteCandidatesPromptInput, "candidateSlot">;
+
+    const promptOptions = {
+      provider: input.provider ?? "deepseek",
+      model: input.model,
+      temperature: input.temperature ?? 0.45,
+    };
+
+    let rawCandidates: ChapterEditorRewriteCandidatesParsed["candidates"];
+    let macroAlignmentNote: string | null = null;
+    if (input.scope === "chapter") {
+      // One candidate per call. A whole chapter is a few thousand characters, and demanding two or
+      // three complete copies in a single reply overruns the model's output ceiling — a real run
+      // stopped with "模型输出达到额度上限（8192 tokens）" while rewriting a 4300-character chapter,
+      // because the reply had to carry two or three full copies of it. Each call below carries the
+      // chapter once, which fits. The user still ends up choosing between the same number of options.
+      const settled = await Promise.all(
+        Array.from({ length: FULL_CHAPTER_CANDIDATE_COUNT }, (_, index) =>
+          this.promptRunner({
+            asset: chapterEditorRewriteCandidatesPrompt,
+            promptInput: { ...promptInput, candidateSlot: { index: index + 1, total: FULL_CHAPTER_CANDIDATE_COUNT } },
+            options: promptOptions,
+          })
+            .then((result) => ({
+              candidates: result.output.candidates as ChapterEditorRewriteCandidatesParsed["candidates"],
+              note: result.output.macroAlignmentNote?.trim() || null,
+              error: null as unknown,
+            }))
+            .catch((error: unknown) => ({ candidates: [], note: null, error })),
+        ),
+      );
+      rawCandidates = settled.flatMap((entry) => entry.candidates);
+      macroAlignmentNote = settled.find((entry) => entry.note)?.note ?? null;
+      if (!rawCandidates.length) {
+        // Surface the real reason (output limit, provider error) instead of a generic message.
+        const firstError = settled.find((entry) => entry.error)?.error;
+        if (firstError instanceof Error) throw firstError;
+        throw new Error("整章改写没有生成可用方案，请重试。");
+      }
+    } else {
+      const result = await this.promptRunner({
+        asset: chapterEditorRewriteCandidatesPrompt,
+        promptInput,
+        options: promptOptions,
+      });
+      rawCandidates = result.output.candidates;
+      macroAlignmentNote = result.output.macroAlignmentNote?.trim() || null;
+    }
 
     const candidates = dedupeCandidates(
-      result.output.candidates.slice(0, 3).map((candidate, index) => ({
+      rawCandidates.slice(0, 3).map((candidate: ChapterEditorRewriteCandidatesParsed["candidates"][number], index: number) => ({
         id: randomUUID(),
         label: candidate.label?.trim() || `方案 ${index + 1}`,
         content: candidate.content.trim(),
         summary: candidate.summary?.trim() || null,
         rationale: candidate.rationale?.trim() || null,
-        riskNotes: candidate.riskNotes?.filter((item) => item.trim().length > 0) ?? [],
-        semanticTags: candidate.semanticTags?.filter((tag) => tag.trim().length > 0) ?? [],
+        riskNotes: candidate.riskNotes?.filter((item: string) => item.trim().length > 0) ?? [],
+        semanticTags: candidate.semanticTags?.filter((tag: string) => tag.trim().length > 0) ?? [],
         diffChunks: buildChapterEditorDiffChunks(targetRange.text, candidate.content.trim()),
       })),
     );
 
-    if (candidates.length < 2) {
-      throw new Error("AI 未返回足够的候选版本，请重试。");
+    if (!candidates.length) {
+      throw new Error("AI 未返回可用的候选版本，请重试。");
     }
 
     return {
@@ -186,7 +232,7 @@ export class NovelChapterEditorService {
       scope: input.scope,
       resolvedIntent,
       targetRange,
-      macroAlignmentNote: result.output.macroAlignmentNote?.trim() || null,
+      macroAlignmentNote,
       candidates,
       activeCandidateId: candidates[0]?.id ?? null,
     };

@@ -22,6 +22,15 @@ export interface ChapterEditorRewriteCandidatesPromptInput {
   macroContextSummary: string;
   resolvedIntentSummary: string;
   constraintsText: string;
+  /**
+   * Set when the caller wants exactly one candidate from this call.
+   *
+   * A whole-chapter rewrite has to fit several complete copies of the chapter into one reply, which
+   * overruns the model's output ceiling: a real run failed with an 8192-token limit while rewriting a
+   * 4300-character chapter, because two or three full copies were demanded at once. The caller now
+   * asks for one candidate per call and repeats the call, so each reply carries the chapter once.
+   */
+  candidateSlot?: { index: number; total: number };
 }
 
 function renderOptionalBlock(title: string, value?: string | null): string {
@@ -34,7 +43,7 @@ export const chapterEditorRewriteCandidatesPrompt: PromptAsset<
   ChapterEditorRewriteCandidatesParsed
 > = {
   id: "novel.chapter_editor.rewrite_candidates",
-  version: "v2",
+  version: "v3",
   taskType: "writer",
   mode: "structured",
   language: "zh",
@@ -79,7 +88,7 @@ export const chapterEditorRewriteCandidatesPrompt: PromptAsset<
     return [
     new SystemMessage([
       "你是中文网络小说章节编辑器里的局部改写助手。",
-      "你的职责是围绕用户选中的一段正文，给出 2 到 3 个可直接比较的候选改写版本。",
+      "你的职责是围绕用户给出的正文，给出可直接比较的候选改写版本；本次只生成几个候选由「候选要求」指定。",
       "",
       "任务边界：",
       "1. 只改写选中片段，不要重写整章。",
@@ -95,7 +104,10 @@ export const chapterEditorRewriteCandidatesPrompt: PromptAsset<
       "5. 不要把文本改得明显像模板化 AI 文风。",
       "",
       "候选要求：",
-      "1. 返回 2 到 3 个候选。",
+      ...(input.candidateSlot
+        // One candidate per call so the reply fits the output ceiling; the caller repeats the call.
+        ? [`1. 本次只返回 1 个候选，作为第 ${input.candidateSlot.index} / ${input.candidateSlot.total} 个方案；不要返回其他候选，也不要在 content 里附上多个版本。`]
+        : ["1. 返回 2 到 3 个候选。"]),
       "2. 每个候选都必须是完整可替换的片段文本。",
       "3. rationale 用一句话说明这版主要改法。",
       "4. riskNotes 列出 0 到 3 条需要用户注意的风险。",
