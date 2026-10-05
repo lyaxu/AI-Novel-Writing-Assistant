@@ -220,6 +220,8 @@ const sceneCausalityRules = [
   "每个 sceneCard 必须包含 causality：actor（作出关键选择的人）、choice（具体选择）、motive（为什么如此选择）、prerequisites、resistanceResponse（他人/环境如何回应）、outcomeMechanism（回应如何导致结果）、resultingConstraints。不能把目的或预定结果冒充发生机制。",
   "prerequisites 每项包含 condition、sourceKind、reference。sourceKind 只能是 established_in_context（上下文已建立，reference 指向具体来源）、establish_in_scene（本章先建立再使用，reference 指明建立场景与动作）、unresolved（缺少支持，reference 说明缺口）。没有上下文证据不能声称前文已获得物品、信息、信任、能力或通行条件。",
   "resultingConstraints 每项包含 constraint、persistence：写明行动带来的身体、资源、时间、关系或认知限制，以及持续至何时/什么可见事件才能解除；既有伤势或消耗必须实际限制可选行动，不能只作装饰。没有新增限制可返回空数组，不能强行添加伤亡。",
+  "每个场景必须交付新信息：场景结束时，读者或主角至少在信息、处境、代价、可选项四项之一上发生变化。把已知情况换个说法再说一遍不算推进，这样的场景应当合并或删除。",
+  "角色立场反转必须由具体新事实触发：若某角色先前明确表过态（例如「我帮不了」「这事我不管」「你走吧」），之后又做出相反举动，causality.motive 必须写明是哪一件新事实、新代价或新处境改变了他的算计，不能只写亏欠、情面或良心这类笼统理由——读者要能从文本里指出是哪一句让他改了主意。",
   "因果合同适用于各种题材：拒绝、等待、误解、认知或情绪变化、失败都可以是结果，不要求每场战斗、获胜或反转。对手也应按自身利益和已知能力回应，不能只为预定结果降智。前提最多6项、后续限制最多6项，各文本字段不超过120汉字；无必要前提可用空数组。",
 ];
 
@@ -382,7 +384,7 @@ export const volumeChapterTaskSheetPrompt: PromptAsset<
   ReturnType<typeof createChapterTaskSheetSchema>["_output"]
 > = {
   id: "novel.volume.chapter_task_sheet",
-  version: "v9",
+  version: "v10",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -403,7 +405,7 @@ export const volumeChapterExecutionContractPrompt: PromptAsset<
   ReturnType<typeof createChapterExecutionContractSchema>["_output"]
 > = {
   id: "novel.volume.chapter_execution_contract",
-  version: "v10",
+  version: "v11",
   taskType: "planner",
   mode: "structured",
   language: "zh",
