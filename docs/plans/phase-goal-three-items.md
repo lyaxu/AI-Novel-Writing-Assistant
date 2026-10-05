@@ -52,8 +52,6 @@
 
 `biggestWeakness` 独立给出同一定位，`repeatedExchanges` 仍为空（与三问核对一致）。
 
-### ① 首次运行的验收偏差（重要）
-
 ### ① 的运行方式
 
 ```
