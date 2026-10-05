@@ -4,7 +4,7 @@
 
 执行口径、验收标准与全部证据见 [阶段目标三件](../plans/phase-goal-three-items.md)，
 ② 的设计见 [放弃规划修复会话设计](../plans/design-abandon-planning-repair.md)，
-运行时契约见 [规划修复放弃](../wiki/workflows/planning-repair-abandonment.md)。三件均已完成：
+运行时契约见 [规划修复放弃](../wiki/workflows/planning-repair-abandonment.md)。**另含第 ④ 项界面可操作性（用户本轮追加）**，详见台账 Q40。四项的落地情况：
 
 - **① 章节合同 vs 正文 可复跑检查**（`854a4eb2`）：`node server/scripts/audit-contract-vs-prose.cjs <novelId>`。
   语义判断走注册的 `novel.audit.contract_vs_prose@v2`，确定性部分单独检查。三章复跑结论跨两次运行稳定。
@@ -20,7 +20,7 @@
 
 **给下一轮的提醒**：不要照着目标文本里 ③ 的旧定义（"对话回合重复"）继续做事，它已被证据否定。
 
-最新核验：**2026-10-05（阶段目标三件）**。完整读磁盘AGENTS.md → [长期上下文](PROJECT_CONTEXT.md) → [阶段目标三件](../plans/phase-goal-three-items.md) → [完整交接包](2026-10-01_1153Z_three-chapter-audit_thread_handoff.md) → [工作台账](WORK_LEDGER.md) → [工具优化目标任务书](../plans/tool-improvement-roadmap.md)。旧Sept30包归档保留。
+最新核验：**2026-10-05（阶段目标四项，含界面可操作性）**。完整读磁盘AGENTS.md → [长期上下文](PROJECT_CONTEXT.md) → [阶段目标三件](../plans/phase-goal-three-items.md) → [完整交接包](2026-10-01_1153Z_three-chapter-audit_thread_handoff.md) → [工作台账](WORK_LEDGER.md) → [工具优化目标任务书](../plans/tool-improvement-roadmap.md)。旧Sept30包归档保留。
 
 - **Q28 建议容量反复硬停已修**：用户反复遇到"相关规划与审查资料超出单次建议容量"。根因是语义核验证据目录把每个可引用窗口的 `quote` 完整重复，而同一段原文已存在于同一 payload（结构性重复，非真实超限）。真实技术停点输入复现 154956/160000 = 96.8%，目录占 59%。修复后 **154956 → 122304**；15/15 离线回归（含结构护栏）。提交 `b17151e3`。证据 `.codex-run/competitor-absorb/`。
 - **竞品机制研究与六阶段整合方案已就绪**：[竞品研究](../plans/novel-studio-competitor-review.md)（含从打包资源读取的真实约束）、[整合方案](../plans/competitor-borrow-integration-plan.md)（**执行状态表在该文档开头，新窗口从这里读**）。用户已确认六阶段全做、阶段 A 加 DB 列前先备份、阶段 D 只做内部资产。
