@@ -62,6 +62,24 @@ const MAX_PROSE_CHARS_PER_CALL = 24_000;
  */
 const MAX_AUDITED_CHAPTERS = 40;
 
+/**
+ * What the verdict words are called in front of a reader.
+ *
+ * `delivered` / `partial` / `absent` / `contradicted` are the schema's vocabulary. They are fine in
+ * the report's data and wrong in its text: the report is read by a writer, and an English enum value
+ * in a Chinese sentence reads as a system leak rather than an answer.
+ */
+const VERDICT_LABELS: Record<string, string> = {
+  delivered: "已写出",
+  partial: "只写出一部分",
+  absent: "正文里没有",
+  contradicted: "正文写的是另一回事",
+};
+
+function verdictLabel(verdict: string): string {
+  return VERDICT_LABELS[verdict] ?? verdict;
+}
+
 function deterministicChapterFindings(input: {
   requiredElementCount: number;
   sceneCount: number;
@@ -137,7 +155,7 @@ export function renderContractProseReport(report: ContractProseAuditReport): str
     lines.push("| # | 清单条目 | 判定 | 正文证据 |");
     lines.push("| --- | --- | --- | --- |");
     for (const check of chapter.audit.elements) {
-      lines.push(`| ${check.index} | ${check.element.replace(/\|/g, "／")} | ${check.verdict} | ${(check.evidence || check.note).replace(/\|/g, "／")} |`);
+      lines.push(`| ${check.index} | ${check.element.replace(/\|/g, "／")} | ${verdictLabel(check.verdict)} | ${(check.evidence || check.note).replace(/\|/g, "／")} |`);
     }
     lines.push("");
     const weakScenes = chapter.audit.scenes.filter((scene) => !scene.resistanceDelivered || !scene.turnDelivered);
@@ -331,7 +349,7 @@ export async function auditNovelContracts(input: {
         chapterOrder: chapter.order, chapterTitle: chapter.title ?? "",
         kind: "delivery",
         severity: check.verdict === "contradicted" ? "high" : check.verdict === "absent" ? "high" : "medium",
-        message: `清单第 ${check.index} 条判定为 ${check.verdict}：${check.element}`,
+        message: `清单第 ${check.index} 条：${verdictLabel(check.verdict)}——${check.element}`,
         detail: [check.evidence, check.note].filter(Boolean).join(" / "),
       });
     }
