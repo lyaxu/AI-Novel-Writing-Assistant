@@ -536,3 +536,24 @@ test("a repair preserves the chapter's minimum event list instead of erasing it"
     "a repair must carry the existing event list forward, not empty it",
   );
 });
+
+test("a repair may rewrite the chapter title when the title itself is the conflict", () => {
+  // The deadlock this pins down: the chapter quality gate told the user to align title and summary
+  // ("七百块" vs "一百块"), but the repair patch had no title field and the repair prompt explicitly
+  // forbade touching title. The conflict therefore returned on every attempt and chapter detail
+  // generation could never get past it.
+  const proposal = output();
+  proposal.changes[0].title = "一百块拍在桌上";
+
+  const candidate = apply(document(), proposal);
+
+  assert.equal(candidate.volumes[0].chapters.find((c) => c.id === "plan-1").title, "一百块拍在桌上");
+});
+
+test("omitting the title leaves the existing one untouched", () => {
+  // Changing a chapter name must stay opt-in: an ordinary repair that says nothing about the title
+  // must not blank it.
+  const candidate = apply();
+
+  assert.equal(candidate.volumes[0].chapters.find((c) => c.id === "plan-1").title, "Immutable title plan-1");
+});

@@ -10,6 +10,9 @@ const taskSheetShape = createChapterTaskSheetSchema().out.shape;
 
 export const planningRepairChangeSchema = z.object({
   chapterId: requiredText,
+  // Optional on purpose: a repair only rewrites the title when the title itself is the conflict.
+  // Omitting it must mean 'leave the title alone', not 'fail validation'.
+  title: requiredText.max(120).optional(),
   summary: requiredText.max(600),
   purpose: contractText,
   exclusiveEvent: contractText,
@@ -207,6 +210,7 @@ export function applyPlanningRepairCandidate(
     // Never spread model output onto a plan: IDs, title, ordering, metadata and target stay untouched.
     return {
       ...chapter,
+      ...(change.title ? { title: change.title } : {}),
       summary: change.summary,
       purpose: change.purpose,
       exclusiveEvent: change.exclusiveEvent,

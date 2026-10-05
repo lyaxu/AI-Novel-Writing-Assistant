@@ -22,7 +22,7 @@ const commonRules = [
   "能力潜力与当章实际兑现、后续悬念与本章人物已知事实要区分。合同已明确限制或禁止且没有相反执行安排时，不因担心正文可能忽略约束而要求重复添加同义禁止。真实缺失动作、矛盾安排、前提缺口与越界仍须修复；refinements只是可选润色，不能作为阻塞或强制返工依据。",
   "changes 和 obligationMoves 中的 chapterId 指 VolumeChapterPlan.id，不是可选的持久化 chapterId。",
   "只允许修改当前卷 allowedChapterIds 内的章节。readonlyPrevious、readonlyNext 以及其他章节全部只读。",
-  "禁止修改章节和卷的 ID、持久化 chapterId 关联、volumeId、title、chapterOrder、beatKey、章节数量与顺序、targetWordCount、风格合同及元数据。冲突等级 conflictLevel、揭露等级 revealLevel 已有数值时必须原样保留；仅在缺失或 null 时根据本章职责补齐 0-100 整数，不得改变用户已定强度。",
+  "禁止修改章节和卷的 ID、持久化 chapterId 关联、volumeId、chapterOrder、beatKey、章节数量与顺序、targetWordCount、风格合同及元数据。章节 title 原则上原样保留；只有当 title 与本章其它字段或已写正文事实直接冲突时（例如 title 写了具体金额、地点或人物，而 purpose、exclusiveEvent、taskSheet、场景卡或已写正文是另一回事），才可按冲突后的事实改写 title，且只改冲突处，其余措辞保持原样。改与不改都要在 reason 里说明。冲突等级 conflictLevel、揭露等级 revealLevel 已有数值时必须原样保留；仅在缺失或 null 时根据本章职责补齐 0-100 整数，不得改变用户已定强度。",
   "本轮唯一有效范围是顶层 allowedChapterIds；originalChapters 和 candidateChapters 仅包含本轮待修复或待审章节。assessment.original 是历史问题依据，不是当前权限，若其文字引用旧窗口，应以顶层当前范围为准。",
   "严格保留每章原始目标字数。允许在原始预算内重新分配场景字数，但 sceneCards.targetWordCount 的总和不得超过本章原始 targetWordCount；优先恰好等于原始预算。不能靠增加目标字数解决职责过载。",
   "保留原始叙事义务、兑现引用和继承钩子，不得靠静默删掉职责或重复兑现一次性事件解决过载。同一全书钩子可被多章合理引用，不能把 payoffRefs 的引用次数直接当作实际义务重复。",
@@ -37,7 +37,7 @@ const commonRules = [
 // These assets do not resolve models; the coordinator must pass its explicit modelRoute to the runner.
 export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, PlanningRepairOutput> = {
   id: "novel.volume.planning_repair",
-  version: "v10",
+  version: "v11",
   taskType: "replan",
   mode: "structured",
   language: "zh",
@@ -48,7 +48,7 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
       "你是网文规划修复器。只修复限定章节窗口的执行合同，不写正文，不重做全书规划。",
       commonRules,
       "逐项解决 assessment.current 中仍未解决的问题，参照issueHistoryByChapter保留此前有效修复；原始问题仅用于检查职责没有丢失。用具体的章节职责和场景变化解决真实缺口，不为可选润色反复改写。只能在允许窗口内保留、合并或移动职责；错误引用可按显式revise账本纠正表述，叙事功能仍须保留。",
-      "输出 {requiresUserDecision:boolean,reason:string,changes:[{chapterId,summary,purpose,exclusiveEvent,endingState,nextChapterEntryState,conflictLevel:number,revealLevel:number,taskSheet,mustAvoid,payoffRefs:string[],sceneCards:[],readerExperience:{}}],obligationMoves:[{obligation,fromChapterId,toChapterId,action,replacement?,reason}]}。",
+      "输出 {requiresUserDecision:boolean,reason:string,changes:[{chapterId,title,summary,purpose,exclusiveEvent,endingState,nextChapterEntryState,conflictLevel:number,revealLevel:number,taskSheet,mustAvoid,payoffRefs:string[],sceneCards:[],readerExperience:{}}],obligationMoves:[{obligation,fromChapterId,toChapterId,action,replacement?,reason}]}。",
       "changes 必须对每个 allowedChapterIds 恰好返回一次完整的允许字段，包括无需变化的字段。不返回完整替换文档，不新增其他字段。",
       "payoffRefs承载叙事义务，普通保留或迁移仍须保留原引用。若引用含与已写事实冲突的旧实现方式，或用户已确认纠正其表述，可在同一允许章用obligationMoves的revise显式修订：obligation逐字取自candidateChapters当前原引用（无候选才用originalChapters），replacement逐字对应changes里新引用，reason说明事实依据、保留的叙事功能及本章如何落实。新引用替代旧引用，不同时保留错误原句。不得只修改payoffRefs而漏记映射；也不得把旧错误句继续当作执行目标。只因近义润色不应重写引用。",
       "长度为严格执行合同：taskSheet、summary 各最多600字符；purpose、exclusiveEvent、endingState、nextChapterEntryState、mustAvoid 各最多240字符。taskSheet 只写执行摘要，不重复完整场景卡；具体动作及必达义务保留在 sceneCards 中，不得为压缩文字而删除职责。其他字段严格遵守输出 schema 的长度和数组上限。",

@@ -358,7 +358,7 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/novel/volume/chapterTaskSheetQuality.prompts").chapterTaskSheetQualityPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.volume.planning_repair@v10",
+    key: "novel.volume.planning_repair@v11",
     load: () => require("../prompts/novel/volume/planningRepair.prompts").planningRepairPrompt as UnknownPromptAsset,
   },
   {
