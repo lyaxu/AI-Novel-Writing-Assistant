@@ -156,7 +156,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   AiChapterTaskSheetQualityAssessment
 > = {
   id: "novel.volume.chapter_task_sheet_quality",
-  version: "v16",
+  version: "v17",
   taskType: "review",
   mode: "structured",
   language: "zh",

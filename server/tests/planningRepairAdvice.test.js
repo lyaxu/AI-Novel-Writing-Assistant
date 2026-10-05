@@ -242,7 +242,10 @@ test("consumed advice is projected as applied rather than stale without allowing
 
 test("oversized unique context fails before timeout wrapper or any paid model boundary", async () => {
   const f = fixture(true);
-  f.source.context = { novel: { description: "唯一正文".repeat(50000) } };
+  // Sized against ADVICE_CONTEXT_MAX_CHARS (400000): the ceiling was raised from 160000, so a
+    // fixture built for the old limit no longer trips the guard and the test would silently
+    // stop covering the pre-call refusal it exists to prove.
+    f.source.context = { novel: { description: "唯一正文".repeat(110000) } };
   await f.service.request("t", { repairKey: "r", idempotencyKey: "capacity" });
   await settle();
   const saved = f.source.seed.planningRepairAdvice;
@@ -463,10 +466,10 @@ const parse = (value, contract = prompt.planningRepairAdvicePrompt.outputSchema,
   label: "advice-offline", strategy: "prompt_json", profile: {}, maxRepairAttempts: 0, finishReason: "stop", ...extra,
 });
 
-test("v11 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
+test("v12 prompt renders the full shared contract and example, with explicit paid-recovery boundaries", () => {
   const asset = prompt.planningRepairAdvicePrompt;
   const text = asset.render({ contextJson: "{}" })[0].content;
-  assert.equal(asset.version, "v11"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
+  assert.equal(asset.version, "v12"); assert.equal(asset.repairPolicy.maxAttempts, 0); assert.equal(asset.semanticRetryPolicy.maxAttempts, 0);
   const jsonSchema = JSON.parse(text.split("完整输出契约（minItems/maxItems是数量，minLength/maxLength是字符数）：\n")[1].split("\n输出格式示例")[0]);
   const fields = jsonSchema.properties.options.items.properties;
   assert.deepEqual(fields.diagnosis.enum, schema.planningRepairAdviceDiagnoses);
@@ -478,7 +481,7 @@ test("v11 prompt renders the full shared contract and example, with explicit pai
   assert.match(text, /不要让写作新手查询服务器schema/);
   assert.match(text, /planning_contract_before_prose/);
   assert.match(text, /historical_claim_requires_current_verification/);
-  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v11/);
+  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice@v12/);
 });
 
 test("real rejected response keeps every action under wider non-safety limits but still rejects invented diagnoses", async () => {
