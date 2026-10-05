@@ -13,6 +13,7 @@ import { queryKeys } from "@/api/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import SettingsReadinessCard, { buildSettingsReadinessItems } from "../components/SettingsReadinessCard";
+import SettingsFinder from "../components/SettingsFinder";
 import { SettingsShell } from "../components/SettingsShell";
 import { APP_RUNTIME } from "@/lib/constants";
 
@@ -50,6 +51,7 @@ export default function SettingsOverviewPage() {
 
   return (
     <SettingsShell title="系统设置" description="查看创作环境状态，并进入需要调整的设置。">
+      <SettingsFinder />
       <SettingsReadinessCard items={items} />
       <div className="grid gap-4 md:grid-cols-2">
         {entries.map(({ to, title, description, icon: Icon }) => {
