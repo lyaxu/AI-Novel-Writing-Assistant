@@ -206,14 +206,19 @@ export function createVolumeChapterListPrompt(
 
   return {
     id: "novel.volume.chapter_list",
-    version: "v13",
+    version: "v14",
     taskType: "planner",
     mode: "structured",
     language: "zh",
 
     contextPolicy: {
       maxTokensBudget: NOVEL_PROMPT_BUDGETS.volumeChapterList,
-      requiredGroups: ["book_contract", "target_volume", "target_beat_contract"],
+      // written_evidence is required, not preferred: a chapter list planned without seeing what has
+      // already been written schedules scenes the prose has already played. That is how a real book
+      // got a fourth chapter whose first half re-ran the second chapter's rent scene — the contract
+      // generation downstream then elaborated the repeat faithfully, because its own rule against
+      // repeating finished events only had the plan to argue with.
+      requiredGroups: ["book_contract", "target_volume", "target_beat_contract", "written_evidence"],
       preferredGroups: [
         "macro_constraints",
         "beat_context_window",
@@ -312,6 +317,8 @@ export function createVolumeChapterListPrompt(
           "7. chapterPayoff 写这一章交付给读者的推进或转折：兑现了什么、反转了什么、付出了什么代价、局面因此向哪边移动。每一章都必须有，不能只在结尾章出现。",
           "8. protagonistAction 与 chapterPayoff 必须逐章不同。相邻两章写同一个动作或同一个结果，等同于没有推进，会被判为失败并要求重排。",
           "9. 这两项是章节功能的正式声明，由你自己判断，不要为了通过检查而套用固定句式；它们必须与 summary 描述的是同一件事。",
+          "10. 排章前必须先读 written_evidence（已写正文）：哪些事件已经发生过、哪些人已经知道了什么、上一章结尾具体决定去做什么。已经演过的场面不得再排一次；同一处境要再次出现时，必须写明这一次与上一次不同的阻力、不同的选择或不同的后果，并把增量写进 summary 与 chapterPayoff。",
+          "11. 典型错误：前文已经交过房租、已经被人当面追问过钱从哪来，就不要再排一章重新交租、重新被问一遍。读者会认为情节在原地打转。要接着演的是那件事之后的新局面。",
           "",
           "四、章节功能分配要求",
           "1. 生成前必须在脑内把当前 beat 拆成若干章节功能：承接、加压、试探、发现、转折、反击、兑现、余波或钩子。",
