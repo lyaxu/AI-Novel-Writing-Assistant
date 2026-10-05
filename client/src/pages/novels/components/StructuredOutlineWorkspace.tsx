@@ -17,6 +17,7 @@ import StructuredChapterListCard from "./StructuredChapterListCard";
 import StructuredChapterDetailCard from "./StructuredChapterDetailCard";
 import WorldInjectionHint from "./WorldInjectionHint";
 import PlanningRepairPanel from "./planningRepair/PlanningRepairPanel";
+import ContractProseAuditPanel from "./contractAudit/ContractProseAuditPanel";
 import {
   chapterMatchesBeat,
   findChapterBeat,
@@ -279,6 +280,9 @@ export default function StructuredOutlineWorkspace(props: StructuredTabViewProps
       <CardContent className="space-y-5 px-0 pt-5">
         <PlanningRepairPanel novelId={novelId} />
         <WorldInjectionHint worldInjectionSummary={worldInjectionSummary} />
+        {/* Placed after the hint rather than beside the repair panel: that panel only appears when
+            something is broken, so this stays the visible entry when nothing is wrong. */}
+        <ContractProseAuditPanel novelId={novelId} />
 
         {directorTakeoverEntry ? (
           <div className="flex flex-col gap-3 rounded-2xl bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">

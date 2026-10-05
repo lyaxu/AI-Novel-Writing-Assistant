@@ -12,6 +12,7 @@ import { prisma } from "../../../../db/prisma";
 import { llmProviderSchema } from "../../../../llm/providerSchema";
 import { validate } from "../../../../middleware/validate";
 import { KnowledgeService } from "../../../../services/knowledge/KnowledgeService";
+import { auditNovelContracts, renderContractProseReport } from "../../../../services/novel/audit/ContractProseAuditService";
 import { novelCreateResourceRecommendationService } from "../../../../services/novel/NovelCreateResourceRecommendationService";
 import type { NovelApplicationServices } from "../../../../services/novel/application/NovelApplicationContracts";
 import { isCompletedStorySample } from "../application/simpleCreationShelfProgress";
@@ -471,6 +472,22 @@ export function registerNovelBaseRoutes(input: RegisterNovelBaseRoutesInput): vo
     } catch (error) {
       next(error);
     }
+  });
+
+  // Contract-vs-prose audit, reachable from the product rather than only from a terminal. It answers
+  // "did the written chapters actually do what their contracts said", which is the question a writer
+  // asks after finishing a stretch of chapters — so it belongs where they are, not in a script.
+  router.post("/:id/contract-prose-audit", validate({
+    params: idParamsSchema,
+    body: z.object({ chapterOrders: z.array(z.number().int().min(1)).max(500).optional() }).strict().optional(),
+  }), async (req, res, next) => {
+    try {
+      const report = await auditNovelContracts({
+        novelId: String(req.params.id),
+        chapterOrders: (req.body as { chapterOrders?: number[] } | undefined)?.chapterOrders,
+      });
+      res.json({ success: true, data: { report, markdown: renderContractProseReport(report) } });
+    } catch (error) { next(error); }
   });
 
   router.get("/:id/knowledge-documents", validate({ params: idParamsSchema }), async (req, res, next) => {
