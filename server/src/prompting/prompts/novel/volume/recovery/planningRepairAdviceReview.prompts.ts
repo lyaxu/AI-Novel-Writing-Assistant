@@ -24,8 +24,8 @@ export const planningRepairAdviceReviewExample: PlanningRepairAdviceReviewModelO
 export const planningRepairAdviceReviewPrompt: PromptAsset<{
   contextJson: string; draftAdviceJson: string;
 }, PlanningRepairAdviceReviewModelOutput> = {
-  id: "novel.planning_repair.advice_review", version: "v6", taskType: "outline_planning", mode: "structured", language: "zh",
-  contextPolicy: { maxTokensBudget: 48000 }, outputSchema: preserveGeneratedContentConstraints(planningRepairAdviceReviewModelOutputSchema),
+  id: "novel.planning_repair.advice_review", version: "v7", taskType: "outline_planning", mode: "structured", language: "zh",
+  contextPolicy: { maxTokensBudget: 96000 }, outputSchema: preserveGeneratedContentConstraints(planningRepairAdviceReviewModelOutputSchema),
   repairPolicy: { maxAttempts: 0 }, semanticRetryPolicy: { maxAttempts: 0 }, structuredOutputHint: { mode: "off" },
   render: input => [
     new SystemMessage(`你是独立的小说规划建议核验编辑。你不是第一轮建议的辩护者。核验原始资料与待审建议，直接返回纠正后的最终方案，每个方案自带check核验结果，不要求第三轮模型调用。绝不执行修复、批准写作或放宽既有审查门槛。

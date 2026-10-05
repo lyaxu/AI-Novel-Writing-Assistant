@@ -23,8 +23,8 @@ export const planningRepairAdviceExample: PlanningRepairAdviceOutput = {
 };
 
 export const planningRepairAdvicePrompt: PromptAsset<{ contextJson: string }, PlanningRepairAdviceOutput> = {
-  id: "novel.planning_repair.advice", version: "v11", taskType: "outline_planning", mode: "structured", language: "zh",
-  contextPolicy: { maxTokensBudget: 48000 }, outputSchema: preserveGeneratedContentConstraints(planningRepairAdviceOutputSchema),
+  id: "novel.planning_repair.advice", version: "v12", taskType: "outline_planning", mode: "structured", language: "zh",
+  contextPolicy: { maxTokensBudget: 96000 }, outputSchema: preserveGeneratedContentConstraints(planningRepairAdviceOutputSchema),
   repairPolicy: { maxAttempts: 0 },
   semanticRetryPolicy: { maxAttempts: 0 },
   structuredOutputHint: { mode: "off" },

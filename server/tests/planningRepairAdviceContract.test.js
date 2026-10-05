@@ -59,7 +59,7 @@ test("nested wire still enforces shared cross-field rules and retains the two-ca
   assert.equal(reviewContract.planningRepairAdviceReviewModelOutputSchema.safeParse(long).success, false);
   assert.deepEqual(reviewPrompt.planningRepairAdviceReviewPrompt.repairPolicy, { maxAttempts: 0 });
   assert.deepEqual(reviewPrompt.planningRepairAdviceReviewPrompt.semanticRetryPolicy, { maxAttempts: 0 });
-  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice_review@v6/);
+  assert.match(fs.readFileSync(path.join(__dirname, "../src/prompting/registry/promptAssetLoaderEntries.ts"), "utf8"), /novel\.planning_repair\.advice_review@v7/);
 });
 
 test("review-only advice with no candidate changes survives the full response contract", () => {

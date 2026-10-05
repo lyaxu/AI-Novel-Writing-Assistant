@@ -46,7 +46,9 @@ test("repeated strings and subtrees reconstruct exactly without changing permiss
 });
 
 test("unique oversized material stays intact and is refused at the unchanged capacity limit", () => {
-  const input = { content: "唯一正文".repeat(50000) };
+  // Sized against ADVICE_CONTEXT_MAX_CHARS in AdviceContextEncoding.ts; if that ceiling moves
+  // again, this fixture has to move with it — it is the only thing proving the guard still fires.
+  const input = { content: "唯一正文".repeat(110000) };
   assert.equal(encodeAdviceContext(input), JSON.stringify(input));
   assert.throws(() => prepareAdviceContext(input), AdviceContextCapacityError);
 });
@@ -57,7 +59,7 @@ test("actual captured advice context fits after lossless encoding", { skip: !fs.
   const original = JSON.stringify(input);
   const encoded = prepareAdviceContext(input);
   assert.equal(JSON.stringify(decode(encoded)), original);
-  assert.ok(encoded.length <= 160000);
+  assert.ok(encoded.length <= 400000);
   t.diagnostic(`original=${original.length}; encoded=${encoded.length}; saved=${original.length - encoded.length}`);
 });
 

@@ -18,11 +18,11 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/novel/audit/contractProseDefects.prompts").contractProseDefectsPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.planning_repair.advice_review@v6",
+    key: "novel.planning_repair.advice_review@v7",
     load: () => require("../prompts/novel/volume/recovery/planningRepairAdviceReview.prompts").planningRepairAdviceReviewPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.planning_repair.advice@v11",
+    key: "novel.planning_repair.advice@v12",
     load: () => require("../prompts/novel/volume/recovery/planningRepairAdvice.prompts").planningRepairAdvicePrompt as UnknownPromptAsset,
   },
   {
