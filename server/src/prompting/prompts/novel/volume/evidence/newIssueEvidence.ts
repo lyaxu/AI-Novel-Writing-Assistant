@@ -41,12 +41,26 @@ export function validateNewIssueEvidence(
     }
     for (const quote of [...basis.candidateEvidence, ...basis.counterEvidence]) {
       if (!matchesChapterEvidence(source, quote)) {
-        throw new Error(`New issue ${issue.id} cites evidence absent from the current candidate.`);
+        const path = quote.sourcePath ?? "(no sourcePath)";
+        throw new Error(
+          `New issue ${issue.id} cites evidence absent from the current candidate.`
+          + ` Source: ${path}${source.leaves.has(path) ? " (this source is in the candidate, but the quoted text is not found in it — likely paraphrased or stitched from separate places)" : " (this source is not part of the candidate at all)"}.`
+          + ` Quote: ${JSON.stringify((quote.quote ?? "").slice(0, 120))}`,
+        );
       }
     }
     for (const quote of basis.contextEvidence ?? []) {
       if (!matchesChapterEvidence(contextSource, quote)) {
-        throw new Error(`New issue ${issue.id} cites evidence absent from the supplied read-only context.`);
+        // Name the quote and where it claimed to come from. Without them the message says only that
+        // something did not match, which is unactionable: the two cases below need opposite responses
+        // — one is the reviewer misquoting, the other is context this validator never indexed.
+        const path = quote.sourcePath ?? "(no sourcePath)";
+        const known = contextSource.leaves.has(path);
+        throw new Error(
+          `New issue ${issue.id} cites evidence absent from the supplied read-only context.`
+          + ` Source: ${path}${known ? " (this source is in the context, but the quoted text is not found in it — likely paraphrased or stitched from separate places)" : " (this source is not part of the read-only context at all)"}.`
+          + ` Quote: ${JSON.stringify((quote.quote ?? "").slice(0, 120))}`,
+        );
       }
     }
     const citedLeaves = new Set([
