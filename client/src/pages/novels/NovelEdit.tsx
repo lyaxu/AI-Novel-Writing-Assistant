@@ -1675,7 +1675,11 @@ export default function NovelEdit() {
           disabled: cancelAutoDirectorMutation.isPending,
         });
         actions.push({
-          label: cancelAutoDirectorMutation.isPending ? "退出中..." : "退出导演模式",
+          // Says what the click does. This button used to carry the same "退出导演模式" label as the
+          // one that opened the confirmation, so the confirmation step was invisible: clicking the
+          // entry looked like it had already exited. It had not — the task stayed live, kept its
+          // planning-repair lock, and the panel kept showing a frozen error.
+          label: cancelAutoDirectorMutation.isPending ? "退出中..." : "确认退出并取消任务",
           onClick: () => cancelAutoDirectorMutation.mutate(task.id),
           variant: "destructive",
           disabled: cancelAutoDirectorMutation.isPending,
@@ -1684,7 +1688,9 @@ export default function NovelEdit() {
         actions.push({
           label: "退出导演模式",
           onClick: () => setIsDirectorExitActionExpanded(true),
-          variant: "destructive",
+          // Only opens the confirmation, so it is not marked destructive: styling a harmless click
+          // as the destructive one is what made the two steps indistinguishable.
+          variant: "outline",
           disabled: cancelAutoDirectorMutation.isPending,
         });
       }
