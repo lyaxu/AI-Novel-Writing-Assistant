@@ -1438,3 +1438,29 @@ test("a new attempt after giving up starts fresh instead of reviving the abandon
   assert.ok(carried, "the new session carries a record of the given-up attempt");
   assert.ok(carried.abandonedAt, "including when it was given up");
 });
+
+test("a given-up repair stops blocking another task for the same novel", async () => {
+  // The reported symptom: a dead run kept "Another live task owns planning repair" in the way of
+  // every other task on the book, and the only way out was cancelling the whole director run.
+  // Same blocker row both times — only its phase changes, so this isolates the lock predicate.
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  const blocked = { planningRepair: { ...session.state, rounds: 2, phase: "technical_failed" } };
+  h.otherTasks.push({ id: "other", novelId: "n", status: "running", seedPayloadJson: JSON.stringify(blocked) });
+  await assert.rejects(h.store.begin(h.input), /Another live task/);
+
+  h.otherTasks[0].seedPayloadJson = JSON.stringify({ planningRepair: { ...session.state, phase: "abandoned" } });
+  const resumed = await h.store.begin(h.input);
+  assert.ok(resumed, "the book is no longer blocked by the given-up session");
+  assert.notEqual(resumed.state.phase, "abandoned", "and it starts a session of its own");
+});
+
+test("a committed repair still holds nothing back either", async () => {
+  // Guard against over-correcting: the terminal set is what releases the lock, not `abandoned`
+  // alone, and a committed session must not start blocking again.
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  h.otherTasks.push({ id: "other", novelId: "n", status: "running",
+    seedPayloadJson: JSON.stringify({ planningRepair: { ...session.state, phase: "committed" } }) });
+  await h.store.begin(h.input);
+});
