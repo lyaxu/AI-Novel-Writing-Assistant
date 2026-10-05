@@ -16,6 +16,7 @@ import {
   type ChapterEditorRewriteCandidatesPromptInput,
 } from "../../../prompting/prompts/novel/chapterEditor/rewriteCandidates.prompts";
 import type { ChapterEditorRewriteCandidatesParsed } from "../../../prompting/prompts/novel/chapterEditor/rewriteCandidates.promptSchemas";
+import { runWithEnforcedTimeout } from "../../../llm/invokeTimeout";
 import {
   chapterEditorUserIntentPrompt,
   type ChapterEditorUserIntentPromptInput,
@@ -40,6 +41,13 @@ const FULL_CHAPTER_REVISION_LIMIT = 8000;
  * can only carry the chapter once without overrunning the output ceiling.
  */
 const FULL_CHAPTER_CANDIDATE_COUNT = 3;
+
+/**
+ * Ceiling for one candidate call. The three calls run together, so this is also the wait the user
+ * sees — well inside the client's ten-minute request timeout. A stalled provider is aborted rather
+ * than left hanging, and the candidates that did arrive are still offered.
+ */
+const FULL_CHAPTER_CANDIDATE_TIMEOUT_MS = 4 * 60 * 1000;
 
 const OPERATION_LABELS: Record<ChapterEditorOperation, string> = {
   polish: "优化表达",
@@ -179,17 +187,22 @@ export class NovelChapterEditorService {
       // chapter once, which fits. The user still ends up choosing between the same number of options.
       const settled = await Promise.all(
         Array.from({ length: FULL_CHAPTER_CANDIDATE_COUNT }, (_, index) =>
-          this.promptRunner({
-            asset: chapterEditorRewriteCandidatesPrompt,
-            promptInput: { ...promptInput, candidateSlot: { index: index + 1, total: FULL_CHAPTER_CANDIDATE_COUNT } },
-            options: promptOptions,
+          runWithEnforcedTimeout({
+            label: `chapter-editor-rewrite-candidate-${index + 1}`,
+            timeoutMs: FULL_CHAPTER_CANDIDATE_TIMEOUT_MS,
+            run: () => this.promptRunner({
+              asset: chapterEditorRewriteCandidatesPrompt,
+              promptInput: { ...promptInput, candidateSlot: { index: index + 1, total: FULL_CHAPTER_CANDIDATE_COUNT } },
+              options: promptOptions,
+            }),
           })
             .then((result) => ({
               candidates: result.output.candidates as ChapterEditorRewriteCandidatesParsed["candidates"],
               note: result.output.macroAlignmentNote?.trim() || null,
+              timedOut: false,
               error: null as unknown,
             }))
-            .catch((error: unknown) => ({ candidates: [], note: null, error })),
+            .catch((error: unknown) => ({ candidates: [], note: null, timedOut: true, error })),
         ),
       );
       rawCandidates = settled.flatMap((entry) => entry.candidates);
@@ -197,6 +210,12 @@ export class NovelChapterEditorService {
       if (!rawCandidates.length) {
         // Surface the real reason (output limit, provider error) instead of a generic message.
         const firstError = settled.find((entry) => entry.error)?.error;
+        if (settled.every((entry) => entry.timedOut)) {
+          throw new Error(
+            `整章改写等待模型超时（每个方案上限 ${Math.round(FULL_CHAPTER_CANDIDATE_TIMEOUT_MS / 1000)} 秒），`
+            + "已中断本次请求。可以换一个更快的模型重试。",
+          );
+        }
         if (firstError instanceof Error) throw firstError;
         throw new Error("整章改写没有生成可用方案，请重试。");
       }
