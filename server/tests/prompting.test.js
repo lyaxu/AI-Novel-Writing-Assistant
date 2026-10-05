@@ -151,7 +151,7 @@ test("prompt registry exposes versioned planning assets", () => {
     "agent.runtime.fallback_answer@v1",
     "agent.runtime.setup_guidance@v1",
     "agent.runtime.setup_ideation@v1",
-    "planner.chapter.plan@v4",
+    "planner.chapter.plan@v5",
     "novel.director.candidates@v6",
     "novel.director.candidate_patch@v5",
     "novel.director.blueprint@v1",
@@ -177,7 +177,7 @@ test("prompt registry exposes versioned planning assets", () => {
     "novel.framing.suggest@v1",
     "novel.production.characters@v1",
     "state.snapshot.extract@v4",
-    "novel.payoff_ledger.sync@v7",
+    "novel.payoff_ledger.sync@v8",
     "novel.characterDynamics.volumeProjection@v3",
     "novel.character_resource.extract_updates@v1",
     "storyMode.child.generate@v1",
@@ -213,7 +213,7 @@ test("prompt registry exposes versioned planning assets", () => {
     assert.ok(getRegisteredPromptAsset(id, version), `missing prompt asset ${key}`);
   }
 
-  const chapterAsset = getRegisteredPromptAsset("planner.chapter.plan", "v4");
+  const chapterAsset = getRegisteredPromptAsset("planner.chapter.plan", "v5");
   assert.ok(chapterAsset);
   assert.equal(chapterAsset.taskType, "planner");
 });

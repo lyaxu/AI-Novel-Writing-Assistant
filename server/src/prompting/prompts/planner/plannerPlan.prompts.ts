@@ -179,42 +179,42 @@ function buildPlannerPlanAsset(input: {
 
       if (input.planLevel === "chapter") {
         if (!Array.isArray(normalized.payoffDecisions)) {
-          throw new Error("Chapter planner output is missing payoffDecisions.");
+          throw new Error(`Chapter planner output is missing payoffDecisions. planLevel=${input.planLevel}; 实际收到 ${Array.isArray(normalized.payoffDecisions) ? "数组" : typeof normalized.payoffDecisions}，需要为本章给出给付决策数组。`);
         }
         if (promptInput?.payoffValidation) {
           validateChapterPayoffDecisions({ ...promptInput.payoffValidation, decisions: normalized.payoffDecisions }, { allowReplan: true });
         }
         if (!normalized.planRole) {
-          throw new Error("Chapter planner output is missing planRole.");
+          throw new Error(`Chapter planner output is missing planRole. planLevel=${input.planLevel}; 实际值 ${JSON.stringify(normalized.planRole ?? null)}。`);
         }
         if (!["setup", "progress", "pressure", "turn", "payoff", "cooldown"].includes(normalized.planRole)) {
-          throw new Error("Chapter planner output has invalid planRole.");
+          throw new Error(`Chapter planner output has invalid planRole: 实际值 ${JSON.stringify(normalized.planRole)}，允许值 setup / progress / pressure / turn / payoff / cooldown。`);
         }
         if ((normalized.scenes ?? []).length === 0) {
-          throw new Error("Chapter planner output is missing scenes.");
+          throw new Error(`Chapter planner output is missing scenes. planLevel=${input.planLevel}; scenes 实际长度 ${(normalized.scenes ?? []).length}，本章至少需要一个场景。`);
         }
       }
 
       if (!input.includeScenes && (normalized.scenes ?? []).length > 0) {
-        throw new Error("Planner output should not include scenes for this plan level.");
+        throw new Error(`Planner output should not include scenes for this plan level. planLevel=${input.planLevel}; includeScenes=${input.includeScenes}，但实际返回了 ${(normalized.scenes ?? []).length} 个场景。`);
       }
 
       if (input.includeScenes) {
-        for (const scene of normalized.scenes ?? []) {
+        for (const [index, scene] of (normalized.scenes ?? []).entries()) {
           if (!scene.title?.trim()) {
-            throw new Error("Planner scene is missing title.");
+            throw new Error(`Planner scene is missing title. 第 ${index + 1} 个场景；实际值 ${JSON.stringify(scene.title ?? null)}。`);
           }
           if (!scene.objective?.trim()) {
-            throw new Error("Planner scene is missing objective.");
+            throw new Error(`Planner scene is missing objective. 第 ${index + 1} 个场景（title=${JSON.stringify(scene.title ?? null)}）；实际值 ${JSON.stringify(scene.objective ?? null)}。`);
           }
           if (!scene.conflict?.trim()) {
-            throw new Error("Planner scene is missing conflict.");
+            throw new Error(`Planner scene is missing conflict. 第 ${index + 1} 个场景（title=${JSON.stringify(scene.title ?? null)}）；实际值 ${JSON.stringify(scene.conflict ?? null)}。`);
           }
           if (!scene.reveal?.trim()) {
-            throw new Error("Planner scene is missing reveal.");
+            throw new Error(`Planner scene is missing reveal. 第 ${index + 1} 个场景（title=${JSON.stringify(scene.title ?? null)}）；实际值 ${JSON.stringify(scene.reveal ?? null)}。`);
           }
           if (!scene.emotionBeat?.trim()) {
-            throw new Error("Planner scene is missing emotionBeat.");
+            throw new Error(`Planner scene is missing emotionBeat. 第 ${index + 1} 个场景（title=${JSON.stringify(scene.title ?? null)}）；实际值 ${JSON.stringify(scene.emotionBeat ?? null)}。`);
           }
         }
       }
@@ -225,7 +225,7 @@ function buildPlannerPlanAsset(input: {
 }
 export const plannerBookPlanPrompt = buildPlannerPlanAsset({
   id: "planner.book.plan",
-  version: "v1",
+  version: "v2",
   planLevel: "book",
   includeScenes: false,
   maxTokensBudget: 1800,
@@ -233,7 +233,7 @@ export const plannerBookPlanPrompt = buildPlannerPlanAsset({
 
 export const plannerArcPlanPrompt = buildPlannerPlanAsset({
   id: "planner.arc.plan",
-  version: "v1",
+  version: "v2",
   planLevel: "arc",
   includeScenes: false,
   maxTokensBudget: 1800,
@@ -241,7 +241,7 @@ export const plannerArcPlanPrompt = buildPlannerPlanAsset({
 
 export const plannerChapterPlanPrompt = buildPlannerPlanAsset({
   id: "planner.chapter.plan",
-  version: "v4",
+  version: "v5",
   planLevel: "chapter",
   includeScenes: true,
   maxTokensBudget: 2400,

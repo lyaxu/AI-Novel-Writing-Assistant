@@ -210,15 +210,15 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/comic/comic.prompts").comicPanelScriptPrompt as UnknownPromptAsset,
   },
   {
-    key: "planner.book.plan@v1",
+    key: "planner.book.plan@v2",
     load: () => require("../prompts/planner/plannerPlan.prompts").plannerBookPlanPrompt as UnknownPromptAsset,
   },
   {
-    key: "planner.arc.plan@v1",
+    key: "planner.arc.plan@v2",
     load: () => require("../prompts/planner/plannerPlan.prompts").plannerArcPlanPrompt as UnknownPromptAsset,
   },
   {
-    key: "planner.chapter.plan@v4",
+    key: "planner.chapter.plan@v5",
     load: () => require("../prompts/planner/plannerPlan.prompts").plannerChapterPlanPrompt as UnknownPromptAsset,
   },
   {
@@ -530,7 +530,7 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/novel/ideaConstellation/ideaConstellation.prompts").directorIdeaConstellationComposePrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.payoff_ledger.sync@v7",
+    key: "novel.payoff_ledger.sync@v8",
     load: () => require("../prompts/payoff/payoffLedgerSync.prompts").payoffLedgerSyncPrompt as UnknownPromptAsset,
   },
   {

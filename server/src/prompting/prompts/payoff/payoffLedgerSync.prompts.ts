@@ -70,7 +70,7 @@ export const payoffLedgerSyncPrompt: PromptAsset<
   z.infer<typeof payoffLedgerSyncOutputSchema>
 > = {
   id: "novel.payoff_ledger.sync",
-  version: "v7",
+  version: "v8",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -195,7 +195,7 @@ export const payoffLedgerSyncPrompt: PromptAsset<
         && item.targetEndChapterOrder
         && item.targetStartChapterOrder > item.targetEndChapterOrder
       ) {
-        throw new Error(`伏笔 ${item.ledgerKey} 的目标章节窗口非法。`);
+        throw new Error(`伏笔 ${item.ledgerKey} 的目标章节窗口非法：targetStartChapterOrder=${item.targetStartChapterOrder}，targetEndChapterOrder=${item.targetEndChapterOrder}。起始必须不晚于结束。`);
       }
       if (item.currentStatus === "paid_off" && !item.payoffChapterId && item.payoffChapterOrder == null) {
         throw new Error(`伏笔 ${item.ledgerKey} 已兑现时必须返回 payoffChapterOrder 或 payoffChapterId。`);
@@ -213,7 +213,7 @@ export const payoffLedgerSyncPrompt: PromptAsset<
         || coveringItem.targetEndChapterOrder == null
         || coveringItem.targetEndChapterOrder > requiredSource.targetEndChapterOrder
       ) {
-        throw new Error(`Book Contract 承诺 ${requiredSource.refId} 必须保持书级范围和不晚于第 ${requiredSource.targetEndChapterOrder} 章的截止窗口。`);
+        throw new Error(`Book Contract 承诺 ${requiredSource.refId} 必须保持书级范围和不晚于第 ${requiredSource.targetEndChapterOrder} 章的截止窗口：实际 scopeType=${JSON.stringify(coveringItem.scopeType)}，targetEndChapterOrder=${JSON.stringify(coveringItem.targetEndChapterOrder)}。书级承诺不能被缩到单卷或更晚的截止章。`);
       }
     }
     return output;
