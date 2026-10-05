@@ -65,11 +65,14 @@ export default function PlanningRepairPanel({ novelId }: { novelId: string }) {
     </details> : null}
     {canAct ? <div className="space-y-3">
       <RepairActions key={`${status.taskId}:${repair.key}:${repair.rounds}:${repair.maxRounds ?? 2}`} status={status} />
-      <div className="border-t border-border/60 pt-3">
+      <div className="space-y-1 pt-1">
+        {/* Sits next to "保持暂停" in the same panel, so the two must not read alike: one keeps the
+            session for later, the other ends it. Light visual weight because it is the rare path. */}
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
+          className="h-auto px-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
           disabled={abandon.isPending}
           onClick={() => {
             const confirmed = window.confirm([
@@ -84,8 +87,10 @@ export default function PlanningRepairPanel({ novelId }: { novelId: string }) {
         >
           {abandon.isPending ? "放弃中…" : "放弃这次修复"}
         </Button>
-        <p className="mt-1 text-xs text-muted-foreground">修复反复中断、或暂时不想处理时使用。计划与正文不会因此改变。</p>
-        {abandon.isError ? <p role="alert" className="mt-1 break-words text-xs text-destructive">
+        <p className="text-xs text-muted-foreground">
+          修复反复中断、暂时不想处理时用这个：它会结束这次修复，之后需要重新发起。如果只是想先放一放，用上面的「保持暂停」即可，之后可以接着修。
+        </p>
+        {abandon.isError ? <p role="alert" className="break-words text-xs text-destructive">
           {abandon.error instanceof Error ? abandon.error.message : "放弃失败，请稍后重试。"}
         </p> : null}
       </div>
