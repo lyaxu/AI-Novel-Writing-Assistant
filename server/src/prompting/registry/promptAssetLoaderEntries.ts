@@ -10,6 +10,10 @@ export interface PromptAssetLoaderEntry {
 
 export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
   {
+    key: "novel.audit.contract_vs_prose@v1",
+    load: () => require("../prompts/novel/audit/contractProseAudit.prompts").contractProseAuditPrompt as UnknownPromptAsset,
+  },
+  {
     key: "novel.planning_repair.advice_review@v6",
     load: () => require("../prompts/novel/volume/recovery/planningRepairAdviceReview.prompts").planningRepairAdviceReviewPrompt as UnknownPromptAsset,
   },
