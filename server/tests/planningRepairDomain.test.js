@@ -507,3 +507,32 @@ test("captured round9 passes historical replay but still rejects unmapped new pa
   assert.deepEqual(result.volumes.flatMap(v => v.chapters).find(c => c.id === state.chapterId).payoffRefs,
     proposal.changes.find(c => c.chapterId === state.chapterId).payoffRefs);
 });
+
+test("a repair preserves the chapter's minimum event list instead of erasing it", () => {
+  // Reported symptom: the chapter that came out of a planning repair was the one with an empty
+  // requiredElements. The patch rebuilds the scene plan from scenes and reader experience only, and
+  // planningRepairChangeSchema has no field for the list, so rebuilding quietly dropped it — leaving
+  // a chapter with nothing required to happen in it, which is exactly how prose turns into padding.
+  const { normalizeChapterScenePlan, serializeChapterScenePlan, parseChapterScenePlan } =
+    require("../../shared/dist/types/chapterLengthControl.js");
+
+  const elements = ["劳梓凡深夜送外卖到老旧小区", "电梯骤停并渗出冷气", "他用符箓封住异常源头"];
+  const seed = change("plan-1");
+  const seeded = serializeChapterScenePlan(normalizeChapterScenePlan({
+    scenes: seed.sceneCards,
+    readerExperience: seed.readerExperience,
+    requiredElements: elements,
+  }, 3000));
+  assert.deepEqual(parseChapterScenePlan(seeded, { targetWordCount: 3000 }).requiredElements, elements);
+
+  const doc = document();
+  doc.volumes[0].chapters[1].sceneCards = seeded;
+  const candidate = apply(doc);
+  const after = candidate.volumes[0].chapters.find(c => c.id === "plan-1");
+
+  assert.deepEqual(
+    parseChapterScenePlan(after.sceneCards, { targetWordCount: 3000 }).requiredElements,
+    elements,
+    "a repair must carry the existing event list forward, not empty it",
+  );
+});

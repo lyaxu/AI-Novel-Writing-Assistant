@@ -1,7 +1,7 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 import { preserveGeneratedContentConstraints } from "../../../../llm/generatedContentSchema";
 import type { VolumeChapterPlan, VolumePlanDocument } from "@ai-novel/shared/types/novel";
-import { normalizeChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
+import { normalizeChapterScenePlan, parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
 import { createChapterTaskSheetSchema } from "../chapterDetail/chapterDetailSchemas";
 
 const requiredText = z.string().trim().min(1);
@@ -190,9 +190,15 @@ export function applyPlanningRepairCandidate(
     if (comparable(change.endingState) === comparable(change.nextChapterEntryState)) {
       throw new Error(`Planning repair chapter ${chapter.id} repeats its ending as the next entry state.`);
     }
+    // A repair patch carries scenes and reader experience only — `planningRepairChangeSchema` has
+    // no field for the chapter's minimum event list. Rebuilding the plan without it silently
+    // erased that list, and the chapter that came out of a repair was exactly the one with nothing
+    // required to happen in it. Carry the existing list forward; the patch may not rewrite it.
+    const existingPlan = parseChapterScenePlan(chapter.sceneCards, { targetWordCount: target });
     const scenePlan = normalizeChapterScenePlan({
       scenes: change.sceneCards,
       readerExperience: change.readerExperience,
+      requiredElements: existingPlan?.requiredElements ?? [],
     }, target);
     if (scenePlan.targetWordCount !== target
       || scenePlan.scenes.reduce((sum, scene) => sum + scene.targetWordCount, 0) !== target) {
