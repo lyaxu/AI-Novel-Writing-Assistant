@@ -52,7 +52,13 @@ export function encodeAdviceContext(input: unknown) {
 export function prepareAdviceContext(input: unknown): string {
   const contextJson = encodeAdviceContext(input);
   if (contextJson.length > 160000) {
-    throw new AdviceContextCapacityError("相关规划与审查资料超出单次建议容量，本次未调用模型。请保持暂停，可将此运行记录交给支持人员检查。已有内容与修复轮次保留。");
+    // State the actual size. Without it the message says only "too large", which cannot be acted on:
+    // the earlier incident of this kind needed the real number before anyone could tell whether the
+    // payload was genuinely big or the encoding was duplicating text.
+    throw new AdviceContextCapacityError(
+      `相关规划与审查资料超出单次建议容量（本次 ${contextJson.length} 字符，上限 160000），本次未调用模型。`
+      + "请保持暂停，可将此运行记录交给支持人员检查。已有内容与修复轮次保留。",
+    );
   }
   return contextJson;
 }
