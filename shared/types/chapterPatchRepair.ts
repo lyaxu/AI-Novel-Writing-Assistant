@@ -41,6 +41,7 @@ export type ChapterPatchApplyFailureType =
   | "requires_full_rewrite"
   | "missing_target"
   | "ambiguous_target"
+  | "introduces_duplicate"
   | "no_effect";
 
 export type ChapterPatchMatchStrategy = "exact" | "normalized_whitespace";
@@ -179,6 +180,36 @@ function findSafePatchMatch(content: string, target: string): {
   };
 }
 
+/**
+ * Shortest run of characters that counts as "this text is already in the chapter".
+ *
+ * Chinese prose repeats short idioms naturally, so the bar has to be high enough that a common
+ * phrase is not mistaken for duplication; the observed defect had whole sentences re-emitted
+ * (28–38 characters of exact overlap), which this catches with margin.
+ */
+const DUPLICATE_SPAN_MIN_CHARS = 24;
+
+/**
+ * A span of `candidate` that already occurs in `existing`, or null.
+ *
+ * Used to answer one precise question: does the text this patch is *adding* repeat text the chapter
+ * already contains? Deliberately not "is the chapter repetitive" — that would blame a patch for
+ * duplication it did not cause. The target region is excluded by the caller, so a replacement that
+ * simply keeps the original wording of the span it replaces is not flagged.
+ */
+function findSharedSpan(existing: string, candidate: string, minLength: number): string | null {
+  if (existing.length < minLength || candidate.length < minLength) return null;
+  const windows = new Set<string>();
+  for (let index = 0; index + minLength <= existing.length; index += 1) {
+    windows.add(existing.slice(index, index + minLength));
+  }
+  for (let index = 0; index + minLength <= candidate.length; index += 1) {
+    const span = candidate.slice(index, index + minLength);
+    if (windows.has(span)) return span;
+  }
+  return null;
+}
+
 export function applyChapterPatchRepairPlan(
   content: string,
   plan: ChapterPatchRepairPlan,
@@ -221,6 +252,23 @@ export function applyChapterPatchRepairPlan(
     }
 
     const beforePatch = nextContent;
+    // The chapter without the span being replaced: text still present in the rest of the chapter.
+    const restOfChapter = beforePatch.slice(0, matchResult.match.start) + beforePatch.slice(matchResult.match.end);
+    const duplicated = findSharedSpan(restOfChapter, replacement, DUPLICATE_SPAN_MIN_CHARS);
+    if (duplicated) {
+      // A real run shipped a chapter whose second half retold the first: the repair was asked to fix
+      // a repetition, and its replacement re-emitted material already in the chapter. Nothing checked
+      // that, so the duplicated prose was saved as the finished chapter.
+      failures.push({
+        patchId: patch.id,
+        reason: `补丁的 replacement 把正文里已有的内容又写了一遍（重复片段：“${duplicated}…”）。`
+          + "replacement 应当只替换 targetExcerpt 对应的片段；若要新增内容，不要重述已有段落。",
+        failureType: "introduces_duplicate",
+        matchedBy: matchResult.match.matchedBy,
+        occurrenceCount: matchResult.occurrenceCount,
+      });
+      continue;
+    }
     nextContent = [
       nextContent.slice(0, matchResult.match.start),
       replacement,

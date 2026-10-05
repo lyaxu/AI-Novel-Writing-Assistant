@@ -111,8 +111,17 @@ export function validateChapterPayoffDecisions(
       if (decision.followUp.chapterOrder <= input.chapterOrder || !targets.length) {
         throw new Error(`Payoff follow-up must cite a supplied future planning target: ${decision.ledgerKey}. Chapter ${decision.followUp.chapterOrder} is not a supplied future chapter in planningWindow. A ledger target date is not an existing chapter plan. ${due ? "This payoff is due; do not remove its required follow-up while keeping seed/touch/pressure. Choose a valid authorized decision or requires_replan." : "This payoff is not due. For seed/touch/pressure an optional followUp may be null; do not invent a future chapter. Defer and partial_reveal still require real follow-up evidence."}`);
       }
-      if (!stringLeaves(targets).some((leaf) => leaf.includes(decision.followUp!.planningQuote))) {
-        throw new Error(`Payoff follow-up must cite a supplied future planning target: ${decision.ledgerKey}. Chapter ${decision.followUp.chapterOrder} exists, but planningQuote is not a continuous verbatim quote from that chapter. Copy from planningWindow, not the ledger or book summary.`);
+      // Sibling of the contract-evidence check above: same question, same tolerance. It used a raw
+      // `includes` on the decoded leaves, so a quote spanning a line break in the planning text was
+      // rejected as "not continuous" when it was word-for-word correct.
+      if (!citesQuote(stringLeaves(targets), decision.followUp.planningQuote)) {
+        const actual = stringLeaves(targets).join(" / ").slice(0, 200) || "(该章没有可引用的规划文本)";
+        throw new Error(
+          `Payoff follow-up must cite a supplied future planning target: ${decision.ledgerKey}.`
+          + ` Chapter ${decision.followUp.chapterOrder} 引用：${JSON.stringify(decision.followUp.planningQuote.slice(0, 120))}`
+          + ` ｜ 该章规划实际内容：${actual}`
+          + " 请从 planningWindow 复制连续原文，不要引用账本或书级摘要。",
+        );
       }
     }
   }

@@ -282,3 +282,55 @@ test("ChapterPatchRepairService converts unsafe apply-stage patch validation int
     promptRunner.runStructuredPrompt = originalRunStructuredPrompt;
   }
 });
+
+test("applyChapterPatchRepairPlan refuses a patch that re-tells text already in the chapter", () => {
+  // Reported defect: chapter 4 of a real book told the same scene twice. The repair was a light
+  // patch repair asked to reduce a repetition, and its replacement re-emitted the chapter's own
+  // opening before adding the new material, so the duplication was saved as the finished chapter.
+  const chapter = [
+    "他拉开门，楼道里一片漆黑。声控灯没亮，他跺了一脚，灯闪了两下才亮起来。",
+    "他把电动车推出巷子，后视镜里那栋楼的轮廓越来越小。",
+    "回到出租屋，他把葫芦埋进米缸，又翻开了爷爷的笔记本。",
+  ].join("\n");
+
+  const result = applyChapterPatchRepairPlan(chapter, {
+    strategy: "patch_first",
+    summary: "补一个离开的动作。",
+    patches: [{
+      id: "patch-1",
+      targetExcerpt: "他把电动车推出巷子，后视镜里那栋楼的轮廓越来越小。",
+      replacement: "他拉开门，楼道里一片漆黑。声控灯没亮，他跺了一脚，灯闪了两下才亮起来。\n他把电动车推出巷子。",
+      reason: "补足离场动作。",
+      issueIds: ["issue-1"],
+    }],
+    requiresFullRewrite: false,
+    escalationReason: null,
+  });
+
+  assert.equal(result.success, false);
+  assert.ok(
+    result.failures.some((failure) => failure.failureType === "introduces_duplicate"),
+    `expected an introduces_duplicate failure, got ${JSON.stringify(result.failures)}`,
+  );
+  assert.equal(result.content, chapter, "the duplicated text must not reach the saved chapter");
+});
+
+test("applyChapterPatchRepairPlan still allows genuinely new prose beside existing text", () => {
+  // The guard must not block ordinary additions: text that is not already in the chapter is fine.
+  const result = applyChapterPatchRepairPlan("他锁好车，上了楼。", {
+    strategy: "patch_first",
+    summary: "补一个动作。",
+    patches: [{
+      id: "patch-1",
+      targetExcerpt: "他锁好车，上了楼。",
+      replacement: "他锁好车，又回头看了一眼巷口那盏不亮的路灯，这才上楼。",
+      reason: "补足警惕感。",
+      issueIds: ["issue-1"],
+    }],
+    requiresFullRewrite: false,
+    escalationReason: null,
+  });
+
+  assert.equal(result.success, true);
+  assert.deepEqual(result.failures, []);
+});

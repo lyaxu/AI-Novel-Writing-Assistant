@@ -26,6 +26,18 @@ function readonlyPlanningText(context: unknown, path: string): string | null {
   return typeof value === "string" ? value : null;
 }
 
+/**
+ * Same set of chapter ids, regardless of order or repeats.
+ *
+ * Used where the contract fixes *which* chapters an issue covers but says nothing about the order
+ * they are listed in, so ordering must not be part of the judgement.
+ */
+function sameChapterIdSet(left: readonly string[] | undefined, right: readonly string[]): boolean {
+  const a = [...new Set(left ?? [])].sort();
+  const b = [...new Set(right)].sort();
+  return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
 /** AI decides semantic support; this guard only verifies provenance and structured safety. */
 export function validateAdviceSemanticReview(output: PlanningRepairAdviceReviewOutput, context: unknown): void {
   planningRepairAdviceReviewOutputSchema.parse(output);
@@ -38,8 +50,19 @@ export function validateAdviceSemanticReview(output: PlanningRepairAdviceReviewO
   }
   for (const assessment of assessments) {
     const issue = currentIssues.find(item => item.issueId === assessment.issueId)!;
-    if (assessment.chapterId !== issue.chapterId
-      || (issue.scope === "window" && (assessment.scope !== "window" || JSON.stringify(assessment.affectedChapterIds) !== JSON.stringify(issue.affectedChapterIds)))) throw new Error("问题核验章节不匹配当前目录。");
+    // Compared as sets, not as serialized arrays. Neither the schema nor the prompt states an order
+    // for affectedChapterIds, so a semantically identical answer that listed the same chapters in a
+    // different order used to be rejected — and rejected forever, because nothing told the model
+    // which order was wanted.
+    const windowMatches = issue.scope !== "window"
+      || (assessment.scope === "window" && sameChapterIdSet(assessment.affectedChapterIds, issue.affectedChapterIds));
+    if (assessment.chapterId !== issue.chapterId || !windowMatches) {
+      throw new Error(
+        `问题核验章节不匹配当前目录：${assessment.issueId} 返回 chapterId=${assessment.chapterId}、`
+        + `affectedChapterIds=[${(assessment.affectedChapterIds ?? []).join(", ")}]；`
+        + `目录要求 chapterId=${issue.chapterId}、affectedChapterIds=[${issue.affectedChapterIds.join(", ")}]。`,
+      );
+    }
     if (assessment.status !== "insufficient" && !assessment.evidence.length) throw new Error("问题判断缺少本次原文证据。");
     for (const evidence of assessment.evidence) {
       const candidate = adviceCandidateSourceText(context, evidence.sourcePath);
