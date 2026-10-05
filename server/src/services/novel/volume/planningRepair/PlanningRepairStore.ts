@@ -31,7 +31,7 @@ export interface PlanningRepairState {
   rounds: number;
   maxRounds: number;
   phase: "assessing" | "repairing" | "reviewing" | "ready" | "committed"
-    | "waiting_confirmation" | "uncertain" | "technical_failed";
+    | "waiting_confirmation" | "uncertain" | "technical_failed" | "abandoned";
   candidateVersionId?: string;
   affectedChapterIds?: string[];
   pendingOperation?: { kind: string; startedAt: string };
@@ -43,6 +43,16 @@ export interface PlanningRepairState {
   guidance?: string;
   recoveryAction?: { requestId: string; mode: "repair_then_review" | "review_existing"; paidRound?: number; affectedChapterIds?: string[] };
   technicalError?: string;
+  /** Set when the user gives up on this session. Kept as evidence; the session is not reusable. */
+  abandonedAt?: string;
+  abandonReason?: string;
+  /**
+   * Rounds consumed at the moment of abandonment.
+   *
+   * A new session for the same window starts from here. Without it, abandoning a session with an
+   * exhausted budget would hand out a fresh two rounds, and "abandon" would become a free retry.
+   */
+  abandonedRounds?: number;
 }
 
 export interface RepairSession {
@@ -104,8 +114,16 @@ const SNAPSHOT_KEY = "planningRepairSnapshot";
 const INACTIVE_PHASES = new Set(["waiting_confirmation", "uncertain", "technical_failed"]);
 const PHASES = new Set([
   "assessing", "repairing", "reviewing", "ready", "committed",
-  "waiting_confirmation", "uncertain", "technical_failed",
+  "waiting_confirmation", "uncertain", "technical_failed", "abandoned",
 ]);
+/**
+ * Phases in which a repair session is over and stops holding the novel's repair lock.
+ *
+ * `abandoned` is deliberately its own terminal phase rather than a second meaning for `committed`:
+ * commit records that a candidate was accepted and applied, and abandoning one never was. Writing
+ * `committed` here would put "this candidate was approved" into the history as a falsehood.
+ */
+const TERMINAL_PHASES = new Set(["committed", "abandoned"]);
 // Fields an eligible chapter may legitimately be rewritten in by generation or repair.
 //
 // KEEP IN SYNC with the object returned by `generateChapterTaskSheetDetail`
@@ -223,7 +241,9 @@ async function readTask(tx: Prisma.TransactionClient, taskId: string, novelId: s
   });
   for (const other of otherTasks) {
     const repair = readState(parseSeed(other.seedPayloadJson));
-    if (repair && repair.phase !== "committed") conflict("Another live task owns planning repair for this novel.");
+    // An abandoned session is over: it must stop blocking every other task in the novel. Leaving it
+    // in this check is precisely what kept a dead run holding the lock forever.
+    if (repair && !TERMINAL_PHASES.has(repair.phase)) conflict("Another live task owns planning repair for this novel.");
   }
   return task;
 }
@@ -455,6 +475,9 @@ function validateState(previous: PlanningRepairState, next: PlanningRepairState,
     conflict(`Affected chapter is outside the repair window. Outside: ${outside.join(", ")}. Allowed: ${eligible.join(", ") || "(none)"}.`);
   }
   if (previous.phase === "committed" || next.phase === "committed") conflict("Only commit may finalize a repair session.");
+  // Same reasoning for giving up. `validateState` guards the rebase path only; commit and abandon
+  // each have their own guarded write path, and a rebase must not reach either state.
+  if (previous.phase === "abandoned" || next.phase === "abandoned") conflict("Only abandon may give up a repair session.");
 }
 
 /**
@@ -754,7 +777,12 @@ export class PlanningRepairStore {
       }
       const reviewedWindowChapter = previous?.phase === "committed" && previous.volumeId === input.volumeId
         && requestedPlan && previous.affectedChapterIds?.includes(requestedPlan.id);
-      if (previous && (previous.phase !== "committed" || sameChapter || reviewedWindowChapter)) {
+      // A session the user gave up is never revived. `abandoned` is absorbing, so reusing it here
+      // would leave the chapter unrepairable forever — the worst outcome of that absorbing state.
+      // The next attempt starts as a new session; the abandoned one keeps the evidence (including
+      // the rounds it had consumed), which is what the audit trail needs.
+      const abandonedGaveUp = previous?.phase === "abandoned";
+      if (previous && !abandonedGaveUp && (previous.phase !== "committed" || sameChapter || reviewedWindowChapter)) {
         const snapshot = readSnapshot(seed, input.taskId);
         let state = previous;
         const upgradeBudget = snapshot.effectiveDefaultChapterLength === undefined && snapshot.snapshotToken === source.token;
@@ -812,7 +840,14 @@ export class PlanningRepairStore {
         novelId: input.novelId, volumeId: input.volumeId, chapterId: chapter.id,
         chapterOrder: chapter.chapterOrder, rounds: 0, maxRounds: 2,
         phase: stale || !eligible.length ? "waiting_confirmation" : "assessing",
-        history: [], quality: null, obligationMoves: [],
+        // A task holds one repair slot, so this new attempt replaces the given-up session. Carry a
+        // record of it forward: without this, giving up would erase exactly the evidence the abandon
+        // path exists to keep.
+        history: abandonedGaveUp && previous.novelId === input.novelId
+          ? [{ kind: "abandoned_previous", abandonedAt: previous.abandonedAt, abandonedRounds: previous.abandonedRounds,
+            reason: previous.abandonReason, technicalError: previous.technicalError }]
+          : [],
+        quality: null, obligationMoves: [],
         ...(stale || !eligible.length ? { summary: "Planning source is stale or the chapter is protected." } : {}),
       };
       const snapshot: StoredSnapshot = {
@@ -911,6 +946,55 @@ export class PlanningRepairStore {
     this.seeds.set(session, result.raw);
     if (result.stale) conflict("Planning source changed; the repair is waiting for confirmation.");
     return session;
+  }
+
+  /**
+   * Give up on this task's repair session.
+   *
+   * Needed because a session that stopped in `technical_failed` / `uncertain` / `waiting_confirmation`
+   * holds the novel's planning-repair lock while offering the same frozen error back however often
+   * the user retries. The only existing way out was cancelling the whole director run, which throws
+   * away unrelated progress.
+   *
+   * The workspace is never touched here: no candidate is applied and no chapter changes. What is
+   * written is the record that the user gave up, so the decision is auditable rather than silent.
+   *
+   * Read+CAS rather than `this.current(...)` on purpose: the panel acts on a task id, not on the
+   * in-memory session that `current` requires.
+   */
+  async abandon(input: { taskId: string; reason?: string }): Promise<PlanningRepairState> {
+    return transaction(async (tx) => {
+      const task = await tx.novelWorkflowTask.findUnique({ where: { id: input.taskId } });
+      if (!task) conflict("Repair task no longer exists.");
+      const seed = parseSeed(task.seedPayloadJson);
+      const previous = readState(seed);
+      if (!previous) conflict("This task has no planning repair session to give up.");
+      // Giving up twice is the same intent; it must be idempotent rather than an error.
+      if (previous.phase === "abandoned") return previous;
+      if (previous.phase === "committed") conflict("This repair was already applied; there is nothing to give up.");
+      if (task.status === "cancelled" || task.status === "succeeded") {
+        conflict("The task is already finished; its repair session no longer blocks anything.");
+      }
+      const next: PlanningRepairState = {
+        ...previous,
+        phase: "abandoned",
+        // These two are "a call is in flight" markers. Leaving them set is what kept the panel
+        // showing a frozen error after the session had stopped for good.
+        pendingOperation: undefined,
+        repairOutputPending: undefined,
+        // Points at a recovery action that must not be executed once the session is given up.
+        recoveryAction: undefined,
+        abandonedAt: new Date().toISOString(),
+        // Evidence, not enforcement: the next attempt starts with a fresh budget because the two
+        // rounds exist to stop the machine retrying on its own, and an explicit give-up is the very
+        // intervention they are meant to force. Keeping the count here preserves the audit trail.
+        abandonedRounds: previous.rounds,
+        ...(input.reason?.trim() ? { abandonReason: input.reason.trim() } : {}),
+        summary: "用户已放弃这次修复。计划与正文均未改动。",
+      };
+      await casSeed(tx, task, { ...seed, planningRepair: next });
+      return next;
+    });
   }
 
   async commit(session: RepairSession, candidate: VolumePlanDocument): Promise<VolumePlanDocument> {

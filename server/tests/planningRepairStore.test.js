@@ -1363,3 +1363,78 @@ for (const [name, mutate] of [
     assert.deepEqual(h.db, before);
   });
 }
+
+// ── 放弃卡住的修复会话 ────────────────────────────────────────────────────────
+
+function stuckSeed(h, phase = "technical_failed") {
+  const seed = JSON.parse(h.db.task.seedPayloadJson);
+  seed.planningRepair = {
+    ...seed.planningRepair,
+    phase,
+    pendingOperation: { kind: "review", startedAt: epoch },
+    repairOutputPending: { inputFingerprint: "fp", round: 1 },
+    recoveryAction: { requestId: "req-1", mode: "review_existing" },
+    technicalError: "model call failed",
+  };
+  h.db.task.seedPayloadJson = JSON.stringify(seed);
+}
+
+test("giving up a stuck repair records the decision and clears in-flight markers", async () => {
+  const h = fixture();
+  await h.store.begin(h.input);
+  stuckSeed(h);
+  const roundsBefore = h.state().rounds;
+
+  const abandoned = await h.store.abandon({ taskId: "t", reason: "用户放弃这次修复" });
+
+  assert.equal(abandoned.phase, "abandoned");
+  assert.equal(h.state().phase, "abandoned");
+  // The frozen error is what the panel kept showing; the in-flight markers must go with it.
+  assert.equal(h.state().pendingOperation, undefined);
+  assert.equal(h.state().repairOutputPending, undefined);
+  assert.equal(h.state().recoveryAction, undefined);
+  // Evidence survives: the failure itself, when the user gave up, and what was spent.
+  assert.equal(h.state().technicalError, "model call failed");
+  assert.equal(h.state().abandonReason, "用户放弃这次修复");
+  assert.ok(h.state().abandonedAt, "the give-up time is recorded");
+  assert.equal(h.state().abandonedRounds, roundsBefore);
+});
+
+test("giving up twice is the same intent, not an error", async () => {
+  const h = fixture();
+  await h.store.begin(h.input);
+  stuckSeed(h, "uncertain");
+  const first = await h.store.abandon({ taskId: "t" });
+  const afterFirst = h.state();
+  await h.store.abandon({ taskId: "t" });
+  // Compare what was persisted: the returned object carries explicit undefined keys that do not
+  // survive a round-trip through the seed, so comparing it to a re-read state tests JSON, not intent.
+  assert.deepEqual(h.state(), afterFirst);
+  assert.equal(first.phase, "abandoned");
+});
+
+test("an applied repair cannot be given up", async () => {
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  await h.ready(session);
+  await h.store.commit(session, h.candidate());
+  await assert.rejects(() => h.store.abandon({ taskId: "t" }), /already applied/);
+});
+
+test("a new attempt after giving up starts fresh instead of reviving the abandoned session", async () => {
+  const h = fixture();
+  await h.store.begin(h.input);
+  stuckSeed(h);
+  await h.store.abandon({ taskId: "t" });
+
+  const resumed = await h.store.begin(h.input);
+
+  // Reusing an absorbing state would leave this chapter unrepairable forever.
+  assert.notEqual(resumed.state.phase, "abandoned");
+  assert.equal(resumed.state.rounds, 0, "a new attempt gets a full budget, not an exhausted one");
+  // One repair slot per task: the new session replaces the old one, so the evidence must travel
+  // with it rather than being overwritten.
+  const carried = resumed.state.history.find((entry) => entry.kind === "abandoned_previous");
+  assert.ok(carried, "the new session carries a record of the given-up attempt");
+  assert.ok(carried.abandonedAt, "including when it was given up");
+});
