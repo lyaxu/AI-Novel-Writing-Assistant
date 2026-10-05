@@ -71,3 +71,20 @@ export const contractProseAuditSchema = z.object({
   summary: z.string().trim().min(1).max(600),
 });
 export type ContractProseAudit = z.infer<typeof contractProseAuditSchema>;
+
+/**
+ * The writing-layer defects, asked in their own call.
+ *
+ * Measured reason for the split: asked inside the full delivery audit — one JSON with six sections —
+ * the model returned both defect arrays empty for a chapter whose unsupported turn a focused,
+ * single-question probe identified immediately. The capability was there; the batched prompt
+ * diluted it. Delivery checking and defect hunting are different readings and get separate calls.
+ */
+export const contractProseDefectsSchema = z.object({
+  repeatedExchanges: z.array(contractProseRepeatedExchangeSchema).max(5).default([]),
+  unsupportedTurns: z.array(contractProseUnsupportedTurnSchema).max(5).default([]),
+  /** What the reader would most want changed, whether or not it fits the two defect shapes. */
+  biggestWeakness: z.string().trim().max(400).default(""),
+  summary: z.string().trim().min(1).max(600),
+});
+export type ContractProseDefects = z.infer<typeof contractProseDefectsSchema>;

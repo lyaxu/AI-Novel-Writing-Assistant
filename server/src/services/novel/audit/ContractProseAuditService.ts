@@ -1,8 +1,9 @@
-import type { ContractProseAudit, ContractProseElementCheck } from "@ai-novel/shared/types/contractProseAudit";
+import type { ContractProseAudit, ContractProseDefects, ContractProseElementCheck } from "@ai-novel/shared/types/contractProseAudit";
 import { parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
 import { prisma } from "../../../db/prisma";
 import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
 import { contractProseAuditPrompt, type ContractProseAuditSceneInput } from "../../../prompting/prompts/novel/audit/contractProseAudit.prompts";
+import { contractProseDefectsPrompt } from "../../../prompting/prompts/novel/audit/contractProseDefects.prompts";
 import { detectProseQuality } from "../runtime/proseQuality/ProseQualityDetector";
 
 /**
@@ -35,6 +36,8 @@ export interface ContractProseAuditedChapter {
   chapterTitle: string;
   /** Present only when the chapter has prose to judge. */
   audit: ContractProseAudit | null;
+  /** The writing-layer pass, a separate call. Null whenever `audit` is null. */
+  defects: ContractProseDefects | null;
   /** Deterministic findings for this chapter, independent of the model. */
   deterministic: string[];
   skippedReason?: string;
@@ -67,6 +70,13 @@ function deterministicChapterFindings(input: {
   for (const leak of leaks) notes.push(`正文残留规划标记：${leak.excerpt}`);
   if (input.targetWordCount && input.prose.length < input.targetWordCount * 0.6) {
     notes.push(`正文 ${input.prose.length} 字，明显低于目标 ${input.targetWordCount} 字。`);
+  }
+  if (input.targetWordCount && input.prose.length > input.targetWordCount * 1.35) {
+    // Reported as a deviation from the contract, not as a defect in the writing. Two independent
+    // readings of the chapter this check was built from both judged the prose tight while it ran
+    // 151% of target, so length alone must not be presented as padding.
+    const ratio = Math.round((input.prose.length / input.targetWordCount) * 100);
+    notes.push(`正文 ${input.prose.length} 字，为目标 ${input.targetWordCount} 字的 ${ratio}%。超长本身不等于拖沓；这里只记录与合同的偏差。`);
   }
   return notes;
 }
@@ -241,7 +251,7 @@ export async function auditNovelContracts(input: {
     if (!prose) {
       report.chapters.push({
         chapterOrder: chapter.order, chapterTitle: chapter.title ?? "",
-        audit: null, deterministic, skippedReason: "本章没有正文，未做落实核对。",
+        audit: null, defects: null, deterministic, skippedReason: "本章没有正文，未做落实核对。",
       });
       continue;
     }
@@ -273,6 +283,28 @@ export async function auditNovelContracts(input: {
       elements: reconcileElements(required, result.output.elements, { order: chapter.order, title: chapter.title ?? "" }, report.findings),
     };
 
+    // Second, separate reading. Batched into the call above, both defect arrays came back empty for
+    // a chapter whose unsupported turn a focused probe found immediately.
+    input.onProgress?.(`正在检查第 ${chapter.order} 章的写作问题…`);
+    const defectsResult = await runStructuredPrompt({
+      asset: contractProseDefectsPrompt,
+      promptInput: {
+        novelTitle: novel.title,
+        chapterOrder: chapter.order,
+        chapterTitle: chapter.title ?? "",
+        prose: prose.slice(0, MAX_PROSE_CHARS_PER_CALL),
+      },
+      options: {
+        provider: input.provider,
+        model: input.model,
+        temperature: 0.1,
+        novelId: novel.id,
+        stage: "contract_prose_defects",
+        itemKey: `chapter_${chapter.order}`,
+      },
+    });
+    const defects: ContractProseDefects = defectsResult.output;
+
     for (const check of audit.elements) {
       if (check.verdict === "delivered") continue;
       report.findings.push({
@@ -300,7 +332,7 @@ export async function auditNovelContracts(input: {
         detail: audit.endingHookEvidence,
       });
     }
-    for (const exchange of audit.repeatedExchanges) {
+    for (const exchange of defects.repeatedExchanges) {
       report.findings.push({
         chapterOrder: chapter.order, chapterTitle: chapter.title ?? "",
         kind: "defect", severity: "high",
@@ -308,17 +340,24 @@ export async function auditNovelContracts(input: {
         detail: [exchange.evidence, exchange.fixHint].filter(Boolean).join(" / "),
       });
     }
-    for (const turn of audit.unsupportedTurns) {
+    for (const turn of defects.unsupportedTurns) {
       report.findings.push({
         chapterOrder: chapter.order, chapterTitle: chapter.title ?? "",
         kind: "defect", severity: "high",
-        message: `${turn.character} 的转变缺少硬理由：${turn.from} → ${turn.to}`,
+        message: `${turn.character} 说出口的立场被推翻却没有新依据：${turn.from} → ${turn.to}`,
         detail: [turn.evidence, turn.fixHint].filter(Boolean).join(" / "),
+      });
+    }
+    if (defects.biggestWeakness) {
+      report.findings.push({
+        chapterOrder: chapter.order, chapterTitle: chapter.title ?? "",
+        kind: "defect", severity: "medium",
+        message: `最该改的一处：${defects.biggestWeakness}`,
       });
     }
 
     report.chapters.push({
-      chapterOrder: chapter.order, chapterTitle: chapter.title ?? "", audit, deterministic,
+      chapterOrder: chapter.order, chapterTitle: chapter.title ?? "", audit, defects, deterministic,
     });
   }
 
