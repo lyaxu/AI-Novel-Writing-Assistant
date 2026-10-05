@@ -94,6 +94,14 @@ export default function PlanningRepairPanel({ novelId }: { novelId: string }) {
           {abandon.error instanceof Error ? abandon.error.message : "放弃失败，请稍后重试。"}
         </p> : null}
       </div>
-    </div> : null}
+    </div> : <p className="text-sm text-muted-foreground">
+      {/* Rendered as an explanation, not as nothing. Previously this branch was `null`, so a repair
+          that could not act showed no buttons and no reason — the user clicked repair again and again
+          with no way to tell they were being held back. */}
+      现在这一步没有可以直接操作的修复：{isPlanningRepairTaskPaused(status)
+        ? "这次修复不在等待你处理的状态，运行可能仍在继续或已经结束。"
+        : `这次运行的当前状态是「${status.status === "cancelled" ? "已取消" : status.status === "succeeded" ? "已完成" : status.status}」，只有在等待你处理时才能在这里修复。`}
+      上面显示的报错是上一次留下的记录；要重新走一遍，请等运行停在需要你确认的位置，再回来点「让 AI 推荐修复方案」。
+    </p>}
   </section>;
 }
