@@ -6,8 +6,10 @@ import { DirectorCommandService } from "../commands/DirectorCommandService";
 import { AppError } from "../../../../middleware/errorHandler";
 import { isPlanningRepairConfirmationError } from "../recovery/planningRepair/planningRepairRecovery";
 import { PlanningRepairAdviceService } from "../recovery/planningRepair/advice/PlanningRepairAdviceService";
+import { planningRepairStore, type PlanningRepairStore } from "../../volume/planningRepair/PlanningRepairStore";
 
 const params = z.object({ id: z.string().trim().min(1) });
+const abandonBody = z.object({ reason: z.string().trim().max(400).optional() }).strict().optional();
 const adviceRequest = z.object({ repairKey: z.string().min(1), idempotencyKey: z.string().min(1).max(128) }).strict();
 const adviceSelection = adviceRequest.extend({ adviceId: z.string().min(1), optionId: z.string().min(1) }).strict();
 const action = z.discriminatedUnion("action", [
@@ -24,6 +26,7 @@ export function createPlanningRepairRouter(
   recovery: Pick<PlanningRepairRecoveryService, "status" | "statusByNovel" | "grant"> = new PlanningRepairRecoveryService(),
   commands: Pick<DirectorCommandService, "enqueuePlanningRepairRecoveryCommand"> = new DirectorCommandService(),
   advice: Pick<PlanningRepairAdviceService, "status" | "request" | "select"> = new PlanningRepairAdviceService(recovery),
+  store: Pick<PlanningRepairStore, "abandon"> = planningRepairStore,
 ) {
   const router = Router();
   router.get("/:id/planning-repair/advice", validate({ params }), async (req, res, next) => {
@@ -52,6 +55,25 @@ export function createPlanningRepairRouter(
   router.get("/:id/planning-repair", validate({ params }), async (req, res, next) => {
     try {
       res.json({ success: true, data: await recovery.status(String(req.params.id)) });
+    } catch (error) { next(error); }
+  });
+  /**
+   * Give up on this task's repair session.
+   *
+   * Separate from `actions/retry` on purpose: retrying asks the same stuck session for another
+   * attempt, which is what the user has already done several times by the point they reach for this.
+   * This ends the session so the novel stops being blocked by it.
+   */
+  router.post("/:id/planning-repair/abandon", validate({ params, body: abandonBody }), async (req, res, next) => {
+    try {
+      const state = await store.abandon({
+        taskId: String(req.params.id),
+        reason: (req.body as { reason?: string } | undefined)?.reason,
+      });
+      res.json({
+        success: true,
+        data: { phase: state.phase, abandonedAt: state.abandonedAt, abandonedRounds: state.abandonedRounds },
+      });
     } catch (error) { next(error); }
   });
   router.post("/:id/planning-repair/actions", validate({ params, body: action }), async (req, res, next) => {

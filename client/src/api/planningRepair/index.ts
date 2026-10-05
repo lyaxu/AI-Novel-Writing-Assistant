@@ -19,7 +19,7 @@ export interface PlanningRepairStatus {
     chapterOrder: number;
     rounds: number;
     maxRounds?: number;
-    phase: "assessing" | "repairing" | "reviewing" | "ready" | "committed" | "waiting_confirmation" | "uncertain" | "technical_failed";
+    phase: "assessing" | "repairing" | "reviewing" | "ready" | "committed" | "waiting_confirmation" | "uncertain" | "technical_failed" | "abandoned";
     summary: string;
     quality?: unknown;
     history: unknown[];
@@ -65,5 +65,19 @@ export async function actOnPlanningRepair(taskId: string, payload:
   | { action: "retry"; repairKey: string; guidance: string; idempotencyKey: string; executionMode?: "repair_then_review" | "review_existing"; affectedChapterIds?: string[] },
 ) {
   const { data } = await apiClient.post<ApiResponse<unknown>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/actions`, payload);
+  return data.data;
+}
+
+/**
+ * Give up on this task's repair session.
+ *
+ * Not part of `actOnPlanningRepair`: the actions there ask the same stuck session for another
+ * attempt, which is exactly what the user has already tried several times by this point.
+ */
+export async function abandonPlanningRepair(taskId: string, reason?: string) {
+  const { data } = await apiClient.post<ApiResponse<{ phase: string; abandonedAt?: string; abandonedRounds?: number }>>(
+    `/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/abandon`,
+    reason?.trim() ? { reason: reason.trim() } : {},
+  );
   return data.data;
 }
