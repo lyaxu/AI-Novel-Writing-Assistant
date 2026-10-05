@@ -250,6 +250,36 @@ export class DirectorBookAutomationProjectionService {
         updatedAt: true,
       },
     });
+    // The panel shows the most recently touched auto_director task, which is right when a run is
+    // resumed and wrong when a dead one is being poked at. That choice is left alone — both signals
+    // are defensible — but the ambiguity is recorded: two live director runs for one book means one
+    // of them can hold the planning-repair lock while the other is the one the user is watching.
+    //
+    // Scoped to the same lane on purpose: a manual_create task for the same book is a different
+    // flow and not evidence of a conflict. Comparing task ids across lanes once produced a wrong
+    // diagnosis, so the check asks the precise question instead of the convenient one.
+    const otherLiveTasks = await prisma.novelWorkflowTask.findMany({
+      where: {
+        novelId,
+        id: { not: latestTask?.id ?? "" },
+        lane: "auto_director",
+        status: { in: ["queued", "running", "waiting_approval"] },
+      },
+      select: { id: true, status: true, createdAt: true, updatedAt: true, pendingManualRecovery: true },
+      orderBy: [{ updatedAt: "desc" }],
+    });
+    if (otherLiveTasks.length > 0) {
+      console.warn("[director.projection] several live director runs for one novel", {
+        novelId,
+        shown: { id: latestTask?.id ?? null, status: latestTask?.status ?? null },
+        others: otherLiveTasks.map((task) => ({
+          id: task.id,
+          status: task.status,
+          pendingManualRecovery: task.pendingManualRecovery,
+          createdAt: task.createdAt.toISOString(),
+        })),
+      });
+    }
     const latestRun = await prisma.directorRun.findFirst({
       where: { novelId },
       orderBy: { updatedAt: "desc" },
