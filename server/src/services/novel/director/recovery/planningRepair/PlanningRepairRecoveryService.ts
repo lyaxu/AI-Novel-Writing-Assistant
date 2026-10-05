@@ -4,7 +4,7 @@ import { NovelWorkflowService } from "../../../workflow/NovelWorkflowService";
 import { buildNovelEditResumeTarget } from "../../../workflow/novelWorkflow.shared";
 import { isPlanningRepairConfirmationError, readPlanningRepairSeed, resolvePlanningRepairResumePhase } from "./planningRepairRecovery";
 import { PlanningRepairStore } from "../../../volume/planningRepair/PlanningRepairStore";
-import { isPlanningRepairConfirmationPhase, isPlanningRepairTaskPaused } from "@ai-novel/shared/types/planningRepair/recovery";
+import { isPlanningRepairConfirmationPhase, isPlanningRepairTaskPaused, isTerminalPlanningRepairPhase } from "@ai-novel/shared/types/planningRepair/recovery";
 import { readPipelinePauseProjection } from "../pipelinePause";
 
 export class PlanningRepairRecoveryService {
@@ -30,7 +30,7 @@ export class PlanningRepairRecoveryService {
       || row.startedAt?.getTime() !== expected.startedAt?.getTime()) return false;
     const current = readPlanningRepairSeed(row.seedPayloadJson);
     const original = readPlanningRepairSeed(expected.seedPayloadJson);
-    if (!original.repair || !current.repair || current.repair.novelId !== row.novelId || current.repair.phase === "committed"
+    if (!original.repair || !current.repair || current.repair.novelId !== row.novelId || isTerminalPlanningRepairPhase(current.repair.phase)
       || current.repair.key !== original.repair.key
       || current.recovery?.idempotencyKey !== original.recovery?.idempotencyKey
       || current.recovery?.pendingGrant) return false;
@@ -79,7 +79,7 @@ export class PlanningRepairRecoveryService {
     if (!row || row.status === "cancelled" || row.cancelRequestedAt) return;
     const { seed, repair, recovery } = readPlanningRepairSeed(row.seedPayloadJson);
     if (!repair) throw new AppError("规划修复缺少持久化状态。", 409);
-    if (repair.novelId !== row.novelId || repair.phase === "committed") throw new AppError("规划修复归属或状态已变化。", 409);
+    if (repair.novelId !== row.novelId || isTerminalPlanningRepairPhase(repair.phase)) throw new AppError("规划修复归属或状态已变化。", 409);
     const technicalError = error instanceof Error ? error.message : undefined;
     const executionConflict = expectedRow && error && typeof error === "object" && "code" in error
       && error.code === "PLANNING_REPAIR_CONFLICT";

@@ -7,6 +7,7 @@ import {
   type DirectorContinuationMode,
 } from "@ai-novel/shared/types/novelDirector";
 import type { NovelContextService } from "../../NovelContextService";
+import { isTerminalPlanningRepairPhase } from "@ai-novel/shared/types/planningRepair/recovery";
 import type { StoryMacroPlanService } from "../../storyMacro/StoryMacroPlanService";
 import type { NovelVolumeService } from "../../volume/NovelVolumeService";
 import type { NovelWorkflowService } from "../../workflow/NovelWorkflowService";
@@ -259,7 +260,7 @@ export class NovelDirectorContinueRuntime {
     }
     assertPlanningRepairResumeAllowed(row.seedPayloadJson, input?.planningRepairRecoveryKey);
     const planningRepairSeed = readPlanningRepairSeed(row.seedPayloadJson);
-    const planningRepairRecovery = planningRepairSeed.repair && planningRepairSeed.repair.phase !== "committed"
+    const planningRepairRecovery = planningRepairSeed.repair && !isTerminalPlanningRepairPhase(planningRepairSeed.repair.phase)
       ? planningRepairSeed.recovery ?? {
         repairKey: planningRepairSeed.repair.key,
         resumePhase: resolvePlanningRepairResumePhase(row),

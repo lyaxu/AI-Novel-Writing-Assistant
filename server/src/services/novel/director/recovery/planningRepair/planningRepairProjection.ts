@@ -13,6 +13,12 @@ interface PlanningPauseTask {
 
 function isPlanningPause(task: PlanningPauseTask, phase: string): boolean {
   if (!isPlanningRepairTaskPaused(task)) return false;
+  // A given-up session is over. Without this it still reads as a planning pause — the first clause
+  // matches on task status alone — so the panel keeps showing the frozen checkpoint the user just
+  // dismissed, which is the exact symptom abandoning is supposed to clear.
+  // Only `abandoned` is excluded here, not every terminal phase: a committed repair legitimately
+  // still presents its checkpoint, and filtering the whole terminal set silently removed that.
+  if (phase === "abandoned") return false;
   return (task.status === "waiting_approval" && task.checkpointType === "step_review_required")
     || Boolean(task.pendingManualRecovery && isPlanningRepairConfirmationPhase(phase));
 }
