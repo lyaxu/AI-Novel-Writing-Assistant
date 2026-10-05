@@ -881,7 +881,7 @@ export class PlanningRepairStore {
       // A given-up session is final. Recovery entry points already refuse terminal phases, but a
       // store must not rely on callers having checked: `validateState` guards `save`, not this path,
       // so without this a rebase silently revived the session the user had just given up.
-      if (previous.phase === "abandoned") return conflict("A given-up repair session cannot be revived.");
+      if (previous.phase === "abandoned") return conflict("这次修复已经放弃，不能再继续。");
       const snapshot = readSnapshot(seed, task.id);
       const source = await readSource(tx, input.novelId, task);
       if (input.expectedSourceToken !== undefined && input.expectedSourceToken !== source.token) {
@@ -969,15 +969,15 @@ export class PlanningRepairStore {
   async abandon(input: { taskId: string; reason?: string }): Promise<PlanningRepairState> {
     return transaction(async (tx) => {
       const task = await tx.novelWorkflowTask.findUnique({ where: { id: input.taskId } });
-      if (!task) conflict("Repair task no longer exists.");
+      if (!task) conflict("找不到这次修复所属的任务，可能已经被清理。");
       const seed = parseSeed(task.seedPayloadJson);
       const previous = readState(seed);
-      if (!previous) conflict("This task has no planning repair session to give up.");
+      if (!previous) conflict("这次任务没有可以放弃的修复。");
       // Giving up twice is the same intent; it must be idempotent rather than an error.
       if (previous.phase === "abandoned") return previous;
-      if (previous.phase === "committed") conflict("This repair was already applied; there is nothing to give up.");
+      if (previous.phase === "committed") conflict("这次修复已经应用完成，没有可放弃的内容。");
       if (task.status === "cancelled" || task.status === "succeeded") {
-        conflict("The task is already finished; its repair session no longer blocks anything.");
+        conflict("这次运行已经结束，它的修复不再占用任何东西。");
       }
       const next: PlanningRepairState = {
         ...previous,

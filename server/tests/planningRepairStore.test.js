@@ -1418,7 +1418,7 @@ test("an applied repair cannot be given up", async () => {
   const session = await h.store.begin(h.input);
   await h.ready(session);
   await h.store.commit(session, h.candidate());
-  await assert.rejects(() => h.store.abandon({ taskId: "t" }), /already applied/);
+  await assert.rejects(() => h.store.abandon({ taskId: "t" }), /已经应用完成/);
 });
 
 test("a new attempt after giving up starts fresh instead of reviving the abandoned session", async () => {
@@ -1472,7 +1472,7 @@ test("a given-up session cannot be revived by rebasing it", async () => {
   await h.store.begin(h.input);
   const abandonedAt = (await h.store.abandon({ taskId: "t" })).abandonedAt;
 
-  await assert.rejects(h.store.rebase(h.input), /cannot be revived/);
+  await assert.rejects(h.store.rebase(h.input), /不能再继续/);
 
   const after = h.state();
   assert.equal(after.phase, "abandoned", "the session stays given up");
