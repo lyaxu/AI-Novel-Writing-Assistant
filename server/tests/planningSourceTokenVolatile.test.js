@@ -65,11 +65,31 @@ test("the run's own writes to volumes, versions and chapters do NOT change the i
   assert.equal(after, before, "timestamp-only writes must not look like an external planning edit");
 });
 
+test("the run's own progress on a chapter row is NOT the guarantee under test here", () => {
+  // Deliberately asserted as NOT ignored. A chapter's body and status are what tell a commit
+  // that the chapter it is about to write has since been written or locked by someone else
+  // (planningRepairStore.test.js "commit rejects concurrent body/lock changes"). Stripping them
+  // from the identity removes that protection, so only `updatedAt` is excluded.
+  const before = identity(base());
+  const locked = base();
+  locked.chapters[0].chapterStatus = "generating";
+  assert.notEqual(identity(locked), before, "a chapter becoming locked must invalidate a pending commit");
+});
+
+test("a chapter row appearing or disappearing changes the identity", () => {
+  const before = identity(base());
+  const extra = base();
+  extra.chapters.push({ id: "c3", novelId: "n1", order: 3, title: "新章", generationState: "planned", chapterStatus: "unplanned", createdAt: "T+", updatedAt: "T+" });
+  assert.notEqual(identity(extra), before, "a new row carries a new order, so identity must change");
+  const fewer = base();
+  fewer.chapters.pop();
+  assert.notEqual(identity(fewer), before, "dropping the last row must change identity too");
+});
+
 test("adding a volume IS a real planning change and still requires confirmation", () => {
-  // Deliberately NOT excluded. The observed false positive came only from `updatedAt`:
-  // the snapshot already contained all three volumes, and only their timestamps moved.
-  // Loosening the identity to tolerate a growing volume list would be a much wider change
-  // than the evidence supports.
+  // Deliberately NOT excluded. The observed false positive came from the run's own writes
+  // (timestamps and its own chapter progress), not from the volume list growing. Loosening
+  // the identity to tolerate that would be a much wider change than the evidence supports.
   const before = identity(base());
   const grown = base();
   grown.volumes.push({ id: "v2", novelId: "n1", title: "旁支现身", status: "active", sortOrder: 2, sourceVersionId: "ver1", createdAt: "T+", updatedAt: "T+", chapters: [] });
@@ -103,9 +123,9 @@ test("a real planning edit STILL changes the identity and still requires confirm
   macroEdit.macro.content = "changed";
   assert.notEqual(identity(macroEdit), before, "changing the story macro is a real planning edit");
 
-  const proseEdit = base();
-  proseEdit.chapters[0].generationState = "approved";
-  assert.notEqual(identity(proseEdit), before, "a written-chapter state change is a real change");
+  const planTaskSheet = base();
+  planTaskSheet.volumes[0].chapters[0].taskSheet = "新的章节计划";
+  assert.notEqual(identity(planTaskSheet), before, "rewriting a planned chapter's task sheet is a real planning edit");
 });
 
 test("createdAt is retained: identity is not weakened into ignoring real history", () => {

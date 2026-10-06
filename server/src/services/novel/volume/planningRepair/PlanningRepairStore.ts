@@ -284,9 +284,11 @@ async function readSource(tx: Prisma.TransactionClient, novelId: string, task: N
   // "Planning source changed; explicit confirmation is required." — a false positive that
   // sends the user to supply repair direction for a problem that does not exist.
   //
-  // Only the volatile columns are dropped. Every field that describes the plan stays, so a
-  // genuine user edit (title, status, chapter list, version content, macro, novel settings)
-  // still changes the token and still requires explicit confirmation.
+  // Only `updatedAt` is dropped. Every other column stays in the hash, including a chapter's
+  // body and status: those are exactly what tells a commit that the chapter it is about to
+  // write has since been written or locked by someone else (planningRepairStore.test.js
+  // "commit rejects concurrent body/lock changes"). Narrowing the identity to "plan shape"
+  // fields silently removed that protection, so it is not done here.
   const stripVolatile = <T extends object>(row: T): Omit<T, "updatedAt"> => {
     const { updatedAt: _rowUpdatedAt, ...rest } = row as T & { updatedAt?: unknown };
     return rest;
@@ -305,7 +307,8 @@ async function readSource(tx: Prisma.TransactionClient, novelId: string, task: N
     chapters, volumes, versions, document, effectiveDefaultChapterLength,
     token: hash(planningIdentity),
     // Kept for sessions seeded before the volatile columns were excluded, so an in-flight
-    // repair is recognised by either the old or the new identity.
+    // repair is recognised by either the old or the new identity instead of being reported
+    // as a source change by the very fix meant to stop false positives.
     legacyToken: hash({ novel, volumes, versions, chapters, macro }),
   };
 }
@@ -957,7 +960,7 @@ export class PlanningRepairStore {
       if (snapshot.committed) conflict("A committed repair cannot be resumed as a draft.");
       validateState(previous, requestedState, snapshot.eligibleChapterIds);
       const source = await readSource(tx, previous.novelId, task);
-      if (source.token !== snapshot.snapshotToken) {
+      if (![source.token, source.legacyToken].includes(snapshot.snapshotToken)) {
         const waiting = { ...previous, phase: "waiting_confirmation" as const, summary: "Planning source changed; explicit confirmation is required." };
         const raw = await casSeed(tx, task, { ...seed, planningRepair: waiting });
         return { state: waiting, snapshot, candidate: await this.loadCandidate(tx, previous, snapshot), raw, stale: true };
@@ -1038,7 +1041,7 @@ export class PlanningRepairStore {
       const { task, seed, previous, snapshot } = await this.current(tx, session);
       if (snapshot.committed) conflict("Repair is already committed; reload the active workspace.");
       const source = await readSource(tx, previous.novelId, task);
-      if (source.token !== snapshot.snapshotToken) {
+      if (![source.token, source.legacyToken].includes(snapshot.snapshotToken)) {
         const waiting = { ...previous, phase: "waiting_confirmation" as const, summary: "Planning source changed; commit was not applied." };
         const raw = await casSeed(tx, task, { ...seed, planningRepair: waiting });
         return { stale: true as const, state: waiting, snapshot, raw };
