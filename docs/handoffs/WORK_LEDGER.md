@@ -196,3 +196,63 @@ approved/completed（含 high 级连贯性风险）变为 drafted/needs_repair�
   [长文提示词评估](../evals/competitor-absorb/2026-10-06-longform-prompt-assessment.md)，
   建议优先做「明喻频率 + 无意义小动作」两条 `antiAiRule`。
 
+---
+
+## 2026-10-06 规划修复连续卡死（Q42）
+
+《外卖小哥阴间配送》开书后**连续 5 次卡在 20%**，用户界面提示
+「请回到节奏 / 拆章工作区补充修复方向，并确认追加一轮规划修复。」
+这是本窗口第二个反复问题，**且我前四次都修错了地方**。
+
+### ⚠️ 最重要的教训：先分清"被拒绝"和"没执行"
+
+前三次我看到任务 `updatedAt` 不变就断定"没执行"，实际上是
+`assertPlanningRepairResumeAllowed`（`planningRepairRecovery.ts:58-65`）
+**在入口就抛 409 拒绝了**——`waiting_confirmation` 状态下点"继续"必然被拒，
+这是设计如此。查证方法：看 `DirectorRunCommand` 有没有新记录、
+`GenerationJob` 的 `startedAt/finishedAt` 是否推进。**不要只看 `updatedAt`。**
+
+### 实际修掉的四个缺陷（按提交顺序）
+
+| 提交 | 缺陷 | 说明 |
+|---|---|---|
+| `810ad64c` | 规划源身份含 `updatedAt` | `readSource` 查表无 `select`，拿到完整行含时间戳。流程自己的写入被判为外部编辑。仅剔 `updatedAt`，并保留 `legacyToken` 兼容在途会话 |
+| `5cf32cf9` | `save()` / `commit()` 漏改 | 上一提交只改了 `begin()`。真跑一次即撞上，`technicalError` 实为 "Planning source changed; the repair is waiting for confirmation." |
+| `9f440270` | 孤儿 `pendingOperation` 死锁 | 三处 stale 分支只改 `phase`/`summary`，不释放"调用在飞"标记；而 `commit()` 要求 `!pendingOperation`，导致**每次重试都死在同一面墙** |
+| `0f9f14b6` | 空章物化被判为来源变更 | 物化已规划章节会写 `Chapter` 空行，该写入改变身份，流程 91ms 后拒绝自己。改为：**章节只有在真正被做过之后才计入身份**（有正文 / 离开 planned / 被接手） |
+
+### 依证据订正了一条既有测试断言（需知晓）
+
+`planningRepairStore.test.js` 原有断言「来源变更时不得重置 rounds 或 pendingOperation」。
+**`pendingOperation` 部分已改为必须清空**，理由：保留它正是死锁成因，有真实运行证据
+（该标记卡了 17 分钟）。`rounds=2 不被重置` 的核心断言原样保留，
+`history` 亦未动。若后续认为应保留原设计，需改为在 `commit()` 中识别孤儿标记
+再自动释放，代价是逻辑更绕。
+
+### 仍未解决的产品缺陷（Q43）
+
+`waiting_confirmation` 时点"继续自动导演"必然 409，而唯一合法出口
+（拆章工作区的修复面板）需要用户"补充修复方向 + 确认追加一轮"。
+**用户被挡在一个没有出口的界面上，只得到一句错误文案。**
+这不是 bug，是分层设计缺陷：主流程状态机不认识规划修复的状态。
+修法（待办）：让主流程的恢复入口识别 `waiting_confirmation`，
+或给出明确的跳转引导，而不是 409。
+
+### 修复后状态
+
+《外卖小道士》`phase=abandoned`、`pendingOperation=None`、`rounds=0`、
+卷与章节计划未被改动（时间戳仍为 12:06）。**用户自行尝试方案 A**
+（去拆章工作区补充修复方向并确认追加一轮），结果未确认。
+`generationState` 曾因 `PUT` schema 不含该字段而残留 `approved`，
+经核实不影响生成（空正文 → 边界为 null → `skipCompleted` 不跳过）。
+
+### 本窗口测试基线
+
+- 修 A/B/C/D 后：`files=335 filepass=306 testfail=28 loadfail=1`，与基线**逐文件零差异**
+- 规划修复系列最终：`planningRepairStore 133/133`、
+  `planningSourceTokenVolatile 7/7`、`planningRepairRecovery 20/20`、
+  `planningRepairPipelineFailure 4/4`、
+  `chapterProgressionAcceptance 15/15`、`volumeChapterDetailContext 14/14`、
+  `chapterContractGuardTrace 5/5`
+- 基线未变：`planningRepairPausedRecovery` 仍是既有的 `pipelinePause` 加载失败
+
