@@ -19,7 +19,13 @@ export function projectProgressionAssessment(output: ChapterAcceptanceAssessment
     ].join("\n");
     riskTags.push(code);
     blockingIssues.push({
-      code, category: "plot", severity: "medium", evidence,
+      // `stalled` is a proven repetition: validateProgressionEvidence downgrades it to
+      // insufficient_evidence unless BOTH sides carry verbatim quotes from real prior
+      // prose and this chapter's prose. It is therefore not "we could not check" but
+      // "we checked and this chapter re-stages delivered material", which must be able
+      // to reach blockingIssueIds (only high/critical do) instead of being recorded as
+      // medium debt and passed over. Evidence insufficiency stays medium on purpose.
+      code, category: "plot", severity: unknown ? "medium" : "high", evidence,
       fixSuggestion: unknown ? "核对前后章节原文与覆盖范围；保留未核实的推进质量债，不补造前情。" : check.repairSuggestion,
     });
     if (!unknown) repairDirectives.push({

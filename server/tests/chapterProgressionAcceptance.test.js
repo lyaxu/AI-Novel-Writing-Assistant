@@ -85,8 +85,12 @@ test("three stalled semantic judgments survive high scores as local repair, not 
   assert.equal(result.continuePolicy, "repair_once");
   assert.equal(result.repairability, "none");
   assert.equal(result.blockingIssues.length, 3);
-  assert.ok(result.blockingIssues.every((issue) => issue.category === "plot" && issue.severity === "medium"));
+  // Proven repetition (stalled, two-sided verified quotes) is graded high so it can reach
+  // blockingIssueIds and actually force a rewrite, instead of being recorded as medium
+  // debt and passed over. It must still stay a LOCAL repair: no global replan is derived.
+  assert.ok(result.blockingIssues.every((issue) => issue.category === "plot" && issue.severity === "high"));
   assert.equal(result.repairDirectives.length, 3);
+  assert.notEqual(result.replanRecommendation?.recommended, true);
   assert.deepEqual(service.normalizeAssessment(result, newText), result);
 });
 
