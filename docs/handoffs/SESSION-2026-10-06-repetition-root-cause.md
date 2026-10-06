@@ -242,23 +242,43 @@ clause: 不得让劳梓凡在本章再次'发现'通道A停用三年这一第1�
 **这只证明这一次**。按 AI-first 规则，"机制存在 ≠ 机制生效"，
 仍需新书跑第 1→2→3 章才能排除"恰好这次合同没写重复内容"。
 
-### ⚠️ 由此暴露的可观测性缺口（下轮应补）
+### ⚠️ 由此暴露的可观测性缺口 → **已补（`chapterContractGuardTrace.ts`）**
 
-`neighborEventUse` / `mustAvoidConflicts` **只用于校验，没有落库**。
+`neighborEventUse` / `mustAvoidConflicts` 原先**只用于校验，没有落库**。
 `Chapter` / `VolumeChapterPlan` / `AuditReport` 都没有这两列
 （`Chapter` 只有同名不同义的 `conflictLevel`）。
+后果：事后无法回答"模型这次申报了什么、守卫有没有开火"。
 
-后果：**事后无法回答"模型这次申报了什么、守卫有没有开火"**。
+**已修**：新增 `server/src/services/novel/volume/chapterDetail/chapterContractGuardTrace.ts`，
+在 `chapterExecutionContractGeneration.ts` 的重试循环里记录两类事件到
+**章节既有的 `repairHistory` 文本列**（`[contract_guard] {...}` 行）：
 
-唯一能看到开火的是 `promptQualityTelemetry` 的 `semantic_retry_start`
-（`promptRunner.ts:586`，postValidate 抛错时记录），
-但它存在 `promptQualityAggregates` 这个 **Map 内存变量**里
-（`promptQualityTelemetry.ts:140`），**进程一重启就没**，且**没有 HTTP 出口**
-（`getPromptQualitySnapshot` 只被测试引用）。
+- `outcome=rejected` + **校验器自己的报错原文**（不是对规则的复述）
+- `outcome=accepted` + 模型申报的 `declaredConflicts` / `declaredNeighborPreemptions`
 
-→ 新书实跑时**看不到守卫是否真的拦下过东西**。
-下轮建议：把合同声明落库（`Chapter` 加两列，或写进 `repairHistory` 一行），
-并把 `semantic_retry_start` 的失败原因落到 `ChapterTaskSheetQualityAssessment` 或日志文件。
+**为什么用 repairHistory 而不是加列**：避免 schema 迁移
+（Q36 曾因只 `db push` 不建迁移文件导致新装用户缺列），
+且该列本就是 append-only 的证据列，已有 `[patch_receipt]` / `[quality_loop]` 先例。
+`parseChapterContractGuardRecords()` 可把痕迹读回来。
+
+**现在能回答的问题**：
+- 某章的合同被守卫拒过几次？每次因为什么？
+- 最终通过的那份合同，模型申报了几处冲突 / 几次越界占用？
+- → **"这章干净"与"这章是守卫救回来的"从此可区分**
+
+读取方式：
+```powershell
+python .codex-run/new-book-watch/contract-guard-trace.py [novelId]
+```
+
+测试：`chapterContractGuardTrace` 5/5（新文件）；
+`chapterContractRepairBoundary` 7/7（需为新模块登记 mock，
+否则报 `Unmocked dependency: ./chapterContractGuardTrace` —— 与
+`pipelinePause` / `emotionPresence` 同类历史债，单测会整体加载失败）。
+
+**注意**：`prompting.test.js` 在**未重新编译 dist** 时会假失败
+（48/2，报 `PrismaClientKnownRequestError`）。重新 `npx tsc` 后为 50/50。
+**改动 TypeScript 后必须重编译再跑测试**，否则会误判为回归。
 
 ### 监控脚本
 

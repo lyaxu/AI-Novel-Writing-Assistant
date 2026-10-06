@@ -25,6 +25,7 @@ import type {
   VolumeWorkspace,
 } from "../volumeModels";
 import { loadPlanningWrittenEvidence } from "../writtenEvidence";
+import { recordChapterContractGuardEvent } from "./chapterContractGuardTrace";
 import { loadSelectedPlanningDirection, projectPlanningHorizon } from "../planningPromises";
 
 /** Reusing complete text is not reusing a semantic approval from an unknown source. */
@@ -250,6 +251,18 @@ export async function generateChapterTaskSheetDetail(params: {
           ...projectPlanningHorizon(promptInput.workspace, promptInput.targetVolume.id, [promptInput.targetChapter.id]),
           planningContext: { novel: promptInput.novel, targetVolume: promptInput.targetVolume } }),
       });
+      // Record what the model actually declared, so an accepted contract can be read back
+      // later. Without this, "the chapter is clean" cannot be told apart from "the guard had to
+      // rewrite a self-contradictory contract before it was accepted".
+      await recordChapterContractGuardEvent({
+        novelId: promptInput.workspace.novelId,
+        chapterId: promptInput.targetChapter.chapterId ?? promptInput.targetChapter.id,
+        outcome: "accepted",
+        attempt: attempt + 1,
+        declaredConflicts: (generated.output.mustAvoidConflicts ?? []).length,
+        declaredNeighborPreemptions: (generated.output.neighborEventUse ?? [])
+          .filter((use) => use.consumesExclusiveEvent).length,
+      }).catch(() => { /* Telemetry must never fail contract generation. */ });
       return {
         purpose: generated.output.purpose.trim(),
         exclusiveEvent: generated.output.exclusiveEvent.trim(),
@@ -266,6 +279,16 @@ export async function generateChapterTaskSheetDetail(params: {
       };
     } catch (error) {
       lastError = error instanceof Error ? error : new Error("章节执行合同生成失败。");
+      // The contract guard is otherwise invisible after the fact: the prompt runner only keeps
+      // `semantic_retry_start` in an in-process Map that dies with the server. Recording the
+      // rejection here is what makes "the guard actually fired" answerable after the fact.
+      await recordChapterContractGuardEvent({
+        novelId: params.promptInput.workspace.novelId,
+        chapterId: params.promptInput.targetChapter.chapterId ?? params.promptInput.targetChapter.id,
+        outcome: "rejected",
+        reason: lastError.message,
+        attempt: attempt + 1,
+      }).catch(() => { /* Telemetry must never fail contract generation. */ });
       if (!shouldRetryChapterExecutionContract(error, attempt)) {
         throw lastError;
       }

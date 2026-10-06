@@ -34,6 +34,9 @@ function harness(responses) {
     "../../../../prompting/prompts/novel/volume/contextBlocks":{buildVolumeChapterDetailContextBlocks:()=>[]},
     "../ChapterTaskSheetQualityGateService":service,"../writtenEvidence":{},
     "../planningPromises":{projectPlanningHorizon:()=>({readonlyOpeningRoutes:[]})},
+    // The contract guard trace writes to the chapter row; these tests assert retry/routing
+    // behaviour, not persistence, so it is stubbed out rather than hitting the database.
+    "./chapterContractGuardTrace":{recordChapterContractGuardEvent:async()=>{}},
   });
   const chapter={id:"c",chapterOrder:2,title:"查账",summary:"账目有疑点",payoffRefs:[]};
   const params={promptInput:{novel:{},workspace:{novelId:"n",volumes:[]},targetVolume:{id:"v",chapters:[chapter]},targetChapter:chapter,detailMode:"task_sheet"},options:{}};
