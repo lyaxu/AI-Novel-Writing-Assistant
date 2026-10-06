@@ -63,10 +63,47 @@ function withoutWhitespace(value: string): string {
   return value.replace(/\s+/g, "");
 }
 
+/**
+ * Longest run of characters that `quote` and `field` share, as a fraction of the quote's length.
+ *
+ * Used as a tolerance for near-verbatim quoting. A real run was blocked because the model wrote
+ * "他回站点后台复核…" where the task sheet said "…请人打120，回站点后台复核…": one pronoun added,
+ * the rest character-for-character correct. That is quoting, not inventing, and rejecting it stopped
+ * the whole pipeline at a checkpoint. Requiring the *whole* quote to be a substring treats a single
+ * added word as evidence of fabrication.
+ *
+ * Still strict enough to matter: a quote lifted from a different chapter, or invented outright,
+ * shares only scattered characters and falls far below the threshold.
+ */
+function verbatimCoverage(quote: string, field: string): number {
+  if (!quote.length || !field.length) return 0;
+  // Rolling row of the classic longest-common-substring table; only lengths are needed.
+  const previous = new Array<number>(field.length + 1).fill(0);
+  const current = new Array<number>(field.length + 1).fill(0);
+  let best = 0;
+  for (let i = 1; i <= quote.length; i += 1) {
+    for (let j = 1; j <= field.length; j += 1) {
+      current[j] = quote[i - 1] === field[j - 1] ? previous[j - 1] + 1 : 0;
+      if (current[j] > best) best = current[j];
+    }
+    for (let j = 0; j <= field.length; j += 1) previous[j] = current[j];
+  }
+  return best / quote.length;
+}
+
+/** Shortest quote worth accepting on partial overlap; below this, treat it as not quoting. */
+const MIN_VERBATIM_QUOTE_CHARS = 16;
+
+/** Share of the quote that must appear verbatim in the field for the citation to count. */
+const MIN_VERBATIM_COVERAGE = 0.85;
+
 function citesQuote(leaves: readonly string[], quote: string): boolean {
   const needle = withoutWhitespace(quote);
   if (!needle) return false;
-  return leaves.some((leaf) => withoutWhitespace(leaf).includes(needle));
+  const haystacks = leaves.map(withoutWhitespace).filter(Boolean);
+  if (haystacks.some((leaf) => leaf.includes(needle))) return true;
+  if (needle.length < MIN_VERBATIM_QUOTE_CHARS) return false;
+  return haystacks.some((leaf) => verbatimCoverage(needle, leaf) >= MIN_VERBATIM_COVERAGE);
 }
 
 export interface ChapterPayoffValidationInput {
