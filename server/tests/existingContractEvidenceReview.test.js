@@ -38,6 +38,9 @@ function fixture({ changed = false, rejected = false } = {}) {
     } } },
     "../writtenEvidence": { loadPlanningWrittenEvidence: async () => ({ sourceFingerprint: changed && reads++ > 0 ? "changed" : "same", chapters: [{ content: "刀具收缴，烙印胸口" }] }) },
     "../planningPromises": { ...load("../src/services/novel/volume/planningPromises/planningHorizon.ts", {}), loadSelectedPlanningDirection: async () => direction },
+    // Guard trace persistence is exercised in chapterContractGuardTrace.test.js; these cases
+    // assert reuse/review behaviour, so the writer is stubbed rather than hitting the database.
+    "./chapterContractGuardTrace": { recordChapterContractGuardEvent: async () => {} },
   });
   const params = { promptInput: { novel: {}, workspace, targetVolume, targetChapter: candidate }, options: {} };
   return { generation, params, candidate, counts: () => ({ reviews, initial }) };
