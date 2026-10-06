@@ -11,6 +11,7 @@ const {
 } = require("../dist/prompting/prompts/novel/volume/contextBlocks.js");
 const {
   volumeChapterBoundaryPrompt,
+  volumeChapterExecutionContractPrompt,
   volumeChapterTaskSheetPrompt,
 } = require("../dist/prompting/prompts/novel/volume/chapterDetail.prompts.js");
 
@@ -314,9 +315,22 @@ test("task sheet post-validate rejects adjacent chapter event leakage", () => {
     ],
   };
 
+  // Adjacent-chapter ownership is no longer inferred from title verbs: that missed every
+  // real title of a test book, including ones whose milestone word sat outside the 18-item
+  // list. The model now declares the relationship in neighborEventUse, and the declaration is
+  // checked against the neighbour's real contract. Either way the leak is refused: either the
+  // neighbour has no contract to own a milestone (nothing to pre-empt), or it does and the
+  // one-time node would be taken twice.
+  const declaredLeak = {
+    ...leakedOutput,
+    neighborEventUse: [
+      { relation: "next", consumesExclusiveEvent: true, evidence: "本章末直接写系统激活。" },
+    ],
+    mustAvoidConflicts: [],
+  };
   assert.throws(
-    () => volumeChapterTaskSheetPrompt.postValidate(leakedOutput, input, context),
-    /系统激活/,
+    () => volumeChapterTaskSheetPrompt.postValidate(declaredLeak, input, context),
+    /独占事件/,
   );
 });
 
@@ -444,4 +458,211 @@ test("due ledger promises become a required planning block only when something i
   assert.ok(absentBlock);
   assert.equal(absentBlock.required, false);
   assert.match(absentBlock.content, /不要为了填满这个位置而新造承诺/);
+});
+
+// Regression cover for the chapter 1 -> chapter 2 duplication of 《外卖小道士：这单是阴单》.
+//
+// The old guard inferred "one-time milestone" from an 18-word verb list in chapter
+// titles. All five real titles of that book yielded no anchor (including "翻出"),
+// so a contract that re-staged chapter 1's closing scene passed untouched. Comparing
+// mustAvoid against scene text cannot replace it either: the prohibition and the
+// scheduled scene paraphrase each other and share only 2-4 characters.
+//
+// So the model now declares both relationships and the code only checks that each
+// declaration refers to something that actually exists.
+
+function createDeclarationVolume() {
+  const now = new Date().toISOString();
+  const chapter = (chapterOrder, title, extra) => ({
+    id: `chapter-${chapterOrder}`,
+    volumeId: "volume-decl",
+    novelId: "novel-1",
+    chapterOrder,
+    title,
+    summary: `第${chapterOrder}章摘要`,
+    purpose: null,
+    // Unwritten chapters carry no exclusiveEvent at all; that is the real DB shape.
+    exclusiveEvent: null,
+    endingState: null,
+    nextChapterEntryState: null,
+    conflictLevel: 50,
+    conflictLevelSource: "ai",
+    revealLevel: 40,
+    targetWordCount: 3000,
+    mustAvoid: null,
+    taskSheet: null,
+    sceneCards: null,
+    payoffRefs: [],
+    createdAt: now,
+    updatedAt: now,
+    ...extra,
+  });
+  const chapters = [
+    chapter(1, "加价三倍的凶宅单", { exclusiveEvent: "种下妖记" }),
+    chapter(2, "最后一张真符", { exclusiveEvent: "背周婆冲出老楼并被咬下妖记" }),
+    chapter(3, "翻出停用通道"),
+  ];
+  return { chapters, target: chapters[1] };
+}
+
+function createDeclarationInput() {
+  const { chapters, target } = createDeclarationVolume();
+  return {
+    ...createPromptInput(),
+    targetVolume: {
+      id: "volume-decl",
+      novelId: "novel-1",
+      sortOrder: 1,
+      title: "第一卷",
+      summary: "测试卷摘要",
+      openingHook: "接单",
+      mainPromise: "推进",
+      primaryPressureSource: "妖物",
+      coreSellingPoint: "民俗悬疑",
+      escalationMode: "从受压到反查",
+      protagonistChange: "从求生到追查",
+      midVolumeRisk: "被盯上",
+      climax: "当面对质",
+      payoffType: "线索推进",
+      nextVolumeHook: "更大势力",
+      resetPoint: null,
+      openPayoffs: [],
+      status: "active",
+      sourceVersionId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      chapters,
+    },
+    // Same object identity: the validators look the target up by identity.
+    targetChapter: target,
+    detailMode: "execution_contract",
+  };
+}
+
+function createDeclarationContract() {
+  return {
+    purpose: "拍符封门背人冲楼。",
+    exclusiveEvent: "背周婆冲出老楼并被咬下妖记",
+    endingState: "带妖记回到出租屋",
+    nextChapterEntryState: "次日找老邱对质",
+    conflictLevel: 50,
+    revealLevel: 45,
+    targetWordCount: 2800,
+    mustAvoid: "不得让周婆死亡；不得让劳梓凡在本章再次'发现'通道A停用三年这一第1章已知信息。",
+    payoffRefs: [],
+    requiredElements: ["拍出最后一张真符", "回站点后台复核通道A记录"],
+    taskSheet: "回站点后台复核第1章已截图的通道A记录。",
+    readerExperience: {
+      readerQuestion: "谁在派单",
+      promisedReward: "确认有人盯着",
+      rewardLevel: "partial",
+      protagonistWant: "查清通道A",
+      primaryResistance: "权限不足",
+      keyTurn: "日志出现非本人查询",
+      emotionalShift: "意识到被盯",
+      informationReveal: "通道A停用三年仍派单",
+      netChange: "从可疑来源变成有人盯",
+      inheritedHookResponsibilities: [],
+      endingHook: "次日对质",
+    },
+    sceneCards: [
+      { key: "scene_1", title: "门框火线", purpose: "p", mustAdvance: ["拍符封门"], mustPreserve: [], entryState: "六楼", exitState: "封门", forbiddenExpansion: [] },
+      { key: "scene_2", title: "背人冲楼", purpose: "p", mustAdvance: ["冲下老楼"], mustPreserve: [], entryState: "里屋", exitState: "肩被咬", forbiddenExpansion: [] },
+      { key: "scene_3", title: "回站点复核", purpose: "p", mustAdvance: ["查订单来源"], mustPreserve: [], entryState: "站点", exitState: "决定次日找老邱", forbiddenExpansion: [] },
+    ],
+    neighborEventUse: [
+      { relation: "previous", consumesExclusiveEvent: false, evidence: "承接上一章种下妖记后的状态，不重演接单遇妖。" },
+      { relation: "next", consumesExclusiveEvent: false, evidence: "不占用下一章翻查通道的职责。" },
+    ],
+    mustAvoidConflicts: [],
+  };
+}
+
+const emptyContext = { blocks: [], selectedBlockIds: [], droppedBlockIds: [], summarizedBlockIds: [], estimatedInputTokens: 0 };
+
+test("an honest contract with no declared conflict or neighbour claim is accepted", () => {
+  const input = createDeclarationInput();
+  const contract = createDeclarationContract();
+  assert.doesNotThrow(() => volumeChapterExecutionContractPrompt.postValidate(contract, input, emptyContext));
+});
+
+test("a contract that forbids an event in mustAvoid while scheduling it is rejected", () => {
+  const input = createDeclarationInput();
+  const contract = {
+    ...createDeclarationContract(),
+    mustAvoidConflicts: [{
+      forbiddenClause: "不得让劳梓凡在本章再次'发现'通道A停用三年这一第1章已知信息。",
+      scheduledIn: "sceneCards[2]",
+      reason: "禁止再次发现通道A，但 scene_3 安排回站点后台复核同一记录。",
+    }],
+  };
+  assert.throws(
+    () => volumeChapterExecutionContractPrompt.postValidate(contract, input, emptyContext),
+    /自相矛盾/,
+  );
+});
+
+test("a declared conflict that cites a clause absent from mustAvoid is rejected as fabricated", () => {
+  const input = createDeclarationInput();
+  const contract = {
+    ...createDeclarationContract(),
+    mustAvoidConflicts: [{ forbiddenClause: "不得让周婆说出银镯", scheduledIn: "sceneCards[2]", reason: "x" }],
+  };
+  assert.throws(
+    () => volumeChapterExecutionContractPrompt.postValidate(contract, input, emptyContext),
+    /不是 mustAvoid 中的原文条目/,
+  );
+});
+
+test("a declared conflict pointing at a non-existent slot is rejected", () => {
+  const input = createDeclarationInput();
+  const contract = {
+    ...createDeclarationContract(),
+    mustAvoidConflicts: [{ forbiddenClause: "不得让周婆死亡", scheduledIn: "sceneCards[9]", reason: "x" }],
+  };
+  assert.throws(
+    () => volumeChapterExecutionContractPrompt.postValidate(contract, input, emptyContext),
+    /不存在/,
+  );
+});
+
+test("claiming a written previous chapter's exclusive event is rejected", () => {
+  const input = createDeclarationInput();
+  const contract = {
+    ...createDeclarationContract(),
+    neighborEventUse: [
+      { relation: "previous", consumesExclusiveEvent: true, evidence: "本章再次写种下妖记。" },
+      { relation: "next", consumesExclusiveEvent: false, evidence: "不占用下一章。" },
+    ],
+  };
+  assert.throws(
+    () => volumeChapterExecutionContractPrompt.postValidate(contract, input, emptyContext),
+    /一次性节点不能跨章重复占用/,
+  );
+});
+
+test("claiming an unwritten neighbour's exclusive event is rejected as invented", () => {
+  const input = createDeclarationInput();
+  const contract = {
+    ...createDeclarationContract(),
+    neighborEventUse: [
+      { relation: "previous", consumesExclusiveEvent: false, evidence: "不占用上一章。" },
+      { relation: "next", consumesExclusiveEvent: true, evidence: "本章负责翻出停用通道。" },
+    ],
+  };
+  assert.throws(
+    () => volumeChapterExecutionContractPrompt.postValidate(contract, input, emptyContext),
+    /没有任何独占事件可占用/,
+  );
+});
+
+test("the title verb whitelist is gone: no fixed word list decides boundary conflicts", () => {
+  const source = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "..", "src", "prompting", "prompts", "novel", "volume", "chapterDetail.prompts.ts"),
+    "utf8",
+  );
+  // The constant name survives only inside the comment explaining why it was removed.
+  assert.doesNotMatch(source, /const TITLE_EVENT_ANCHOR_HINTS/);
+  assert.doesNotMatch(source, /function extractEventAnchorsFromTitle/);
+  assert.doesNotMatch(source, /extractEventAnchorsFromTitle\(/);
 });

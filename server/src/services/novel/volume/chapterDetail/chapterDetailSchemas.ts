@@ -207,6 +207,25 @@ export function createChapterExecutionContractSchema() {
       taskSheet: z.string().trim().min(1).max(600),
       readerExperience: boundedReaderExperienceSchema,
       sceneCards: z.array(z.preprocess(normalizeSceneCardPayload, boundedSceneCardSchema)).min(3).max(8),
+      // The model declares, per adjacent chapter, whether this contract consumes that
+      // chapter's one-time milestone. Code cannot decide this: the original guard tried to
+      // infer it from an 18-word verb list in titles and was blind on a real book
+      // (5/5 titles yielded no anchor, including "翻出"). Asking the model to state the
+      // relationship turns an unsolvable string-matching problem into a structural check
+      // that can reject a contract which pre-empts or re-runs a neighbouring chapter.
+      neighborEventUse: z.array(z.object({
+        relation: z.enum(["previous", "next"]),
+        consumesExclusiveEvent: z.boolean(),
+        evidence: z.string().trim().min(1).max(200),
+      })).default([]),
+      // The model declares any place where mustAvoid forbids something the contract also
+      // schedules. Verified structurally (each entry must cite a real mustAvoid clause and a
+      // real scheduled item), never by string-matching prohibition text against prose.
+      mustAvoidConflicts: z.array(z.object({
+        forbiddenClause: z.string().trim().min(1).max(200),
+        scheduledIn: z.string().trim().min(1).max(120),
+        reason: z.string().trim().min(1).max(200),
+      })).default([]),
     }),
   );
 }

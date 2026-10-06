@@ -15,51 +15,8 @@ const selectedDirectionRule = "selectedPlanningDirection是用户确认的创作
 
 const progressionRule = "先对照writtenEvidence已写正文：哪些事件已经发生、人物已经知道什么、前章结尾具体决定去做什么。purpose与readerExperience.netChange必须说明本章相对这些事实的新结果；场景必须实际执行、受阻改变或有依据地改选该行动，不能整章重复铺垫后又仅决定去做。重复行动若带来新线索、代价、关系变化或认识重释可保留，并在mustAdvance中明确增量。回顾、哀悼、慢热日常可承担情绪或关系上的真实变化，不强求胜利、打斗、固定反转数或每章兑现长期目标。细腻是把篇幅用在有意义的观察、选择与结果上，不是重复求生、赶路、盘点和已知感想。先压缩无效重复，再在已有授权范围内调整职责；旧计划若要求重复已完成事件，不得把它当成仍必须完成的新事件，交给规划审查纠正。不得伪造前文或占用只读邻章独占事件。";
 
-const TITLE_EVENT_ANCHOR_HINTS = [
-  "激活",
-  "入手",
-  "兑现",
-  "暴露",
-  "发现",
-  "转向",
-  "升级",
-  "查账",
-  "接管",
-  "请缨",
-  "破局",
-  "反压",
-  "发难",
-  "露白",
-  "启动",
-  "异响",
-  "得手",
-  "松动",
-];
-
 function normalizeComparableText(value: string | null | undefined): string {
   return value?.replace(/\s+/g, " ").trim() || "";
-}
-
-function cleanAnchorFragment(value: string): string {
-  return value.replace(/[《》【】「」『』“”"'‘’]/g, "").trim();
-}
-
-function extractEventAnchorsFromTitle(title: string | null | undefined): string[] {
-  const normalized = normalizeComparableText(title);
-  if (!normalized) {
-    return [];
-  }
-  const seen = new Set<string>();
-  const fragments = normalized
-    .split(/[，,。；;：:、|/\\\-\s（）()]+/g)
-    .map((item) => cleanAnchorFragment(item))
-    .filter((item) => item.length >= 4 && item.length <= 16)
-    .filter((item) => TITLE_EVENT_ANCHOR_HINTS.some((hint) => item.includes(hint)));
-
-  for (const fragment of fragments) {
-    seen.add(fragment);
-  }
-  return [...seen];
 }
 
 function buildCurrentChapterContractText(input: VolumeChapterDetailPromptInput): string {
@@ -117,7 +74,6 @@ function validateBoundaryContract(
   }
 
   const previousChapter = targetIndex > 0 ? sortedChapters[targetIndex - 1] : null;
-  const nextChapter = targetIndex < sortedChapters.length - 1 ? sortedChapters[targetIndex + 1] : null;
   const currentContractText = buildCurrentChapterContractText(input);
 
   if (
@@ -127,21 +83,98 @@ function validateBoundaryContract(
   ) {
     throw new Error(`当前章独占事件与上一章独占事件「${previousChapter.exclusiveEvent.trim()}」冲突。一次性节点不能跨章重复占用。`);
   }
-  const leakedNextAnchor = nextChapter
-    ? extractEventAnchorsFromTitle(nextChapter.title).find((anchor) => (
-      output.exclusiveEvent.includes(anchor)
-      || output.endingState.includes(anchor)
-      || output.nextChapterEntryState.includes(anchor)
-    ))
-    : null;
-  if (leakedNextAnchor && !currentContractText.includes(leakedNextAnchor)) {
-    throw new Error(`当前章边界合同疑似提前占用了下一章标题中的一次性事件锚点「${leakedNextAnchor}」。`);
-  }
+  // Cross-chapter milestone ownership is now declared by the model (neighborEventUse) and
+  // checked in validateDeclaredNeighborAndConflictUsage. It used to be inferred from title
+  // verbs, which was blind on a real book: all five of its chapter titles produced no
+  // anchor, so a contract re-staging the previous chapter's closing scene passed.
   if (normalizeComparableText(output.endingState) === normalizeComparableText(output.nextChapterEntryState)) {
     throw new Error("endingState 与 nextChapterEntryState 不能完全相同。前者是本章结束态，后者是下章入口态，必须体现承接而不是机械重复。");
   }
 
   return output;
+}
+
+/**
+ * Verify the model's own declarations instead of re-deriving them with string rules.
+ *
+ * Two guards here used to guess semantics and both failed on a real book:
+ *  - TITLE_EVENT_ANCHOR_HINTS (an 18-word verb list) could not recognise a one-time
+ *    milestone in a chapter title; all five real titles of that book yielded no anchor,
+ *    so a contract that re-ran the previous chapter's closing scene passed untouched.
+ *  - Comparing mustAvoid text against scene text cannot work either: the prohibition
+ *    and the scheduled scene are paraphrases of each other, sharing only 2-4 characters.
+ *
+ * Both relationships are reading judgements, so the model states them and this function
+ * only checks that each statement refers to something that actually exists in the
+ * contract. A false or missing declaration is a generation error worth retrying; the
+ * judgement itself stays with the model.
+ */
+function validateDeclaredNeighborAndConflictUsage(output: {
+  mustAvoid?: string;
+  taskSheet?: string;
+  requiredElements?: string[];
+  sceneCards?: Array<{ title: string; mustAdvance: string[] }>;
+  neighborEventUse?: Array<{ relation: string; consumesExclusiveEvent: boolean; evidence: string }>;
+  mustAvoidConflicts?: Array<{ forbiddenClause: string; scheduledIn: string; reason: string }>;
+}, input: VolumeChapterDetailPromptInput): void {
+  // 1. Every declared mustAvoid conflict must be real: a declared conflict that does not
+  //    exist is a fabricated finding, and one that does exist must be resolved.
+  const mustAvoid = normalizeComparableText(output.mustAvoid);
+  const clauses = mustAvoid ? mustAvoid.split(/[；;]/).map((item) => item.trim()).filter(Boolean) : [];
+  const scheduledTargets = new Set<string>();
+  if (normalizeComparableText(output.taskSheet)) scheduledTargets.add("taskSheet");
+  for (const [index] of (output.requiredElements ?? []).entries()) scheduledTargets.add(`requiredElements[${index}]`);
+  for (const [index, scene] of (output.sceneCards ?? []).entries()) scheduledTargets.add(`sceneCards[${index}]`);
+
+  for (const conflict of output.mustAvoidConflicts ?? []) {
+    const citesRealClause = clauses.some((clause) => clause === conflict.forbiddenClause.trim());
+    if (!citesRealClause) {
+      throw new Error(
+        `mustAvoidConflicts 声明的禁止项「${conflict.forbiddenClause}」不是 mustAvoid 中的原文条目。`
+        + `mustAvoid 现有条目：${clauses.join("；") || "（无）"}。只能逐条引用真实禁止项。`,
+      );
+    }
+    const target = conflict.scheduledIn.trim();
+    const pointsAtRealSlot = [...scheduledTargets].some((slot) => target === slot || target.startsWith(slot))
+      || (output.sceneCards ?? []).some((scene, index) => target === scene.title?.trim() || target === `sceneCards[${index}]`);
+    if (!pointsAtRealSlot) {
+      throw new Error(
+        `mustAvoidConflicts 指向的执行位置「${target}」不存在。可用位置：${[...scheduledTargets].join("、")}。`,
+      );
+    }
+    throw new Error(
+      `章节合同自相矛盾：mustAvoid 禁止「${conflict.forbiddenClause}」，但 ${target} 又要求执行同一件事。`
+      + `理由：${conflict.reason}。必须删除该必做内容或改写 mustAvoid，不能一边禁止一边安排执行。`,
+    );
+  }
+
+  // 2. Declaring that an adjacent chapter's milestone IS consumed is only allowed when
+  //    that chapter's own contract actually claims it. A chapter that is still unwritten
+  //    has no exclusiveEvent, so it cannot be legitimately claimed here.
+  const sorted = input.targetVolume.chapters
+    .slice()
+    .sort((left, right) => left.chapterOrder - right.chapterOrder);
+  for (const use of output.neighborEventUse ?? []) {
+    if (!use.consumesExclusiveEvent) continue;
+    const targetIndex = sorted.indexOf(input.targetChapter);
+    const neighbor = use.relation === "previous"
+      ? (targetIndex > 0 ? sorted[targetIndex - 1] : null)
+      : (targetIndex >= 0 && targetIndex < sorted.length - 1 ? sorted[targetIndex + 1] : null);
+    if (!neighbor) continue;
+    const exclusiveEvent = neighbor.exclusiveEvent?.trim();
+    const label = use.relation === "previous" ? "上一" : "下一";
+    if (!exclusiveEvent) {
+      throw new Error(
+        `neighborEventUse 声明本章占用了${label}章（第${neighbor.chapterOrder}章）的独占事件，`
+        + "但该章尚未生成执行合同、没有任何独占事件可占用。不得凭标题臆造邻章的一次性节点。",
+      );
+    }
+    throw new Error(
+      `本章占用了${label}章（第${neighbor.chapterOrder}章）的独占事件「${exclusiveEvent}」：${use.evidence}。`
+      + "一次性节点不能跨章重复占用；本章只能承接邻章状态。"
+      + "若确实必须由本章承担，请先在该邻章合同中改写归属。",
+    );
+  }
 }
 
 function buildTaskSheetSemanticText(output: {
@@ -190,27 +223,11 @@ function validateAdjacentChapterBoundary<T extends {
     return output;
   }
 
-  const currentContractText = buildCurrentChapterContractText(input);
-  const outputText = buildTaskSheetSemanticText(output);
-  const adjacentChapters = [
-    { label: "上一章", chapter: targetIndex > 0 ? sortedChapters[targetIndex - 1] : null },
-    { label: "下一章", chapter: targetIndex < sortedChapters.length - 1 ? sortedChapters[targetIndex + 1] : null },
-  ];
-
-  for (const adjacent of adjacentChapters) {
-    const chapter = adjacent.chapter;
-    if (!chapter) {
-      continue;
-    }
-    const leakedAnchor = extractEventAnchorsFromTitle(chapter.title)
-      .find((anchor) => outputText.includes(anchor) && !currentContractText.includes(anchor));
-    if (leakedAnchor) {
-      throw new Error(
-        `${adjacent.label}标题中的一次性事件锚点「${leakedAnchor}」疑似越界进入当前章节执行合同。当前章只能承接相邻章节状态，不能提前、滞后或重复承担相邻章节的关键首次事件。`,
-      );
-    }
-  }
-
+  // Neighbour milestone ownership is declared by the model (neighborEventUse) and verified in
+  // validateDeclaredNeighborAndConflictUsage. The previous check here compared the contract
+  // text against verbs scraped from adjacent titles, which could not see titles whose
+  // milestone word was outside an 18-item list, and it never looked at scene cards at all —
+  // which is exactly where the duplicated scene was scheduled.
   return output;
 }
 
@@ -301,7 +318,7 @@ function createExecutionContractSystemPrompt(): string {
     selectedDirectionRule,
     progressionRule,
     intensityScaleRule,
-    "只输出严格 JSON，必须同时包含 purpose、exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、targetWordCount、mustAvoid、payoffRefs、requiredElements、taskSheet、readerExperience、sceneCards。",
+    "只输出严格 JSON，必须同时包含 purpose、exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、targetWordCount、mustAvoid、payoffRefs、requiredElements、taskSheet、readerExperience、sceneCards、neighborEventUse、mustAvoidConflicts。",
     "requiredElements 是本章的最小事件清单，3-8 条，每一条都必须是正文里能被读者看见的具体专名、事件或动作，例如「假丘处机在城外验货时暴露口音破绽」。禁止写主题、意图、情绪或评价，例如「展现主角的成长」「节奏更紧凑」「体现江湖险恶」——这些无法被验收。清单合起来要能说清这一章实际发生了什么，而不是它想表达什么。",
     "purpose 用一句话说明本章到底要推进什么，不要写成摘要复述。",
     "exclusiveEvent / endingState / nextChapterEntryState 等字段不可缺失，它们是章节的硬边界合同。",
@@ -309,6 +326,8 @@ function createExecutionContractSystemPrompt(): string {
     "readerExperience 是本章唯一的读者体验合同，必须完整包含 readerQuestion、promisedReward、rewardLevel、protagonistWant、primaryResistance、keyTurn、emotionalShift、informationReveal、netChange、inheritedHookResponsibilities、endingHook。",
     "rewardLevel 只能使用 setup、partial、major；promisedReward 和 netChange 必须能在正文中被读者直接感知。",
     "sceneCards 除原字段外还必须包含 resistance、turn、emotionalShift、readerValue，确保每个场景都有阻力、转折和读者价值。",
+    "neighborEventUse 必填：分别为上一章和下一章各输出一项，relation 只能是 previous 或 next。consumesExclusiveEvent 表示本章是否已经承担了该章的一次性独占事件（第一次激活、第一笔资源入手、身份暴露、关键查账、正式请缨、确认某条关键真相等）。默认应为 false；本章只能承接邻章已发生的状态并产生新结果，不能把邻章的首次事件再做一遍。若确实要承担，必须在 evidence 写明理由。",
+    "mustAvoidConflicts 必填：逐条自查 mustAvoid 与 taskSheet、requiredElements、sceneCards 是否冲突——凡 mustAvoid 禁止发生的事，又被写成必做内容的，都必须列出来。forbiddenClause 必须逐字复制 mustAvoid 中用「；」分隔的某一条，scheduledIn 写明它出现在 taskSheet / requiredElements[n] / sceneCards[n] 哪一项，reason 写明为什么冲突。确实没有冲突就返回空数组。禁止漏报：一边禁止一边安排执行是最严重的合同错误。",
     ...sceneCausalityRules,
     "taskSheet 和 sceneCards 只能执行当前章的合同，不得提前占用相邻章的一次性事件，也不得重写上一章已经完成的里程碑。",
     "payoff_cadence 列出本章到期的账本承诺。每一条都必须在本章合同里有明确落点：purpose、mustAdvance 或 readerExperience 要写出它这一章向前动了哪一步、由谁在什么处境下推动、带来什么可见后果。只写「记得这件事」「准备去办」不算推进。推进不等于兑现，长期承诺不要求本章全部兑现；确实推不动时说明具体阻力或取舍，并不要为凑清单新造能力、道具、人物或提前兑现远期安排。",
@@ -342,7 +361,7 @@ export const volumeChapterPurposePrompt: PromptAsset<
   ReturnType<typeof createChapterPurposeSchema>["_output"]
 > = {
   id: "novel.volume.chapter_purpose",
-  version: "v6",
+  version: "v7",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -363,7 +382,7 @@ export const volumeChapterBoundaryPrompt: PromptAsset<
   ReturnType<typeof createChapterBoundarySchema>["_output"]
 > = {
   id: "novel.volume.chapter_boundary",
-  version: "v5",
+  version: "v6",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -384,7 +403,7 @@ export const volumeChapterTaskSheetPrompt: PromptAsset<
   ReturnType<typeof createChapterTaskSheetSchema>["_output"]
 > = {
   id: "novel.volume.chapter_task_sheet",
-  version: "v10",
+  version: "v11",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -397,7 +416,10 @@ export const volumeChapterTaskSheetPrompt: PromptAsset<
     new SystemMessage(createVolumeDetailSystemPrompt("task_sheet")),
     new HumanMessage(buildChapterDetailPrompt(renderSelectedContextBlocks(context), input.detailMode)),
   ],
-  postValidate: (output, input) => validateAdjacentChapterBoundary(output, input),
+  postValidate: (output, input) => {
+    validateDeclaredNeighborAndConflictUsage(output, input);
+    return output;
+  },
 };
 
 export const volumeChapterExecutionContractPrompt: PromptAsset<
@@ -405,7 +427,7 @@ export const volumeChapterExecutionContractPrompt: PromptAsset<
   ReturnType<typeof createChapterExecutionContractSchema>["_output"]
 > = {
   id: "novel.volume.chapter_execution_contract",
-  version: "v11",
+  version: "v12",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -419,6 +441,7 @@ export const volumeChapterExecutionContractPrompt: PromptAsset<
     ].join("\n\n")),
   ],
   postValidate: (output, input) => {
+    validateDeclaredNeighborAndConflictUsage(output, input);
     validateBoundaryContract(output, input);
     validateAdjacentChapterBoundary(output, input);
     return output;
