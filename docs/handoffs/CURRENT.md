@@ -1,5 +1,22 @@
 # 最新交接入口
 
+## 当前窗口：情节重复根因治理（2026-10-06）
+
+**先读 [SESSION-2026-10-06-repetition-root-cause](SESSION-2026-10-06-repetition-root-cause.md)**
+（含已被证据推翻的判断，务必先看），再看 [WORK_LEDGER](WORK_LEDGER.md) 的 Q41 节。
+
+用户新书《外卖小道士：这单是阴单》第 2 章与第 1 章重复。**根因已定位，第一阶段已修。**
+
+- **推翻了旧判断**：不是"合同层看不到前章正文"（实测 `written_evidence` 完整入选上下文），
+  也不是"没检测到"（门禁已点名 `coherence:high`）。真正问题是**检测到之后被降级成不可阻断的质量债**。
+- **已修**（`ccd2eaeb`）：`stalled` 判 `high`，可进入 `blockingIssueIds` 真正触发重写；
+  证据不足仍 `medium` 不阻断。`chapterProgressionAcceptance` 15/15。
+- **未修**：修 B（标题锚点白名单，18 词对本书 5/5 失明）、修 C（合同自洽，字符串方案已实测
+  不可行并放弃）、修 D（越界校验扩到 sceneCards）——三处同一改造面，需模型自述而非代码猜语义。
+- **待办**：修完后单独重写《外卖小道士》第 2 章（已授权）。
+- **测试基线**：`files=334 filepass=305 testfail=28 loadfail=1`，全部预先存在。
+  注意 `run-tests.cjs fast` 会在首个加载失败处直接退出，必须逐文件跑。
+
 ## 阶段目标三件（合同对照检查 / 放弃卡住的修复会话 / 第3章写作缺陷）
 
 执行口径、验收标准与全部证据见 [阶段目标三件](../plans/phase-goal-three-items.md)，

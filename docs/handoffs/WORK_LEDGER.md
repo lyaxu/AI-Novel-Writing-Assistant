@@ -88,3 +88,71 @@
 README/release-notes 与 wiki 本窗口未同步。
 
 完整交接见 `docs/handoffs/SESSION-2026-10-05-assertion-validation.md`。
+
+
+## 2026-10-06 情节重复根因治理（Q41）
+
+用户新书《外卖小道士：这单是阴单》第一章完成、第二章正文与第一章基本重复。
+用户明确：**问题在工具，不在样书**；要求尽快修好以便进入写书步骤。
+
+### 关键结论：此前对本次故障的归因是错的
+
+10-05 交接文档判断重复源于「合同层看不到已写正文」。**实测推翻**：
+用 `buildVolumeChapterDetailContextBlocks` + `selectContextBlocks` 渲染第 2 章合同上下文，
+`written_evidence` 以 `required`/priority 110 入选（1274 tok），第 1 章收尾句
+（`通道A已于三年前停用`）与站点后台场面**都在上下文里**。模型看得见，仍照重演。
+
+### 真实故障链（三层，检测层是好的，放行层有问题）
+
+1. **合同层｜标题锚点白名单失效**：`chapterDetail.prompts.ts:18-36` 的
+   `TITLE_EVENT_ANCHOR_HINTS` 只有 18 个中文动词。拿本书真实 5 章标题实测，
+   **全部提取为空**——`翻出` 不在表内。故
+   `validateBoundaryContract`/`validateAdjacentChapterBoundary` 对本书 100% 失明。
+   把数据库里真实的第 2 章合同喂回 `postValidate`：**PASSED**。
+2. **检测层｜其实有效**：第 2 章 `riskFlags` 已点名
+   `pacing:medium:第1章结尾已完成拍符封门与背人冲楼，本章开头再次…` 与
+   `coherence:high:第1章结尾劳梓凡已在后台完成查询并截图离开，本章…`。
+3. **放行层｜问题所在**：`rootCauseCode=draft_repair_exhausted` →
+   `terminalAction=defer_and_continue` → 章节仍存成 `approved`。
+   `defer_and_continue` 无法区分「文笔一般可接受」与「本章等于没写」。
+
+正文层面：第 2 章有 4 段 ≥40 字与第 1 章逐字相同，占其篇幅 5.8%。
+
+### Q41 已完成：修 A（已提交 `ccd2eaeb`）
+
+`progressionProjection.ts`：`stalled` 判为 `high`（原与证据不足同为 `medium`），
+使其能进入 `blockingIssueIds`（只有 high/critical 会进）从而真正触发重写。
+`insufficient_evidence` 仍为 `medium`，不阻断——这正是
+`docs/wiki/workflows/evidence-insufficiency-grading.md` 记录的三层设计意图，
+此前 `stalled` 与证据不足同档导致该设计失效。
+
+- 验证：隔离 3 例（确认重复→high/可阻断；仅证据不足→medium/不阻断；健康章不受影响）
+- `chapterProgressionAcceptance` **15/15**（该测试原本断言 `medium`，其**声明意图**
+  「local repair, not global replan」仍满足，已按新意图改为断言 `high` 并补
+  「不得升级为全局重规划」断言，未削弱原保证）
+- `chapterStructuredOutputNormalization` 与 `chapterArtifactInfluence` 仍失败，
+  **已用对照实验**（stash 本次改动后重编译重跑）确认为预先存在
+
+### Q41 未完成
+
+- **修 B（标题锚点白名单）**：已确认设计约束——未细化的相邻章在
+  `VolumeChapterPlan` 上**没有** `exclusiveEvent`/`purpose` 列（实测 ch3-ch5 全为 null），
+  因此「与邻章独占事件比对」拿不到数据。需改为让模型自行声明，不能靠代码猜。
+- **修 C（合同自洽：mustAvoid vs sceneCards）**：**已尝试字符串方案并主动放弃**。
+  实测第 2 章的 `mustAvoid`（31字）与 scene_3 是**改写关系而非逐字重合**
+  （最长公共连续串仅 2-4 字，比例 0.06-0.13），字符级匹配在原理上不可用；
+  且按 AGENTS.md 的 AI-first 规则，语义一致性判断不得用固定字符串实现。
+  正确做法同修 B：由模型结构化声明，代码只校验结构。
+- **修 D（相邻章越界校验扩到 sceneCards）**：与修 B 同一改造面。
+- 《外卖小道士》第 2 章：仍 `approved`+`completed`，新守卫不回溯，需单独重写
+  （用户已授权「顺手处理掉」，等全部修好后一并做）。
+- 10-05 遗留未销账：R2 第三批约 8 处；节奏段重生跳过已写章节（B 项）；
+  两处 R3（`worldDraft.prompts.ts:392` 弱势力判据、counts 独立下发）。
+
+### 本窗口测试基线（逐文件，非前缀过滤）
+
+`TOTAL files=334 filepass=305 testfail=28 loadfail=1`（29 失败，全部预先存在）。
+注：`node scripts/run-tests.cjs fast` 会在首个加载失败处**直接退出**（exit 7，
+`Unmocked dependency: ../pipelinePause`），拿不到全量；必须逐文件跑。
+此数字**取代**10-05 记录的「2187 项 / 39 失败」口径，两者不可相加或比较。
+
