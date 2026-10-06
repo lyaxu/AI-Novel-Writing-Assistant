@@ -277,9 +277,35 @@ async function readSource(tx: Prisma.TransactionClient, novelId: string, task: N
     : buildVolumeWorkspaceDocument({ novelId, volumes: volumes.map(mapVolumeRow), source: "volume" });
   // Switching the production interface must not invalidate a planning source.
   const { creationExperience: _experience, updatedAt: _updatedAt, ...novelPlanningSource } = novel;
+  // Row timestamps are not planning content. A run writes its own volumes, versions and
+  // chapters while it progresses, so hashing `updatedAt` made the run's ordinary writes look
+  // like an external edit: a brand-new book created three volumes and updated them a few
+  // seconds after the snapshot was taken, and the next `begin()` reported
+  // "Planning source changed; explicit confirmation is required." — a false positive that
+  // sends the user to supply repair direction for a problem that does not exist.
+  //
+  // Only the volatile columns are dropped. Every field that describes the plan stays, so a
+  // genuine user edit (title, status, chapter list, version content, macro, novel settings)
+  // still changes the token and still requires explicit confirmation.
+  const stripVolatile = <T extends object>(row: T): Omit<T, "updatedAt"> => {
+    const { updatedAt: _rowUpdatedAt, ...rest } = row as T & { updatedAt?: unknown };
+    return rest;
+  };
+  const planningIdentity = {
+    novel: novelPlanningSource,
+    volumes: volumes.map((volume) => ({
+      ...stripVolatile(volume),
+      chapters: (volume.chapters ?? []).map(stripVolatile),
+    })),
+    versions: versions.map(stripVolatile),
+    chapters: chapters.map(stripVolatile),
+    macro: macro ? stripVolatile(macro) : macro,
+  };
   return {
     chapters, volumes, versions, document, effectiveDefaultChapterLength,
-    token: hash({ novel: novelPlanningSource, volumes, versions, chapters, macro }),
+    token: hash(planningIdentity),
+    // Kept for sessions seeded before the volatile columns were excluded, so an in-flight
+    // repair is recognised by either the old or the new identity.
     legacyToken: hash({ novel, volumes, versions, chapters, macro }),
   };
 }
@@ -801,8 +827,13 @@ export class PlanningRepairStore {
             || committedSourceHash(source) !== snapshot.committedSourceHash) {
             conflict("The committed planning contract changed; explicit confirmation is required.");
           }
-        } else if (snapshot.snapshotToken !== source.token || (input.selectedPlanningDirection
+        } else if (![source.token, source.legacyToken].includes(snapshot.snapshotToken) || (input.selectedPlanningDirection
           && snapshot.selectedCandidateFingerprint !== selectedCandidateFingerprint)) {
+          // legacyToken is accepted here for the same reason as in the partial-volume
+          // correction path: a session seeded before the volatile-column fix carries an
+          // identity computed with `updatedAt` included. Without this, every in-flight
+          // session would be reported as a source change by the very fix meant to stop
+          // false positives, and the only way out would be abandoning the task.
           state = { ...previous, phase: "waiting_confirmation", summary: "Planning source changed; explicit confirmation is required." };
         }
         if (committed && requestedPlan && ((input.expectedWrittenSourceFingerprint !== undefined
