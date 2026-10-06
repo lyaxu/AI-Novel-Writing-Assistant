@@ -11,10 +11,14 @@
   也不是"没检测到"（门禁已点名 `coherence:high`）。真正问题是**检测到之后被降级成不可阻断的质量债**。
 - **已修**（`ccd2eaeb`）：`stalled` 判 `high`，可进入 `blockingIssueIds` 真正触发重写；
   证据不足仍 `medium` 不阻断。`chapterProgressionAcceptance` 15/15。
-- **未修**：修 B（标题锚点白名单，18 词对本书 5/5 失明）、修 C（合同自洽，字符串方案已实测
-  不可行并放弃）、修 D（越界校验扩到 sceneCards）——三处同一改造面，需模型自述而非代码猜语义。
-- **待办**：修完后单独重写《外卖小道士》第 2 章（已授权）。
-- **测试基线**：`files=334 filepass=305 testfail=28 loadfail=1`，全部预先存在。
+- **未修**：修 B/C/D 已于 `111aa9f7` 一并落地（模型自述取代 18 词白名单）。
+- **《外卖小道士》第 2 章已退回待生成**（`content` 空、`chapterStatus=pending_generation`、
+  合同与 riskFlags 全部清空），**由用户自己跑**。第 1 章逐字未动。
+  备份 `.codex-run/ch2-rewrite-20261006/`（integrity ok，sha256 已记）。
+  `generationState` 仍为 `approved` 但不影响生成（空正文 → 边界为 null → 不跳过）。
+- **待用户实跑验收**：重启服务 → 第 2 章点「写本章」→ 看是否仍重演第 1 章结尾。
+  这只能证明这一次；不靠运气需新开一本书跑 1→2→3 章。
+- **测试基线**：`files=334 filepass=305 testfail=28 loadfail=1`，与修前**逐文件零差异**。
   注意 `run-tests.cjs fast` 会在首个加载失败处直接退出，必须逐文件跑。
 
 ## 阶段目标三件（合同对照检查 / 放弃卡住的修复会话 / 第3章写作缺陷）

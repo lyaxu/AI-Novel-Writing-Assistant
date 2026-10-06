@@ -1,8 +1,8 @@
 # 交接：情节重复的根因定位与第一阶段修复
 
 日期：2026-10-06
-分支：`codex/book-story-foundation`（无上游，全部提交在本地，未 push）
-HEAD：`ccd2eaeb`
+分支：`codex/book-story-foundation`（已推送到 `lyaxu` fork，upstream 已设置）
+HEAD：`711fcdac`（已推送，本地与远端 0/0 一致）
 本窗口起点：`64d44edb`
 
 **先读本文，再读 [WORK_LEDGER](WORK_LEDGER.md) 的 Q41 节。**
@@ -192,15 +192,69 @@ clause: 不得让劳梓凡在本章再次'发现'通道A停用三年这一第1�
 
 ---
 
+## 五之二、修 B/C/D 已完成（`111aa9f7`）
+
+**采纳方案：模型结构化申报 + 代码只做结构校验。** 删除了
+`TITLE_EVENT_ANCHOR_HINTS`（18 词）与 `extractEventAnchorsFromTitle`。
+
+- `neighborEventUse`：申报本章是否占用邻章独占事件。占用**已写**章节 → 拒；
+  占用**尚未生成合同、根本没有独占事件**的邻章 → 同样拒（杜绝凭标题臆造）。
+- `mustAvoidConflicts`：申报禁止项与必做项的冲突。每条必须逐字引用
+  `mustAvoid` 真实分句、且指向真实存在的 `taskSheet` / `requiredElements[n]` /
+  `sceneCards[n]` 槽位；**虚构引用按编造证据拒绝**。
+
+四个资产升版 `purpose@v7`、`boundary@v6`、`task_sheet@v11`、
+`execution_contract@v12`，loader 与 `prompting.test.js` 已同步（升版后全量搜过旧版本号）。
+
+测试：`volumeChapterDetailContext` 14/14（新增 6 例真实场景回归 + 1 例白名单确已删除）、
+`prompting` 52/52、`chapterProgressionAcceptance` 15/15、`chapterTaskSheetQualityGate` 17/17。
+
+**全量回归**（逐文件 334）：`334/305/28/1`，与修前基线**逐文件比对零差异**
+（新失败 0，修复 0）。
+
+---
+
 ## 六、待办
 
-1. 修 B / C / D（同一改造面，建议合并为一次改动 + 一次回归）
-2. 《外卖小道士》第 2 章：仍 `approved`+`completed`，新守卫不回溯，
-   需**单独触发重写**（用户已授权，等修完一起做）
-3. 10-05 遗留未销账：R2 第三批约 8 处；节奏段重生跳过已写章节（B 项）；
+1. **用户实跑验收**（见下节）——这是唯一能证明修复生效的方式
+2. 10-05 遗留未销账：R2 第三批约 8 处；节奏段重生跳过已写章节（B 项）；
    两处 R3（`worldDraft.prompts.ts:392` 弱势力判据、counts 独立下发）
-4. 文档：本窗口已同步 `WORK_LEDGER`(Q41)、`evidence-insufficiency-grading.md`、
-   `release-notes.md`、`README.md`。**修 B/C/D 落地后需再同步一次**
+3. 长文提示词借鉴项（见 `docs/evals/competitor-absorb/2026-10-06-longform-prompt-assessment.md`）：
+   建议优先做「明喻频率 + 无意义小动作」两条 `antiAiRule`（数据驱动，可按书禁用）
+4. 文档：本窗口已同步 `WORK_LEDGER`(Q41)、`CURRENT.md`、
+   `evidence-insufficiency-grading.md`、`release-notes.md`、`README.md`
+
+---
+
+## 六之二、《外卖小道士》第 2 章已退回待生成（用户自行跑）
+
+用户选择**自己跑**而非由我调用模型重写。
+
+- 备份：`.codex-run/ch2-rewrite-20261006/dev-before-ch2-rewrite.db`
+  （SQLite 在线备份 API，非裸拷），979.46 MB，`integrity_check=ok`，
+  sha256 `0c5d014c023afaafd6a9620e3d64b61bdff6a4fc840fc9c902683666b84d0bf3`，
+  `Novel=10 / Chapter=61`，manifest 同目录
+- 旧第 2 章快照：`ch2-before-reset.json`（正文 sha256 `e3e9496…`，含导致重复的
+  `mustAvoid` 与 `taskSheet` 原文）
+- 重置走**正规入口** `PUT /api/novels/:id/chapters/:chapterId`：
+  `content=""`、`chapterStatus=pending_generation`，
+  `taskSheet/sceneCards/mustAvoid/repairHistory/riskFlags` 与四个分数全部置空
+- **第 1 章逐字未动**：4119 字、`generationState=approved`、`updatedAt` 未变
+- 第 3-5 章未动；`Novel=10 / Chapter=61` 不变；`integrity_check=ok`
+
+**注意**：`generationState` 仍为 `approved`（`PUT` 的 zod schema 不含该字段，
+无法经该入口改）。经查**不影响生成**：
+`getCurrentChapterArtifactSyncOutcome` 对空正文直接返回 `null`
+（`ChapterArtifactSyncBoundary.ts:18`），故 `isCurrentChapterProductionCompleted`
+为 `false`，`skipCompleted` 不会跳过第 2 章。仅前端"就绪"步骤图标会显示为已完成。
+
+**验收步骤（用户）**：重启服务 → 对第 2 章点「写本章」→ 检查
+① 第 2 章正文是否仍重演第 1 章结尾的站点后台场景
+② 合同 `mustAvoidConflicts` 是否被模型如实申报
+③ 章节 `riskFlags` 是否仍出现 `chapter_progression_event_repetition_stalled`
+
+**验收边界**：这只能证明**这一次**不再重复。AI-first 规则下，
+"机制存在 ≠ 机制生效"，需新开一本书跑第 1→2→3 章才能验证不靠运气。
 
 ---
 
