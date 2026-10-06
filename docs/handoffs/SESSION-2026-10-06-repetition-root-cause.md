@@ -226,7 +226,58 @@ clause: 不得让劳梓凡在本章再次'发现'通道A停用三年这一第1�
 
 ---
 
-## 六之二、《外卖小道士》第 2 章已退回待生成（用户自行跑）
+## 六之二、用户实跑结果（2026-10-06 08:17）——**修复生效**
+
+用户重新生成了《外卖小道士》第 2 章，量化复核：
+
+| 指标 | 修复前 | 修复后 |
+|---|---|---|
+| ch1/ch2 共享 30 字以上逐字段落 | **126** | **0** |
+| ch2 中逐字重复覆盖比例 | **5.8%** | **0.0%** |
+| ch2 正文字数 | 2853 | 5236 |
+| ch2 状态 | approved/completed（带 high 级连贯性风险） | drafted/needs_repair |
+
+用户主观反馈："绝大部分内容基本没有重复了……情节在推进中。"
+
+**这只证明这一次**。按 AI-first 规则，"机制存在 ≠ 机制生效"，
+仍需新书跑第 1→2→3 章才能排除"恰好这次合同没写重复内容"。
+
+### ⚠️ 由此暴露的可观测性缺口（下轮应补）
+
+`neighborEventUse` / `mustAvoidConflicts` **只用于校验，没有落库**。
+`Chapter` / `VolumeChapterPlan` / `AuditReport` 都没有这两列
+（`Chapter` 只有同名不同义的 `conflictLevel`）。
+
+后果：**事后无法回答"模型这次申报了什么、守卫有没有开火"**。
+
+唯一能看到开火的是 `promptQualityTelemetry` 的 `semantic_retry_start`
+（`promptRunner.ts:586`，postValidate 抛错时记录），
+但它存在 `promptQualityAggregates` 这个 **Map 内存变量**里
+（`promptQualityTelemetry.ts:140`），**进程一重启就没**，且**没有 HTTP 出口**
+（`getPromptQualitySnapshot` 只被测试引用）。
+
+→ 新书实跑时**看不到守卫是否真的拦下过东西**。
+下轮建议：把合同声明落库（`Chapter` 加两列，或写进 `repairHistory` 一行），
+并把 `semantic_retry_start` 的失败原因落到 `ChapterTaskSheetQualityAssessment` 或日志文件。
+
+### 监控脚本
+
+`.codex-run/new-book-watch/watch-chapter-contract.mjs`（只读，轮询 dev.db）
+
+```powershell
+node .codex-run/new-book-watch/watch-chapter-contract.mjs <秒> <轮询秒>
+# 输出 .codex-run/new-book-watch/chapter-samples.log（UTF-8）
+```
+
+只采样**持久化**的章节状态（书名/章序/标题/generationState/chapterStatus/
+字数/updatedAt）。这能回答"新章是否生成、是否卡在 needs_repair、是否停写"，
+**不能**回答"合同守卫是否开火"（见上述缺口）。
+
+⚠️ 控制台输出会因 PowerShell 编码显示为乱码，**日志文件本身是 UTF-8、正常**。
+
+---
+
+## 六之三、《外卖小道士》第 2 章已退回待生成（用户自行跑）
 
 用户选择**自己跑**而非由我调用模型重写。
 
