@@ -837,7 +837,9 @@ export class PlanningRepairStore {
           // identity computed with `updatedAt` included. Without this, every in-flight
           // session would be reported as a source change by the very fix meant to stop
           // false positives, and the only way out would be abandoning the task.
-          state = { ...previous, phase: "waiting_confirmation", summary: "Planning source changed; explicit confirmation is required." };
+          // pendingOperation is cleared for the same reason as in commit(): this wait state ends
+          // the attempt, and leaving the in-flight marker behind blocks every later commit.
+          state = { ...previous, phase: "waiting_confirmation", pendingOperation: undefined, summary: "Planning source changed; explicit confirmation is required." };
         }
         if (committed && requestedPlan && ((input.expectedWrittenSourceFingerprint !== undefined
           && snapshot.writtenSourceFingerprint !== writtenFingerprint) || (input.selectedPlanningDirection
@@ -961,7 +963,9 @@ export class PlanningRepairStore {
       validateState(previous, requestedState, snapshot.eligibleChapterIds);
       const source = await readSource(tx, previous.novelId, task);
       if (![source.token, source.legacyToken].includes(snapshot.snapshotToken)) {
-        const waiting = { ...previous, phase: "waiting_confirmation" as const, summary: "Planning source changed; explicit confirmation is required." };
+        // pendingOperation is released for the same reason as in commit(): this wait state ends
+        // the attempt, and a marker left behind blocks every later commit.
+        const waiting = { ...previous, phase: "waiting_confirmation" as const, pendingOperation: undefined, summary: "Planning source changed; explicit confirmation is required." };
         const raw = await casSeed(tx, task, { ...seed, planningRepair: waiting });
         return { state: waiting, snapshot, candidate: await this.loadCandidate(tx, previous, snapshot), raw, stale: true };
       }
@@ -1042,7 +1046,10 @@ export class PlanningRepairStore {
       if (snapshot.committed) conflict("Repair is already committed; reload the active workspace.");
       const source = await readSource(tx, previous.novelId, task);
       if (![source.token, source.legacyToken].includes(snapshot.snapshotToken)) {
-        const waiting = { ...previous, phase: "waiting_confirmation" as const, summary: "Planning source changed; commit was not applied." };
+        // pendingOperation must be cleared here. This wait state ends the current attempt, and
+        // `commit` refuses any state that still carries a pending operation, so keeping the
+        // in-flight marker here deadlocks every later attempt until the book is abandoned.
+        const waiting = { ...previous, phase: "waiting_confirmation" as const, pendingOperation: undefined, summary: "Planning source changed; commit was not applied." };
         const raw = await casSeed(tx, task, { ...seed, planningRepair: waiting });
         return { stale: true as const, state: waiting, snapshot, raw };
       }

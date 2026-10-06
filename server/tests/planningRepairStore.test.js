@@ -418,7 +418,7 @@ test("resume preserves pending operations, quota, history and an unresolved diff
   assert.equal(resumed.state.chapterId, "p2");
 });
 
-test("source changes wait without resetting rounds or pending operations", async () => {
+test("source changes wait without resetting rounds, and the orphaned marker is released", async () => {
   const h = fixture();
   const session = await h.store.begin(h.input);
   await h.store.save(session, { ...session.state, rounds: 1 });
@@ -426,8 +426,13 @@ test("source changes wait without resetting rounds or pending operations", async
   h.db.novel.title = "changed business input";
   const resumed = await h.store.begin(h.input);
   assert.equal(resumed.state.phase, "waiting_confirmation");
-  assert.equal(resumed.state.rounds, 2);
-  assert.equal(resumed.state.pendingOperation.kind, "review");
+  assert.equal(resumed.state.rounds, 2, "paid repair rounds must never be reset by a source change");
+  // The in-flight marker is now released, it used to be kept. A wait state ends the attempt, so
+  // an operation that can no longer complete must not stay recorded as running: `commit` refuses
+  // any state carrying pendingOperation, so keeping it here deadlocked every later attempt and
+  // left the book unrecoverable without abandoning it. Paid progress lives in `rounds`/`history`,
+  // which are still preserved above.
+  assert.equal(resumed.state.pendingOperation, undefined);
 });
 
 test("draft save is atomic with seed CAS; stale sessions cannot clobber unrelated task fields", async () => {
@@ -723,6 +728,24 @@ test("stale save throws after persisting wait, preventing another paid call", as
   await assert.rejects(h.store.save(session, { ...session.state, pendingOperation: { kind: "repair", startedAt: epoch } }), /waiting for confirmation/);
   assert.equal(session.state.phase, "waiting_confirmation");
   assert.equal(h.state().pendingOperation, undefined);
+});
+
+test("a stale commit clears the pending operation, so the next attempt is not deadlocked", async () => {
+  // Real deadlock, 2026-10-06: a run set pendingOperation={kind:"initial_generation"} before
+  // its paid call, then the source moved and the commit was refused. The wait state kept the
+  // pendingOperation, and `commit` requires `!previous.pendingOperation`, so every later
+  // attempt died on "Only a ready repair without a pending operation can commit." with no way
+  // out but abandoning the book. A wait state is terminal for this attempt, so the in-flight
+  // marker must not survive it.
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  await h.ready(session);
+  await h.store.save(session, { ...session.state, pendingOperation: { kind: "initial_generation", startedAt: epoch } });
+  h.db.novel.title = "new business input";
+
+  await assert.rejects(h.store.commit(session, session.candidate), /waiting for confirmation/);
+  assert.equal(h.state().phase, "waiting_confirmation");
+  assert.equal(h.state().pendingOperation, undefined, "a refused commit must not leave an in-flight marker behind");
 });
 
 test("persisted quota and audit history cannot be silently reset", async () => {
