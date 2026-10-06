@@ -277,22 +277,35 @@ async function readSource(tx: Prisma.TransactionClient, novelId: string, task: N
     : buildVolumeWorkspaceDocument({ novelId, volumes: volumes.map(mapVolumeRow), source: "volume" });
   // Switching the production interface must not invalidate a planning source.
   const { creationExperience: _experience, updatedAt: _updatedAt, ...novelPlanningSource } = novel;
-  // Row timestamps are not planning content. A run writes its own volumes, versions and
-  // chapters while it progresses, so hashing `updatedAt` made the run's ordinary writes look
-  // like an external edit: a brand-new book created three volumes and updated them a few
-  // seconds after the snapshot was taken, and the next `begin()` reported
-  // "Planning source changed; explicit confirmation is required." — a false positive that
-  // sends the user to supply repair direction for a problem that does not exist.
+  // What counts as "the planning source" is the plan, not every column of every row.
   //
-  // Only `updatedAt` is dropped. Every other column stays in the hash, including a chapter's
-  // body and status: those are exactly what tells a commit that the chapter it is about to
-  // write has since been written or locked by someone else (planningRepairStore.test.js
-  // "commit rejects concurrent body/lock changes"). Narrowing the identity to "plan shape"
-  // fields silently removed that protection, so it is not done here.
+  // Two separate false positives were traced to this hash, both from the run's own writes:
+  //  1. `updatedAt` moved whenever the pipeline persisted volumes, versions or chapters.
+  //  2. Materialising a planned chapter creates/refreshes its empty `Chapter` row, and that
+  //     write alone changed the identity. On a brand-new book the first generation attempt
+  //     wrote the empty row and 91ms later refused itself with "Planning source changed",
+  //     so chapter 1 could never start.
+  //
+  // So: timestamps are dropped, and a chapter contributes to the identity only once it has
+  // actually been worked on. An empty, still-planned row is the run's own bookkeeping.
+  //
+  // A chapter that has gained a body, left the planned state, or been picked up by a run is
+  // still hashed in full: that is what tells a commit that the chapter it is about to write
+  // has since been written or locked by someone else (planningRepairStore.test.js
+  // "commit rejects concurrent body/lock changes").
   const stripVolatile = <T extends object>(row: T): Omit<T, "updatedAt"> => {
     const { updatedAt: _rowUpdatedAt, ...rest } = row as T & { updatedAt?: unknown };
     return rest;
   };
+  const chapterHasProgress = (chapter: {
+    content?: string | null;
+    generationState?: string | null;
+    chapterStatus?: string | null;
+  }): boolean => Boolean(
+    (chapter.content ?? "").trim()
+    || (chapter.generationState && chapter.generationState !== "planned")
+    || (chapter.chapterStatus && chapter.chapterStatus !== "unplanned"),
+  );
   const planningIdentity = {
     novel: novelPlanningSource,
     volumes: volumes.map((volume) => ({
@@ -300,7 +313,9 @@ async function readSource(tx: Prisma.TransactionClient, novelId: string, task: N
       chapters: (volume.chapters ?? []).map(stripVolatile),
     })),
     versions: versions.map(stripVolatile),
-    chapters: chapters.map(stripVolatile),
+    // Only chapters that have actually been worked on take part. Materialising a planned
+    // chapter refreshes its empty row, and that write is the run's own bookkeeping.
+    chapters: chapters.filter(chapterHasProgress).map(stripVolatile),
     macro: macro ? stripVolatile(macro) : macro,
   };
   return {

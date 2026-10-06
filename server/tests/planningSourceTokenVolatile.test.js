@@ -76,14 +76,50 @@ test("the run's own progress on a chapter row is NOT the guarantee under test he
   assert.notEqual(identity(locked), before, "a chapter becoming locked must invalidate a pending commit");
 });
 
-test("a chapter row appearing or disappearing changes the identity", () => {
-  const before = identity(base());
-  const extra = base();
-  extra.chapters.push({ id: "c3", novelId: "n1", order: 3, title: "新章", generationState: "planned", chapterStatus: "unplanned", createdAt: "T+", updatedAt: "T+" });
-  assert.notEqual(identity(extra), before, "a new row carries a new order, so identity must change");
-  const fewer = base();
-  fewer.chapters.pop();
-  assert.notEqual(identity(fewer), before, "dropping the last row must change identity too");
+// A chapter contributes to the identity only once it has been worked on. Materialising a
+// planned chapter refreshes its empty row, and on a brand-new book that write alone made the
+// first generation attempt refuse itself 91ms later with "Planning source changed".
+function identityOf({ novel, volumes, versions, chapters, macro }) {
+  const chapterHasProgress = (c) => Boolean(
+    (c.content ?? "").trim()
+    || (c.generationState && c.generationState !== "planned")
+    || (c.chapterStatus && c.chapterStatus !== "unplanned"),
+  );
+  return hash({
+    novel: stripVolatile(novel),
+    volumes: volumes.map((v) => ({ ...stripVolatile(v), chapters: (v.chapters ?? []).map(stripVolatile) })),
+    versions: versions.map(stripVolatile),
+    chapters: chapters.filter(chapterHasProgress).map(stripVolatile),
+    macro: macro ? stripVolatile(macro) : macro,
+  });
+}
+
+test("materialising an empty planned chapter does NOT change the identity", () => {
+  // The real sequence on 《外卖小哥阴间配送》: the pipeline wrote ch1's empty row at
+  // 14:54:04.257 and refused itself at 14:54:04.348 — 91ms later, same attempt.
+  const before = identityOf(base());
+  const materialised = base();
+  materialised.chapters[0] = {
+    ...materialised.chapters[0],
+    content: "", taskSheet: null, sceneCards: null, qualityScore: null,
+    riskFlags: null, updatedAt: "T+8s",
+  };
+  assert.equal(identityOf(materialised), before, "an empty planned row is the run's own bookkeeping");
+});
+
+test("a chapter that gains a body or leaves the planned state STILL changes the identity", () => {
+  const before = identityOf(base());
+  const written = base();
+  written.chapters[0].content = "暴雨无门牌正文…";
+  assert.notEqual(identityOf(written), before, "a chapter that gained prose must invalidate a pending commit");
+
+  const started = base();
+  started.chapters[0].chapterStatus = "generating";
+  assert.notEqual(identityOf(started), before, "a chapter a run has picked up must invalidate");
+
+  const locked = base();
+  locked.chapters[0].generationState = "drafted";
+  assert.notEqual(identityOf(locked), before);
 });
 
 test("adding a volume IS a real planning change and still requires confirmation", () => {
