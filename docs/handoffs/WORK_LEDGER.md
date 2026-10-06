@@ -118,8 +118,20 @@ README/release-notes 与 wiki 本窗口未同步。
 
 正文层面：第 2 章有 4 段 ≥40 字与第 1 章逐字相同，占其篇幅 5.8%。
 
-### Q41 已完成：修 A（已提交 `ccd2eaeb`）
+### Q41 风险项已关闭：904 个提交已推送备份
 
+分支 `codex/book-story-foundation` 已推送到用户自己的 fork
+`lyaxu`（github.com/lyaxu/AI-Novel-Writing-Assistant），并设置 upstream。
+本地与远端 `111aa9f7` 一致（0 ahead / 0 behind）。
+
+**这是本项目此前最大的单点故障**：901 个提交从未推送、无 upstream、
+无异地副本，main 落后 900+ 提交因而无法整体回退。现已消除。
+
+推送前已核对：`.codex-run/`、`.playwright-cli/`、`*.db`、`start-local.bat` 等
+均未被跟踪；仅有 `.env.example` 模板入库（无真实密钥）；推送内容 51MB。
+`main`/`beta` 未被触碰，分支流程仍是「feature → beta → main」。
+
+### Q41 已完成：修 A（已提交 `ccd2eaeb`）
 `progressionProjection.ts`：`stalled` 判为 `high`（原与证据不足同为 `medium`），
 使其能进入 `blockingIssueIds`（只有 high/critical 会进）从而真正触发重写。
 `insufficient_evidence` 仍为 `medium`，不阻断——这正是
