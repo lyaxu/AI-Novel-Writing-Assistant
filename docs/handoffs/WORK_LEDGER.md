@@ -145,26 +145,54 @@ README/release-notes 与 wiki 本窗口未同步。
 - `chapterStructuredOutputNormalization` 与 `chapterArtifactInfluence` 仍失败，
   **已用对照实验**（stash 本次改动后重编译重跑）确认为预先存在
 
-### Q41 未完成
+### Q41 已完成：修 B/C/D（`111aa9f7`）
 
-- **修 B（标题锚点白名单）**：已确认设计约束——未细化的相邻章在
-  `VolumeChapterPlan` 上**没有** `exclusiveEvent`/`purpose` 列（实测 ch3-ch5 全为 null），
-  因此「与邻章独占事件比对」拿不到数据。需改为让模型自行声明，不能靠代码猜。
-- **修 C（合同自洽：mustAvoid vs sceneCards）**：**已尝试字符串方案并主动放弃**。
-  实测第 2 章的 `mustAvoid`（31字）与 scene_3 是**改写关系而非逐字重合**
-  （最长公共连续串仅 2-4 字，比例 0.06-0.13），字符级匹配在原理上不可用；
-  且按 AGENTS.md 的 AI-first 规则，语义一致性判断不得用固定字符串实现。
-  正确做法同修 B：由模型结构化声明，代码只校验结构。
-- **修 D（相邻章越界校验扩到 sceneCards）**：与修 B 同一改造面。
-- 《外卖小道士》第 2 章：仍 `approved`+`completed`，新守卫不回溯，需单独重写
-  （用户已授权「顺手处理掉」，等全部修好后一并做）。
-- 10-05 遗留未销账：R2 第三批约 8 处；节奏段重生跳过已写章节（B 项）；
-  两处 R3（`worldDraft.prompts.ts:392` 弱势力判据、counts 独立下发）。
+删掉 `TITLE_EVENT_ANCHOR_HINTS`（18 词）与 `extractEventAnchorsFromTitle`，
+改为**模型结构化申报 + 代码只校验结构**（与 `0d5d89ed` 删 6 张关键词表同一思路）：
+
+- `neighborEventUse`：申报本章是否占用邻章独占事件。占用**已写**章节 → 拒；
+  占用**尚未生成合同、根本没有独占事件**的邻章 → 同样拒（杜绝凭标题臆造）。
+- `mustAvoidConflicts`：申报禁止项与必做项的冲突。每条必须逐字引用
+  `mustAvoid` 真实分句、且指向真实存在的 `taskSheet`/`requiredElements[n]`/`sceneCards[n]`；
+  **虚构引用按编造证据拒绝**。
+
+四个资产升版 `purpose@v7`、`boundary@v6`、`task_sheet@v11`、`execution_contract@v12`，
+loader 与 `prompting.test.js` 已同步（升版后全量搜过旧版本号）。
+
+### Q41 已完成：可观测性（`ec4b74bc` + `e75391fb`）
+
+新增 `chapterContractGuardTrace.ts`，把守卫的每次开火与最终申报写进章节**既有的
+`repairHistory`**（`[contract_guard] {...}` 行）：`rejected` 附校验器报错原文，
+`accepted` 附模型申报的冲突数/越界占用数。选 repairHistory 而非加列是为避免
+schema 迁移（Q36 曾因只 `db push` 不建迁移导致新装用户缺列）。
+
+读取：`python .codex-run/new-book-watch/contract-guard-trace.py [novelId]`
+
+**现在能区分**「这章本来就干净」与「守卫把一份自相矛盾的合同改好了才放行」。
+
+### Q41 验收结果
+
+用户重跑《外卖小道士》第 2 章：ch1/ch2 共享 30 字以上逐字段落 **126 → 0**，
+逐字重复覆盖 **5.8% → 0.0%**，字数 2853 → 5236，状态由
+approved/completed（含 high 级连贯性风险）变为 drafted/needs_repair。
 
 ### 本窗口测试基线（逐文件，非前缀过滤）
 
-`TOTAL files=334 filepass=305 testfail=28 loadfail=1`（29 失败，全部预先存在）。
+**最终口径**：`TOTAL files=335 filepass=306 testfail=28 loadfail=1`
+（29 失败，与修复前基线**逐文件比对零差异**：新失败 0、修复 0；
+多出的 1 个文件是本轮新增的 `chapterContractGuardTrace.test.js`）。
+
 注：`node scripts/run-tests.cjs fast` 会在首个加载失败处**直接退出**（exit 7，
 `Unmocked dependency: ../pipelinePause`），拿不到全量；必须逐文件跑。
 此数字**取代**10-05 记录的「2187 项 / 39 失败」口径，两者不可相加或比较。
+
+### Q41 未完成
+
+- **待用户实跑新书 1→2→3 章**：单章跑通不等于不靠运气。跑完用
+  `contract-guard-trace.py` 确认守卫是否真的开火。
+- 10-05 遗留未销账：R2 第三批约 8 处；节奏段重生跳过已写章节（B 项）；
+  两处 R3（`worldDraft.prompts.ts:392` 弱势力判据、counts 独立下发）。
+- 长文提示词借鉴项：见
+  [长文提示词评估](../evals/competitor-absorb/2026-10-06-longform-prompt-assessment.md)，
+  建议优先做「明喻频率 + 无意义小动作」两条 `antiAiRule`。
 
