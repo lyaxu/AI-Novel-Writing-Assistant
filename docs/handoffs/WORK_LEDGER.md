@@ -198,6 +198,51 @@ approved/completed（含 high 级连贯性风险）变为 drafted/needs_repair�
 
 ---
 
+## 2026-10-07 测试书清理与重做决策（Q45）
+
+### 背景更正
+
+用户用**大伟 AI 小说家 4.0**（作者开源免费分发）实测写了**一部完整书的 50 章章纲
++ 第 1-2 章正文**，评价「文笔有进步、能看，总体稳定」。
+**它不是竞品，是可借鉴的开源参照物。** 本项目此前用"竞品"一词不当，已更正。
+
+### 11 本测试书已全部删除
+
+- 删除前已做**已验证备份**（SQLite 在线备份 API）：
+  `.codex-run/cleanup-20261007/dev-before-test-book-cleanup.db`
+  （979.5 MB，`integrity_check=ok`，sha256 `190cfe74…`，
+  含 11 本书 / 70 章 / 92,007 字正文），manifest 同目录
+- 删除走**正规产品接口** `DELETE /api/novels/:id`（`novelBaseRoutes.ts:574`），
+  逐本执行并逐本确认，未直接改库
+- 完成后：小说 0、Chapter 0、VolumePlan 0、VolumeChapterPlan 0、Character 0、
+  PayoffLedgerItem 0、AuditReport 0、StoryMacroPlan 0、BookContract 0，
+  `integrity_check=ok`
+- 残留 `NovelWorkflowTask 2` / `DirectorRunCommand 3` / `AgentRun 8` 为
+  `SetNull` 孤儿（设计如此，不影响）
+- **一次失败**：首轮用了一个从旧 dump 复制的错误 novelId，报 500
+  （`No record was found for a delete`），核对真实 id 后重试成功。
+  教训：批量操作前必须当场核对 id，不能凭先前输出
+
+### 关于"找不到取消/退出按钮"
+
+用户反馈**退出导演模式与取消任务的入口都找不到**。本窗口改用
+`DELETE /api/novels/:id` 完成清理，绕开了界面。
+这条已并入重做方案的第一优先级：**步骤互斥 + 进度可见 + 入口可达**。
+
+### 重做方案
+
+见 [2026-10-07-rewrite-decision.md](../plans/2026-10-07-rewrite-decision.md)（`ab56c100`）。
+
+一句话结论：**371,658 行 vs 7,534 行，差距不在代码量，在架构形状。**
+新工具取「竞品的骨架（单直线状态机 / 规划前置冻结 / 一次成稿 / 失败即停）」
++「现有工具的文学质量部件（伏笔账本 / 风格引擎 / 去 AI 味规则 / 情绪与排版规则 /
+提示词版本治理 / 结构化审校）」，**明文禁止**把规划修复、多线因果、卷级 gate
+带进新工具。预计 3-5 周（每天 4-6 小时）。
+
+**待用户拍板 5 个问题**：范围 / 数据迁移 / 平台 / 模型接入 / 验证标准（建议 10 章）。
+
+---
+
 ## 2026-10-06 规划前置验证与阻碍 2 修复（Q44）
 
 验证窗口（`.codex-run/planning-freeze-verify-20261006/FINDINGS.md`）确认了
