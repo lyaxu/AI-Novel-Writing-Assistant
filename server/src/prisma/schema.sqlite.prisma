@@ -2131,6 +2131,11 @@ model VolumeChapterPlan {
   chapterOrder    Int
   title           String
   summary         String
+  // Chapter-function self-declaration. The chapter_list prompt requires these and refuses a
+  // list whose neighbours declare the same action or payoff, but they were dropped on merge,
+  // so that anti-repetition check only ever held for the duration of one call.
+  protagonistAction String?
+  chapterPayoff     String?
   purpose         String?
   conflictLevel   Int?
   conflictLevelSource String?

@@ -198,6 +198,71 @@ approved/completed（含 high 级连贯性风险）变为 drafted/needs_repair�
 
 ---
 
+## 2026-10-06 规划前置验证与阻碍 2 修复（Q44）
+
+验证窗口（`.codex-run/planning-freeze-verify-20261006/FINDINGS.md`）确认了
+「合同逐章 JIT 生成」这个前提，并挖出**两个此前无人发现的真实缺陷**。
+
+### 前提成立
+
+第 N 章合同确在第 N-1 章正文存在**之后**生成：
+`DirectorCoreStepModuleRuntime.ts:305-318`（sync 步只做同步）→
+`ChapterExecutionPreparationService.ts:67-70` → `ChapterPlanJITService.ts:89`
+（`entrypoint: "jit_planner"`）→ `volumeGenerationOrchestrator.ts:602`
+`loadPlanningWrittenEvidence(novelId, chapterOrder)` 只读该章之前的正文。
+库内印证：ch1/ch2 合同 162/622 字，ch3-5 合同长度为 0。
+重复指标复算 30 字以上逐字重合 = 0，**126→0 复现成功**。
+
+### 阻碍 2（已修）：防重复自述在落库时被丢掉 —— 本项目最严重的一类 bug
+
+`0d5d89ed` 引入的 `protagonistAction`/`chapterPayoff` 自述校验
+（`chapterList.prompts.ts:146-166,301,316-319`）**校验完就丢**：
+- 结构化 schema 有这两项（`volumeGenerationSchemas.ts:416-432`）
+- 但 `VolumeChapterPlan`（`shared/types/novel.ts:805-828`）没有这两个字段
+- `GeneratedVolumeChapterBlock.chapters`（`volumeGenerationHelpers.ts:24-33`）也没带
+- 合并时逐字段显式重建（`volumeGenerationHelpers.ts:418-439`）不含它们
+- 落库 `toVolumeChapterPlanData` 与两处 `select` 清单均不含它们
+
+实测 v5 全部 5 章这两项都是空字符串。**那条「相邻两章不能声明同一个推进」的规则
+只在一次调用内成立，等于没有防重复。**
+
+**已修**：两套 prisma schema + 迁移 `20261006210000_volume_chapter_plan_function_declaration`
++ `volumeChapterInputSchema` + `GeneratedVolumeChapterBlock` + 合并 + 落库 +
+两处 `select` + `isChapterRowCurrent` + `volumeModels.mapVolumeRow`。
+迁移已应用到 `server/dev.db`（改动前 `VolumeChapterPlan 86→86`、`Chapter 63→63`、
+`Novel 11→11`，`integrity_check=ok`），备份
+`.codex-run/chapter-function-decl-20261006/`（sha256 `d0d58ccb…`）。
+**两套迁移文件都已建**，`prismaMigrationCompleteness` 2/2（Q36 的坑）。
+
+测试：新增 `volumeChapterFunctionDeclaration` 3/3（声明可穿过
+normalize → serialize → 重读；无声明的旧章归 null 不失败；相邻章可比较重复声明）。
+回归 `volumeWorkspace 11/11`、`volumeGenerationSchemas 19/19`、
+`volumeGenerationOrchestrator 7/7`、`volumeChapterListChunking 13/13`、
+`planningRepairStore 133/133`、`volumeChapterDetailContext 14/14`、
+`chapterProgressionAcceptance 15/15`、`chapterTaskSheetQualityGate 17/17`。
+
+### 阻碍 1（未修，待决）：自动导演路径不走合同复用分支
+
+`ChapterExecutionContractService.ts:134`：
+
+```ts
+if (readiness?.canReuse && !options.taskId) {
+```
+
+带 `taskId`（自动导演 / JIT）时，**即使合同已存在且完全兼容也一律重新生成**（`:142`）。
+所以「预冻结合同 → 写作时只喂冻结合同」在自动导演链路上不成立。
+
+**改它属于运行时契约变更**，会牵动 `planningRepairStore` /
+`chapterContractRepairBoundary` 等既有测试，且**在修阻碍 2 之前改它没有意义**
+（没有持久化的声明可供多章比较）。建议顺序：阻碍 2 落地 → 再评估阻碍 1。
+
+### 验证被阻塞的事实
+
+`server/.env` 中所有 LLM key 为空（OPENAI/DEEPSEEK/SILICONFLOW/ANTHROPIC/XAI/
+KIMI/GLM/QWEN/GEMINI），**当前无法发真实模型请求**，30 字重合判据跑不了。
+
+---
+
 ## 2026-10-06 规划修复连续卡死（Q42）
 
 《外卖小哥阴间配送》开书后**连续 5 次卡在 20%**，用户界面提示

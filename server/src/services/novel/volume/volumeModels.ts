@@ -202,6 +202,8 @@ export function mapVolumeRow(row: VolumeRow): VolumePlan {
       beatKey: null,
       title: chapter.title,
       summary: chapter.summary,
+      protagonistAction: chapter.protagonistAction,
+      chapterPayoff: chapter.chapterPayoff,
       purpose: chapter.purpose,
       exclusiveEvent: null,
       endingState: null,

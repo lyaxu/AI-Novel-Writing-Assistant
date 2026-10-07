@@ -47,6 +47,10 @@ const volumeChapterInputSchema = z.object({
   beatKey: z.string().trim().nullable().optional(),
   title: z.string().trim().min(1),
   summary: z.string().trim().min(1),
+  // Chapter-function self-declaration, required by the chapter_list prompt. Persisted so the
+  // "neighbouring chapters must not declare the same action/payoff" rule outlives the call.
+  protagonistAction: z.string().trim().nullable().optional(),
+  chapterPayoff: z.string().trim().nullable().optional(),
   purpose: z.string().trim().nullable().optional(),
   exclusiveEvent: z.string().trim().nullable().optional(),
   endingState: z.string().trim().nullable().optional(),
@@ -228,6 +232,8 @@ function sanitizeVolumeChapter(
     beatKey: normalizeText(chapter.beatKey),
     title: chapter.title.trim(),
     summary: chapter.summary.trim(),
+    protagonistAction: normalizeText(chapter.protagonistAction),
+    chapterPayoff: normalizeText(chapter.chapterPayoff),
     purpose: normalizeText(chapter.purpose),
     exclusiveEvent: normalizeText(chapter.exclusiveEvent),
     endingState: normalizeText(chapter.endingState),

@@ -172,6 +172,8 @@ function toVolumeChapterPlanData(volumeId: string, chapter: VolumeChapterPlan): 
     chapterOrder: chapter.chapterOrder,
     title: chapter.title,
     summary: chapter.summary,
+    protagonistAction: chapter.protagonistAction ?? null,
+    chapterPayoff: chapter.chapterPayoff ?? null,
     purpose: chapter.purpose ?? null,
     conflictLevel: chapter.conflictLevel ?? null,
     conflictLevelSource,
@@ -266,6 +268,8 @@ type ExistingVolumeWorkspaceRow = Prisma.VolumePlanGetPayload<{
         chapterOrder: true;
         title: true;
         summary: true;
+        protagonistAction: true;
+        chapterPayoff: true;
         purpose: true;
         conflictLevel: true;
         conflictLevelSource: true;
@@ -324,6 +328,8 @@ function isChapterRowCurrent(
     && row.chapterOrder === chapter.chapterOrder
     && row.title === chapter.title
     && row.summary === chapter.summary
+    && sameNullableText(row.protagonistAction, chapter.protagonistAction)
+    && sameNullableText(row.chapterPayoff, chapter.chapterPayoff)
     && sameNullableText(row.purpose, chapter.purpose)
     && (
       preserveUserConflictLevel
@@ -424,6 +430,8 @@ export async function persistActiveVolumeWorkspace(
           chapterOrder: true,
           title: true,
           summary: true,
+          protagonistAction: true,
+          chapterPayoff: true,
           purpose: true,
           conflictLevel: true,
           conflictLevelSource: true,

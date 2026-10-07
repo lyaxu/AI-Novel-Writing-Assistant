@@ -810,6 +810,13 @@ export interface VolumeChapterPlan {
   beatKey?: string | null;
   title: string;
   summary: string;
+  /**
+   * The chapter's self-declared function. Required by the chapter_list prompt, which refuses a
+   * list whose neighbouring chapters declare the same action or payoff. Persisted so that
+   * check survives the call that produced it.
+   */
+  protagonistAction?: string | null;
+  chapterPayoff?: string | null;
   purpose?: string | null;
   exclusiveEvent?: string | null;
   endingState?: string | null;

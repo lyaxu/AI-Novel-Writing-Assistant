@@ -29,6 +29,13 @@ export interface GeneratedVolumeChapterBlock {
     beatKey: string;
     title: string;
     summary: string;
+    /**
+     * The chapter_list prompt's function declaration. It has to travel with the block or the
+     * "neighbouring chapters must not declare the same action/payoff" rule cannot reach
+     * persistence — the merge below only keeps what this type carries.
+     */
+    protagonistAction?: string;
+    chapterPayoff?: string;
   }>;
 }
 
@@ -422,6 +429,12 @@ export function mergeChapterList(
           beatKey: beat.key,
           title: chapter.title,
           summary: chapter.summary,
+          // The chapter_list prompt requires these two and rejects a list whose neighbours
+          // declare the same action or payoff. Rebuilding the row field-by-field silently
+          // dropped them, so that guard existed only for the duration of one call and every
+          // persisted chapter came back with an empty declaration.
+          protagonistAction: chapter.protagonistAction ?? existingChapter?.protagonistAction ?? null,
+          chapterPayoff: chapter.chapterPayoff ?? existingChapter?.chapterPayoff ?? null,
           purpose: existingChapter?.purpose ?? null,
           exclusiveEvent: existingChapter?.exclusiveEvent ?? null,
           endingState: existingChapter?.endingState ?? null,
