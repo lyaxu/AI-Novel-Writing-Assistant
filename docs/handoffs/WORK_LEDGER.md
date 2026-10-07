@@ -263,6 +263,48 @@ KIMI/GLM/QWEN/GEMINI），**当前无法发真实模型请求**，30 字重合�
 
 ---
 
+### Q43 更正（重要）：不是闭环，是入口不明显
+
+我先前判断「方案 A 走不通、用户被挡在没有出口的界面上」——**该判断错误**。
+实测 `GET /api/novel-workflows/<taskId>/planning-repair/advice` 对
+《外卖小哥阴间配送》返回 `success: true`，且**已经存在一条 `status: "stale"` 的建议**
+（说明用户此前点过一次，生成后因源指纹变化而失效）。
+
+真实情况：
+- `isPlanningRepairTaskPaused` = **true**（status=waiting_approval）
+- `isPlanningRepairConfirmationPhase` = **true**（phase=waiting_confirmation）
+- 活跃 `GenerationJob`（queued/running）= **0**
+
+建议通道的两个前置条件**都满足**，`assertAdvicePaused` 不会拦。
+「继续自动导演」被 `assertPlanningRepairResumeAllowed` 409 拒绝是**设计如此**，
+它要用户改走建议通道——而这条通道在界面上**没有明显入口**，
+所以用户回到拆章工作区后仍不知道要点「获取修复建议」。
+
+**Q43 定性：引导缺陷（不是死锁）。** 需要做的是把入口显式化：
+- 在任务卡停在 `waiting_confirmation` 时，直接给出「获取修复建议 → 选择方向 → 继续」
+  的可点击路径，而不是让用户自己在拆章工作区里找
+- 文案要说清「继续自动导演」为什么不行、下一步具体点哪里
+
+**教训**：判断「这条路走不通」之前，必须实际调用一次接口，
+不能只看代码里的 guard 就下结论。我上一条正是因为只读代码而误判。
+
+### 阻碍 1 与竞品移植：均转交新窗口
+
+- **阻碍 1**（`ChapterExecutionContractService.ts:134` 的 `!options.taskId`）：
+  属运行时契约变更，牵动既有测试，且在阻碍 2 落地前无实际收益。**已记录，转交。**
+- **大伟 4.0 参考移植**（人设改名全局同步、题材库、一次成稿、失败即停、
+  规划前置、状态机扁平化）：结论见
+  [竞品研究](../evals/competitor-absorb/2026-10-06-dawei-4.0-reverse-research.md)，
+  **尚未开展，转交新窗口。**
+
+### LLM key 说明
+
+`server/.env` 中 OPENAI/SILICONFLOW/ANTHROPIC/XAI/GLM/QWEN/GEMINI 为空
+**不是阻碍**——用户只使用 DeepSeek、Kimi、MiniMax 与一个三方聚合接口。
+后续需要真实模型请求时向用户索取对应 key 即可。
+
+---
+
 ## 2026-10-06 规划修复连续卡死（Q42）
 
 《外卖小哥阴间配送》开书后**连续 5 次卡在 20%**，用户界面提示

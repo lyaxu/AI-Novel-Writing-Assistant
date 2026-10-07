@@ -54,6 +54,20 @@
 **规则**：当一条恢复路径把用户挡在门外时，除了「拒绝」，还必须提供
 「去哪里做什么」。只抛 409 而不给可达的出口，等于把设计缺陷转嫁给用户。
 
+## 同源教训：判断「这条路走不通」之前要真的走一次
+
+2026-10-06 我据这段代码得出结论：「用户被挡在闭环里，方案 A 无解，只能放弃整本书」。
+**该结论是错的。** 随后实测 `GET /api/novel-workflows/<taskId>/planning-repair/advice`
+返回成功，且已存在一条历史建议——建议通道的前置条件
+（`isPlanningRepairTaskPaused` 与 `isPlanningRepairConfirmationPhase`）**全部满足**。
+
+错因：只读了 `assertAdvicePaused` 里的两个 guard，就断定另一条通道也走不通，
+**没有实际调用接口**。两个 guard 看起来像闭锁，但「看起来需要某状态」与
+「实际拿不到该状态」是两件事。
+
+**规则**：断言某条路径不可用之前，先跑一次它。只读代码得出的可用性结论，
+默认当作待验证假设，而不是结论。
+
 ## 相关模块
 
 - `server/src/services/novel/director/recovery/planningRepair/planningRepairRecovery.ts`
