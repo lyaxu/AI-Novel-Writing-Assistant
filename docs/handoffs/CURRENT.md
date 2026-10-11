@@ -1,6 +1,8 @@
 # 最新交接入口
 
-更新：2026-10-11 17:48 UTC。
+更新：2026-10-11 17:51 UTC。
+
+**运行阻点：ac8925a3修复尚未加载。** 17:49在全部预检通过后停止旧后端34144，被Windows拒绝访问；17:50 health仍stale=true。当前会话非管理员，需用户右键运行新版`.codex-run/maoshan-full-entry-recovery-20261011/restart-repaired-old.cmd`以管理员身份重启一次。两种PowerShell只读预检均通过；脚本只重启旧后端，首稿/原任务再次核验，不调用模型。运行后先读固定restart-last.log与实际health，核验新PID/stale=false、原job/hash/暂停和新版PIDs，再告诉用户源页继续。总目标仍active，不能标为完成。详见[修复证据与运行阻点](../evals/2026-10-11-maoshan-full-entry-recovery.md)。
 
 **最新停点：完整入口修复、离线回归与误关联纠正已完成，待核验旧服务加载。** 用户已授权直接修复。源页到原审查的13项新增回归、35文件352项封网组合、规划恢复20项通过，服务端编译通过。17:45已备份并事务纠正导演指向原job；第一章3013字hash不变，原job/journal/预算/暂停保留，无模型调用。详见[完整入口修复证据](../evals/2026-10-11-maoshan-full-entry-recovery.md)。完成旧服务加载前不要点击继续；后文均为前序历史。基线c2319022，源码与证据随本轮阶段提交；以git核对最终HEAD。
 

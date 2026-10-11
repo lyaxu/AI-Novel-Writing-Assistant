@@ -4,6 +4,8 @@
 
 本节为最新状态；下方历史台账保留，不把历史待办当自动执行授权。统一入口为 [CURRENT](CURRENT.md)，长期目标与记录规则为 [PROJECT_CONTEXT](PROJECT_CONTEXT.md)。
 
+**17:51运行阻点**：修复提交ac8925a3；旧管理员后端34144停止时Windows拒绝访问，仍stale=true。已备新版管理员重启入口并通过两种PowerShell只读预检，等待加载后再核验；目标未完成，用户暂勿继续。[运行证据](../evals/2026-10-11-maoshan-full-entry-recovery.md)。
+
 **17:48完整入口修复**：352项封网组合与20项规划恢复通过，已一致性备份、副本演练并CAS纠正误关联到原job；首章3013字hash不变，所有job/journal/预算和暂停保留。真实prepareDirector只读预检通过，无模型调用。待核验旧服务加载再指导源页继续。[实现、测试与数据证据](../evals/2026-10-11-maoshan-full-entry-recovery.md)。
 
 **17:15验收失败补记**：服务已加载修复，用户继续后仍停。规划恢复绕过原job恢复入口、漏传任务身份，误建新job撞原journal；原稿未变、无新增模型用量。已只读定位与真实规划游标离线回放，尚未实施修复；暂停继续验收。[证据与修复范围](../evals/2026-10-11-maoshan-resume-second-stop.md)。307项原回归缺整条实际入口覆盖，不能作为恢复通过结论。
