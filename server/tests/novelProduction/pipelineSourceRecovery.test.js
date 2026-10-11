@@ -53,7 +53,8 @@ for (const [reason, patch] of Object.entries({
   unknownStep: { inspection: { steps: [{ key: "review", status: "unknown" }] } },
   activeChapter: { inspection: { leaseActive: true } },
   completedChapter: { inspection: { status: "completed" } },
-  failedJob: { job: { status: "failed" } },
+  failedWithoutManualPause: { job: { status: "failed", pendingManualRecovery: false } },
+  cancelledStatus: { job: { status: "cancelled" } },
   notPaused: { job: { pendingManualRecovery: false } },
   cancelled: { job: { cancelRequestedAt: new Date(1000) } },
   activeParent: { job: { executionOwner: "owner", executionLeaseExpiresAt: new Date(9000) } },
@@ -108,6 +109,7 @@ for (const cancelledDuringPreflight of [false, true]) {
       "./runtime/artifactSync": {}, "./pipelineJobDedup": {}, "./pipelineJobState": {},
       "./production/NovelPipelineExecutor": { NovelPipelineExecutor: class {} },
       "./production/completion": {}, "./production/reliability": { ChapterProductionError: ProductionError },
+      "./production/recovery": {},
       "./production/executionLease": { PipelineExecutionLeaseService: class {} }, "./director/issues": {},
     });
     const service = new NovelCorePipelineService();
@@ -122,5 +124,33 @@ for (const cancelledDuringPreflight of [false, true]) {
     assert.equal(writes[0].where.currentItemKey, "chapter"); assert.equal(writes[0].where.OR.length, 3);
     assert.equal(writes[0].data.cancelRequestedAt, undefined, "never erase a concurrent cancellation");
     assert.equal(writes[0].data.retryCount, undefined, "never reset the existing job budget");
+  });
+}
+
+test("failed saved-review job resumes only after explicit source confirmation", async () => {
+  const f = fixture({ job: { status: "failed" } });
+  assert.equal((await f.service.project(f.target, f.inspection)).canResumePipeline, true);
+  await f.service.resume({ ...f.target, operationId: f.inspection.operationId });
+  assert.equal(f.calls[0][0], "job");
+});
+
+for (const [reason, patch] of Object.entries({
+  good: {}, unknown: { inspection: { canAcknowledge: true } },
+  outputLimit: { inspection: { steps: [{ key: "review", status: "unknown" }] } },
+  manuscriptOrContractEdited: { inspection: { inputChanged: true } },
+  cancelled: { job: { cancelRequestedAt: new Date(1000) } },
+  chapterBusy: { inspection: { leaseActive: true } },
+  jobBusy: { job: { executionOwner: "worker", executionLeaseExpiresAt: new Date(9000) } },
+  notPaused: { job: { pendingManualRecovery: false } },
+  wrongWorkflow: { inspection: { workflowTaskId: "other" } },
+  wrongOperation: { inspection: { operationId: "pipeline:other:chapter" } },
+})) {
+  test(`director failed-review preflight preserves original job and guards ${reason}`, async () => {
+    const f = fixture({ ...patch, job: { status: "failed", payload: JSON.stringify({ workflowTaskId: "director" }), ...patch.job },
+      inspection: { workflowTaskId: "director", ...patch.inspection } });
+    const call = () => f.service.prepareDirector("job", { novelId: "novel", directorTaskId: "director" });
+    if (reason === "good") assert.deepEqual(await call(), { ...f.target, updatedAt: f.job.updatedAt, payload: f.job.payload });
+    else await assert.rejects(call(), { code: "CHAPTER_PRODUCTION_CONFLICT" });
+    assert.equal(f.calls.length, 0, "preflight never schedules or clears a pause");
   });
 }

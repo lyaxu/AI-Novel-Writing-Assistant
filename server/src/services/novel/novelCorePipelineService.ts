@@ -15,7 +15,7 @@ import { buildPipelineCurrentItemLabel, buildPipelineStageProgress, decoratePipe
 import { NovelPipelineExecutor } from "./production/NovelPipelineExecutor";
 import { isCurrentChapterProductionCompleted } from "./production/completion";
 import { ChapterProductionError } from "./production/reliability";
-import type { PipelineRecoveryExpectation } from "./production/recovery";
+import { createChapterPipelineRecoveryService, type PipelineRecoveryExpectation, type DirectorPipelineRecoveryRequest } from "./production/recovery";
 import {
   PIPELINE_EXECUTION_LEASE_MS,
   PIPELINE_EXECUTION_RENEW_INTERVAL_MS,
@@ -250,7 +250,9 @@ export class NovelCorePipelineService {
     });
   }
 
-  async resumePipelineJob(jobId: string, expectedRecovery?: PipelineRecoveryExpectation): Promise<void> {
+  async resumePipelineJob(jobId: string, recovery?: PipelineRecoveryExpectation | DirectorPipelineRecoveryRequest): Promise<void> {
+    const expectedRecovery = recovery && "directorTaskId" in recovery
+      ? await createChapterPipelineRecoveryService().prepareDirector(jobId, recovery) : recovery;
     const job = await prisma.generationJob.findUnique({
       where: { id: jobId },
       select: {
@@ -267,31 +269,36 @@ export class NovelCorePipelineService {
         repairMode: true,
         maxRetries: true,
         payload: true,
+        pendingManualRecovery: true,
+        cancelRequestedAt: true,
       },
     });
     if (!job) {
       throw new Error("章节流水线任务不存在。");
     }
-      if (job.status !== "queued" && job.status !== "running") {
+      if (!["queued", "running", ...(expectedRecovery ? ["failed"] : [])].includes(job.status)) {
         if (expectedRecovery) throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "范围任务状态已变化，请刷新后核对。");
         return;
       }
+      // Watchdogs and ordinary reattachment are not permission to clear a manual pause or cancellation.
+      if (!expectedRecovery && (job.pendingManualRecovery || job.cancelRequestedAt)) return;
       if (expectedRecovery) {
         const result = await prisma.generationJob.updateMany({
           where: { id: job.id, novelId: expectedRecovery.novelId, currentItemKey: expectedRecovery.chapterId,
-            status: { in: ["queued", "running"] }, pendingManualRecovery: true, cancelRequestedAt: null,
+            status: job.status, pendingManualRecovery: true, cancelRequestedAt: null,
             updatedAt: expectedRecovery.updatedAt, payload: expectedRecovery.payload,
             OR: [{ executionOwner: null }, { executionLeaseExpiresAt: null }, { executionLeaseExpiresAt: { lte: new Date() } }],
           },
-          data: { status: "queued", pendingManualRecovery: false, heartbeatAt: null },
+          data: { status: "queued", pendingManualRecovery: false, heartbeatAt: null, finishedAt: null },
         });
         if (result.count !== 1) throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "范围任务已被取消、恢复或修改，请刷新后核对。");
-      } else await this.updateJobSafe(job.id, {
-        status: "queued",
-        pendingManualRecovery: false,
-        heartbeatAt: null,
-        cancelRequestedAt: null,
-      });
+      } else {
+        const result = await prisma.generationJob.updateMany({
+          where: { id: job.id, status: { in: ["queued", "running"] }, pendingManualRecovery: false, cancelRequestedAt: null },
+          data: { status: "queued", heartbeatAt: null },
+        });
+        if (result.count !== 1) return;
+      }
       const payload = this.parsePipelinePayload(job.payload);
       this.schedulePipelineExecution(job.id, job.novelId, {
         startOrder: job.startOrder,

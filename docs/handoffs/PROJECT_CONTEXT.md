@@ -46,6 +46,7 @@
 - [结构化输出与恢复边界](../wiki/workflows/structured-output-budget-recovery.md)。其他模块按仓库 wiki 和模块 README 定位，不把旧聊天当实现证据。
 - 新窗口默认先只读接手，汇报目标/分支/未提交项/当前卡点/下一步，避免同一 checkout 两个窗口同时修改。
 - 当前工作台账见 [WORK_LEDGER.md](WORK_LEDGER.md)，它记录完成、部分完成、待验证、暂停及取消事项；它不是自动执行清单。关键长期规则见[书级构思](../wiki/workflows/book-story-foundation.md)、[跨章推进](../wiki/workflows/narrative-progression-review.md)、[约束范围与阶段回报](../wiki/workflows/narrative-constraint-scope-and-payoff.md)。
+- 新的验收发现、修复结论和用户设想必须接回 CURRENT 与 WORK_LEDGER；专项记录可以单列，但不可成为孤立文档。长期规则写本页或wiki，实时状态写交接，讨论未实施的设想明确标注边界。目前记录的[断线续作与书内创作agent](../plans/2026-10-11-resilient-writing-and-book-agent-ideas.md)等待专项设计，不属于自动执行授权。
 
 ## 何时换窗口
 

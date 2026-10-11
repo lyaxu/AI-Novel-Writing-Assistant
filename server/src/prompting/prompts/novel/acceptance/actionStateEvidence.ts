@@ -112,6 +112,8 @@ export function reconcileSceneActionVerdicts(scenes: SceneCausalityVerdict[], ch
 }
 
 export const ACTION_STATE_AUDIT_RULES = [
+  "所有 quote 必须逐字复制对应正文的连续短片段，包括标点；不要换主语、补代词、把逗号改成句号或拼接分散的句子。说明写在 explanation。引用可以从句中开始，不必改成完整句。",
+  "transitionStatus=established 时必须提供 transitionEvidence；动作本身就是变化时可引用该动作，不要留空。enablingTransitionRequired 只表示本次 action 发生前必须满足的变化，不能把 action 导致的后续结果倒填成行动前提。若所选 action 不能覆盖要审查的事件，请重新选择关键 action 并配准确证据。",
   "actionStateChecks 必须按 expectedSceneKeys 每场恰好选1个决定结果的关键行动（最多8条）；没有场景合同则 sceneKey=chapter，检查1个实际行动/关系决定。状态审查先于场景earned与总分；不能只确认结局发生。",
   "每条包含 sceneKey、actor、action、actionEvidence、states、verdict、explanation。states只选真正相关的body/item/ability/knowledge/location维度，通常1-2项，不要求每次列齐五类；每项包含dimension、entity、before、requiredForAction、after、beforeEvidence、afterEvidence、transitionEvidence、enablingTransitionRequired、stateChanged、transitionStatus。各状态/说明180字内，引用180字内，每类至多2条；未知就标unknown且状态证据数组可空，不编造。",
   "证据对象为{source,sourceId,quote}。source=current_prose时sourceId使用本章chapterId；established_context时只用written_evidence已写正文的chapterId。quote必须为该来源的连续准确原文。planned_contract只能说明计划，不可证明物品已有、身体状态恢复或行动已发生；不得拿摘要、场景卡或sourceKind声明充当既有事实。actionEvidence和afterEvidence必须含当前正文证据。",

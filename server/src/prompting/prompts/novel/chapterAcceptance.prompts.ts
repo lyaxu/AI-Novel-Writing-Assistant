@@ -281,6 +281,18 @@ function validateAcceptanceSceneCoverage(output: ChapterAcceptanceAssessmentOutp
   }
 }
 
+function reviewEvidenceProblems(
+  audit: ReturnType<typeof validateActionStateEvidence>,
+  progression: ReturnType<typeof validateProgressionEvidence>,
+): string[] {
+  return [
+    ...audit.coverageIssues,
+    ...progression.coverageIssues,
+    ...audit.checks.flatMap(row => (row.validationIssues ?? []).map(issue => `actionStateChecks[${row.sceneKey}]:${issue}`)),
+    ...progression.checks.flatMap(row => (row.validationIssues ?? []).map(issue => `progressionChecks[${row.dimension}]:${issue}`)),
+  ];
+}
+
 const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
   status: "repairable",
   score: {
@@ -351,7 +363,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ChapterAcceptanceAssessmentOutput
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v7",
+  version: "v8",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -405,16 +417,18 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
         };
       }
     });
-    // Other post-validation failures retain their existing error path.
-    if (!blockingIssues.some((issue) => issue.sourceValidationIssues?.length)) throw new Error(validationError);
     const audit = validateActionStateEvidence(rawOutput.actionStateChecks ?? [], promptInput);
     const progression = validateProgressionEvidence(rawOutput.progressionChecks ?? [], promptInput);
+    const hasInvalidIssueSource = blockingIssues.some(issue => issue.sourceValidationIssues?.length);
+    if (!hasInvalidIssueSource && !reviewEvidenceProblems(audit, progression).length) throw new Error(validationError);
+    // Keep the last completed answer for inspection. The runtime's review-completion
+    // gate pauses here; exhaustion is never approval or permission to rewrite prose.
     return {
       ...rawOutput,
-      status: "continue_with_risk",
-      continuePolicy: "continue",
+      status: hasInvalidIssueSource ? "continue_with_risk" : "needs_manual_review",
+      continuePolicy: hasInvalidIssueSource ? "continue" : "pause",
       repairability: "none",
-      decisionReason: "部分问题的引文来源未能核实，完整保留问题供复核；无法逐项关联的修复指令暂不执行。",
+      decisionReason: "审查的引文或状态证据未能核实，完整保留回答供复核；保留正文，不执行未核实的修改建议。",
       blockingIssues,
       deferredRepairDirectives: rawOutput.repairDirectives,
       deferredMissingObligations: rawOutput.missingObligations,
@@ -436,6 +450,15 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
     validateAcceptanceSceneCoverage(output, input);
     const audit = validateActionStateEvidence(output.actionStateChecks ?? [], input);
     const progression = validateProgressionEvidence(output.progressionChecks ?? [], input);
+    const problems = reviewEvidenceProblems(audit, progression);
+    if (problems.length) {
+      throw new Error([
+        "审查回答的证据校验未通过；只纠正审查 JSON，不改正文、不补造剧情。",
+        ...problems,
+        "从声明来源逐字复制连续准确原文，保留标点；补齐覆盖、状态变化证据，区分行动前提与行动结果。",
+        "没有比较职责时使用 not_applicable；无法核实则如实标记未知，不用高分或 earned 掩盖缺证据。",
+      ].join("\n"));
+    }
     return {
       ...output,
       actionStateChecks: audit.checks,

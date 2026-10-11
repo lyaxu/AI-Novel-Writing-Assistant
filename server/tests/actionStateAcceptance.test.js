@@ -76,9 +76,16 @@ function evaluate(row, content, extra = {}) {
     explanation: "本测试仅聚焦行动状态，前文无本项对应职责。", repairSuggestion: "",
   })) };
   const parsed = prompts.generatedChapterAcceptanceAssessmentSchema.parse(modelAssessment);
-  const output = prompts.chapterAcceptanceAssessmentPrompt.postValidate(parsed, {
+  const input = {
     chapterId: "c2", chapterOrder: 2, content, expectedSceneKeys: ["s"], establishedProse: [{ chapterId: "c1", order: 1, content: "前章以他入睡作结。" }], ...extra,
-  });
+  };
+  // Projection unit tests inspect invalid findings too. Fresh production responses
+  // must first pass the prompt's bounded correction/completion gate.
+  const action = evidence.validateActionStateEvidence(parsed.actionStateChecks, input);
+  const progression = progressionEvidence.validateProgressionEvidence(parsed.progressionChecks, input);
+  const output = { ...parsed, actionStateChecks: action.checks, actionStateAuditIssues: action.coverageIssues,
+    progressionChecks: progression.checks, progressionAuditIssues: progression.coverageIssues,
+    sceneCausalityVerdicts: evidence.reconcileSceneActionVerdicts(parsed.sceneCausalityVerdicts, action.checks) };
   return service.normalizeAssessment(output, content);
 }
 
@@ -214,12 +221,14 @@ test("legacy persisted assessments remain readable; fresh structured output requ
   assert.equal(service.normalizeAssessment(legacy, "旧正文").status, "accepted");
 });
 
-test("missing action coverage is uncertainty rather than another model request", () => {
-  const output = prompts.chapterAcceptanceAssessmentPrompt.postValidate(assessment([]), { chapterId: "c2", chapterOrder: 2, content: "正文", expectedSceneKeys: ["s"] });
-  const result = service.normalizeAssessment(output, "正文");
-  assert.ok(result.riskTags.includes("action_state_coverage_missing:s"));
-  assert.equal(result.status, "continue_with_risk");
-  assert.equal(result.repairDirectives.length, 0);
+test("missing action coverage requests review correction and exhaustion cannot approve prose", () => {
+  const input = { chapterId: "c2", chapterOrder: 2, content: "正文", expectedSceneKeys: ["s"] };
+  assert.throws(() => prompts.chapterAcceptanceAssessmentPrompt.postValidate(assessment([]), input), /action_state_coverage_missing:s/);
+  const result = prompts.chapterAcceptanceAssessmentPrompt.postValidateFailureRecovery({ rawOutput: assessment([]),
+    promptInput: input, validationError: "missing coverage", semanticRetryAttempts: 1, context: {} });
+  assert.ok(result.actionStateAuditIssues.includes("action_state_coverage_missing:s"));
+  assert.equal(result.status, "needs_manual_review");
+  assert.deepEqual(result.repairDirectives, []);
 });
 
 test("fresh prompt has a full compact state example, relevant dimensions only, and bounded output allowance", () => {

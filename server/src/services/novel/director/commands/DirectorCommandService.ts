@@ -41,6 +41,7 @@ import { taskDispatcher } from "../../../../workers/TaskDispatcher";
 import { DirectorCommandLeaseService } from "./leases/DirectorCommandLeaseService";
 import { assertPlanningRepairResumeAllowed, readPlanningRepairSeed } from "../recovery/planningRepair/planningRepairRecovery";
 import { isPlanningRepairTaskPaused } from "@ai-novel/shared/types/planningRepair/recovery";
+import { createChapterPipelineRecoveryService, assertUnchangedPipelineRecoveryScope } from "../../production/recovery";
 
 const ACTIVE_COMMAND_STATUSES: DirectorRunCommandStatus[] = ["queued", "leased", "running"];
 const EXECUTION_COMMAND_TYPES: DirectorRunCommandType[] = [
@@ -758,25 +759,55 @@ export class DirectorCommandService {
       return toAcceptedResponse(reusableCommand, null);
     }
 
+    // Confirm saved chapter execution before any command can clear the task's manual pause.
+    const pausedSeed = parseSeedPayload<Parameters<typeof assertUnchangedPipelineRecoveryScope>[0] & {
+      autoExecution?: { pipelineJobId?: string };
+    }>(row.seedPayloadJson);
+    const pausedJobId = row.pendingManualRecovery && !input.payload.planningRepairRecoveryKey
+      ? pausedSeed?.autoExecution?.pipelineJobId : undefined;
+    if (pausedJobId && (row.cancelRequestedAt || !row.novelId || input.payload.forceResume !== true)) {
+      throw new AppError("请从本书工作区明确确认原任务恢复；已取消的任务不能继续。", 409);
+    }
+    if (pausedJobId && pausedSeed) assertUnchangedPipelineRecoveryScope(pausedSeed);
+    const pausedRecovery = pausedJobId
+      ? await createChapterPipelineRecoveryService().prepareDirector(pausedJobId, {
+        novelId: row.novelId!, directorTaskId: input.taskId,
+      }) : null;
+
     const normalizedPayload = Object.fromEntries(
       Object.entries(input.payload).filter(([, value]) => value !== undefined),
     );
     const idempotencyKey = input.idempotencyKey ?? `${input.commandType}:${row.updatedAt.getTime()}:${hashPayload(normalizedPayload)}`;
     const payloadJson = stableJson(normalizedPayload);
-    const createCommand = () => prisma.directorRunCommand.create({
-      data: {
+    const commandData = {
         taskId: input.taskId,
         novelId: row.novelId,
         commandType: input.commandType,
         idempotencyKey,
-        status: "queued",
+        status: "queued" as const,
         payloadJson,
-      },
-    });
+    };
+    const createCommand = () => pausedRecovery ? prisma.$transaction(async tx => {
+      const stillPaused = await tx.generationJob.findFirst({ where: {
+        id: pausedJobId, novelId: pausedRecovery.novelId, currentItemKey: pausedRecovery.chapterId,
+        updatedAt: pausedRecovery.updatedAt, payload: pausedRecovery.payload,
+        status: { in: ["queued", "running", "failed"] }, pendingManualRecovery: true, cancelRequestedAt: null,
+        OR: [{ executionOwner: null }, { executionLeaseExpiresAt: null }, { executionLeaseExpiresAt: { lte: new Date() } }],
+      }, select: { id: true } });
+      if (!stillPaused) throw new AppError("原章节任务状态已变化，请刷新工作区后核对。", 409);
+      const accepted = await tx.novelWorkflowTask.updateMany({
+        where: { id: row.id, updatedAt: row.updatedAt, seedPayloadJson: row.seedPayloadJson,
+          status: row.status, pendingManualRecovery: true, cancelRequestedAt: null },
+        data: { status: "queued", pendingManualRecovery: false, ...buildAcceptedTaskState(input.commandType),
+          ...(input.preserveLastError ? {} : { lastError: null }), heartbeatAt: new Date(), finishedAt: null },
+      });
+      if (accepted.count !== 1) throw new AppError("导演任务已被取消、恢复或修改，请刷新工作区。", 409);
+      return tx.directorRunCommand.create({ data: commandData });
+    }) : prisma.directorRunCommand.create({ data: commandData });
 
     try {
       const command = await withSqliteRetry(createCommand, { label: "director.command.create" });
-      await this.markCommandAcceptedOnTask(input.taskId, input.commandType, {
+      if (!pausedRecovery) await this.markCommandAcceptedOnTask(input.taskId, input.commandType, {
         preserveLastError: input.preserveLastError,
       });
       taskDispatcher.notify({ commandType: input.commandType, taskId: input.taskId });

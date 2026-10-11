@@ -400,6 +400,9 @@ export class NovelDirectorContinueRuntime {
         ))
         || (requestedPlan.mode === "volume" && previousState.volumeOrder !== requestedPlan.volumeOrder)
       ));
+      if (changedExecutionScope && previousState?.pipelineJobId && (row.pendingManualRecovery || previousState.pipelineStatus === "failed")) {
+        throw new Error("原章节审查尚未完成，请先按原任务范围恢复，再调整后续写作范围。");
+      }
       const existingPipelineJobId = planningRepairRecovery || changedExecutionScope
         ? null : previousState?.pipelineJobId ?? null;
       const existingExecutionState = changedExecutionScope

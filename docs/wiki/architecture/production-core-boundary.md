@@ -57,3 +57,5 @@ Chapter 中已审核任务单、场景卡、职责与字数目标是执行合同
 下一章在缓存准备之前读取前章精确正文 hash 及其当前 operationId 的完成边界，旧稿边界或其他操作的边界不能放行。旧后台、手动资产同步入口不得双写受生产日志管理的章节。正文换版产生的旧自动事实/时间线保留为 superseded；上下文、导出及 RAG 读取排除失效事实，不能只依赖异步索引清理。
 
 模块边界见 [实际状态](../../../server/src/services/novel/production/actualState/README.md) 与 [写前准备](../../../server/src/services/novel/production/preparation/README.md)。既有编辑器防丢稿、创作写法和字数规则仍独立有效；这些事务保证不能证明文学质量。
+
+审查回答本身的可信性与正文质量分开判断。错误引文/缺项先按原预算纠正审查，不把未核实意见交给修文；failed人工暂停的章节必须经源页预检及CAS恢复原job和原journal，后台重启无权清暂停。详见[章节审查与原任务恢复](../workflows/chapter-review-resume.md)。

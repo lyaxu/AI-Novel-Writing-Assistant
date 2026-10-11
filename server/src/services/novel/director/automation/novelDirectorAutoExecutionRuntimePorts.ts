@@ -112,7 +112,7 @@ export interface NovelDirectorAutoExecutionNovelPort {
     noticeSummary?: string | null;
     error?: string | null;
   } | null>;
-  resumePipelineJob(jobId: string): Promise<unknown>;
+  resumePipelineJob(jobId: string, recovery?: { novelId: string; directorTaskId: string }): Promise<unknown>;
   cancelPipelineJob(jobId: string): Promise<unknown>;
 }
 

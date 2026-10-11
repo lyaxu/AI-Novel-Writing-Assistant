@@ -17,6 +17,18 @@ const {
 const {
   resolveAutoExecutionRangeAndState,
 } = require("../dist/services/novel/director/automation/novelDirectorAutoExecutionScopeRuntime.js");
+const { prisma } = require("../dist/db/prisma.js");
+const originalWorkflowFindUnique = prisma.novelWorkflowTask.findUnique;
+test.beforeEach(() => {
+  // These runtime fixtures have no professional-workbench handoff. Keep the read
+  // explicit so an added database dependency still fails under offlineBootstrap.
+  prisma.novelWorkflowTask.findUnique = async (query) => {
+    assert.deepEqual(query.select, { currentItemKey: true, checkpointType: true });
+    assert.equal(typeof query.where.id, "string");
+    return null;
+  };
+});
+test.afterEach(() => { prisma.novelWorkflowTask.findUnique = originalWorkflowFindUnique; });
 function buildRequest(overrides = {}) {
   return {
     idea: "一个普通人被卷入命运迷局",
@@ -708,7 +720,7 @@ test("runFromReady treats explicit range continuation as approval for quality-al
   );
 });
 
-test("runFromReady keeps a pending manual-recovery pipeline job paused", async () => {
+for (const pausedStatus of ["queued", "failed"]) test(`runFromReady keeps a ${pausedStatus} manual-recovery pipeline job paused`, async () => {
   const calls = [];
   const runtime = new NovelDirectorAutoExecutionRuntime({
     novelContextService: {
@@ -731,7 +743,7 @@ test("runFromReady keeps a pending manual-recovery pipeline job paused", async (
         calls.push(["getPipelineJobById", jobId]);
         return {
           id: "job-paused",
-          status: "queued",
+          status: pausedStatus,
           progress: 0.65,
           pendingManualRecovery: true,
           currentStage: "queued",
@@ -787,10 +799,9 @@ test("runFromReady keeps a pending manual-recovery pipeline job paused", async (
   assert.deepEqual(calls, [
     ["getPipelineJobById", "job-paused"],
     ["bootstrapTask", "job-paused", "running"],
-    ["findActivePipelineJobForRange", "novel-1", 1, 1, "job-paused"],
     ["getPipelineJobById", "job-paused"],
     ["requeueTaskForRecovery", "chapter_batch_ready"],
-    ["bootstrapTask", "job-paused", "queued"],
+    ["bootstrapTask", "job-paused", pausedStatus],
   ]);
 });
 

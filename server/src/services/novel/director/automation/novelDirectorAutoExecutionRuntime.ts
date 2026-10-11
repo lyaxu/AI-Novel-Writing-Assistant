@@ -36,6 +36,7 @@ import {
 import { prepareRequestedAutoExecution as prepareRequestedAutoExecutionState, readAutoExecutionIdentity, resolveAutoExecutionRuntimeRangeAndState, shouldStopAutoExecution } from "./novelDirectorAutoExecutionRuntimePreparation";
 import type { NovelDirectorAutoExecutionRuntimeDeps, PipelineJobSnapshot } from "./novelDirectorAutoExecutionRuntimePorts";
 import { prisma } from "../../../../db/prisma";
+import { ChapterProductionError } from "../../production/reliability";
 
 export class NovelDirectorAutoExecutionRuntime {
   constructor(private readonly deps: NovelDirectorAutoExecutionRuntimeDeps) {}
@@ -76,10 +77,13 @@ export class NovelDirectorAutoExecutionRuntime {
     if (pipelineJobId) {
       knownPipelineJob = await this.deps.novelService.getPipelineJobById(pipelineJobId);
       if (knownPipelineJob?.pendingManualRecovery && input.resumePendingManualRecovery) {
-        await this.deps.novelService.resumePipelineJob(knownPipelineJob.id);
+        await this.deps.novelService.resumePipelineJob(knownPipelineJob.id, { novelId: input.novelId, directorTaskId: input.taskId });
         knownPipelineJob = await this.deps.novelService.getPipelineJobById(knownPipelineJob.id);
+        if (!knownPipelineJob || knownPipelineJob.pendingManualRecovery || ["failed", "cancelled"].includes(knownPipelineJob.status)) {
+          throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "原章节任务未恢复，请刷新本书工作区核对暂停原因。");
+        }
       }
-      if (!knownPipelineJob || ["failed", "cancelled"].includes(knownPipelineJob.status)) {
+      if (!knownPipelineJob || (!knownPipelineJob.pendingManualRecovery && ["failed", "cancelled"].includes(knownPipelineJob.status))) {
         pipelineJobId = "";
         ({ range, autoExecution } = await resolveAutoExecutionRuntimeRangeAndState(this.deps, {
           novelId: input.novelId,
@@ -124,12 +128,12 @@ export class NovelDirectorAutoExecutionRuntime {
       if (pipelineJobId) {
         const existingJob = knownPipelineJob ?? await this.deps.novelService.getPipelineJobById(pipelineJobId);
         knownPipelineJob = existingJob;
-        if (!existingJob || ["failed", "cancelled"].includes(existingJob.status)) {
+        if (!existingJob || (!existingJob.pendingManualRecovery && ["failed", "cancelled"].includes(existingJob.status))) {
           pipelineJobId = "";
         }
       }
 
-      const activeRangeJob = await this.deps.novelService.findActivePipelineJobForRange(
+      const activeRangeJob = knownPipelineJob?.pendingManualRecovery ? null : await this.deps.novelService.findActivePipelineJobForRange(
         input.novelId,
         resolveSingleChapterExecutionRange(range, autoExecution).startOrder,
         resolveSingleChapterExecutionRange(range, autoExecution).endOrder,

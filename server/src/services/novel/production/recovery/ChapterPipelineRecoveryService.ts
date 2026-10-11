@@ -8,6 +8,19 @@ export interface PipelineRecoveryJob {
   updatedAt: Date;
 }
 export interface PipelineRecoveryExpectation { novelId: string; chapterId: string; updatedAt: Date; payload: string | null }
+export interface DirectorPipelineRecoveryRequest { novelId: string; directorTaskId: string }
+interface ExecutionScope { mode?: string; startOrder?: number; endOrder?: number; volumeOrder?: number }
+/** A paused execution must finish its saved boundary before a new scope can replace it. */
+export function assertUnchangedPipelineRecoveryScope(seed: { autoExecution?: ExecutionScope; directorInput?: { autoExecutionPlan?: ExecutionScope } }) {
+  const previous = seed.autoExecution;
+  const requested = seed.directorInput?.autoExecutionPlan;
+  if (!previous || !requested) return;
+  if (previous.mode !== requested.mode
+    || (requested.mode === "chapter_range" && (previous.startOrder !== requested.startOrder || previous.endOrder !== requested.endOrder))
+    || (requested.mode === "volume" && previous.volumeOrder !== requested.volumeOrder)) {
+    throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "请先按原任务范围完成当前章节恢复，再调整后续写作范围。");
+  }
+}
 interface RecoveryTarget { novelId: string; chapterId: string }
 export interface PipelineRecoveryProjection {
   pipelineJobId?: string;
@@ -26,8 +39,8 @@ export interface ChapterPipelineRecoveryDeps {
 export class ChapterPipelineRecoveryService {
   constructor(private readonly deps: ChapterPipelineRecoveryDeps) {}
 
-  private async loadJob(target: RecoveryTarget, inspection: NonNullable<Inspection>): Promise<PipelineRecoveryJob | null> {
-    if (inspection.entry !== "pipeline" || inspection.workflowTaskId) return null;
+  private async loadJob(target: RecoveryTarget, inspection: NonNullable<Inspection>, workflowTaskId?: string): Promise<PipelineRecoveryJob | null> {
+    if (inspection.entry !== "pipeline" || (inspection.workflowTaskId || undefined) !== workflowTaskId) return null;
     // Identity was assigned by the executor. Random historical operations cannot be attributed safely.
     const suffix = `:${target.chapterId}`;
     if (!inspection.operationId.startsWith("pipeline:") || !inspection.operationId.endsWith(suffix)) return null;
@@ -41,7 +54,7 @@ export class ChapterPipelineRecoveryService {
       payload = JSON.parse(job.payload ?? "null");
       if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
     } catch { return null; }
-    return payload.workflowTaskId ? null : job;
+    return (payload.workflowTaskId || undefined) === workflowTaskId ? job : null;
   }
 
   private projection(target: RecoveryTarget, inspection: NonNullable<Inspection>, job: PipelineRecoveryJob | null): PipelineRecoveryProjection {
@@ -52,7 +65,7 @@ export class ChapterPipelineRecoveryService {
       pipelineJobId: job.id, pipelineRange: { startOrder: job.startOrder, endOrder: job.endOrder },
       canResumePipeline: !inspection.leaseActive && !inspection.inputChanged && !inspection.canAcknowledge
         && !inspection.steps.some(step => step.status === "unknown")
-        && inspection.status !== "completed" && ["queued", "running"].includes(job.status)
+        && inspection.status !== "completed" && ["queued", "running", "failed"].includes(job.status)
         && job.pendingManualRecovery && !job.cancelRequestedAt && !parentLeaseActive
         && job.currentItemKey === target.chapterId,
     };
@@ -60,6 +73,21 @@ export class ChapterPipelineRecoveryService {
 
   async project(target: RecoveryTarget, inspection: NonNullable<Inspection>): Promise<PipelineRecoveryProjection> {
     return this.projection(target, inspection, await this.loadJob(target, inspection));
+  }
+
+  /** Read-only preflight, shared by command acceptance and execution; neither clears a pause. */
+  async prepareDirector(jobId: string, request: DirectorPipelineRecoveryRequest): Promise<PipelineRecoveryExpectation> {
+    const original = await this.deps.findJob(jobId);
+    if (!original?.currentItemKey || original.novelId !== request.novelId || !request.directorTaskId) {
+      throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "原章节任务缺少可核对的恢复位置，请查看保留稿。");
+    }
+    const target = { novelId: request.novelId, chapterId: original.currentItemKey };
+    const inspection = await this.deps.inspect(target);
+    const job = inspection ? await this.loadJob(target, inspection, request.directorTaskId) : null;
+    if (!inspection || job?.id !== jobId || !this.projection(target, inspection, job).canResumePipeline) {
+      throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "请先在章节源页核对原任务、保留稿和未确认的调用结果，再继续自动导演。");
+    }
+    return { ...target, updatedAt: job.updatedAt, payload: job.payload };
   }
 
   async resume(target: RecoveryTarget & { operationId: string }): Promise<{ jobId: string }> {

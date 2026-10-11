@@ -3,8 +3,8 @@ import { getSharedNovelServices } from "../../application/sharedNovelServices";
 import { createDefaultChapterProductionJournal } from "../reliability";
 import { ChapterPipelineRecoveryService } from "./ChapterPipelineRecoveryService";
 
-export { ChapterPipelineRecoveryService } from "./ChapterPipelineRecoveryService";
-export type { ChapterPipelineRecoveryDeps, PipelineRecoveryJob, PipelineRecoveryProjection, PipelineRecoveryExpectation } from "./ChapterPipelineRecoveryService";
+export { ChapterPipelineRecoveryService, assertUnchangedPipelineRecoveryScope } from "./ChapterPipelineRecoveryService";
+export type { ChapterPipelineRecoveryDeps, PipelineRecoveryJob, PipelineRecoveryProjection, PipelineRecoveryExpectation, DirectorPipelineRecoveryRequest } from "./ChapterPipelineRecoveryService";
 
 export function createChapterPipelineRecoveryService() {
   return new ChapterPipelineRecoveryService({

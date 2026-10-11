@@ -58,7 +58,9 @@ export function validateProgressionEvidence(checks: ChapterProgressionCheck[], i
     if (check.status === "progressed" && !check.actualChange.trim()) invalid.push("actual_change_missing");
     if (check.status === "justified_repetition" && !check.newConsequence.trim()) invalid.push("new_consequence_missing");
     if (check.status === "stalled" && !check.repairSuggestion.trim()) invalid.push("repair_suggestion_missing");
-    if (check.status !== "insufficient_evidence"
+    // An explicitly inapplicable comparison has no truth value. Provenance and the
+    // later-chapter missing-context guard still apply; null is not a passed comparison.
+    if (check.status !== "insufficient_evidence" && check.status !== "not_applicable"
       && (check.repeatsEstablishedBeat === null || check.addsNewConsequence === null)) invalid.push("semantic_findings_unknown");
     if (check.repeatsEstablishedBeat === true && !check.previousEvidence.length) invalid.push("repetition_evidence_missing");
     if (check.status === "progressed" && check.repeatsEstablishedBeat === true) invalid.push("progressed_conflicts_with_repeated_beat");
@@ -84,7 +86,7 @@ export function validateProgressionEvidence(checks: ChapterProgressionCheck[], i
 }
 
 export const CHAPTER_PROGRESSION_AUDIT_RULES = [
-  "每行必须额外填写 repeatsEstablishedBeat（是否重演已完成事件/已知信息/既定决定）和 addsNewConsequence（本次是否确有新后果），值为 true/false；无法判断填 null。先做这两项语义判断再选status：重复且无新后果不能progressed；重复但有新后果用justified_repetition；新后果必须写明newConsequence并由本章证据支持。explanation、actualChange、newConsequence和status必须表达同一结论，不得把本章其他新增桥段算作被重演事件的新后果。",
+  "每行必须额外填写 repeatsEstablishedBeat（是否重演已完成事件/已知信息/既定决定）和 addsNewConsequence（本次是否确有新后果），值为 true/false；无法判断填 null。not_applicable 表示已查证没有比较职责（如首章无前文），两值可为 null，不必伪造前文或重演结论；后章缺少前文材料用 insufficient_evidence。先做这两项语义判断再选status：重复且无新后果不能progressed；重复但有新后果用justified_repetition；新后果必须写明newConsequence并由本章证据支持。explanation、actualChange、newConsequence和status必须表达同一结论，不得把本章其他新增桥段算作被重演事件的新后果。",
   "知识核验要分别说明谁知道什么：知道任务存在、知道任务内容、知道目标位置、知道执行方法是不同命题。人物不知道其中一项，不代表其他已知信息被遗忘。判断遗忘/重复认识前，连读否定句前后文、转折和指代，保留原句限定范围，不把局部未知扩写成整体未知。",
   "progressionChecks 必须按 event_repetition、knowledge_repetition、prior_goal_followthrough 各输出一行，恰好3行。用written_evidence实际前文与当前正文比较，不把任务表、摘要、预期netChange当实际兑现。每行含dimension、status、priorState、actualChange、newConsequence、previousEvidence、currentEvidence、explanation、repairSuggestion。",
   "event_repetition 检查是否重演前章已完成的事件职责；knowledge_repetition 检查人物/读者是否只是再次发现已确立的信息；prior_goal_followthrough 检查前章已作出的行动决定在本章是否尝试执行、遭遇实质阻力、改变方案或合理延后，而非结尾再决定一次。叙述换词、换摊贩/场景、增加心理旁白，本身不等于新进展。",
