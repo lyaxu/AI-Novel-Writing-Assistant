@@ -1,6 +1,8 @@
 # 最新交接入口
 
-更新：2026-10-11 16:15 UTC。
+更新：2026-10-11 16:43 UTC。
+
+用户手动重启的Backend identity changed是脚本把DateTime与字符串直接比较造成的误判，非服务换了身份；已修UTC比较，PowerShell 7.6.5和Windows PowerShell的CheckOnly实跑通过。服务仍未重启，原稿和暂停不变。可双击`.codex-run/maoshan-review-recovery-fix-20261011/restart-old.cmd`，日志自动保留在同目录restart-last.log；详见下方修复报告。源码修复提交为`d2cc20e5`，后续仅运行说明文档。
 
 **当前停点：两处修复与离线回归完成，旧运行服务待加载修复，再由用户从原任务第一章审查继续。** 本轮用户授权修复审查证据校验及failed暂停原job恢复，并要求记录与整体台账同步。没有真实模型调用、恢复或正文写入。
 

@@ -4,6 +4,8 @@
 
 本节为最新状态；下方历史台账保留，不把历史待办当自动执行授权。统一入口为 [CURRENT](CURRENT.md)，长期目标与记录规则为 [PROJECT_CONTEXT](PROJECT_CONTEXT.md)。
 
+16:43运行补充：用户重启遇到Backend identity changed，已确认并修正脚本DateTime/字符串比较误判；两种PowerShell的只读预检通过，服务尚未重启。新增双击入口restart-old.cmd及固定日志，用户无需转抄报错；证据与路径见下方修复报告。此故障与此前blocked by policy分别记录。
+
 | 事项 | 状态与证据 | 下一步/边界 |
 | --- | --- | --- |
 | 核心重构阶段2/3 | 保存、恢复、合同、审查、实际状态已离线交付；见[批准方案](../plans/2026-10-11-production-core-refactor.md)及[阶段3报告](../evals/2026-10-11-production-core-stage3.md) | 不等于十章真实验收完成 |

@@ -39,6 +39,8 @@
 
 脚本校验已知端口/PID/启动时间、原暂停状态及正文hash，无可自动续跑任务才停已知旧进程并调用原隔离启动脚本；不发送生成或恢复请求。已通过语法检查，读取预检实测通过；停止/启动部分本轮未执行。若PID、稿件或任务已变，脚本会拒绝，不能强行改脚本绕过。
 
+16:43补充：用户运行报Backend identity changed，实际PID与启动时刻均未变化。根因为PowerShell 7把ISO时间解析成DateTime，与字符串直接比较误判；不是用户操作或权限错误。脚本已统一为UTC时刻比较，保留PID/进程创建时间/正文及暂停状态检查，增加CheckOnly。PowerShell 7.6.5和Windows PowerShell两端实跑CheckOnly均通过，没有停止/启动服务。可双击同目录`restart-old.cmd`，自动保存`restart-last.log`，发生异常由代理直接读取，不要求用户抄终端。启动仍待用户执行；命令执行审批拒绝与本次脚本错误必须分开记录，不能仅凭blocked by policy确定具体阻断层。此为本地运行脚本修正，不改变产品源码，不更新产品release notes。
+
 服务成功后打开[本书第一章源工作区](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt600jsgow0e6kb0852)，刷新，点击“继续自动导演”。标准入口continuationMode=resume经命令适配带forceResume；从第一章未完成审查接回，然后按原质量策略及1—3范围推进。不要改范围、跳过质检或单独生成第二章。运行记录只读。
 
 真实模型审查、UI原任务恢复与连续十章仍待用户验收；再次暂停应保留现场定位，不连续点重试。记录连到[CURRENT](../handoffs/CURRENT.md)、[台账](../handoffs/WORK_LEDGER.md)、[长期规则](../wiki/workflows/chapter-review-resume.md)和[断线续作/书内agent设想](../plans/2026-10-11-resilient-writing-and-book-agent-ideas.md)。
