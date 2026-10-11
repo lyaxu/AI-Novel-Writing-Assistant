@@ -44,13 +44,14 @@ function fixture() {
   } };
   const journal = createChapterProductionJournal({ repository, now: () => now, leaseMs: 900 });
   return {
-    open: (operationId) => journal.open({ novelId: "n", chapterId: "c", request: { model: "offline" }, operationId }),
+    open: (operationId, request = { entry: "stream", model: "offline" }) => journal.open({ novelId: "n", chapterId: "c", request, operationId }),
     chapter: () => chapter, record: () => JSON.parse(record.metadataJson),
     edit: (data) => { chapter = { ...chapter, ...data }; },
     expire: () => { now += 901; }, failSave: () => { failSave = true; },
     failJournal: () => { failJournal = true; },
     archives: () => archives,
     inspect: () => journal.inspect({ novelId: "n", chapterId: "c" }),
+    resumeRequest: operationId => journal.readResumeRequest({ novelId: "n", chapterId: "c", operationId }),
   };
 }
 test("review failure resumes saved writer result without writing again", async () => {
@@ -195,7 +196,7 @@ test("inspection reads safe recovery projection without claiming, renewing or wr
   await s.close(); f.expire(); const before = structuredClone(f.record());
   const projection = await f.inspect();
   assert.deepEqual(f.record(), before);
-  assert.deepEqual(Object.keys(projection).sort(), ["error", "operationId", "partialText", "savedDraft", "status", "steps"].sort());
+  assert.deepEqual(Object.keys(projection).sort(), ["resumeBlockedReason", "entry", "leaseActive", "inputChanged", "canResume", "error", "operationId", "partialText", "savedDraft", "status", "steps"].sort());
   assert.equal(projection.partialText, "partial draft"); assert.equal(projection.savedDraft, "original");
   assert.equal(projection.steps.find(step => step.key === "writer").status, "unknown");
   assert.equal(JSON.stringify(projection).includes("hidden"), false);
@@ -298,4 +299,40 @@ test("SQLite: manual contract/content updates and stale raw metadata fail CAS", 
   await assert.rejects(f.repository.transaction(tx => tx.writeContent("n", "c", expected, { content: "direct overwrite" })), { code: "CHAPTER_PRODUCTION_CONFLICT" });
   await assert.rejects(f.repository.transaction(tx => tx.writeJournal("n", "c", "stale metadata", JSON.stringify({ status: "completed" }))), { code: "CHAPTER_PRODUCTION_CONFLICT" });
   assert.equal(f.chapter().content, "human draft");
+});
+
+test('resume uses private original request and never projects its values', async () => {
+  const f = fixture(); const s = await f.open('op', { entry: 'repair', model: 'chosen-model', userInstruction: 'private' });
+  await assert.rejects(f.resumeRequest('op'), { code: 'CHAPTER_PRODUCTION_BUSY' });
+  await s.close();
+  assert.equal((await f.inspect()).canResume, true);
+  assert.equal(JSON.stringify(await f.inspect()).includes('private'), false);
+  assert.deepEqual(await f.resumeRequest('op'), { entry: 'repair', model: 'chosen-model', userInstruction: 'private' });
+  await assert.rejects(f.resumeRequest('wrong'), { code: 'CHAPTER_PRODUCTION_CONFLICT' });
+  f.edit({ content: 'human edit' });
+  assert.equal((await f.inspect()).inputChanged, true);
+  await assert.rejects(f.resumeRequest('op'), { code: 'CHAPTER_PRODUCTION_CONFLICT' });
+});
+
+test('unfinished stream and parent pipeline require source review instead of chapter resend', async () => {
+  const f = fixture(); const s = await f.open('op'); await s.put('stream.started', true); await s.close();
+  assert.equal((await f.inspect()).canResume, false);
+  await assert.rejects(f.resumeRequest('op'), { code: 'CHAPTER_PRODUCTION_UNCERTAIN' });
+  const g = fixture(); const parent = await g.open('op', { entry: 'pipeline', workflowTaskId: 'director-task' }); await parent.close();
+  assert.equal((await g.inspect()).workflowTaskId, 'director-task');
+  assert.equal((await g.inspect()).canResume, false);
+});
+
+test('SQLite: asset and completion marker roll back together, then replay without rewriting', async t => {
+  const f = sqliteFixture(t); let s = await f.open(); let writes = 0;
+  const write = async tx => { writes++; await tx.chapter.updateMany({ where: { id: 'c' }, data: { generationState: 'reviewed' } }); return { committed: true }; };
+  f.failJournal();
+  await assert.rejects(s.commitState('actual-state', write), { code: 'CHAPTER_PRODUCTION_STORAGE' });
+  assert.equal(f.chapter().generationState, 'planned');
+  assert.deepEqual(await s.commitState('actual-state', write), { committed: true });
+  await s.close(); s = await f.open();
+  assert.deepEqual(await s.commitState('actual-state', () => assert.fail('duplicate write')), { committed: true });
+  assert.equal(writes, 2);
+  f.edit({ content: 'human' });
+  await assert.rejects(s.commitState('late-assets', write), { code: 'CHAPTER_PRODUCTION_CONFLICT' });
 });

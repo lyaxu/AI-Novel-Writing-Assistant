@@ -16,6 +16,7 @@ function adaptTransaction(db: Prisma.TransactionClient): JournalTransaction {
     if (result.count !== 1) throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "正文或执行约定已变化，已保留当前稿件并停止覆盖。");
   };
   return {
+    assetClient: db,
     readChapter: (novelId, chapterId) => db.chapter.findFirst({ where: { id: chapterId, novelId }, select: selectChapter }),
     readJournal: (novelId, chapterId) => db.chapterArtifactSyncCheckpoint.findUnique({
       where: { novelId_chapterId_contentHash_artifactType_syncMode: slot(novelId, chapterId) },

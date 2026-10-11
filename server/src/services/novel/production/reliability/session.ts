@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { ChapterProductionError, chapterFingerprint, productionFingerprint, isDefinitiveProductionFailure, type ChapterProductionInspection, type ChapterProductionJournalRecord, type ChapterProductionJournalRepository, type JournalChapter, type JournalContentWrite, type JournalStateWrite, type JournalTransaction } from "./types";
 
 export interface ChapterProductionSession {
@@ -15,6 +16,7 @@ export interface ChapterProductionSession {
   bindPrepared(snapshot: unknown): Promise<void>;
   saveContent(input: JournalContentWrite): Promise<void>;
   updateState(input: JournalStateWrite): Promise<void>;
+  commitState<T>(key: string, write: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T>;
   close(options?: { completed?: boolean; error?: unknown }): Promise<void>;
 }
 export interface OpenChapterProductionInput { novelId: string; chapterId: string; request: unknown; operationId?: string }
@@ -45,9 +47,26 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
         const row = await tx.readJournal(input.novelId, input.chapterId);
         if (!row) return null;
         const record = parseRecord(row.metadataJson);
+        const request = record.request as { entry?: string; workflowTaskId?: string } | undefined;
+        const entry = request?.entry === "stream" || request?.entry === "repair" || request?.entry === "pipeline" ? request.entry : null;
+        const chapter = await tx.readChapter(input.novelId, input.chapterId);
+        const leaseActive = record.status === "running" && record.expiresAt > now();
+        const inputChanged = !chapter || record.expectedFingerprint !== chapterFingerprint(chapter);
+        const unknown = Object.values(record.steps).some(step => step.status === "unknown" || (step.external && step.status === "running"))
+          || (record.values["stream.started"] && record.steps["stream.normalize"]?.status !== "done");
+        const resumeBlockedReason = leaseActive ? "本章仍在执行，请等待结果或刷新进度。"
+          : inputChanged ? "当前稿件或章节约定已变化，请核对当前稿与保留稿后决定下一步。"
+          : unknown ? "外部调用结果尚未确认，请核对保留稿和调用记录，确认后才可另起操作。"
+          : request?.workflowTaskId || entry === "pipeline" ? "本章属于范围任务，请回到原任务的源工作区恢复。"
+          : !entry ? "这份历史记录没有完整请求参数，请核对已有产物后明确发起新操作。"
+          : record.status === "completed" ? "本次操作已完成；需要重新生成或修文时请明确发起新操作。" : undefined;
         return {
           operationId: record.operationId,
           status: record.status,
+          entry, leaseActive, inputChanged,
+          ...(resumeBlockedReason ? { resumeBlockedReason } : {}),
+          canResume: Boolean((entry === "stream" || entry === "repair") && !leaseActive && !inputChanged && !unknown && !request?.workflowTaskId && record.status !== "completed"),
+          ...(request?.workflowTaskId ? { workflowTaskId: request.workflowTaskId } : {}),
           ...(record.partialText !== undefined ? { partialText: record.partialText } : {}),
           // Provider diagnostics can contain request fragments. Keep raw errors private in the journal.
           steps: Object.entries(record.steps).map(([key, step]) => ({
@@ -57,6 +76,20 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
           ...(record.error ? { error: "执行尚未完成，请查看步骤状态和已保留内容。" } : {}),
           ...(record.expectedChapter.content ? { savedDraft: record.expectedChapter.content } : {}),
         };
+      });
+    },
+    /** Private saved request; callers must keep it server-side and resume the original entry. */
+    async readResumeRequest(input: { novelId: string; chapterId: string; operationId: string }): Promise<Record<string, unknown>> {
+      const inspection = await this.inspect(input);
+      if (!inspection || inspection.operationId !== input.operationId) conflict();
+      if (inspection.leaseActive) throw new ChapterProductionError("CHAPTER_PRODUCTION_BUSY", "本章仍在执行，请先查看已保存进度。");
+      if (inspection.inputChanged) conflict();
+      if (!inspection.canResume) throw new ChapterProductionError("CHAPTER_PRODUCTION_UNCERTAIN", "请先核对已有输出；范围任务须回到原工作区恢复。");
+      return transaction(async tx => {
+        const row = await tx.readJournal(input.novelId, input.chapterId);
+        const record = row && parseRecord(row.metadataJson);
+        if (!record || record.operationId !== input.operationId || !record.request) conflict();
+        return record.request as Record<string, unknown>;
       });
     },
     async open(input: OpenChapterProductionInput): Promise<ChapterProductionSession> {
@@ -86,7 +119,7 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
             await tx.archiveJournal(novelId, chapterId, previous);
           }
           const fingerprint = chapterFingerprint(chapter);
-          next = { version: 1, operationId: input.operationId ?? randomUUID(), requestFingerprint, inputFingerprint: fingerprint, expectedFingerprint: fingerprint, expectedChapter: chapter, token, expiresAt: now() + leaseMs, status: "running", steps: {}, values: {} };
+          next = { version: 1, operationId: input.operationId ?? randomUUID(), request: input.request, requestFingerprint, inputFingerprint: fingerprint, expectedFingerprint: fingerprint, expectedChapter: chapter, token, expiresAt: now() + leaseMs, status: "running", steps: {}, values: {} };
         }
         await tx.writeJournal(novelId, chapterId, row?.metadataJson ?? null, JSON.stringify(next));
         return next;
@@ -136,6 +169,14 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
         }),
         updateState: (data) => mutate(async (_current, chapter, tx) => {
           await tx.writeState(novelId, chapterId, chapter, data);
+        }),
+        commitState: (key, write) => mutate(async (current, _chapter, tx) => {
+          const previous = current.steps[key];
+          if (previous?.status === "done") return previous.output as never;
+          if (!tx.assetClient) throw new ChapterProductionError("CHAPTER_PRODUCTION_STORAGE", "章节状态事务不可用，正文已保留。");
+          const output = await write(tx.assetClient);
+          current.steps[key] = { status: "done", external: false, output };
+          return output;
         }),
         async runStep<T>(key: string, fn: () => Promise<T>, stepOptions: { external?: boolean } = {}): Promise<T> {
           const state = await mutate((current) => {

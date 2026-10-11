@@ -150,20 +150,9 @@ export function useChapterExecutionActions({
       return;
     }
     setGenerationActionKind("rewrite");
-    patchChapterMutation.mutate({
-      content: "",
-      chapterStatus: "pending_generation",
-      repairHistory: `${chapter.repairHistory ?? ""}\n[rewrite] ${new Date().toISOString()}`.trim(),
-    });
-    void syncNovelWorkflowStageSilently({
-      novelId,
-      stage: "chapter_execution",
-      itemLabel: "本章已重置并准备重写",
-      chapterId: chapter.id,
-      status: "waiting_approval",
-    });
+    // The production journal archives the previous operation. Never erase the user's
+    // chapter before the replacement has completed and passed the guarded save.
     onGenerateChapter();
-    onMessage("已触发重写流程。");
   };
 
   const expandChapter = () => {

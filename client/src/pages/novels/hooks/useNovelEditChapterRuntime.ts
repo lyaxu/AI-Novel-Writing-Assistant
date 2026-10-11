@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, type QueryClient } from "@tanstack/react-query";
 import type { ReviewIssue, Chapter, StoryStateSnapshot, StoryPlan } from "@ai-novel/shared/types/novel";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import { generateChapterPlan, replanNovel, reviewNovelChapter } from "@/api/novel";
 import { queryKeys } from "@/api/queryKeys";
+import { toast } from "@/components/ui/toast";
 import type { ChapterExecutionStrategy } from "../chapterExecution.utils";
 import type { ChapterReviewResult } from "../chapterPlanning.shared";
 import { useChapterExecutionActions } from "./useChapterExecutionActions";
+import { prepareChapterOperation } from "../productionRecovery";
 
 interface StreamHandle {
   start: (path: string, payload: Record<string, unknown>) => Promise<void> | void;
@@ -65,6 +67,7 @@ export function useNovelEditChapterRuntime({
   chapterSSE,
   repairSSE,
 }: UseNovelEditChapterRuntimeArgs) {
+  const productionRequestPending = useRef(false);
   const [reviewActionKind, setReviewActionKind] = useState<ChapterReviewActionKind>(null);
 
   const generateChapterPlanMutation = useMutation({
@@ -140,25 +143,34 @@ export function useNovelEditChapterRuntime({
     fullAuditMutation.mutate();
   };
 
-  const handleGenerateSelectedChapter = () => {
-    if (!selectedChapter) {
-      return;
+  const handleGenerateSelectedChapter = async () => {
+    if (!selectedChapter || productionRequestPending.current || chapterSSE.isStreaming || repairSSE.isStreaming) return;
+    productionRequestPending.current = true;
+    try {
+      const productionOperationId = await prepareChapterOperation(novelId, selectedChapter.id);
+      setChapterOperationMessage("正在生成本章正文，现有稿件会保留至新稿保存。");
+      setActiveChapterStream({
+        chapterId: selectedChapter.id,
+        chapterLabel: `第${selectedChapter.order}章 ${selectedChapter.title || "未命名章节"}`,
+      });
+      await chapterSSE.start(`/novels/${novelId}/chapters/${selectedChapter.id}/generate`, {
+        provider: llm.provider,
+        model: llm.model,
+        previousChaptersSummary: [],
+        productionOperationId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "请先核对本章恢复记录。";
+      setChapterOperationMessage(message);
+      toast.info(message);
+    } finally {
+      productionRequestPending.current = false;
     }
-    setChapterOperationMessage("正在生成本章正文...");
-    setActiveChapterStream({
-      chapterId: selectedChapter.id,
-      chapterLabel: `第${selectedChapter.order}章 ${selectedChapter.title || "未命名章节"}`,
-    });
-    void chapterSSE.start(`/novels/${novelId}/chapters/${selectedChapter.id}/generate`, {
-      provider: llm.provider,
-      model: llm.model,
-      previousChaptersSummary: [],
-    });
   };
 
   const handleAbortChapterStream = () => {
     chapterSSE.abort();
-    setChapterOperationMessage("已停止当前章节生成，你可以保留当前输出继续查看，或重新发起本章写作。");
+    setChapterOperationMessage("生成接收已停止。请在“稿件与恢复”核对保留稿和调用状态，再决定恢复或另起操作。");
   };
 
   const handleAbortRepair = () => {
@@ -167,24 +179,32 @@ export function useNovelEditChapterRuntime({
     setChapterOperationMessage("已停止当前章节修复，你可以先查看当前修复结果，再决定是否继续。");
   };
 
-  const startChapterRepair = (issues: ReviewIssue[]) => {
-    if (!selectedChapterId) {
-      setChapterOperationMessage("请先选择章节。");
-      return;
+  const startChapterRepair = async (issues: ReviewIssue[]) => {
+    if (!selectedChapterId || productionRequestPending.current || chapterSSE.isStreaming || repairSSE.isStreaming) return;
+    productionRequestPending.current = true;
+    try {
+      const productionOperationId = await prepareChapterOperation(novelId, selectedChapterId);
+      setChapterOperationMessage("正在生成修复稿，原稿继续保留。");
+      setRepairBeforeContent(selectedChapter?.content ?? "");
+      setRepairAfterContent("");
+      setActiveRepairStream({
+        chapterId: selectedChapterId,
+        chapterLabel: selectedChapter ? `第${selectedChapter.order}章 ${selectedChapter.title || "未命名章节"}` : "当前章节",
+      });
+      await repairSSE.start(`/novels/${novelId}/chapters/${selectedChapterId}/repair`, {
+        provider: llm.provider,
+        model: llm.model,
+        reviewIssues: issues,
+        auditIssueIds: openAuditIssueIds,
+        productionOperationId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "请先核对本章恢复记录。";
+      setChapterOperationMessage(message);
+      toast.info(message);
+    } finally {
+      productionRequestPending.current = false;
     }
-    setChapterOperationMessage("正在生成修复稿...");
-    setRepairBeforeContent(selectedChapter?.content ?? "");
-    setRepairAfterContent("");
-    setActiveRepairStream({
-      chapterId: selectedChapterId,
-      chapterLabel: selectedChapter ? `第${selectedChapter.order}章 ${selectedChapter.title || "未命名章节"}` : "当前章节",
-    });
-    void repairSSE.start(`/novels/${novelId}/chapters/${selectedChapterId}/repair`, {
-      provider: llm.provider,
-      model: llm.model,
-      reviewIssues: issues,
-      auditIssueIds: openAuditIssueIds,
-    });
   };
 
   const chapterExecutionActions = useChapterExecutionActions({

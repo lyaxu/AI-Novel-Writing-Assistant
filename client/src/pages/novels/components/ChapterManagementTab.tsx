@@ -17,6 +17,7 @@ import {
   type QueueFilterKey,
 } from "./chapterExecution.shared";
 import DirectorTakeoverEntryPanel from "./DirectorTakeoverEntryPanel";
+import { ChapterProductionRecoveryPanel } from "../productionRecovery";
 
 export default function ChapterManagementTab(props: ChapterTabViewProps) {
   const {
@@ -199,6 +200,15 @@ export default function ChapterManagementTab(props: ChapterTabViewProps) {
             {chapterOperationMessage}
           </div>
         ) : null}
+
+        {selectedChapter ? <ChapterProductionRecoveryPanel
+          key={selectedChapter.id}
+          novelId={novelId}
+          chapterId={selectedChapter.id}
+          currentContent={selectedChapter.content ?? ""}
+          busy={writingBusy}
+          refreshSignal={chapterOperationMessage}
+        /> : null}
 
         {!hasCharacters ? (
           <div className="flex flex-col gap-3 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900 md:flex-row md:items-center md:justify-between">

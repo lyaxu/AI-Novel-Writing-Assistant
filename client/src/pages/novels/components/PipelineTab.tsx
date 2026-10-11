@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import type { Chapter, NovelBible, PipelineJob, PlotBeat, QualityScore, ReviewIssue } from "@ai-novel/shared/types/novel";
 import AiButton from "@/components/common/AiButton";
 import { Badge } from "@/components/ui/badge";
@@ -144,6 +145,11 @@ export default function PipelineTab(props: PipelineTabProps) {
     directorTakeoverEntry,
   } = props;
 
+  const [searchParams] = useSearchParams();
+  const chapterRecoveryParams = new URLSearchParams(searchParams);
+  chapterRecoveryParams.set("stage", "chapter");
+  chapterRecoveryParams.set("chapterId", selectedChapterId);
+
   const lowScoreRange = getLowScoreChapterRange(chapters, chapterReports, pipelineForm.qualityThreshold);
   const lowScoreReports = chapterReports
     .filter((item) => item.chapterId && item.overall < pipelineForm.qualityThreshold)
@@ -227,6 +233,9 @@ export default function PipelineTab(props: PipelineTabProps) {
             <AiButton variant="secondary" onClick={onRepairChapter} disabled={isRepairing || !selectedChapterId}>执行修复</AiButton>
             <AiButton variant="outline" onClick={onGenerateHook} disabled={isGeneratingHook || !selectedChapterId}>生成钩子</AiButton>
           </div>
+          {selectedChapterId ? <p className="text-sm text-muted-foreground">
+            修文前请在 <Link className="underline" to={`/novels/${encodeURIComponent(novelId)}/edit?${chapterRecoveryParams.toString()}`}>章节工作区的“稿件与恢复”</Link> 核对保留稿、恢复范围或选择新操作。
+          </p> : null}
           {reviewResult ? (
             <div className="rounded-xl bg-background/70 p-3 text-sm">
               <div className="mb-2 font-medium">审校评分</div>

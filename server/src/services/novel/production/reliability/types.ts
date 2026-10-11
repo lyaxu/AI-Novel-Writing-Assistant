@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import type { StructuredOutputError, StructuredOutputErrorCategory } from "../../../../llm/structuredOutput";
 import type { ChapterPatchRepairFailedError } from "../../chapterPatchRepairService";
 
@@ -32,6 +33,7 @@ export interface ChapterProductionJournalRecord {
   version: 1;
   operationId: string;
   requestFingerprint: string;
+  request?: unknown;
   inputFingerprint: string;
   expectedFingerprint: string;
   expectedChapter: JournalChapter;
@@ -51,9 +53,17 @@ export interface ChapterProductionInspection {
   steps: Array<{ key: string; status: JournalStep["status"]; error?: string }>;
   error?: string;
   savedDraft?: string;
+  entry: "stream" | "repair" | "pipeline" | null;
+  leaseActive: boolean;
+  inputChanged: boolean;
+  canResume: boolean;
+  resumeBlockedReason?: string;
+  workflowTaskId?: string;
 }
 export interface JournalRow { metadataJson: string | null; status: string }
 export interface JournalTransaction {
+  /** Local asset writes only; never start external work inside this transaction. */
+  assetClient?: Prisma.TransactionClient;
   readChapter(novelId: string, chapterId: string): Promise<JournalChapter | null>;
   readJournal(novelId: string, chapterId: string): Promise<JournalRow | null>;
   writeJournal(novelId: string, chapterId: string, expectedJson: string | null, nextJson: string): Promise<void>;
