@@ -45,6 +45,7 @@ export interface ChapterProductionJournalRecord {
   values: Record<string, unknown>;
   partialText?: string;
   error?: string;
+  recoveryDecision?: { kind: "acknowledge_unknown"; originalOperationId: string; acknowledgedAt: number; affectedSteps: string[] };
 }
 export interface ChapterProductionInspection {
   operationId: string;
@@ -57,6 +58,7 @@ export interface ChapterProductionInspection {
   leaseActive: boolean;
   inputChanged: boolean;
   canResume: boolean;
+  canAcknowledge: boolean;
   resumeBlockedReason?: string;
   workflowTaskId?: string;
 }
@@ -87,7 +89,7 @@ const definitiveStructuredCategories: ReadonlySet<StructuredOutputErrorCategory>
 /** Structural error protocols avoid importing prompt execution/DB into the journal boundary. */
 export function isDefinitiveProductionFailure(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  if ((error as Error & { code?: unknown }).code === "CHAPTER_EMPTY_CONTENT") return true;
+  if (["CHAPTER_EMPTY_CONTENT", "CHAPTER_REVIEW_INCOMPLETE"].includes(String((error as Error & { code?: unknown }).code))) return true;
   const typed: Partial<StructuredOutputError & ChapterPatchRepairFailedError> = error;
   if (typed.name === "ChapterPatchRepairFailedError") return true;
   return typed.name === "StructuredOutputError" && typed.category !== undefined

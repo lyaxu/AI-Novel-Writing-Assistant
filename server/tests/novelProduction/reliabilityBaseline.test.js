@@ -16,6 +16,7 @@ function gateHarness() {
       upsert: async ({ where, create }) => { stored.set(JSON.stringify(where), create); },
     } } },
     "./ChapterAcceptanceAssessmentService": {},
+    "./acceptance": loadRuntimeSource("acceptance/reviewCompletion.ts", {}),
     "./chapterRuntimePackageBuilders": { hashContent, rememberCacheValue: (map, key, value) => map.set(key, value) },
   });
   const input = {
@@ -41,9 +42,10 @@ function gateHarness() {
 
 function backgroundHarness() {
   const { ChapterArtifactBackgroundSyncService } = loadRuntimeSource("ChapterArtifactBackgroundSyncService.ts", {
+    "../production/reliability": { currentProductionSession: () => undefined },
     "../../../db/prisma": { prisma: {
       chapter: { findFirst: async () => ({ id: "c", order: 1, title: "Chapter", content: "draft" }) },
-      chapterArtifactSyncCheckpoint: { findUnique: async () => null, upsert: async () => ({}) },
+      chapterArtifactSyncCheckpoint: { findFirst: async () => null, findUnique: async () => null, upsert: async () => ({}) },
     } },
     "../../payoff/PayoffLedgerSyncService": {},
     "../pipelineJobState": {},
@@ -92,14 +94,14 @@ test("R1: changed requirements invalidate acceptance", async () => {
 test("R2: unavailable acceptance is retried in the same instance", async () => {
   const h = gateHarness();
   const gate = h.create(true);
-  await gate.runAcceptanceGate(h.input);
-  await gate.runAcceptanceGate(h.input);
+  await assert.rejects(gate.runAcceptanceGate(h.input), { code: "CHAPTER_REVIEW_INCOMPLETE" });
+  await assert.rejects(gate.runAcceptanceGate(h.input), { code: "CHAPTER_REVIEW_INCOMPLETE" });
   assert.equal(h.calls, 2);
 });
 
 test("baseline: unavailable acceptance is not persisted across instances", async () => {
   const h = gateHarness();
-  await h.create(true).runAcceptanceGate(h.input);
+  await assert.rejects(h.create(true).runAcceptanceGate(h.input), { code: "CHAPTER_REVIEW_INCOMPLETE" });
   await h.create().runAcceptanceGate(h.input);
   assert.equal(h.calls, 2);
 });
@@ -111,15 +113,15 @@ test("R3: failed repair request consumes its reserved budget", async () => {
   assert.equal(h.budget, 1);
 });
 
-test("R4a: running artifact checkpoint degrades adaptive sync instead of blocking chapter completion", async () => {
+test("R4a: running artifact checkpoint stays pending and cannot certify chapter completion", async () => {
   const service = backgroundHarness();
   let inspections = 0;
   service.hasCompletedCheckpoint = async () => { inspections++; return false; };
   service.claimCheckpoint = async () => "running";
   const first = await service.runChapterSyncNow("n", "c", "draft");
   const second = await service.runChapterSyncNow("n", "c", "draft");
-  assert.equal(first.status, "degraded");
-  assert.equal(second.status, "degraded");
+  assert.equal(first.status, "pending");
+  assert.equal(second.status, "pending");
   assert.equal(inspections, 0, "running checkpoint is resolved by the durable claim, not a success-cache probe");
 });
 

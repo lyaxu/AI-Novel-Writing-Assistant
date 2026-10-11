@@ -1,7 +1,8 @@
+import { currentProductionSession } from "../novel/production/reliability";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import type { AuditReport, OpenConflict, PayoffLedgerResponse } from "@ai-novel/shared/types/novel";
 import type { PayoffLedgerItem } from "@ai-novel/shared/types/payoffLedger";
-import { prisma } from "../../db/prisma";
+import { actualStateDb as prisma, currentActualStateTransaction, runInActualStateTransaction } from "../novel/production/actualState";
 import { runStructuredPrompt } from "../../prompting/core/promptRunner";
 import { payoffLedgerSyncPrompt } from "../../prompting/prompts/payoff/payoffLedgerSync.prompts";
 import {
@@ -371,7 +372,7 @@ export class PayoffLedgerSyncService {
     const existingRows = await this.loadLedgerRows(novelId);
     try {
       const { promptInput, chapterOrder, latestSnapshotId } = await this.buildSyncPromptInput(novelId, options);
-      const result = await runStructuredPrompt({
+      const extract = () => runStructuredPrompt({
         asset: payoffLedgerSyncPrompt,
         promptInput,
         options: {
@@ -380,6 +381,10 @@ export class PayoffLedgerSyncService {
           temperature: options.temperature ?? 0.2,
         },
       });
+      const session = currentProductionSession();
+      const key = `actual:payoff-reconcile:${options.sourceChapterId ?? "book"}`;
+      const result = session ? await session.runStep(`${key}:extract`, extract, { external: true }) : await extract();
+      const apply = async () => {
       const now = new Date();
       const resolvedItemsByKey = new Map<string, typeof result.output.items[number]>();
       for (const rawItem of result.output.items) {
@@ -540,7 +545,10 @@ export class PayoffLedgerSyncService {
       const items = rows.map(mapPayoffLedgerRow);
       await this.syncLedgerOpenConflicts(novelId, items);
       return buildPayoffLedgerResponse(items, chapterOrder);
+      };
+      return session ? session.commitState(`${key}:commit`, (tx) => runInActualStateTransaction(tx, apply)) : apply();
     } catch (error) {
+      if (currentProductionSession()) throw error;
       if (existingRows.length > 0) {
         await prisma.$transaction(async (tx) => {
           for (const row of existingRows) {

@@ -4,7 +4,7 @@ const { loadRuntimeSource } = require('./sourceHarness.cjs');
 
 function load() {
   return loadRuntimeSource('../production/reliability/executionContext.ts', {
-    'node:async_hooks': require('node:async_hooks'),
+    'node:async_hooks': require('node:async_hooks'), '../../../../llm/invocation/executionPolicy': { withUnknownOutcomeProtection: fn => fn() },
   });
 }
 

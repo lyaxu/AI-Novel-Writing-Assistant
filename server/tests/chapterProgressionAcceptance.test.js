@@ -44,7 +44,7 @@ const causal = source("../src/services/novel/runtime/acceptance/causalAssessment
 });
 let modelOutput;
 const service = source("../src/services/novel/runtime/ChapterAcceptanceAssessmentService.ts", {
-  "../../../db/prisma": { prisma: {} },
+  "../production/actualState": { actualStateDb: {} },
   "../../../prompting/core/promptRunner": { runStructuredPrompt: async ({ asset, promptInput }) => ({ output: asset.postValidate(modelOutput, promptInput) }) },
   "../../../prompting/context/promptContextResolution": { resolvePromptContextBlocksForAsset: async () => ({ blocks: [] }) },
   "../../../prompting/prompts/novel/chapterLayeredContext": { buildChapterReviewContextBlocks: () => [] },
@@ -53,7 +53,7 @@ const service = source("../src/services/novel/runtime/ChapterAcceptanceAssessmen
   "../../state/OpenConflictService": { openConflictService: {} },
   "../novelP0Utils": { normalizeScore: (value) => value, ruleScore: () => scores() },
   "./proseQuality/ProseQualityDetector": { detectProseQuality: () => ({ findings: [] }) },
-  "./acceptance": { ...causal, buildAcceptanceCacheIdentity: async () => "mock" },
+  "./acceptance": { ...causal, ...source("../src/services/novel/runtime/acceptance/reviewCompletion.ts"), buildAcceptanceCacheIdentity: async () => "mock" },
 });
 const scores = () => ({ coherence: 96, pacing: 96, repetition: 96, engagement: 96, voice: 96, overall: 96 });
 const oldText = "他买饼被骗，问清医馆方向，检查了箱底，决定去医馆。";
@@ -161,7 +161,12 @@ test("projection preserves existing manual policy; unknown progression does not 
 });
 
 test("production acceptance service consumes and returns progression evidence with persist false and no DB calls", async () => {
-  modelOutput = assessment(checks());
+  modelOutput = { ...assessment(checks()), actionStateChecks: [{
+    sceneKey: "chapter", actor: "主角", action: "决定去医馆", actionEvidence: [quote("决定去医馆。")],
+    states: [{ dimension: "knowledge", entity: "医馆方向", before: "前章已问清方向", requiredForAction: "知晓医馆方向", after: "仍决定去医馆",
+      beforeEvidence: [quote("问清医馆方向", "established_context", "c1")], afterEvidence: [quote("决定去医馆。")], transitionEvidence: [],
+      enablingTransitionRequired: false, stateChanged: false, transitionStatus: "not_needed" }], verdict: "earned", explanation: "现有知识支持该决定",
+  }] };
   const result = await new service.ChapterAcceptanceAssessmentService().assess({ novelId: "n", chapterId: "c2", chapterOrder: 2,
     chapterTitle: "重复职责", novelTitle: "测试", content: newText, persist: false,
     contextPackage: { chapterReviewContext: { writtenEvidence: { chapters: input().establishedProse } } },

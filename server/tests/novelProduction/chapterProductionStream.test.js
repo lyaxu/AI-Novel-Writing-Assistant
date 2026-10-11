@@ -3,10 +3,11 @@ const assert = require("node:assert/strict");
 const { loadRuntimeSource } = require("./sourceHarness.cjs");
 
 function fixture({ disconnect = false, outputLimit = false, failReview = false, failSave = false, savedNormalize } = {}) {
-  const context = loadRuntimeSource("../production/reliability/executionContext.ts", { "node:async_hooks": require("node:async_hooks") });
+  const context = loadRuntimeSource("../production/reliability/executionContext.ts", { "../../../../llm/invocation/executionPolicy": { withUnknownOutcomeProtection: fn => fn() }, "node:async_hooks": require("node:async_hooks") });
   const runner = loadRuntimeSource("../production/reliability/ChapterProductionExecution.ts", { "./executionContext": context });
   const { ChapterStreamGenerationOrchestrator } = loadRuntimeSource("ChapterStreamGenerationOrchestrator.ts", {
     "../production/reliability": context,
+    "../../planner/plannerPersistence": { buildChapterExecutionContractHash: () => { throw new Error("This stream fixture supplies no effective contract to compare"); } },
     "../novelP0Utils": { toText: value => typeof value === "string" ? value : "" },
     "./chapterEmptyContentError": { assertChapterContentNotEmpty: value => value, isChapterEmptyContentError: () => false },
   });

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { BaseMessageChunk } from "@langchain/core/messages";
 import type { ChapterProductionSession } from "./session";
+import { withUnknownOutcomeProtection } from "../../../../llm/invocation/executionPolicy";
 
 const execution = new AsyncLocalStorage<ChapterProductionSession>();
 
@@ -9,7 +10,7 @@ export function currentProductionSession(): ChapterProductionSession | undefined
 }
 
 export function withProductionSession<T>(session: ChapterProductionSession, action: () => T): T {
-  return execution.run(session, action);
+  return execution.run(session, () => withUnknownOutcomeProtection(action));
 }
 
 export function productionStep<T>(key: string, action: () => Promise<T>, external = false): Promise<T> {

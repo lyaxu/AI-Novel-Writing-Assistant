@@ -12,6 +12,8 @@ for (const source of ["artifact", "manual_summary"]) {
     let savedSummary;
     let chapterWrites = 0;
     const tx = {
+      chapterArtifactSyncCheckpoint: { findFirst: async () => null },
+      consistencyFact: { updateMany: async () => ({ count: 0 }) },
       chapter: {
         findFirst: async () => chapter,
         update: async () => { chapterWrites++; },

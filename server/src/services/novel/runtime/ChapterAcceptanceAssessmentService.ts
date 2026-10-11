@@ -4,7 +4,7 @@ import type {
   GenerationContextPackage,
 } from "@ai-novel/shared/types/chapterRuntime";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
-import { prisma } from "../../../db/prisma";
+import { actualStateDb as prisma } from "../production/actualState";
 import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
 import { resolvePromptContextBlocksForAsset } from "../../../prompting/context/promptContextResolution";
 import { buildChapterReviewContextBlocks } from "../../../prompting/prompts/novel/chapterLayeredContext";
@@ -16,7 +16,7 @@ import {
 import { openConflictService } from "../../state/OpenConflictService";
 import { normalizeScore, ruleScore } from "../novelP0Utils";
 import { detectProseQuality } from "./proseQuality/ProseQualityDetector";
-import { acceptanceOutputBudget, buildAcceptanceCacheIdentity, buildAcceptancePromptInput, projectCausalAssessment } from "./acceptance";
+import { acceptanceOutputBudget, buildAcceptanceCacheIdentity, buildAcceptancePromptInput, projectCausalAssessment, assertReviewCompleted } from "./acceptance";
 
 export interface ChapterAcceptanceAssessmentInput {
   novelId: string;
@@ -220,40 +220,14 @@ export function normalizeAssessment(
   };
 }
 
-function buildFallbackAssessment(content: string): ChapterAcceptanceAssessmentOutput {
-  const score = ruleScore(content);
-  return {
-    status: "continue_with_risk",
-    score,
-    summary: "正文已生成，接收闸门未完成结构化判断，系统将保留正文并标记后续复查风险。",
-    blockingIssues: [{
-      severity: "medium",
-      category: "mode_fit",
-      code: "acceptance_gate_unavailable",
-      evidence: "章节接收闸门未返回可用结构化结果。",
-      fixSuggestion: "保留正文，后续可重新执行章节审校或局部修文。",
-    }],
-    repairDirectives: [],
-    missingObligations: [],
-    repairability: "none",
-    decisionReason: "接收闸门不可用，系统保留正文并继续推进后续复查。",
-    riskTags: ["acceptance_gate_unavailable"],
-    assetSyncRecommendation: {
-      priority: "normal",
-      reason: "正文已保存，但建议后续补跑章节审校或资产同步。",
-      requiresFullPayoffReconcile: false,
-    },
-    continuePolicy: "continue",
-  };
-}
-
 export class ChapterAcceptanceAssessmentService {
   async getCacheIdentity(input: ChapterAcceptanceAssessmentInput): Promise<string> {
     return buildAcceptanceCacheIdentity(input);
   }
 
   async assess(input: ChapterAcceptanceAssessmentInput): Promise<ChapterAcceptanceAssessmentResult> {
-    const assessment = await this.invokeAssessment(input).catch(() => buildFallbackAssessment(input.content));
+    const assessment = await this.invokeAssessment(input);
+    assertReviewCompleted(assessment);
     const proseQuality = detectProseQuality(input.content);
     const proseIssues = proseQuality.findings.slice(0, 5).map((finding) => ({
       severity: finding.severity,

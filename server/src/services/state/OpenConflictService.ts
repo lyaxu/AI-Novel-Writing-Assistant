@@ -1,5 +1,5 @@
 import type { AuditReport } from "@ai-novel/shared/types/novel";
-import { prisma } from "../../db/prisma";
+import { actualStateDb as prisma, currentActualStateTransaction } from "../novel/production/actualState";
 import type { StateDiffConflictCandidate } from "./stateConflictDetection";
 
 const AUDIT_SOURCE_TYPE = "audit_issue";

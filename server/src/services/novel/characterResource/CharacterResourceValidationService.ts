@@ -1,3 +1,4 @@
+import { currentActualStateTransaction } from "../production/actualState";
 import type {
   CharacterResourceEventType,
   CharacterResourceUpdatePayload,
@@ -45,7 +46,7 @@ export class CharacterResourceValidationService {
       };
     }
 
-    if (isDebtSourceProposal(proposal)) {
+    if (isDebtSourceProposal(proposal) && !currentActualStateTransaction()) {
       return markDebtSourcePendingReview(proposal);
     }
 
@@ -65,7 +66,7 @@ export class CharacterResourceValidationService {
       };
     }
 
-    if (proposal.riskLevel === "medium" && !AUTO_DIRECTOR_RESOURCE_SOURCE_TYPES.has(proposal.sourceType)) {
+    if (proposal.riskLevel === "medium" && !AUTO_DIRECTOR_RESOURCE_SOURCE_TYPES.has(proposal.sourceType) && !currentActualStateTransaction()) {
       return {
         ...proposal,
         status: "pending_review",

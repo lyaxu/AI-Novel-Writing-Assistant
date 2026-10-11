@@ -65,6 +65,7 @@ test("public nonmanaged readiness shortcut invokes same review before returning 
     "@ai-novel/shared/types/chapterLengthControl": {}, "@ai-novel/shared/types/chapterTaskSheetQuality": {},
     "../../../db/prisma": { prisma: { chapter: { findFirst: async () => row } } },
     "../../styleEngine/styleContractText": { buildWriterStyleContractText: () => "style" },
+    "../../planner/plannerPersistence": { buildChapterExecutionContractHash: (value) => JSON.stringify(value) },
     "./volumeGenerationOrchestrator": { generateVolumePlanDocument: () => { throw new Error("must not regenerate"); } },
     "./volumeWorkspacePersistence": {}, "./volumeWorkspaceDocument": {},
     "./chapterDetail/chapterExecutionContractReadiness": { inspectChapterExecutionContractReadiness: () => ({ canReuse: true }) },

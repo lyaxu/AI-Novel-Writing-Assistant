@@ -169,7 +169,7 @@ export class ChapterRuntimeCoordinator {
     await hooks.onCheckCancelled?.();
     // Remaining retry budget is a projection, not a new execution identity.
     const { maxRetries: _remainingRetries, productionOperationId: operationId, ...identity } = options;
-    const session = await this.productionJournal.open({ novelId, chapterId, operationId, request: { entry: "pipeline", ...identity } });
+    const session = await this.productionJournal.open({ novelId, chapterId, operationId, replaceCompletedOnly: true, request: { entry: "pipeline", ...identity } });
     return executeProduction(session, () => this.pipelineAdapter.runPipelineChapter(novelId, chapterId, options, {
       ...hooks,
       onCheckCancelled: async () => {

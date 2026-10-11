@@ -37,7 +37,7 @@ export async function applyChapterQualityClosure(input: {
   const { chapter, chapterResult, runtimePayload } = input;
   const final = { score: chapterResult.score, issues: chapterResult.issues };
   const replanRecommendation = chapterResult.runtimePackage?.replanRecommendation;
-  const qualityDebtTerminalAction = chapterResult.pass || replanRecommendation?.scope === "global_book"
+  const qualityDebtTerminalAction = chapterResult.pass || replanRecommendation?.scope === "global_book" || replanRecommendation?.action === "stop_for_replan"
     ? null
     : "defer_and_continue" as const;
   const exhaustedAttempt = input.governance?.policy.maxAutomaticRetries ?? 0;
@@ -174,7 +174,7 @@ export async function applyChapterQualityClosure(input: {
     ? `影响章节=${replanRecommendation.affectedChapterOrders.join(",")}`
     : `锚点章节=${replanRecommendation.anchorChapterOrder ?? chapter.order}`;
   const detail = `第${chapter.order}章${replanRecommendation.scope === "global_book" ? "需要书级重规划" : "正在调整后续章节安排"}（${impactedOrders}；原因=${replanRecommendation.triggerReason ?? replanRecommendation.reason}）`;
-  if (replanRecommendation.scope !== "global_book") {
+  if (replanRecommendation.scope !== "global_book" && replanRecommendation.action !== "stop_for_replan") {
     try {
       const result = await input.runLocalReplan({
         chapterId: chapter.id,

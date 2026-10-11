@@ -5,8 +5,12 @@ export interface ChapterProductionRecovery {
   leaseActive?: boolean;
   inputChanged?: boolean;
   canResume?: boolean;
+  canAcknowledge?: boolean;
   resumeBlockedReason?: string;
   workflowTaskId?: string | null;
+  pipelineJobId?: string | null;
+  pipelineRange?: { startOrder: number; endOrder: number } | null;
+  canResumePipeline?: boolean;
   partialText?: string;
   savedDraft?: string;
   error?: string;
@@ -40,8 +44,39 @@ export function productionStepLabel(key: string): string {
 export interface NewOperationPermit { previousOperationId: string; operationId: string }
 
 export function recoveryInspectionVersion(record: ChapterProductionRecovery): string {
-  return JSON.stringify([record.operationId, record.status, record.leaseActive, record.inputChanged,
-    record.steps, record.savedDraft, record.partialText]);
+  return JSON.stringify([record.operationId, record.status, record.leaseActive, record.inputChanged, record.canAcknowledge,
+    record.steps, record.savedDraft, record.partialText, record.pipelineJobId, record.canResumePipeline]);
+}
+
+/** Resume the original independent batch only after a fresh server inspection. */
+export async function resumeInspectedPipeline(input: {
+  inspected: ChapterProductionRecovery;
+  latest: ChapterProductionRecovery | null;
+  jobId: string;
+  submit: (operationId: string) => Promise<unknown>;
+}): Promise<void> {
+  const record = input.latest;
+  if (!record?.canResumePipeline || record.entry !== "pipeline" || record.workflowTaskId
+    || record.leaseActive || record.inputChanged || record.canAcknowledge
+    || record.pipelineJobId !== input.jobId
+    || recoveryInspectionVersion(record) !== recoveryInspectionVersion(input.inspected)) {
+    throw new Error("原批量任务的恢复条件有变化，请刷新保留进度后重新核对。");
+  }
+  await input.submit(record.operationId);
+}
+
+/** This action records a reviewed decision only; it never starts a model or parent task. */
+export async function acknowledgeInspectedOperation(input: {
+  inspected: ChapterProductionRecovery;
+  latest: ChapterProductionRecovery | null;
+  accepted: boolean;
+  submit: (operationId: string) => Promise<unknown>;
+}): Promise<void> {
+  if (!input.accepted || !input.latest?.canAcknowledge || input.latest.leaseActive || input.latest.inputChanged
+    || recoveryInspectionVersion(input.inspected) !== recoveryInspectionVersion(input.latest)) {
+    throw new Error("核对内容或恢复条件有变化，请重新查看保留稿和调用记录。");
+  }
+  await input.submit(input.inspected.operationId);
 }
 
 export function resolveChapterOperation(record: ChapterProductionRecovery | null, permit?: NewOperationPermit): string | undefined {

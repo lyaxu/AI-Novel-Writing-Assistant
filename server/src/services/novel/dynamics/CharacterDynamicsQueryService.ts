@@ -129,7 +129,7 @@ export class CharacterDynamicsQueryService {
       }),
       currentVolumeChapterOrders.size > 0
         ? prisma.characterTimeline.findMany({
-            where: {
+            where: { source: { not: "superseded" },
               novelId,
               chapterOrder: { in: Array.from(currentVolumeChapterOrders) },
             },

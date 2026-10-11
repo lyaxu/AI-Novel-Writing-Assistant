@@ -49,3 +49,25 @@ for (const entry of ['stream', 'repair', 'pipeline']) {
     assert.equal(options.model, 'original-model'); assert.equal(options.productionOperationId, 'original');
   });
 }
+
+test('unknown decision endpoint requires explicit acceptance and does not run or resume any workflow', async () => {
+  const routes = []; const decisions = [];
+  const { registerNovelChapterGenerationRoutes } = loadRuntimeSource('../../../modules/novel/production/http/novelChapterGeneration.ts', {
+    zod: require('zod'),
+    '../../../../llm/streaming': { streamToSSE: () => assert.fail('decision must not stream') },
+    '../../../../middleware/validate': { validate: schema => schema },
+    '../../../../services/novel/runtime/chapterRuntimeSchema': { chapterRuntimeRequestSchema: {} },
+    '../../../../services/novel/director/workflowStepRuntime/StepModuleRunner': { stepModuleRunner: { runStep: () => assert.fail('decision must not resume parent or chapter') } },
+    '../../../../services/novel/director/workflowStepRuntime/directorWorkflowStepIds': { DIRECTOR_EXECUTION_STEP_IDS: {} },
+    '../../../../services/novel/production/reliability': { createDefaultChapterProductionJournal: () => ({ acknowledgeUnknown: async value => { decisions.push(value); } }) },
+  });
+  registerNovelChapterGenerationRoutes({ router: { get() {}, post: (...args) => routes.push(args) }, chapterParamsSchema: {}, forwardBusinessError: () => false });
+  const route = routes.find(route => route[0].endsWith('/acknowledge'));
+  assert.throws(() => route[1].body.parse({ operationId: 'op' }));
+  assert.throws(() => route[1].body.parse({ operationId: 'op', acceptPossibleDuplicate: false }));
+  const body = route[1].body.parse({ operationId: 'op', acceptPossibleDuplicate: true });
+  let response;
+  await route.at(-1)({ params: { id: 'n', chapterId: 'c' }, body }, { json: value => { response = value; } }, error => { throw error; });
+  assert.deepEqual(decisions, [{ novelId: 'n', chapterId: 'c', operationId: 'op' }]);
+  assert.equal(response.data.acknowledged, true);
+});

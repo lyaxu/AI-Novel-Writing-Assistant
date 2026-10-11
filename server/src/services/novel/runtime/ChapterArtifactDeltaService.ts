@@ -1,8 +1,11 @@
+import { currentProductionSession } from "../production/reliability";
+import { normalizeName, cleanOptionalText, cleanNullableText, clampConfidence, resolveCharacter, uniqueTextItems, joinFactContents, buildKnowledgeBoundaryLine, mergeKnowledgeBoundaryState, normalizeLedgerKey, stringifyChapterResourceText, stringifyPayoffText, stringifyActiveCharacterDialogueInfluenceText, stringifyPreviousState } from "./artifactSync/domain/deltaFormatting";
+export { mergeKnowledgeBoundaryState } from "./artifactSync/domain/deltaFormatting";
 import type {
   ContentProvenance,
   StateChangeProposal,
 } from "@ai-novel/shared/types/canonicalState";
-import { prisma } from "../../../db/prisma";
+import { assertLegacyChapterNotManaged, actualStateDb as prisma, currentActualStateTransaction } from "../production/actualState";
 import { runWithEnforcedTimeout } from "../../../llm/invokeTimeout";
 import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
 import {
@@ -30,7 +33,6 @@ import {
   normalizeResourceKey,
 } from "../characterResource/characterResourceShared";
 import { novelFactService, type NovelFactWriteItem } from "../fact/NovelFactService";
-import { extractFacts } from "../novelP0Utils";
 import { stateCommitService } from "../state/StateCommitService";
 import {
   attachProposalSourceQuality,
@@ -42,7 +44,7 @@ import { buildChapterArtifactContentHash } from "./artifactSync/ChapterArtifactC
 const ARTIFACT_DELTA_SOURCE_TYPE = "chapter_artifact_delta";
 const ARTIFACT_DELTA_SOURCE_STAGE = "chapter_execution";
 
-type CharacterLookupItem = {
+export type CharacterLookupItem = {
   id: string;
   name: string;
   role: string;
@@ -62,7 +64,7 @@ type ChapterArtifactPayoffDelta = ChapterArtifactDeltaOutput["payoffDeltas"][num
 type ChapterArtifactKnowledgeState = ChapterArtifactDeltaOutput["characterKnowledgeStates"][number];
 type ChapterArtifactDialogueInfluenceResolution = ChapterArtifactDeltaOutput["characterDialogueInfluenceResolutions"][number];
 
-type ActiveCharacterDialogueInfluence = {
+export type ActiveCharacterDialogueInfluence = {
   id: string;
   characterId: string;
   characterName: string;
@@ -137,170 +139,6 @@ export interface ChapterArtifactConsumerResult {
 
 export const buildContentHash = buildChapterArtifactContentHash;
 
-function normalizeName(value: string | null | undefined): string {
-  return compactText(value).replace(/\s+/g, "").toLowerCase();
-}
-
-function cleanOptionalText(value: string | null | undefined): string | undefined {
-  const normalized = compactText(value);
-  return normalized || undefined;
-}
-
-function cleanNullableText(value: string | null | undefined): string | null {
-  return compactText(value) || null;
-}
-
-function clampConfidence(value: number | null | undefined): number | null {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(0, Math.min(1, value))
-    : null;
-}
-
-function resolveCharacter(
-  characters: Array<{ id: string; name: string }>,
-  name: string | null | undefined,
-): { id: string; name: string } | null {
-  const normalized = normalizeName(name);
-  if (!normalized) {
-    return null;
-  }
-  const exact = characters.find((item) => normalizeName(item.name) === normalized);
-  if (exact) {
-    return exact;
-  }
-  const fuzzy = characters.find((item) => {
-    const itemName = normalizeName(item.name);
-    return itemName && (normalized.includes(itemName) || itemName.includes(normalized));
-  });
-  return fuzzy ?? null;
-}
-
-function uniqueTextItems(items: string[] | null | undefined, maxItems: number): string[] {
-  const result: string[] = [];
-  const seen = new Set<string>();
-  for (const item of items ?? []) {
-    const normalized = compactText(item);
-    if (!normalized || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    result.push(normalized);
-    if (result.length >= maxItems) {
-      break;
-    }
-  }
-  return result;
-}
-
-function joinFactContents(items: string[], maxItems = 3): string | null {
-  const joined = uniqueTextItems(items, maxItems).join("；");
-  return joined || null;
-}
-
-function buildKnowledgeBoundaryLine(state: ChapterArtifactKnowledgeState): string | null {
-  const knownFacts = uniqueTextItems(state.knownFacts, 5);
-  const hiddenFacts = uniqueTextItems(state.hiddenFacts, 5);
-  if (knownFacts.length === 0 && hiddenFacts.length === 0) {
-    return null;
-  }
-  return [
-    "【信息边界】",
-    knownFacts.length > 0 ? `已知：${knownFacts.join("；")}` : "已知：无新增",
-    hiddenFacts.length > 0 ? `未知/不应超前知情：${hiddenFacts.join("；")}` : "未知/不应超前知情：无",
-  ].join("");
-}
-
-export function mergeKnowledgeBoundaryState(
-  currentState: string | null | undefined,
-  boundaryLine: string,
-): string {
-  const base = String(currentState ?? "")
-    .replace(/\n?【信息边界】[^\n]*/g, "")
-    .trim();
-  const cappedBoundary = boundaryLine.slice(0, 1200);
-  const baseBudget = Math.max(0, 1200 - cappedBoundary.length - (base ? 1 : 0));
-  const cappedBase = base.slice(0, baseBudget).trim();
-  return [cappedBase, cappedBoundary].filter(Boolean).join("\n");
-}
-
-function normalizeLedgerKey(title: string, fallback: string): string {
-  const base = compactText(title)
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 96);
-  return base || fallback;
-}
-
-function stringifyChapterResourceText(items: Awaited<ReturnType<typeof characterResourceLedgerService.listResources>>): string {
-  return items.slice(0, 20).map((item) => [
-    `- ${item.name}`,
-    `holder=${item.holderCharacterName ?? "未知"}`,
-    `status=${item.status}`,
-    `function=${item.narrativeFunction}`,
-    item.summary,
-  ].filter(Boolean).join(" | ")).join("\n");
-}
-
-function stringifyPayoffText(items: Array<{
-  ledgerKey: string;
-  title: string;
-  currentStatus: string;
-  summary: string;
-  targetStartChapterOrder: number | null;
-  targetEndChapterOrder: number | null;
-  lastTouchedChapterOrder: number | null;
-}>): string {
-  return items.slice(0, 20).map((item) => [
-    `- ${item.ledgerKey} | ${item.title}`,
-    `status=${item.currentStatus}`,
-    item.targetStartChapterOrder || item.targetEndChapterOrder
-      ? `target=${item.targetStartChapterOrder ?? "?"}-${item.targetEndChapterOrder ?? "?"}`
-      : "",
-    item.lastTouchedChapterOrder ? `lastTouched=${item.lastTouchedChapterOrder}` : "",
-    item.summary,
-  ].filter(Boolean).join(" | ")).join("\n");
-}
-
-function stringifyActiveCharacterDialogueInfluenceText(items: ActiveCharacterDialogueInfluence[]): string {
-  return items.slice(0, 8).map((item) => [
-    `- influenceId=${item.id}`,
-    `角色=${item.characterName}`,
-    `对话沉淀=${item.summary}`,
-    `窗口=${item.targetStartChapterOrder}-${item.targetEndChapterOrder}`,
-    `行动倾向=${item.behaviorGuidance}`,
-    item.emotionalGuidance ? `情绪倾向=${item.emotionalGuidance}` : "",
-    item.relationTension ? `关系张力=${item.relationTension}` : "",
-  ].filter(Boolean).join(" | ")).join("\n");
-}
-
-function stringifyPreviousState(snapshot: Awaited<ReturnType<typeof stateService.getLatestSnapshotBeforeChapter>>): string {
-  if (!snapshot) {
-    return "";
-  }
-  const characterLines = snapshot.characterStates
-    .map((item) => item.summary?.trim())
-    .filter((item): item is string => Boolean(item))
-    .slice(0, 6);
-  const relationLines = snapshot.relationStates
-    .map((item) => item.summary?.trim())
-    .filter((item): item is string => Boolean(item))
-    .slice(0, 5);
-  const infoLines = snapshot.informationStates
-    .map((item) => `${item.holderType}:${item.fact}`)
-    .slice(0, 6);
-  const foreshadowLines = snapshot.foreshadowStates
-    .map((item) => `${item.title}(${item.status})`)
-    .slice(0, 6);
-  return [
-    snapshot.summary ? `摘要：${snapshot.summary}` : "",
-    characterLines.length > 0 ? `角色：\n${characterLines.map((item) => `- ${item}`).join("\n")}` : "",
-    relationLines.length > 0 ? `关系：\n${relationLines.map((item) => `- ${item}`).join("\n")}` : "",
-    infoLines.length > 0 ? `信息：\n${infoLines.map((item) => `- ${item}`).join("\n")}` : "",
-    foreshadowLines.length > 0 ? `伏笔：\n${foreshadowLines.map((item) => `- ${item}`).join("\n")}` : "",
-  ].filter(Boolean).join("\n\n");
-}
-
 export class ChapterArtifactDeltaService {
   async syncChapterArtifacts(input: ChapterArtifactDeltaSyncInput): Promise<ChapterArtifactDeltaSyncResult> {
     const extraction = await this.extractChapterArtifacts(input);
@@ -368,7 +206,7 @@ export class ChapterArtifactDeltaService {
     const activeCharacterDialogueInfluences = await this.listActiveCharacterDialogueInfluences({
       novelId: input.novelId,
       chapterOrder: chapter.order,
-    }).catch(() => []);
+    }).catch((error) => { if (currentActualStateTransaction()) throw error; return []; });
 
     const previousSnapshot = await stateService.getLatestSnapshotBeforeChapter(input.novelId, chapter.order);
     const contentHash = buildContentHash(content);
@@ -474,7 +312,7 @@ export class ChapterArtifactDeltaService {
         novelId: input.novelId,
         chapterId: input.chapterId,
         chapterOrder: chapter.order,
-      }).catch(() => 0);
+      }).catch((error) => { if (currentActualStateTransaction()) throw error; return 0; });
       return {
         characterResourceProposalCount: proposals.length,
         canonicalCommittedCount: committed.committed.length,
@@ -541,7 +379,7 @@ export class ChapterArtifactDeltaService {
       expectedChapterContent: input.content,
       chapterOrder: chapter.order,
     }).catch((error) => {
-      if (error instanceof ChapterArtifactContentVersionError) {
+      if (currentActualStateTransaction() || error instanceof ChapterArtifactContentVersionError) {
         throw error;
       }
       return 0;
@@ -549,7 +387,7 @@ export class ChapterArtifactDeltaService {
     const active = await this.listActiveCharacterDialogueInfluences({
       novelId: input.novelId,
       chapterOrder: chapter.order,
-    }).catch(() => []);
+    }).catch((error) => { if (currentActualStateTransaction()) throw error; return []; });
     const applied = input.output.characterDialogueInfluenceResolutions.length === 0
       ? 0
       : await this.applyCharacterDialogueInfluenceResolutions({
@@ -717,6 +555,7 @@ export class ChapterArtifactDeltaService {
 
     const resolvedAt = new Date();
     const results = await prisma.$transaction(async (tx) => {
+      if (input.chapterId) await assertLegacyChapterNotManaged(tx, input.novelId, input.chapterId);
       if (input.expectedChapterContent !== undefined) {
         await this.assertExpectedChapterContentInTransaction(tx, input as {
           novelId: string;
@@ -765,16 +604,17 @@ export class ChapterArtifactDeltaService {
     expectedContentHash: string;
   }): Promise<number> {
     const summary = compactText(input.output.summary) || "暂无可总结正文";
-    const extractedFacts = extractFacts(input.content || summary);
+    const extractedFacts = input.output.concreteFacts.map((fact) => ({ category: fact.category, content: fact.text }));
     const keyEvents = joinFactContents(
-      extractedFacts.filter((item) => item.category === "plot").map((item) => item.content),
+      extractedFacts.filter((item) => item.category !== "state_changed").map((item) => item.content),
       3,
     );
     const characterStates = joinFactContents(
-      extractedFacts.filter((item) => item.category === "character").map((item) => item.content),
+      extractedFacts.filter((item) => item.category === "state_changed").map((item) => item.content),
       3,
     );
     await prisma.$transaction(async (tx) => {
+      if (input.chapterId) await assertLegacyChapterNotManaged(tx, input.novelId, input.chapterId);
       const current = await tx.chapter.findFirst({
         where: { id: input.chapterId, novelId: input.novelId },
         select: { content: true },
@@ -807,7 +647,14 @@ export class ChapterArtifactDeltaService {
         source: "auto" as const,
       }))
       .filter((fact) => fact.text.length > 0);
-    if (concreteFacts.length > 0) {
+    if (currentActualStateTransaction()) {
+      await prisma.consistencyFact.updateMany({ where: { novelId: input.novelId, chapterId: input.chapterId, source: { in: ["chapter_auto_extract", "chapter_artifact_delta"] } }, data: { source: "superseded" } });
+      if (concreteFacts.length) await prisma.consistencyFact.createMany({ data: concreteFacts.map((fact) => ({ novelId: input.novelId,
+        chapterId: input.chapterId, category: "plot", content: fact.text, source: "chapter_artifact_delta" })) });
+      await novelFactService.replaceChapterFacts(input.novelId, input.chapterOrder, concreteFacts, {
+        chapterId: input.chapterId, expectedChapterContent: input.content,
+      });
+    } else if (concreteFacts.length > 0) {
       await novelFactService.writeFacts(input.novelId, input.chapterOrder, concreteFacts, {
         chapterId: input.chapterId,
         expectedChapterContent: input.content,
@@ -939,6 +786,7 @@ export class ChapterArtifactDeltaService {
           constraints: update.constraints,
           confidence: update.confidence ?? null,
           syncContentHash: input.contentHash,
+          syncOperationId: currentProductionSession()?.operationId,
         },
         evidence: update.evidence,
         validationNotes: [update.riskReason ?? ""].filter(Boolean),
@@ -962,6 +810,7 @@ export class ChapterArtifactDeltaService {
     }
     const now = new Date();
     await prisma.$transaction(async (tx) => {
+      if (input.chapterId) await assertLegacyChapterNotManaged(tx, input.novelId, input.chapterId);
       await this.assertExpectedChapterContentInTransaction(tx, input);
       for (const item of input.output.payoffDeltas) {
         const ledgerKey = normalizeLedgerKey(item.ledgerKey, normalizeLedgerKey(item.title, `chapter_${input.chapterOrder}_payoff`));
@@ -1129,6 +978,7 @@ export class ChapterArtifactDeltaService {
 
     let writeCount = 0;
     await prisma.$transaction(async (tx) => {
+      if (input.chapterId) await assertLegacyChapterNotManaged(tx, input.novelId, input.chapterId);
       await this.assertExpectedChapterContentInTransaction(tx, input);
       await tx.characterCandidate.deleteMany({
         where: {
@@ -1266,6 +1116,7 @@ export class ChapterArtifactDeltaService {
     }
 
     await prisma.$transaction(async (tx) => {
+      if (input.chapterId) await assertLegacyChapterNotManaged(tx, input.novelId, input.chapterId);
       await this.assertExpectedChapterContentInTransaction(tx, input);
       for (const update of updates) {
         await tx.character.update({
@@ -1281,6 +1132,7 @@ export class ChapterArtifactDeltaService {
     tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
     input: { novelId: string; chapterId: string; expectedChapterContent: string },
   ): Promise<void> {
+    await assertLegacyChapterNotManaged(tx, input.novelId, input.chapterId);
     const current = await tx.chapter.findFirst({
       where: {
         id: input.chapterId,
@@ -1295,6 +1147,7 @@ export class ChapterArtifactDeltaService {
   }
 
   private queueRagUpsert(ownerType: RagOwnerType, ownerId: string): void {
+    if (currentActualStateTransaction()) return;
     void ragServices.ragIndexService.enqueueUpsert(ownerType, ownerId).catch(() => {
       // Keep artifact extraction resilient when RAG queueing fails.
     });

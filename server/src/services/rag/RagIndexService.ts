@@ -429,7 +429,7 @@ export class RagIndexService {
       }
       case "consistency_fact": {
         const fact = await prisma.consistencyFact.findUnique({ where: { id: ownerId } });
-        if (!fact) {
+        if (!fact || fact.source === "superseded") {
           return [];
         }
         const content = normalizeRagText(fact.content);
@@ -452,7 +452,7 @@ export class RagIndexService {
       }
       case "character_timeline": {
         const timeline = await prisma.characterTimeline.findUnique({ where: { id: ownerId } });
-        if (!timeline) {
+        if (!timeline || timeline.source === "superseded") {
           return [];
         }
         const content = buildJoinedText(timeline.title, timeline.content);

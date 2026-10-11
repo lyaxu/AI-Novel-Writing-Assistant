@@ -39,7 +39,7 @@ const prompts = source("../src/prompting/prompts/novel/chapterAcceptance.prompts
 });
 let modelOutput;
 const service = source("../src/services/novel/runtime/ChapterAcceptanceAssessmentService.ts", {
-  "../../../db/prisma": { prisma: {} },
+  "../production/actualState": { actualStateDb: {} },
   "../../../prompting/core/promptRunner": { runStructuredPrompt: async ({ asset, promptInput }) => ({ output: asset.postValidate(modelOutput, promptInput) }) },
   "../../../prompting/context/promptContextResolution": { resolvePromptContextBlocksForAsset: async () => ({ blocks: [] }) },
   "../../../prompting/prompts/novel/chapterLayeredContext": { buildChapterReviewContextBlocks: () => [] },
@@ -48,7 +48,7 @@ const service = source("../src/services/novel/runtime/ChapterAcceptanceAssessmen
   "../../state/OpenConflictService": { openConflictService: {} },
   "../novelP0Utils": { normalizeScore: (x) => x, ruleScore: () => scores() },
   "./proseQuality/ProseQualityDetector": { detectProseQuality: () => ({ findings: [] }) },
-  "./acceptance": { ...causal, buildAcceptanceCacheIdentity: async () => "mock" },
+  "./acceptance": { ...causal, ...source("../src/services/novel/runtime/acceptance/reviewCompletion.ts"), buildAcceptanceCacheIdentity: async () => "mock" },
 });
 const scores = () => ({ coherence: 95, pacing: 95, repetition: 95, engagement: 95, voice: 95, overall: 95 });
 const quote = (text, source = "current_prose", sourceId = "c2") => ({ source, sourceId, quote: text });
@@ -244,7 +244,11 @@ test("uniform prompt input carries only actual prior prose with exact chapter ID
 });
 
 test("service consumes action failures and includes checks in returned audit metadata without DB writes", async () => {
-  modelOutput = assessment();
+  modelOutput = { ...assessment([check({ verdict: "unearned" })]), progressionChecks: progressionSchema.CHAPTER_PROGRESSION_DIMENSIONS.map(dimension => ({
+    dimension, status: "insufficient_evidence", repeatsEstablishedBeat: null, addsNewConsequence: null,
+    priorState: "前文未提供", actualChange: "", newConsequence: "", previousEvidence: [], currentEvidence: [],
+    explanation: "无法核对前文", repairSuggestion: "",
+  })) };
   const result = await new service.ChapterAcceptanceAssessmentService().assess({
     novelId: "n", chapterId: "c2", chapterOrder: 2, chapterTitle: "反绑", novelTitle: "测试", content: "双手反绑在背后。他把食物送进嘴里。", persist: false,
     contextPackage: { chapterReviewContext: { scenePlan: { scenes: [{ key: "s", causality: {} }] } } },

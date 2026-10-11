@@ -19,7 +19,7 @@ export interface ChapterProductionSession {
   commitState<T>(key: string, write: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T>;
   close(options?: { completed?: boolean; error?: unknown }): Promise<void>;
 }
-export interface OpenChapterProductionInput { novelId: string; chapterId: string; request: unknown; operationId?: string }
+export interface OpenChapterProductionInput { novelId: string; chapterId: string; request: unknown; operationId?: string; replaceCompletedOnly?: boolean }
 export interface ChapterProductionJournalOptions { repository: ChapterProductionJournalRepository; now?: () => number; leaseMs?: number }
 function parseRecord(json: string | null): ChapterProductionJournalRecord {
   try {
@@ -30,6 +30,11 @@ function parseRecord(json: string | null): ChapterProductionJournalRecord {
 }
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 function conflict(): never { throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "章节正文、执行约定或执行所有权已变化，已停止写入，请回到章节工作区核对。"); }
+function hasUnknownOutcome(record: ChapterProductionJournalRecord): boolean {
+  return Object.values(record.steps).some(step => step.status === "unknown" || (step.external && step.status === "running"))
+    || Boolean(record.values["stream.started"] && record.steps["stream.normalize"]?.status !== "done")
+    || Boolean(record.values["manual_repair.started"] && !record.values["manual_repair.content"]);
+}
 
 export function createChapterProductionJournal(options: ChapterProductionJournalOptions) {
   const now = options.now ?? Date.now;
@@ -52,8 +57,7 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
         const chapter = await tx.readChapter(input.novelId, input.chapterId);
         const leaseActive = record.status === "running" && record.expiresAt > now();
         const inputChanged = !chapter || record.expectedFingerprint !== chapterFingerprint(chapter);
-        const unknown = Object.values(record.steps).some(step => step.status === "unknown" || (step.external && step.status === "running"))
-          || (record.values["stream.started"] && record.steps["stream.normalize"]?.status !== "done");
+        const unknown = hasUnknownOutcome(record);
         const resumeBlockedReason = leaseActive ? "本章仍在执行，请等待结果或刷新进度。"
           : inputChanged ? "当前稿件或章节约定已变化，请核对当前稿与保留稿后决定下一步。"
           : unknown ? "外部调用结果尚未确认，请核对保留稿和调用记录，确认后才可另起操作。"
@@ -64,6 +68,7 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
           operationId: record.operationId,
           status: record.status,
           entry, leaseActive, inputChanged,
+          canAcknowledge: !leaseActive && !inputChanged && unknown,
           ...(resumeBlockedReason ? { resumeBlockedReason } : {}),
           canResume: Boolean((entry === "stream" || entry === "repair") && !leaseActive && !inputChanged && !unknown && !request?.workflowTaskId && record.status !== "completed"),
           ...(request?.workflowTaskId ? { workflowTaskId: request.workflowTaskId } : {}),
@@ -76,6 +81,32 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
           ...(record.error ? { error: "执行尚未完成，请查看步骤状态和已保留内容。" } : {}),
           ...(record.expectedChapter.content ? { savedDraft: record.expectedChapter.content } : {}),
         };
+      });
+    },
+    /** Explicit source-workspace decision only: no model call or parent-task state mutation. */
+    async acknowledgeUnknown(input: { novelId: string; chapterId: string; operationId: string }): Promise<void> {
+      await transaction(async tx => {
+        const row = await tx.readJournal(input.novelId, input.chapterId);
+        const record = row && parseRecord(row.metadataJson);
+        if (!record || record.operationId !== input.operationId) conflict();
+        if (record.status === "running" && record.expiresAt > now()) throw new ChapterProductionError("CHAPTER_PRODUCTION_BUSY", "本章仍在执行，请先等待结果。");
+        const chapter = await tx.readChapter(input.novelId, input.chapterId);
+        if (!chapter || chapterFingerprint(chapter) !== record.expectedFingerprint) conflict();
+        if (!hasUnknownOutcome(record)) return;
+        const affectedSteps = Object.entries(record.steps).filter(([, step]) => step.status === "unknown" || (step.status === "running" && step.external)).map(([key]) => key);
+        if (record.values["stream.started"] && record.steps["stream.normalize"]?.status !== "done") affectedSteps.push("stream.started");
+        if (record.values["manual_repair.started"] && !record.values["manual_repair.content"]) affectedSteps.push("manual_repair.started");
+        await tx.archiveJournal(input.novelId, input.chapterId, {
+          ...record, operationId: `${record.operationId}:decision:${randomUUID()}`,
+          recoveryDecision: { kind: "acknowledge_unknown", originalOperationId: record.operationId, acknowledgedAt: now(), affectedSteps },
+        });
+        for (const step of Object.values(record.steps)) {
+          if (step.status === "unknown" || step.status === "running") step.status = "failed";
+        }
+        if (record.steps["stream.normalize"]?.status !== "done") delete record.values["stream.started"];
+        if (!record.values["manual_repair.content"]) delete record.values["manual_repair.started"];
+        record.status = "paused"; record.expiresAt = 0; delete record.error;
+        await tx.writeJournal(input.novelId, input.chapterId, row!.metadataJson, JSON.stringify(record));
       });
     },
     /** Private saved request; callers must keep it server-side and resume the original entry. */
@@ -104,6 +135,7 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
         const previous = row ? parseRecord(row.metadataJson) : null;
         if (previous?.status === "running" && previous.expiresAt > now()) throw new ChapterProductionError("CHAPTER_PRODUCTION_BUSY", "本章已有执行进行中，请查看已保存进度。");
         const explicitNewOperation = Boolean(previous && input.operationId && input.operationId !== previous.operationId);
+        if (explicitNewOperation && input.replaceCompletedOnly && previous?.status !== "completed") conflict();
         if (previous && !explicitNewOperation) {
           if (previous.requestFingerprint !== requestFingerprint || previous.expectedFingerprint !== chapterFingerprint(chapter)) conflict();
           if (input.operationId && previous.operationId !== input.operationId) conflict();

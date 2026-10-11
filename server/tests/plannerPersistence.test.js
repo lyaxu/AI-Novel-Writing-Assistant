@@ -469,7 +469,7 @@ async function captureChapterPlanPersistence(baseExecutionContract) {
       createMany: async ({ data }) => { captured.scenes = data; },
     },
     chapter: {
-      findUnique: async () => ({ content: "", chapterStatus: "unplanned" }),
+      findUnique: async () => ({ novelId: "novel-1", content: "", chapterStatus: "unplanned", ...baseExecutionContract }),
       update: async ({ data }) => { captured.chapterUpdate = data; },
     },
   });

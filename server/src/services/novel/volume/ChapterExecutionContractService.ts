@@ -19,6 +19,7 @@ import { serializeVolumeWorkspaceDocument } from "./volumeWorkspaceDocument";
 import { inspectChapterExecutionContractReadiness } from "./chapterDetail/chapterExecutionContractReadiness";
 import { isCommittedPlanningRepairDocument } from "./planningRepair/PlanningRepairCoordinator";
 import { reviewExistingExecutionContract } from "./chapterDetail/chapterExecutionContractGeneration";
+import { buildChapterExecutionContractHash } from "../../planner/plannerPersistence";
 
 export interface ChapterExecutionContractServiceDeps {
   storyMacroPlanService: Pick<StoryMacroPlanService, "getPlan">;
@@ -133,6 +134,11 @@ export class ChapterExecutionContractService {
       : null;
     if (readiness?.canReuse && !options.taskId) {
       await reviewExistingExecutionContract({ novelId, volumeId: matched.volumeId, chapter: currentRequirement!, workspace, options });
+      const current = await prisma.chapter.findFirst({ where: { id: chapterId, novelId } });
+      if (!current || buildChapterExecutionContractHash(current) !== buildChapterExecutionContractHash(chapter)
+        || (current.content ?? "") !== (chapter.content ?? "")) {
+        throw Object.assign(new Error("本章正文或执行约定在复核期间发生变化，请核对后继续。"), { code: "CHAPTER_PRODUCTION_CONFLICT" });
+      }
       const styleContract = await this.resolveStyleContract(novelId, chapterId, options.taskStyleProfileId);
       return {
         ...chapter,
@@ -199,6 +205,11 @@ export class ChapterExecutionContractService {
     targetChapter.styleContract = styleContract;
 
     const persistedChapter = await runVolumeWorkspaceTransaction(async (tx) => {
+      const current = await tx.chapter.findFirst({ where: { id: chapterId, novelId } });
+      if (!current || buildChapterExecutionContractHash(current) !== buildChapterExecutionContractHash(chapter)
+        || (current.content ?? "") !== (chapter.content ?? "")) {
+        throw Object.assign(new Error("本章正文或执行约定在规划期间发生变化，已拒绝覆盖。"), { code: "CHAPTER_PRODUCTION_CONFLICT" });
+      }
       const { versionId } = await this.deps.ensureActiveVersionRecord(
         tx,
         novelId,

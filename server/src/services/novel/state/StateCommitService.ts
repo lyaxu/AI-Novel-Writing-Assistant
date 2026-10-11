@@ -1,3 +1,5 @@
+import { buildChapterArtifactContentHash } from "../runtime/artifactSync/ChapterArtifactContentVersion";
+import { ChapterProductionError } from "../production/reliability";
 import type {
   ContentProvenance,
   StateChangeProposal,
@@ -6,7 +8,7 @@ import type {
 } from "@ai-novel/shared/types/canonicalState";
 import { characterResourceUpdatePayloadSchema } from "@ai-novel/shared/types/characterResource";
 import type { Prisma } from "@prisma/client";
-import { prisma } from "../../../db/prisma";
+import { ACTUAL_STATE_INVALID_PROPOSAL, retainInvalidProposalsForReview, assertLegacyChapterNotManaged, actualStateDb as prisma, currentActualStateTransaction } from "../production/actualState";
 import { ChapterArtifactContentVersionError } from "../runtime/artifactSync/ChapterArtifactSyncResult";
 import { characterResourceLedgerService } from "../characterResource/CharacterResourceLedgerService";
 import { compactText as compactResourceText, normalizeResourceKey } from "../characterResource/characterResourceShared";
@@ -114,7 +116,7 @@ export class StateCommitService {
       input.novelId,
       this.validate(proposals),
     );
-    const persisted = await this.persistValidated(validation, {
+    const persisted = await this.persistValidated(currentActualStateTransaction() ? retainInvalidProposalsForReview(validation) : validation, {
       novelId: input.novelId,
       chapterId: input.chapterId,
       expectedChapterContent: input.expectedChapterContent,
@@ -194,6 +196,22 @@ export class StateCommitService {
 
     await prisma.$transaction(async (tx) => {
       for (const proposal of committed) {
+        if (proposal.validationNotes.includes(ACTUAL_STATE_INVALID_PROPOSAL)) throw new ChapterProductionError("CHAPTER_PRODUCTION_STORAGE", "该提案未通过抽取校验，请核对后明确忽略；不能作为有效事实直接确认。");
+        const fingerprint = (proposal.payload as Record<string, unknown>).syncContentHash;
+        if (proposal.chapterId && typeof fingerprint === "string") {
+          const chapter = await tx.chapter.findFirst({ where: { id: proposal.chapterId, novelId: input.novelId }, select: { content: true } });
+          if (!chapter || buildChapterArtifactContentHash(chapter.content ?? "") !== fingerprint) {
+            throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "该提案对应的正文已变化，请先核对当前稿件。");
+          }
+          const row = await tx.chapterArtifactSyncCheckpoint.findFirst({ where: { novelId: input.novelId, chapterId: proposal.chapterId,
+            contentHash: "active", artifactType: "production_execution" }, select: { metadataJson: true } });
+          if (row?.metadataJson) {
+            const owner = JSON.parse(row.metadataJson) as { status?: string; expiresAt?: number };
+            if (owner.status === "running" && (owner.expiresAt ?? 0) > Date.now()) {
+              throw new ChapterProductionError("CHAPTER_PRODUCTION_BUSY", "本章正在提交状态，请待执行停止后确认提案。");
+            }
+          }
+        }
         await this.applyCommittedProposal(tx, proposal);
         if (!proposal.id) {
           continue;
@@ -306,7 +324,7 @@ export class StateCommitService {
         continue;
       }
 
-      if (isDebtSourceProposal(sourceNormalized)) {
+      if (isDebtSourceProposal(sourceNormalized) && !currentActualStateTransaction()) {
         pendingReview.push(markDebtSourcePendingReview(sourceNormalized));
         continue;
       }
@@ -350,6 +368,7 @@ export class StateCommitService {
     const rejectedRows: PersistedProposalRow[] = [];
 
     await prisma.$transaction(async (tx) => {
+      if (integrity.chapterId) await assertLegacyChapterNotManaged(tx, integrity.novelId, integrity.chapterId);
       if (integrity.expectedChapterContent !== undefined && integrity.chapterId) {
         const chapter = await tx.chapter.findFirst({
           where: {
@@ -577,7 +596,7 @@ export class StateCommitService {
         currentGoal: typeof payload.currentGoal === "string" ? compactText(payload.currentGoal) || null : null,
         lastEvolvedAt: new Date(),
       },
-    }).catch(() => null);
+    }).catch((error) => { if (currentActualStateTransaction()) throw error; return null; });
   }
 
   private toProposal(row: PersistedProposalRow): StateChangeProposal {

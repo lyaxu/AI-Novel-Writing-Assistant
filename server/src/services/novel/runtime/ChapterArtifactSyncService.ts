@@ -1,3 +1,4 @@
+import { currentProductionSession, ChapterProductionError } from "../production/reliability";
 import type { RagOwnerType } from "../../rag/types";
 import { prisma } from "../../../db/prisma";
 import { withSqliteRetry } from "../../../db/sqliteRetry";
@@ -59,6 +60,15 @@ export class ChapterArtifactSyncService {
     content: string,
     options: ChapterArtifactSyncOptions = {},
   ): Promise<ChapterArtifactSyncResult> {
+    if (currentProductionSession()) {
+      const { createChapterActualStateService } = await import("../production/actualState");
+      return createChapterActualStateService().sync({ novelId, chapterId, content, provider: options.provider,
+        model: options.model, artifactSyncMode: options.artifactSyncMode, temperature: options.temperature, contentProvenance: options.contentProvenance });
+    }
+    const managed = await prisma.chapterArtifactSyncCheckpoint.findFirst({
+      where: { novelId, chapterId, artifactType: "production_execution", contentHash: "active" }, select: { id: true },
+    });
+    if (managed) throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "请从章节源工作区恢复实际状态提交。");
     const contentHash = buildContentHash(content);
     const completedArtifacts: string[] = [];
     if (!options.skipLegacySummaryAndFacts) {

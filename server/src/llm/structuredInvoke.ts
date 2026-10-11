@@ -1,3 +1,4 @@
+import { preservesUnknownOutcome } from "./invocation/executionPolicy";
 import type { ZodType } from "zod";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
@@ -494,7 +495,7 @@ export async function invokeStructuredLlmDetailed<T>(input: StructuredInvokeInpu
     structuredStrategy: input.structuredStrategy,
   });
   const fallbackSettings = input.disableFallbackModel ? null : await getStructuredFallbackSettings();
-  const transportRetryCount = normalizeTransportRetryCount(input.transportRetryCount ?? fallbackSettings?.retryCount);
+  const transportRetryCount = preservesUnknownOutcome() ? 0 : normalizeTransportRetryCount(input.transportRetryCount ?? fallbackSettings?.retryCount);
   const fallbackEnabled = Boolean(
     fallbackSettings?.enabled
     && fallbackSettings.model.trim().length > 0
@@ -514,7 +515,8 @@ export async function invokeStructuredLlmDetailed<T>(input: StructuredInvokeInpu
     });
   } catch (primaryError) {
     input.signal?.throwIfAborted();
-    if (primaryError instanceof StructuredOutputError && primaryError.category === "output_limit") {
+    if (primaryError instanceof StructuredOutputError && (primaryError.category === "output_limit"
+      || (preservesUnknownOutcome() && primaryError.category === "transport_error"))) {
       throw primaryError;
     }
     if (!fallbackEnabled || !fallbackSettings) {

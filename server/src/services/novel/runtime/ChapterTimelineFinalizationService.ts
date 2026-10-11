@@ -7,8 +7,8 @@ import type {
   TimelineHookDraft,
 } from "@ai-novel/shared/types/timeline";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
-import { prisma } from "../../../db/prisma";
-import { currentProductionSession } from "../production/reliability";
+import { assertLegacyChapterNotManaged, actualStateDb as prisma, currentActualStateTransaction, runInActualStateTransaction } from "../production/actualState";
+import { ChapterProductionError, currentProductionSession } from "../production/reliability";
 import {
   storyTimelineService,
   timelineCheckerService,
@@ -163,39 +163,17 @@ export class ChapterTimelineFinalizationService {
     })) {
       return null;
     }
-    const novel = await prisma.novel.findUnique({
-      where: { id: input.novelId },
-      select: { title: true },
-    });
-    const timelineContext = await timelineContextService.buildForChapter({
-      novelId: input.novelId,
-      chapterId: previousChapter.id,
-      chapterIndex: previousChapter.order,
-    }).catch(() => null);
-    const contextPackage = {
-      chapter: {
-        id: previousChapter.id,
-        title: previousChapter.title,
-        order: previousChapter.order,
-        content: previousContent,
-        expectation: previousChapter.expectation,
-        supportingContextText: "",
-      },
-      timelineContext,
-      bookContract: novel?.title ? { title: novel.title } : null,
-    } as unknown as GenerationContextPackage;
-    return this.finalizeCurrentContent({
-      novelId: input.novelId,
-      chapterId: previousChapter.id,
-      content: previousContent,
-      contextPackage,
-      request: input.request,
-      sourceStage: "previous_chapter_guard",
-      reason: "missing_current_timeline_finalization_checkpoint",
-    });
+    throw new ChapterProductionError("CHAPTER_PRODUCTION_STORAGE", "前一章实际状态尚未提交，请回到该章核对并恢复状态提交；正文已保留。");
   }
 
   async finalizeCurrentContent(input: FinalizeCurrentContentInput): Promise<ChapterTimelineFinalizationResult> {
+    const session = currentProductionSession();
+    if (session) return this.finalizeProductionContent(input);
+    const managed = await prisma.chapterArtifactSyncCheckpoint.findFirst({
+      where: { novelId: input.novelId, chapterId: input.chapterId, artifactType: "production_execution", contentHash: "active" },
+      select: { id: true },
+    });
+    if (managed) throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "请从章节源工作区恢复实际状态提交。");
     const content = input.content.trim();
     const contentHash = hashContent(content);
     const existingMode = await this.findCurrentFinalizationMode({
@@ -320,8 +298,12 @@ export class ChapterTimelineFinalizationService {
       });
     }
 
+    const stableTimelineContext = gate.timelineContext;
     try {
       await currentProductionSession()?.assertCurrent();
+      await prisma.$transaction(async (tx) => {
+        await assertLegacyChapterNotManaged(tx, input.novelId, input.chapterId);
+        await runInActualStateTransaction(tx, async () => {
       await storyTimelineService.commitChapterTimeline({
         novelId: input.novelId,
         chapterId: input.chapterId,
@@ -331,7 +313,9 @@ export class ChapterTimelineFinalizationService {
         extractedHooks: gate.extractedHooks,
         addressedHookIds: gate.addressedHookIds,
         resolvedHookIds: gate.resolvedHookIds,
-        timelineContext: gate.timelineContext,
+        timelineContext: stableTimelineContext,
+      });
+        });
       });
     } catch (error) {
       if (error && typeof error === "object" && "code" in error && String(error.code).startsWith("CHAPTER_PRODUCTION_")) throw error;
@@ -384,6 +368,48 @@ export class ChapterTimelineFinalizationService {
       hookCount: gate.extractedHooks.length,
       checkpointWritten: true,
     };
+  }
+
+  private async finalizeProductionContent(input: FinalizeCurrentContentInput): Promise<ChapterTimelineFinalizationResult> {
+    const session = currentProductionSession()!;
+    if (session.chapterId !== input.chapterId || session.novelId !== input.novelId) {
+      throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "实际状态提交不属于当前章节。");
+    }
+    const content = input.content.trim();
+    if (!content) throw new ChapterProductionError("CHAPTER_PRODUCTION_STORAGE", "章节没有完整正文，无法提交实际状态。");
+    const contentHash = hashContent(content);
+    const key = `actual:${contentHash}:timeline`;
+    const chapterIndex = input.contextPackage?.chapter.order ?? await this.resolveChapterOrder(input.chapterId);
+    const context = input.contextPackage?.timelineContext ?? await timelineContextService.buildForChapter({
+      novelId: input.novelId, chapterId: input.chapterId, chapterIndex,
+    });
+    if (!context) throw new ChapterProductionError("CHAPTER_PRODUCTION_STORAGE", "时间线上下文缺失，正文已保留，请恢复状态提交。");
+    const gate = await session.runStep(`${key}:extract`, () => this.extractAndCheck({
+      novelId: input.novelId, chapterId: input.chapterId, chapterIndex,
+      chapterTitle: input.contextPackage?.chapter.title ?? `第${chapterIndex}章`,
+      novelTitle: input.contextPackage?.bookContract?.title ?? "当前小说",
+      chapterGoal: chapterGoalFromContext(input.contextPackage), content, timelineContext: context, request: input.request,
+    }), { external: true });
+    if (!gate.extractorSucceeded || !gate.timelineContext) {
+      throw new ChapterProductionError("CHAPTER_PRODUCTION_STORAGE", "时间线抽取未完成，正文已保留，请核对失败步骤。");
+    }
+    return session.commitState(`${key}:commit`, (tx) => runInActualStateTransaction(tx, async () => {
+      const retained = await tx.chapter.findFirst({ where: { id: input.chapterId, novelId: input.novelId, content: input.content }, select: { id: true } });
+      if (!retained) throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "时间线提交不对应当前保留正文。");
+      await tx.storyTimelineEvent.updateMany({ where: { novelId: input.novelId, chapterId: input.chapterId, source: "chapter_extraction", status: { not: "superseded" } }, data: { status: "superseded" } });
+      await tx.timelineHook.updateMany({ where: { novelId: input.novelId, createdInChapterId: input.chapterId }, data: { status: "dropped" } });
+      await tx.timelineHook.updateMany({ where: { novelId: input.novelId, resolvedInChapterId: input.chapterId, createdInChapterId: { not: input.chapterId } }, data: { status: "open", resolvedInChapterId: null, resolvedInChapterIndex: null } });
+      await storyTimelineService.commitChapterTimeline({
+        novelId: input.novelId, chapterId: input.chapterId, chapterIndex,
+        timeAnchor: gate.timeAnchor, extractedEvents: gate.extractedEvents, extractedHooks: gate.extractedHooks,
+        addressedHookIds: gate.addressedHookIds, resolvedHookIds: gate.resolvedHookIds, timelineContext: gate.timelineContext!,
+      });
+      await storyTimelineService.saveCheckReport({ novelId: input.novelId, chapterId: input.chapterId, chapterIndex, result: gate.result });
+      await this.markCheckpoint({ novelId: input.novelId, chapterId: input.chapterId, contentHash, syncMode: "stable",
+        sourceStage: input.sourceStage, metadata: { extractorSucceeded: true, qualityDebt: Boolean(input.qualityDebt), operationId: session.operationId } });
+      return { syncMode: "stable", contentHash, extractorSucceeded: true, eventCount: gate.extractedEvents.length,
+        hookCount: gate.extractedHooks.length, checkpointWritten: true };
+    }));
   }
 
   private async extractAndCheck(input: {
@@ -446,7 +472,7 @@ export class ChapterTimelineFinalizationService {
         timelineContext: input.timelineContext,
         chapterContent: input.content,
       });
-      await storyTimelineService.saveCheckReport({
+      if (!currentProductionSession()) await storyTimelineService.saveCheckReport({
         novelId: input.novelId,
         chapterId: input.chapterId,
         chapterIndex: input.chapterIndex,
@@ -464,6 +490,7 @@ export class ChapterTimelineFinalizationService {
         timelineContext: input.timelineContext,
       };
     } catch (error) {
+      if (currentProductionSession()) throw error;
       const message = error instanceof Error ? error.message : String(error);
       const result: TimelineCheckResult = {
         status: "warning",
@@ -478,7 +505,7 @@ export class ChapterTimelineFinalizationService {
           relatedHookIds: [],
         }],
       };
-      await storyTimelineService.saveCheckReport({
+      if (!currentProductionSession()) await storyTimelineService.saveCheckReport({
         novelId: input.novelId,
         chapterId: input.chapterId,
         chapterIndex: input.chapterIndex,
@@ -507,6 +534,9 @@ export class ChapterTimelineFinalizationService {
     anchorFallbackUsed: boolean;
   }): Promise<ChapterTimelineFinalizationResult> {
     const chapterIndex = input.contextPackage?.chapter.order ?? await this.resolveChapterOrder(input.chapterId);
+    await prisma.$transaction(async (tx) => {
+      await assertLegacyChapterNotManaged(tx, input.novelId, input.chapterId);
+      await runInActualStateTransaction(tx, async () => {
     await timelineRepository.upsertChapterTimeAnchor({
       novelId: input.novelId,
       chapterId: input.chapterId,
@@ -546,6 +576,8 @@ export class ChapterTimelineFinalizationService {
         anchorFallbackUsed: input.anchorFallbackUsed,
         qualityDebt: Boolean(input.qualityDebt),
       },
+    });
+      });
     });
     return {
       syncMode: "degraded",

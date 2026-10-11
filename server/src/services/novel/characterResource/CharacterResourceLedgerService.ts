@@ -6,7 +6,7 @@ import type {
   CharacterResourceUpdatePayload,
 } from "@ai-novel/shared/types/characterResource";
 import type { Prisma } from "@prisma/client";
-import { prisma } from "../../../db/prisma";
+import { actualStateDb as prisma, currentActualStateTransaction } from "../production/actualState";
 import {
   compactText,
   mapCharacterResourceRow,

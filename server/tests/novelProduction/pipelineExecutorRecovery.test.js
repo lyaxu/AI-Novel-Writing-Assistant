@@ -265,6 +265,26 @@ for (const endOrder of [1, 3]) {
   });
 }
 
+test("pipeline operation identity follows the job and chapter across explicit recovery", async () => {
+  const identities = [];
+  const harness = createExecutorHarness({
+    runChapter: async ({ runtimeOptions }) => {
+      identities.push(runtimeOptions.productionOperationId);
+      if (identities.length === 1) throw Object.assign(new Error("review response unknown"), { code: "CHAPTER_PRODUCTION_UNCERTAIN" });
+      return { reviewExecuted: false, pass: true, score: { overall: 100 }, issues: [], runtimePackage: null, retryCountUsed: 0 };
+    },
+  });
+  try {
+    await harness.execute();
+    assert.equal(harness.jobState.pendingManualRecovery, true);
+    // Represents the existing explicit parent recovery command, never polling.
+    Object.assign(harness.jobState, { status: "running", pendingManualRecovery: false });
+    await harness.execute();
+    assert.deepEqual(identities, ["pipeline:job-1:chapter-1", "pipeline:job-1:chapter-1"]);
+    assert.equal(harness.jobState.status, "succeeded");
+  } finally { harness.restore(); }
+});
+
 for (const savedRange of [undefined, { mode: "book", start: 1, end: 80 }]) {
   test(`single-chapter job bounds preparation when saved policy range is ${savedRange ? "broader" : "missing"}`, async () => {
     const originalCount = prisma.chapter.count;
@@ -285,7 +305,8 @@ for (const savedRange of [undefined, { mode: "book", start: 1, end: 80 }]) {
           await originalEnsureRouteWindow.call(routeService, novelId, 2, routeOptions);
         },
       },
-      planner: { ensureChapterPlan: async () => ({ id: "existing-chapter-2-plan" }) },
+      planner: { ensureChapterPlan: async () => ({ id: "existing-chapter-2-plan" }), getChapterPlan: async () => null },
+      loadChapter: async () => ({ order: 2, content: "" }),
       loadEstimatedChapterCount: async () => 80,
     });
     const harness = createExecutorHarness({
@@ -335,7 +356,7 @@ test("pipeline recovery gives an already-reserved chapter no second automatic at
 
 const pipelineIssueGovernance = require("../../dist/services/novel/production/issueGovernance/PipelineIssueGovernance.js");
 
-for (const code of ["CHAPTER_PRODUCTION_BUSY", "CHAPTER_PRODUCTION_CONFLICT", "CHAPTER_PRODUCTION_UNCERTAIN", "CHAPTER_PRODUCTION_STORAGE"]) {
+for (const code of ["CHAPTER_PRODUCTION_BUSY", "CHAPTER_PRODUCTION_CONFLICT", "CHAPTER_PRODUCTION_UNCERTAIN", "CHAPTER_PRODUCTION_STORAGE", "CHAPTER_REVIEW_INCOMPLETE"]) {
   for (const executionOwner of [null, "owner-a"]) {
     test(`${code} preserves the chapter boundary for explicit recovery without AI or automatic retry (${executionOwner ?? "direct"})`, async () => {
       const original = pipelineIssueGovernance.reportPipelineIssue;

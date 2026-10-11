@@ -8,7 +8,7 @@ import { toast } from "@/components/ui/toast";
 import type { ChapterExecutionStrategy } from "../chapterExecution.utils";
 import type { ChapterReviewResult } from "../chapterPlanning.shared";
 import { useChapterExecutionActions } from "./useChapterExecutionActions";
-import { prepareChapterOperation } from "../productionRecovery";
+import { prepareChapterOperation, refreshChapterProductionViews } from "../productionRecovery";
 
 interface StreamHandle {
   start: (path: string, payload: Record<string, unknown>) => Promise<void> | void;
@@ -165,6 +165,7 @@ export function useNovelEditChapterRuntime({
       toast.info(message);
     } finally {
       productionRequestPending.current = false;
+      await refreshChapterProductionViews(queryClient, novelId, selectedChapter.id);
     }
   };
 
@@ -204,6 +205,7 @@ export function useNovelEditChapterRuntime({
       toast.info(message);
     } finally {
       productionRequestPending.current = false;
+      await refreshChapterProductionViews(queryClient, novelId, selectedChapterId);
     }
   };
 

@@ -15,6 +15,7 @@ import DirectorTakeoverEntryPanel from "./DirectorTakeoverEntryPanel";
 import SelectControl from "@/components/common/SelectControl";
 import NovelDirectorIssuePolicyCard from "./NovelDirectorIssuePolicyCard";
 import SecondReaderButton from "./SecondReaderButton";
+import { PipelineJobRecoveryPanel } from "../productionRecovery";
 
 interface PipelineTabProps {
   novelId: string;
@@ -176,6 +177,7 @@ export default function PipelineTab(props: PipelineTabProps) {
 
   return (
     <div className="space-y-4">
+      <PipelineJobRecoveryPanel novelId={novelId} chapterId={selectedChapterId} />
       <DirectorTakeoverEntryPanel
         title="从质量修复接管"
         description="AI 会优先判断当前是否有活动中的章节批次或待修检查点，再决定恢复当前修复还是新开批次。"

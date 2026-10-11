@@ -10,7 +10,7 @@ function fixture({ initialContent = "", repair = false, failure, viaAdapter = fa
     "node:crypto": crypto, "./types": contracts,
   });
   const context = loadRuntimeSource("../production/reliability/executionContext.ts", {
-    "node:async_hooks": require("node:async_hooks"),
+    "../../../../llm/invocation/executionPolicy": { withUnknownOutcomeProtection: fn => fn() }, "node:async_hooks": require("node:async_hooks"),
   });
   const selection = loadRuntimeSource("selection/ChapterRepairCandidateSelection.ts", { "node:crypto": crypto });
   let chapter = { id: "c", novelId: "n", title: "Chapter", order: 1, content: initialContent, taskSheet: "contract", sceneCards: null, expectation: null, targetWordCount: 2800 };

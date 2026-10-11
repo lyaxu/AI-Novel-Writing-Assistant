@@ -99,7 +99,7 @@ export class ChapterFactExtractor {
         where: {
           novelId: input.novelId,
           chapterId: chapter.id,
-          source: "chapter_extract",
+          source: { in: ["chapter_extract", "chapter_artifact_delta"] },
         },
         include: {
           character: {
@@ -109,7 +109,7 @@ export class ChapterFactExtractor {
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       }),
       prisma.consistencyFact.findMany({
-        where: {
+        where: { source: { not: "superseded" },
           novelId: input.novelId,
           chapterId: chapter.id,
         },

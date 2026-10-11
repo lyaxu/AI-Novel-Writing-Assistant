@@ -138,7 +138,7 @@ export class NovelExportService {
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       }),
       prisma.characterTimeline.findMany({
-        where: { novelId },
+        where: { source: { not: "superseded" }, novelId },
         orderBy: [{ chapterOrder: "asc" }, { createdAt: "asc" }],
       }),
     ]);

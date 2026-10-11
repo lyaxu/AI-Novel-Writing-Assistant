@@ -14,6 +14,7 @@ import {
   LLMGenerateOptions,
 } from "./novelCoreShared";
 import { serializeCharacterProhibitions } from "./characters/characterHardFacts";
+import { assertLegacyChapterNotManaged } from "./production/actualState";
 
 export class NovelCoreCharacterService {
   private readonly worldContextGateway = new WorldContextGateway();
@@ -87,7 +88,7 @@ export class NovelCoreCharacterService {
 
   async listCharacterTimeline(novelId: string, characterId: string) {
     return prisma.characterTimeline.findMany({
-      where: { novelId, characterId },
+      where: { source: { not: "superseded" }, novelId, characterId },
       orderBy: [{ chapterOrder: "asc" }, { createdAt: "asc" }],
     });
   }
@@ -125,6 +126,12 @@ export class NovelCoreCharacterService {
       },
     });
 
+    const managedChapters = await prisma.chapterArtifactSyncCheckpoint.findMany({
+      where: { novelId, artifactType: "production_execution", contentHash: "active" },
+      select: { chapterId: true },
+    });
+    const managedChapterIds = new Set(managedChapters.map((row) => row.chapterId));
+    const legacyChapters = chapters.filter((chapter) => !managedChapterIds.has(chapter.id));
     const events: Array<{
       novelId: string;
       characterId: string;
@@ -135,7 +142,7 @@ export class NovelCoreCharacterService {
       source: string;
     }> = [];
 
-    for (const chapter of chapters) {
+    for (const chapter of legacyChapters) {
       const content = chapter.content ?? "";
       if (!content) {
         continue;
@@ -155,11 +162,20 @@ export class NovelCoreCharacterService {
     }
 
     await prisma.$transaction(async (tx) => {
+      for (const chapter of legacyChapters) {
+        await assertLegacyChapterNotManaged(tx, novelId, chapter.id);
+      }
+      const managedAtWrite = await tx.chapterArtifactSyncCheckpoint.findMany({
+        where: { novelId, artifactType: "production_execution", contentHash: "active" },
+        select: { chapterId: true },
+      });
+      const excludedChapterIds = [...new Set([...managedChapterIds, ...managedAtWrite.map((row) => row.chapterId)])];
       await tx.characterTimeline.deleteMany({
         where: {
           novelId,
           characterId,
           source: "chapter_extract",
+          ...(excludedChapterIds.length > 0 ? { chapterId: { notIn: excludedChapterIds } } : {}),
           ...(typeof options.startOrder === "number" || typeof options.endOrder === "number"
             ? {
               chapterOrder: {
@@ -228,7 +244,7 @@ export class NovelCoreCharacterService {
         where: { id: characterId, novelId },
       }),
       prisma.characterTimeline.findMany({
-        where: { novelId, characterId },
+        where: { source: { not: "superseded" }, novelId, characterId },
         orderBy: [{ chapterOrder: "desc" }, { createdAt: "desc" }],
         take: 20,
       }),

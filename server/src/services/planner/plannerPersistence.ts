@@ -32,6 +32,7 @@ interface PersistPlanInput {
   replannedFromPlanId: string | null;
   hookTarget: string | null;
   baseExecutionContract?: ChapterExecutionContractHashInput | null;
+  baseChapterContent?: string | null;
   scenes: Array<{
     title?: string;
     objective?: string;
@@ -218,6 +219,17 @@ export async function persistStoryPlan(input: PersistPlanInput) {
   });
 
   const planId = await prisma.$transaction(async (tx) => {
+    if (input.level === "chapter" && input.chapterId && input.baseExecutionContract) {
+      const current = await tx.chapter.findUnique({ where: { id: input.chapterId }, select: {
+        novelId: true, content: true, expectation: true, targetWordCount: true, conflictLevel: true,
+        revealLevel: true, mustAvoid: true, taskSheet: true, sceneCards: true, hook: true,
+      } });
+      if (!current || current.novelId !== input.novelId
+        || buildChapterExecutionContractHash(current) !== buildChapterExecutionContractHash(input.baseExecutionContract)
+        || (input.baseChapterContent !== undefined && (current.content ?? "") !== (input.baseChapterContent ?? ""))) {
+        throw Object.assign(new Error("章节正文或执行约定已变化，请核对后再准备本章。"), { code: "CHAPTER_PRODUCTION_CONFLICT" });
+      }
+    }
     const plan = existing
       ? await tx.storyPlan.update({
           where: { id: existing.id },

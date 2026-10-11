@@ -7,7 +7,7 @@ import type {
   TimelineHookResolveMode,
   TimelineIssue,
 } from "@ai-novel/shared/types/timeline";
-import { prisma } from "../../db/prisma";
+import { actualStateDb as prisma, currentActualStateTransaction } from "../../services/novel/production/actualState";
 
 function parseJsonArray(value: string | null | undefined): string[] {
   if (!value) {

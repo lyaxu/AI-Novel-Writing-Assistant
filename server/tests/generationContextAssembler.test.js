@@ -153,6 +153,9 @@ test("assembler only reads planning artifacts prepared before context assembly",
     consistencyFactFindMany: prisma.consistencyFact.findMany,
     chapterFindMany: prisma.chapter.findMany,
     creativeDecisionFindMany: prisma.creativeDecision.findMany,
+    characterMindFindMany: prisma.characterMindSnapshot.findMany,
+    characterDialogueFindMany: prisma.characterDialogueInfluence.findMany,
+    factEntryFindMany: prisma.novelFactEntry.findMany,
     getChapterPlan: plannerService.getChapterPlan,
     ensureChapterPlan: plannerService.ensureChapterPlan,
     buildPlanPromptBlock: plannerService.buildPlanPromptBlock,
@@ -216,6 +219,9 @@ test("assembler only reads planning artifacts prepared before context assembly",
     prisma.consistencyFact.findMany = async () => [];
     prisma.chapter.findMany = async () => [];
     prisma.creativeDecision.findMany = async () => [];
+    prisma.characterMindSnapshot.findMany = async () => [];
+    prisma.characterDialogueInfluence.findMany = async () => [];
+    prisma.novelFactEntry.findMany = async () => [];
     plannerService.getChapterPlan = async () => ({
       id: "plan-1",
       chapterId: "chapter-1",
@@ -294,6 +300,7 @@ test("assembler only reads planning artifacts prepared before context assembly",
     assert.equal(chapterFindFirstCalls, 1);
     assert.equal(assembled.chapter.taskSheet, "新任务单");
     assert.equal(assembled.contextPackage.chapter.sceneCards, freshSceneCards);
+    assert.equal(assembled.contextPackage.plan, null, "unversioned plan must not compete with the current chapter contract");
     assert.equal(assembled.contextPackage.storyWorldSlice, storyWorldSlice);
     assert.equal(assembled.contextPackage.chapterWriteContext.writtenEvidence.authority, "written_prose_not_planning");
     assert.equal(assembled.contextPackage.chapterWriteContext.writtenEvidence.targetChapterOrder, 1);
@@ -310,6 +317,9 @@ test("assembler only reads planning artifacts prepared before context assembly",
     prisma.consistencyFact.findMany = originals.consistencyFactFindMany;
     prisma.chapter.findMany = originals.chapterFindMany;
     prisma.creativeDecision.findMany = originals.creativeDecisionFindMany;
+    prisma.characterMindSnapshot.findMany = originals.characterMindFindMany;
+    prisma.characterDialogueInfluence.findMany = originals.characterDialogueFindMany;
+    prisma.novelFactEntry.findMany = originals.factEntryFindMany;
     plannerService.getChapterPlan = originals.getChapterPlan;
     plannerService.ensureChapterPlan = originals.ensureChapterPlan;
     plannerService.buildPlanPromptBlock = originals.buildPlanPromptBlock;

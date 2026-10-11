@@ -295,7 +295,7 @@ export class CharacterLibrarySyncService {
         include: { baseCharacter: true, baseRevision: true },
       }),
       prisma.characterTimeline.findMany({
-        where: { novelId: input.novelId, characterId: input.characterId },
+        where: { source: { not: "superseded" }, novelId: input.novelId, characterId: input.characterId },
         orderBy: [{ chapterOrder: "desc" }, { createdAt: "desc" }],
         take: 12,
       }),

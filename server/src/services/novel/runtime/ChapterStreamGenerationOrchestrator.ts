@@ -9,6 +9,7 @@ import type { ChapterRuntimeRequestInput } from "./chapterRuntimeSchema";
 import type { AssembledRuntimeChapter } from "./chapterRuntimePipeline";
 import type { ChapterExecutionPreparationService } from "../production/preparation";
 import { currentProductionSession, productionStep, captureProductionStream } from "../production/reliability";
+import { buildChapterExecutionContractHash } from "../../planner/plannerPersistence";
 import {
   assertChapterContentNotEmpty,
   isChapterEmptyContentError,
@@ -25,7 +26,7 @@ export interface ChapterStreamGenerationAgentRuntime {
 
 export interface ChapterStreamGenerationOrchestratorDeps {
   assembler: Pick<GenerationContextAssembler, "assemble">;
-  preparationService: Pick<ChapterExecutionPreparationService, "prepare">;
+  preparationService: Pick<ChapterExecutionPreparationService, "prepare"> & Partial<Pick<ChapterExecutionPreparationService, "assertPreviousStateReady">>;
   chapterWritingGraph: Pick<ChapterWritingGraph, "createChapterStream">;
   readinessService: Pick<ChapterRuntimeReadinessService, "assertReady">;
   contentFinalizationService: Pick<ChapterContentFinalizationService, "finalizeChapterContent" | "markChapterStatus">;
@@ -152,15 +153,21 @@ export class ChapterStreamGenerationOrchestrator {
     chapterId: string,
     options: ChapterRuntimeRequestInput = {},
   ): Promise<PreparedRuntimeChapter> {
+    // Recheck outside the cached preparation: another chapter may have been edited since a pause.
+    await this.deps.preparationService.assertPreviousStateReady?.(novelId, chapterId);
     return productionStep("prepare", async () => {
       const request = this.deps.validateRequest(options);
       await this.deps.ensureNovelCharacters(novelId, "generate chapter content");
-      await productionStep("prepare.contract", async () => {
+      const preparation = await productionStep("prepare.contract", async () => {
         const result = await this.deps.preparationService.prepare(novelId, chapterId, request);
         await currentProductionSession()?.bindPrepared({ preparation: result });
         return result;
       }, true);
       const assembled = await this.deps.assembler.assemble(novelId, chapterId, request);
+      if (preparation?.effectiveContract
+        && buildChapterExecutionContractHash(assembled.contextPackage.chapter) !== preparation.effectiveContract.hash) {
+        throw Object.assign(new Error("章节上下文与本次执行约定不一致，请核对后继续。"), { code: "CHAPTER_PRODUCTION_CONFLICT" });
+      }
       this.deps.readinessService.assertReady(assembled.contextPackage);
       this.assertStateDrivenReady(assembled.contextPackage, request);
       const prepared = {

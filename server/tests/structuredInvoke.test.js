@@ -981,3 +981,79 @@ test("whole-operation deadline aborts stalled stream and forbids strategy or mod
     structuredFallbackSettings.getStructuredFallbackSettings = originalFallback;
   }
 });
+
+test("invokeStructuredLlmDetailed preserves unknown production output without transport retry or fallback", async () => {
+  const originalResolveOptions = factory.resolveLLMClientOptions;
+  const originalCreateLLM = factory.createLLMFromResolvedOptions;
+  const originalGetFallbackSettings = structuredFallbackSettings.getStructuredFallbackSettings;
+  const calls = [];
+
+  factory.resolveLLMClientOptions = async (provider, options = {}) => {
+    const resolvedProvider = provider ?? "openai";
+    const resolvedModel = options.model ?? (resolvedProvider === "deepseek" ? "deepseek-chat" : "gpt-4o-mini");
+    const baseURL = options.baseURL ?? (resolvedProvider === "deepseek"
+      ? "https://api.deepseek.com/v1"
+      : "https://api.openai.com/v1");
+    const structuredProfile = options.executionMode === "structured"
+      ? resolveStructuredOutputProfile({
+        provider: resolvedProvider,
+        model: resolvedModel,
+        baseURL,
+        executionMode: "structured",
+      })
+      : null;
+    return {
+      provider: resolvedProvider,
+      providerName: resolvedProvider,
+      model: resolvedModel,
+      temperature: options.temperature ?? 0.3,
+      apiKey: "test-key",
+      baseURL,
+      maxTokens: options.maxTokens,
+      reasoningEnabled: !(structuredProfile?.requiresNonThinkingForStructured),
+      modelKwargs: undefined,
+      includeRawResponse: false,
+      executionMode: options.executionMode ?? "plain",
+      structuredProfile,
+      structuredStrategy: options.structuredStrategy ?? null,
+      reasoningForcedOff: Boolean(structuredProfile?.requiresNonThinkingForStructured),
+      taskType: options.taskType,
+      promptMeta: options.promptMeta,
+    };
+  };
+  factory.createLLMFromResolvedOptions = (resolved) => ({
+    stream: async function* () {
+      calls.push({
+        provider: resolved.provider,
+        strategy: resolved.structuredStrategy,
+      });
+      if (resolved.provider === "openai") {
+        throw new Error("primary structured output failed");
+      }
+      yield { content: "{\"value\":\"fallback-ok\"}" };
+    },
+  });
+  structuredFallbackSettings.getStructuredFallbackSettings = async () => ({
+    enabled: true,
+    provider: "deepseek",
+    model: "deepseek-chat",
+    temperature: 0.2,
+    maxTokens: null,
+    retryCount: 3,
+  });
+
+  try {
+    const { withUnknownOutcomeProtection } = require('../dist/llm/invocation/executionPolicy.js');
+    await assert.rejects(withUnknownOutcomeProtection(() => structuredInvoke.invokeStructuredLlmDetailed({
+      provider: 'openai', model: 'gpt-4o-mini', label: 'production-unknown', taskType: 'planner',
+      schema: z.object({ value: z.string() }), systemPrompt: 'JSON', userPrompt: 'value',
+      disableFallbackModel: false, transportRetryCount: 3,
+    })), error => error.category === 'transport_error');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].provider, 'openai');
+  } finally {
+    factory.resolveLLMClientOptions = originalResolveOptions;
+    factory.createLLMFromResolvedOptions = originalCreateLLM;
+    structuredFallbackSettings.getStructuredFallbackSettings = originalGetFallbackSettings;
+  }
+});

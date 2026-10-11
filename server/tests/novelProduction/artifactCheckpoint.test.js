@@ -21,6 +21,7 @@ function fixture({
     markRecoveryStarted = resolve;
   });
   const checkpoint = {
+    findFirst: async () => null,
     findUnique: async ({ where }) => {
       const artifactType = where.novelId_chapterId_contentHash_artifactType_syncMode.artifactType;
       return artifactType === recoveryArtifactType && row ? { ...row } : null;
@@ -51,6 +52,7 @@ function fixture({
   };
   const ContentVersionError = class extends Error {};
   const { ChapterArtifactBackgroundSyncService } = loadRuntimeSource("ChapterArtifactBackgroundSyncService.ts", {
+    "../production/reliability": { currentProductionSession: () => undefined },
     "../../../db/prisma": { prisma: {
       chapter: { findFirst: async () => ({ id: "c", order: 1, title: "Chapter", content: chapterContent }) },
       chapterArtifactSyncCheckpoint: checkpoint,

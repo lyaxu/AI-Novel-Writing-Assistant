@@ -1,5 +1,5 @@
 import type { CharacterMindSnapshot, CharacterMindSnapshotSource } from "@ai-novel/shared/types/characterMind";
-import { prisma } from "../../../db/prisma";
+import { assertLegacyChapterNotManaged, actualStateDb as prisma, currentActualStateTransaction } from "../production/actualState";
 import { ChapterArtifactContentVersionError } from "../runtime/artifactSync/ChapterArtifactSyncResult";
 import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
 import {
@@ -216,6 +216,7 @@ export class CharacterMindService {
         item.sourceType === "artifact_delta" && item.sourceChapterId && item.expectedChapterContent !== undefined
       ));
       if (chapterArtifactIntegrity?.sourceChapterId) {
+        await assertLegacyChapterNotManaged(tx, inputNovelId, chapterArtifactIntegrity.sourceChapterId);
         const chapter = await tx.chapter.findFirst({
           where: {
             id: chapterArtifactIntegrity.sourceChapterId,

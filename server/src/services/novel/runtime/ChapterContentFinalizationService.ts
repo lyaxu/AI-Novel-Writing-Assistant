@@ -1,3 +1,4 @@
+import { runInActualStateTransaction } from "../production/actualState";
 import { createHash } from "node:crypto";
 import type { ChapterRuntimePackage, GenerationContextPackage } from "@ai-novel/shared/types/chapterRuntime";
 import type { ChapterAcceptanceAssessmentResult } from "./ChapterAcceptanceAssessmentService";
@@ -20,7 +21,7 @@ import {
   detectProseQuality,
 } from "./proseQuality/ProseQualityDetector";
 import type { ChapterLifecycleService } from "./lifecycle";
-import { currentProductionSession, productionStep } from "../production/reliability";
+import { ChapterProductionError, currentProductionSession, productionStep } from "../production/reliability";
 
 export interface ChapterContentFinalizationAgentRuntime {
   finishChapterGenRun: (runId: string, summary: string, durationMs: number) => Promise<void>;
@@ -178,13 +179,16 @@ export class ChapterContentFinalizationService {
     const key = `commit:${createHash("sha256").update(finalContent).digest("hex")}`;
     await input.assertExecutionOwnership?.();
     if (input.evaluation.acceptancePersistenceDeferred && input.evaluation.acceptanceResult) {
-      await productionStep(`${key}:assessment`, async () => this.qualityGateService.persistAcceptanceResult?.({
+      const persistAssessment = async () => this.qualityGateService.persistAcceptanceResult?.({
         novelId: input.novelId,
         chapterId: input.chapterId,
         contextPackage: input.contextPackage,
         content: finalContent,
         request: input.request,
-      }, input.evaluation.acceptanceResult!));
+      }, input.evaluation.acceptanceResult!);
+      const session = currentProductionSession();
+      if (session) await session.commitState(`${key}:assessment`, (tx) => runInActualStateTransaction(tx, persistAssessment));
+      else await productionStep(`${key}:assessment`, persistAssessment);
       await input.assertExecutionOwnership?.();
     }
     const timelineFinalization = await productionStep(`${key}:timeline`, async () => {
@@ -206,7 +210,7 @@ export class ChapterContentFinalizationService {
     }
     await input.assertExecutionOwnership?.();
     await this.markChapterStatus(input.chapterId, needsRepair ? "needs_repair" : "pending_review");
-    if (!needsRepair) {
+    if (!needsRepair && !currentProductionSession()) {
       // 保证义务账本在下一章 JIT 上下文组装前完成；失败只告警，不阻断定稿返回。
       try {
         await input.assertExecutionOwnership?.();
@@ -228,7 +232,7 @@ export class ChapterContentFinalizationService {
 
     }
 
-    if (!needsRepair && input.deferArtifactBackgroundSync && input.scheduleDeferredArtifactBackgroundSync !== false) {
+    if (currentProductionSession() || (!needsRepair && input.deferArtifactBackgroundSync && input.scheduleDeferredArtifactBackgroundSync !== false)) {
       await input.assertExecutionOwnership?.();
       await productionStep(`${key}:artifacts`, async () => {
         const result = await this.artifactSyncService.syncChapterArtifacts(
@@ -239,13 +243,14 @@ export class ChapterContentFinalizationService {
           scheduleBackgroundSync: true,
           artifactSyncMode: input.request.artifactSyncMode,
           awaitArtifactDelta: true,
+          contentProvenance: needsRepair ? "debt" : "confirmed",
           skipLegacySummaryAndFacts: true,
           provider: input.request.provider,
           model: input.request.model,
         },
         );
-        if (result.status !== "completed" && result.status !== "degraded") {
-          throw new Error(result.reason ?? "章节状态尚未同步，正文已保留。");
+        if (result.status !== "completed" && (Boolean(currentProductionSession()) || result.status !== "degraded")) {
+          throw new ChapterProductionError("CHAPTER_PRODUCTION_STORAGE", result.reason ?? "章节状态尚未同步，正文已保留。");
         }
         return result;
       });

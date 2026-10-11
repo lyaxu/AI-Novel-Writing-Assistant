@@ -44,7 +44,7 @@ const PIPELINE_HEARTBEAT_INTERVAL_MS = 15000;
 
 function isChapterProductionSafetyError(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error
-    && ["CHAPTER_PRODUCTION_BUSY", "CHAPTER_PRODUCTION_CONFLICT", "CHAPTER_PRODUCTION_UNCERTAIN", "CHAPTER_PRODUCTION_STORAGE"]
+    && ["CHAPTER_PRODUCTION_BUSY", "CHAPTER_PRODUCTION_CONFLICT", "CHAPTER_PRODUCTION_UNCERTAIN", "CHAPTER_PRODUCTION_STORAGE", "CHAPTER_REVIEW_INCOMPLETE"]
       .includes(String(error.code)));
 }
 
@@ -524,6 +524,7 @@ export class NovelPipelineExecutor {
                     model: runtimePayload.model,
                     temperature: runtimePayload.temperature,
                     workflowTaskId: runtimePayload.workflowTaskId,
+                    productionOperationId: `pipeline:${jobId}:${chapter.id}`,
                     taskStyleProfileId: runtimePayload.taskStyleProfileId,
                     controlPolicy: chapterControlPolicy,
                     maxRetries: Math.max(0, chapterRetryBudget - chapterRetryCountUsed),

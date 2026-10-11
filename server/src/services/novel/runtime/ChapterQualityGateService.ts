@@ -7,6 +7,7 @@ import {
 } from "./ChapterAcceptanceAssessmentService";
 import type { ChapterRuntimeRequestInput } from "./chapterRuntimeSchema";
 import { hashContent, rememberCacheValue } from "./chapterRuntimePackageBuilders";
+import { assertReviewCompleted } from "./acceptance";
 
 type AssessmentService = Pick<ChapterAcceptanceAssessmentService, "assess">
   & Partial<Pick<ChapterAcceptanceAssessmentService, "getCacheIdentity" | "persistAssessmentResult">>;
@@ -63,6 +64,7 @@ export class ChapterQualityGateService {
       const result = requestKey
         ? await this.loadAssessment(assessmentInput, { contentHash, requestKey })
         : await this.service.assess(assessmentInput);
+      assertReviewCompleted(result.assessment);
       console.info("[chapter-runtime-trace]", {
         novelId: input.novelId, chapterId: input.chapterId, chapterOrder: assessmentInput.chapterOrder,
         stage: "acceptance", blocking: true, attemptNo: 1, retryReason: null,

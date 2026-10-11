@@ -3,8 +3,10 @@ import { withSqliteRetry } from "../../db/sqliteRetry";
 import { briefSummary, extractCharacterEventLines, extractFacts } from "./novelCoreShared";
 import { queueRagUpsert } from "./novelCoreSupport";
 import { chapterArtifactBackgroundSyncService } from "./runtime/ChapterArtifactBackgroundSyncService";
+import { assertLegacyChapterNotManaged } from "./production/actualState";
 
 export async function syncCharacterTimelineForChapter(novelId: string, chapterId: string, content: string) {
+  await assertLegacyChapterNotManaged(prisma, novelId, chapterId);
   const [chapter, characters] = await Promise.all([
     prisma.chapter.findFirst({
       where: { id: chapterId, novelId },
@@ -47,6 +49,7 @@ export async function syncCharacterTimelineForChapter(novelId: string, chapterId
 
   await withSqliteRetry(
     () => prisma.$transaction(async (tx) => {
+      await assertLegacyChapterNotManaged(tx, novelId, chapterId);
       await tx.characterTimeline.deleteMany({
         where: {
           novelId,
@@ -76,11 +79,13 @@ export async function syncCharacterTimelineForChapter(novelId: string, chapterId
 }
 
 export async function syncChapterArtifacts(novelId: string, chapterId: string, content: string) {
+  await assertLegacyChapterNotManaged(prisma, novelId, chapterId);
   const facts = extractFacts(content);
   const summary = briefSummary(content, facts);
 
   await withSqliteRetry(
     () => prisma.$transaction(async (tx) => {
+      await assertLegacyChapterNotManaged(tx, novelId, chapterId);
       await tx.chapterSummary.upsert({
         where: { chapterId },
         update: {

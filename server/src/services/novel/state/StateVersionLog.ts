@@ -2,7 +2,7 @@ import type {
   CanonicalStateSnapshot,
   StateVersionRecord,
 } from "@ai-novel/shared/types/canonicalState";
-import { prisma } from "../../../db/prisma";
+import { actualStateDb as prisma, currentActualStateTransaction } from "../production/actualState";
 
 function parseStringArray(value: string | null | undefined): string[] {
   if (!value?.trim()) {

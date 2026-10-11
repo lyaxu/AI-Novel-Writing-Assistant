@@ -69,6 +69,24 @@ export class HybridRetrievalService {
     private readonly rerankerService: RagRerankerService = new RagRerankerService(),
   ) {}
 
+  /** Index cleanup is asynchronous; the canonical rows decide whether cached facts are still valid. */
+  private async filterCurrentFactOwners(rows: RetrievedChunk[]): Promise<RetrievedChunk[]> {
+    const factIds = [...new Set(rows.filter(row => row.ownerType === "consistency_fact").map(row => row.ownerId))];
+    const timelineIds = [...new Set(rows.filter(row => row.ownerType === "character_timeline").map(row => row.ownerId))];
+    const [facts, timelines] = await Promise.all([
+      factIds.length ? prisma.consistencyFact.findMany({
+        where: { id: { in: factIds }, source: { not: "superseded" } }, select: { id: true },
+      }) : Promise.resolve([]),
+      timelineIds.length ? prisma.characterTimeline.findMany({
+        where: { id: { in: timelineIds }, source: { not: "superseded" } }, select: { id: true },
+      }) : Promise.resolve([]),
+    ]);
+    const activeFacts = new Set(facts.map(row => row.id));
+    const activeTimelines = new Set(timelines.map(row => row.id));
+    return rows.filter(row => row.ownerType === "consistency_fact" ? activeFacts.has(row.ownerId)
+      : row.ownerType === "character_timeline" ? activeTimelines.has(row.ownerId) : true);
+  }
+
   private fuseRrf(vectorResults: RetrievedChunk[], keywordResults: RetrievedChunk[], finalTopK: number): RetrievedChunk[] {
     const scoreMap = new Map<string, { item: RetrievedChunk; score: number }>();
 
@@ -311,10 +329,16 @@ export class HybridRetrievalService {
         scopes.knowledgeScope ? traceSearch("vector", () => this.vectorSearch(normalizedQuery, scopes.knowledgeScope!)) : Promise.resolve([] as RetrievedChunk[]),
         scopes.knowledgeScope ? traceSearch("keyword", () => this.keywordSearch(normalizedQuery, scopes.knowledgeScope!)) : Promise.resolve([] as RetrievedChunk[]),
       ]);
+      // Filter both channels before fusion/top-K/reranking so obsolete evidence never reaches a model.
+      const currentRows = await this.filterCurrentFactOwners([
+        ...baseVectorRows, ...knowledgeVectorRows, ...baseKeywordRows, ...knowledgeKeywordRows,
+      ]);
+      const currentIds = new Set(currentRows.map(row => `${row.ownerType}:${row.ownerId}`));
+      const isCurrent = (row: RetrievedChunk) => currentIds.has(`${row.ownerType}:${row.ownerId}`);
       const fusionStartedAt = Date.now();
       const fusedRows = this.fuseRrf(
-        [...baseVectorRows, ...knowledgeVectorRows],
-        [...baseKeywordRows, ...knowledgeKeywordRows],
+        [...baseVectorRows, ...knowledgeVectorRows].filter(isCurrent),
+        [...baseKeywordRows, ...knowledgeKeywordRows].filter(isCurrent),
         fusionTopK,
       );
       tracer.record("fusion", {

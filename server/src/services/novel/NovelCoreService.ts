@@ -180,8 +180,8 @@ export class NovelCoreService {
     return this.pipelineService.findActivePipelineJobForRange(novelId, startOrder, endOrder, preferredJobId);
   }
 
-  async resumePipelineJob(jobId: string) {
-    return this.pipelineService.resumePipelineJob(jobId);
+  async resumePipelineJob(...args: Parameters<NovelCorePipelineService["resumePipelineJob"]>) {
+    return this.pipelineService.resumePipelineJob(...args);
   }
 
   async retryPipelineJob(jobId: string) {

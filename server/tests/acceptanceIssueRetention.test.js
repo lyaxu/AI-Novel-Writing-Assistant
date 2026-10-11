@@ -25,7 +25,7 @@ const causal = source("../src/services/novel/runtime/acceptance/causalAssessment
 });
 const rows = [];
 const service = source("../src/services/novel/runtime/ChapterAcceptanceAssessmentService.ts", {
-  "../../../db/prisma": { prisma: {
+  "../production/actualState": { actualStateDb: {
     $transaction: async (work) => work({ auditReport: {
       deleteMany: async () => { rows.length = 0; },
       create: async ({ data }) => { rows.push(data); },
@@ -42,9 +42,10 @@ const service = source("../src/services/novel/runtime/ChapterAcceptanceAssessmen
   "../../state/OpenConflictService": { openConflictService: { syncFromAuditReports: async () => {} } },
   "../novelP0Utils": { normalizeScore: (value) => value },
   "./proseQuality/ProseQualityDetector": {},
-  "./acceptance": causal,
+  "./acceptance": { ...causal, ...source("../src/services/novel/runtime/acceptance/reviewCompletion.ts") },
 });
 const pipeline = source("../src/services/novel/runtime/chapterRuntimePipeline.ts", {
+  "../production/reliability": { productionStep: async (_key, action) => action() },
   "./acceptance": source("../src/services/novel/runtime/acceptance/actionableIssues.ts"),
   "./artifactSync/ChapterArtifactSyncResult": {},
   "../../styleEngine/styleGenerationSanitizer": {},
@@ -68,6 +69,7 @@ const repair = source("../src/services/novel/runtime/repair/chapterRepairRuntime
 });
 let selectedAuditIssues = [];
 const manual = source("../src/services/novel/runtime/repair/ChapterRepairStreamRuntime.ts", {
+  "../../production/reliability": { currentProductionSession: () => null, productionStep: async (_key, action) => action() },
   "../../../../db/prisma": { prisma: { auditIssue: { findMany: async () => selectedAuditIssues } } },
   "../../../../prompting/core/promptRunner": {},
   "../../../../prompting/prompts/novel/chapterLayeredContext": {},

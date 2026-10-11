@@ -41,7 +41,9 @@ export function evaluateChapterContextProviderContracts(input: {
       available = Boolean(input.contextPackage.previousChapterTail?.trim()) || input.contextPackage.previousChaptersSummary.length > 0;
       reason = available ? "上一章实际结果已提供" : "当前章节缺少上一章实际结果";
     } else if (contract.id === "chapter_obligations") {
-      available = Boolean(input.contextPackage.plan) && Boolean(input.contextPackage.chapterMission);
+      // A saved chapter may have no matching legacy StoryPlan. Its mission is
+      // derived from the saved task sheet; review/recovery must not create a plan.
+      available = Boolean(input.contextPackage.chapterMission);
       reason = available ? "章节义务已提供" : "章节规划或任务义务缺失";
     } else if (contract.id === "world_context") {
       available = Boolean(input.contextPackage.storyWorldSlice);

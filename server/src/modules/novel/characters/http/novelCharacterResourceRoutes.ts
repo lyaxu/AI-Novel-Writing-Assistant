@@ -1,3 +1,4 @@
+import { ACTUAL_STATE_INVALID_PROPOSAL, ACTUAL_STATE_MANUAL_IGNORE } from "../../../../services/novel/production/actualState";
 import type { Router } from "express";
 import type {
   CharacterResourceLedgerResponse,
@@ -308,6 +309,9 @@ export function registerNovelCharacterResourceRoutes(
           throw new AppError("没有找到可确认的角色资源变更。", 404);
         }
 
+        if (parseStringArray(row.validationNotesJson).includes(ACTUAL_STATE_INVALID_PROPOSAL)) {
+          throw new AppError("该提案未通过抽取校验，请核对后明确忽略；不能作为有效事实直接确认。", 409);
+        }
         const payload = characterResourceUpdatePayloadSchema.parse(parsePayload(row.payloadJson));
         const chapter = row.chapterId
           ? await prisma.chapter.findFirst({
@@ -346,6 +350,8 @@ export function registerNovelCharacterResourceRoutes(
     async (req, res, next) => {
       try {
         const { id, proposalId } = req.params as z.infer<typeof characterResourceProposalParamsSchema>;
+        const row = await prisma.stateChangeProposal.findFirst({ where: { id: proposalId, novelId: id, proposalType: "character_resource_update", status: "pending_review" }, select: { validationNotesJson: true } });
+        if (!row) throw new AppError("没有找到可忽略的角色资源变更。", 404);
         const updated = await prisma.stateChangeProposal.updateMany({
           where: {
             id: proposalId,
@@ -353,7 +359,7 @@ export function registerNovelCharacterResourceRoutes(
             proposalType: "character_resource_update",
             status: "pending_review",
           },
-          data: { status: "rejected" },
+          data: { status: "rejected", validationNotesJson: JSON.stringify([...parseStringArray(row.validationNotesJson), ACTUAL_STATE_MANUAL_IGNORE]) },
         });
         if (updated.count === 0) {
           throw new AppError("没有找到可忽略的角色资源变更。", 404);

@@ -3,7 +3,7 @@ import type {
   CanonicalTimelineEventState,
 } from "@ai-novel/shared/types/canonicalState";
 import type { GenerationContextPackage } from "@ai-novel/shared/types/chapterRuntime";
-import { prisma } from "../../../db/prisma";
+import { actualStateDb as prisma, currentActualStateTransaction } from "../production/actualState";
 import { characterResourceLedgerService } from "../characterResource/CharacterResourceLedgerService";
 
 function compactText(value: string | null | undefined, fallback = ""): string {
@@ -179,7 +179,7 @@ export class CanonicalStateService {
         where: { novelId },
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       }),
-      characterResourceLedgerService.listResources(novelId).catch(() => []),
+      characterResourceLedgerService.listResources(novelId).catch((error) => { if (currentActualStateTransaction()) throw error; return []; }),
       prisma.chapter.findMany({
         where: {
           novelId,

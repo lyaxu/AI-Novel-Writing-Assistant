@@ -1,5 +1,5 @@
 import type { CharacterResourceRiskSignal } from "@ai-novel/shared/types/characterResource";
-import { prisma } from "../../../db/prisma";
+import { actualStateDb as prisma, currentActualStateTransaction } from "../production/actualState";
 import {
   parseJsonArray,
   stringifyJson,

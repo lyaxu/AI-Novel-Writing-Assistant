@@ -1,4 +1,5 @@
-import { prisma } from "../../db/prisma";
+import { ChapterProductionError } from "../novel/production/reliability";
+import { assertLegacyChapterNotManaged, actualStateDb as prisma, currentActualStateTransaction } from "../novel/production/actualState";
 import { ChapterArtifactContentVersionError } from "../novel/runtime/artifactSync/ChapterArtifactSyncResult";
 import { stringifyStringArray } from "../novel/novelP0Utils";
 import { payoffLedgerSyncService } from "../payoff/PayoffLedgerSyncService";
@@ -175,6 +176,8 @@ export class StateService {
   }
 
   async syncChapterState(novelId: string, chapterId: string, content: string, options: StateServiceOptions = {}) {
+    if (currentActualStateTransaction()) throw new ChapterProductionError("CHAPTER_PRODUCTION_STORAGE", "实际状态事务中不能发起独立抽取。");
+    await assertLegacyChapterNotManaged(prisma, novelId, chapterId);
     const [chapter, chapters, characters, summaryRow, factRows, timelineRows] = await Promise.all([
       prisma.chapter.findFirst({
         where: { id: chapterId, novelId },
@@ -193,11 +196,11 @@ export class StateService {
         select: { summary: true, keyEvents: true, characterStates: true, hook: true },
       }),
       prisma.consistencyFact.findMany({
-        where: { novelId, chapterId },
+        where: { source: { not: "superseded" }, novelId, chapterId },
         select: { category: true, content: true },
       }),
       prisma.characterTimeline.findMany({
-        where: { novelId, chapterId, source: "chapter_extract" },
+        where: { novelId, chapterId, source: { in: ["chapter_extract", "chapter_artifact_delta"] } },
         select: { characterId: true, content: true },
       }),
     ]);
@@ -397,6 +400,7 @@ export class StateService {
     });
 
     const snapshotId = await prisma.$transaction(async (tx) => {
+      await assertLegacyChapterNotManaged(tx, input.novelId, input.chapterId);
       if (input.expectedChapterContent !== undefined) {
         const chapter = await tx.chapter.findFirst({
           where: {
@@ -494,12 +498,12 @@ export class StateService {
         sourceSnapshotId: persistedSnapshot.id,
         trackedConflictKeys: detected.trackedConflictKeys,
         conflicts: detected.conflicts,
-      }).catch(() => null);
+      }).catch((error) => { if (currentActualStateTransaction()) throw error; return null; });
       if (!input.skipPayoffLedgerSync) {
         await payoffLedgerSyncService.syncLedger(input.novelId, {
           chapterOrder: input.chapterOrder,
           sourceChapterId: input.chapterId,
-        }).catch(() => null);
+        }).catch((error) => { if (currentActualStateTransaction()) throw error; return null; });
       }
     }
 

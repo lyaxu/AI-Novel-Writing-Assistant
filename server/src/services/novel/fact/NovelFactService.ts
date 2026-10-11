@@ -1,4 +1,4 @@
-import { prisma } from "../../../db/prisma";
+import { assertLegacyChapterNotManaged, actualStateDb as prisma, currentActualStateTransaction } from "../production/actualState";
 import { ChapterArtifactContentVersionError } from "../runtime/artifactSync/ChapterArtifactSyncResult";
 
 export type NovelFactCategory = "completed" | "revealed" | "state_changed";
@@ -66,6 +66,7 @@ export class NovelFactService {
       return;
     }
     await prisma.$transaction(async (tx) => {
+      await assertLegacyChapterNotManaged(tx, novelId, integrity.chapterId);
       const chapter = await tx.chapter.findFirst({
         where: {
           id: integrity.chapterId,
@@ -98,6 +99,18 @@ export class NovelFactService {
     });
   }
 
+  /** Replaces the effective automatic facts for the retained text without deleting historical rows. */
+  async replaceChapterFacts(novelId: string, chapterOrder: number, items: NovelFactWriteItem[], integrity: { chapterId: string; expectedChapterContent: string }): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      await assertLegacyChapterNotManaged(tx, novelId, integrity.chapterId);
+      const chapter = await tx.chapter.findFirst({ where: { id: integrity.chapterId, novelId, content: integrity.expectedChapterContent }, select: { id: true } });
+      if (!chapter) throw new ChapterArtifactContentVersionError("正文变化，已拒绝提交旧版本事实。");
+      await tx.novelFactEntry.updateMany({ where: { novelId, chapterOrder, source: "auto" }, data: { source: "superseded" } });
+      if (items.length) await tx.novelFactEntry.createMany({ data: items.map((item) => ({ novelId, chapterOrder,
+        text: item.text.trim(), category: item.category, source: "auto" })) });
+    });
+  }
+
   /**
    * 读取当前章节之前的所有事实，用于填充写章上下文。
    *
@@ -114,6 +127,7 @@ export class NovelFactService {
       where: {
         novelId,
         chapterOrder: { lt: beforeChapterOrder },
+        source: { in: ["auto", "manual"] },
         category: { in: ["completed", "revealed"] },
       },
       orderBy: { chapterOrder: "asc" },
@@ -126,7 +140,7 @@ export class NovelFactService {
           gte: beforeChapterOrder - recentChaptersWindow,
         },
         category: "state_changed",
-      },
+        source: { in: ["auto", "manual"] },      },
       orderBy: { chapterOrder: "asc" },
     });
     return [...milestoneRows, ...recentStateRows].map(mapRow);

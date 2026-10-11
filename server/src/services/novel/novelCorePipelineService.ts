@@ -14,6 +14,8 @@ import { selectPrimaryPipelineJob } from "./pipelineJobDedup";
 import { buildPipelineCurrentItemLabel, buildPipelineStageProgress, decoratePipelineJob as decoratePipelineJobRow, isPipelineActiveStage, parsePipelinePayload as parsePipelineJobPayload, stringifyPipelinePayload as stringifyPipelineJobPayload, type DecoratedPipelineJob, type PipelineActiveStage, type PipelineJobLike } from "./pipelineJobState";
 import { NovelPipelineExecutor } from "./production/NovelPipelineExecutor";
 import { isCurrentChapterProductionCompleted } from "./production/completion";
+import { ChapterProductionError } from "./production/reliability";
+import type { PipelineRecoveryExpectation } from "./production/recovery";
 import {
   PIPELINE_EXECUTION_LEASE_MS,
   PIPELINE_EXECUTION_RENEW_INTERVAL_MS,
@@ -248,7 +250,7 @@ export class NovelCorePipelineService {
     });
   }
 
-  async resumePipelineJob(jobId: string): Promise<void> {
+  async resumePipelineJob(jobId: string, expectedRecovery?: PipelineRecoveryExpectation): Promise<void> {
     const job = await prisma.generationJob.findUnique({
       where: { id: jobId },
       select: {
@@ -271,9 +273,20 @@ export class NovelCorePipelineService {
       throw new Error("章节流水线任务不存在。");
     }
       if (job.status !== "queued" && job.status !== "running") {
+        if (expectedRecovery) throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "范围任务状态已变化，请刷新后核对。");
         return;
       }
-      await this.updateJobSafe(job.id, {
+      if (expectedRecovery) {
+        const result = await prisma.generationJob.updateMany({
+          where: { id: job.id, novelId: expectedRecovery.novelId, currentItemKey: expectedRecovery.chapterId,
+            status: { in: ["queued", "running"] }, pendingManualRecovery: true, cancelRequestedAt: null,
+            updatedAt: expectedRecovery.updatedAt, payload: expectedRecovery.payload,
+            OR: [{ executionOwner: null }, { executionLeaseExpiresAt: null }, { executionLeaseExpiresAt: { lte: new Date() } }],
+          },
+          data: { status: "queued", pendingManualRecovery: false, heartbeatAt: null },
+        });
+        if (result.count !== 1) throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "范围任务已被取消、恢复或修改，请刷新后核对。");
+      } else await this.updateJobSafe(job.id, {
         status: "queued",
         pendingManualRecovery: false,
         heartbeatAt: null,

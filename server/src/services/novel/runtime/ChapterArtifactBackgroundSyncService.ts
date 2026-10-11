@@ -1,3 +1,4 @@
+import { currentProductionSession, ChapterProductionError } from "../production/reliability";
 import { prisma } from "../../../db/prisma";
 import { payoffLedgerSyncService } from "../../payoff/PayoffLedgerSyncService";
 import {
@@ -61,7 +62,7 @@ export class ChapterArtifactBackgroundSyncService {
       artifactSyncMode,
     };
     const run = () => {
-      void this.runChapterSyncNow(novelId, chapterId, content, runOptions);
+      void this.runChapterSyncNow(novelId, chapterId, content, runOptions).catch(() => {});
     };
     if (delayMs > 0) {
       setTimeout(run, delayMs).unref?.();
@@ -76,6 +77,14 @@ export class ChapterArtifactBackgroundSyncService {
     content: string,
     options: ChapterArtifactBackgroundSyncOptions = {},
   ): Promise<ChapterArtifactSyncResult> {
+    if (currentProductionSession()) {
+      const { createChapterActualStateService } = await import("../production/actualState");
+      return createChapterActualStateService().sync({ novelId, chapterId, content, ...options });
+    }
+    const managed = await prisma.chapterArtifactSyncCheckpoint.findFirst({
+      where: { novelId, chapterId, artifactType: "production_execution", contentHash: "active" }, select: { id: true },
+    });
+    if (managed) throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "该章由源工作区管理，后台不得重复抽取或覆盖状态。");
     const artifactSyncMode = options.artifactSyncMode ?? DEFAULT_ARTIFACT_SYNC_MODE;
     const contentHash = buildContentHash(content);
     const chapterKey = `${novelId}:${chapterId}:${artifactSyncMode}`;
@@ -190,7 +199,7 @@ export class ChapterArtifactBackgroundSyncService {
       });
       if (deltaClaim === "running") {
         return {
-          status: artifactSyncMode === "strict" ? "pending" : "degraded",
+          status: "pending",
           contentHash,
           completedArtifacts: [],
           reason: "同一正文版本的资产同步仍在运行。",
@@ -309,7 +318,7 @@ export class ChapterArtifactBackgroundSyncService {
       });
       if (reconcileClaim === "running") {
         return {
-          status: artifactSyncMode === "strict" ? "pending" : "degraded",
+          status: "pending",
           contentHash,
           completedArtifacts: ["artifact_delta"],
           reason: "同一正文版本的伏笔账本对账仍在运行。",

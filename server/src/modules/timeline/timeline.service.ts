@@ -1,3 +1,4 @@
+import { currentActualStateTransaction } from "../../services/novel/production/actualState";
 import type {
   ChapterTimeAnchor,
   ExtractedTimelineEvent,
@@ -201,7 +202,7 @@ export class StoryTimelineService {
       .filter((id) => !resolvedHookIds.includes(id));
     const hookIdsToAddress = addressedHookIds.length > 0 || resolvedHookIds.length > 0
       ? addressedHookIds
-      : fallbackAddressedHookIds({
+      : currentActualStateTransaction() ? [] : fallbackAddressedHookIds({
           extractedEvents: input.extractedEvents,
           timelineContext: input.timelineContext,
         });

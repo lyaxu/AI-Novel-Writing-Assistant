@@ -634,6 +634,7 @@ export class PlannerService {
         ...resolvedStateDrivenContext.protectedSecrets.map((item) => `禁止提前泄露：${item}`),
       ], 8),
       hookTarget: output.hookTarget || chapter.hook?.trim() || null,
+      baseChapterContent: chapter.content,
       baseExecutionContract: {
         expectation: chapter.expectation,
         targetWordCount: chapter.targetWordCount,

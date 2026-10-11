@@ -9,7 +9,7 @@ export async function loadPlanningWrittenEvidence(novelId: string, targetChapter
   return prisma.$transaction(async (tx) => {
     const chapters = await tx.chapter.findMany({ where: { novelId, order: { lt: targetChapterOrder } },
       select: { id: true, order: true, title: true, content: true }, orderBy: [{ order: "desc" }, { id: "asc" }] });
-    const facts = await tx.novelFactEntry.findMany({ where: { novelId, chapterOrder: { lt: targetChapterOrder } },
+    const facts = await tx.novelFactEntry.findMany({ where: { novelId, chapterOrder: { lt: targetChapterOrder }, source: { in: ["auto", "manual"] } },
       select: { chapterOrder: true, text: true, category: true }, orderBy: [{ chapterOrder: "desc" }, { id: "asc" }] });
     return buildPlanningWrittenEvidence({ chapters, facts, targetChapterOrder });
   });

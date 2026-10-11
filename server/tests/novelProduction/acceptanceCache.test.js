@@ -16,6 +16,7 @@ function fixture() {
       upsert: async ({ where, create, update }) => rows.set(JSON.stringify(where), rows.has(JSON.stringify(where)) ? { ...rows.get(JSON.stringify(where)), ...update } : create),
     } } },
     "./ChapterAcceptanceAssessmentService": {},
+    "./acceptance": loadRuntimeSource("acceptance/reviewCompletion.ts", {}),
     "./chapterRuntimePackageBuilders": { hashContent: (value) => crypto.createHash("sha256").update(value).digest("hex"), rememberCacheValue: (map, key, value) => map.set(key, value) },
   });
   const create = () => new ChapterQualityGateService({ acceptanceAssessmentService: {
@@ -98,7 +99,7 @@ test("fresh incomplete progression assessment is returned but never cached as a 
 
 test("unavailable result clears slot without writing a successful cache", async () => {
   const h = fixture(); const gate = h.create(); h.state.unavailable = true;
-  await gate.runAcceptanceGate(h.input);
+  await assert.rejects(gate.runAcceptanceGate(h.input), { code: "CHAPTER_REVIEW_INCOMPLETE" });
   assert.equal(h.rows.size, 0);
   h.state.unavailable = false;
   await gate.runAcceptanceGate(h.input);

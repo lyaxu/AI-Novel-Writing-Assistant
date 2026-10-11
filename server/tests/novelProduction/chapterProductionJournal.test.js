@@ -196,7 +196,7 @@ test("inspection reads safe recovery projection without claiming, renewing or wr
   await s.close(); f.expire(); const before = structuredClone(f.record());
   const projection = await f.inspect();
   assert.deepEqual(f.record(), before);
-  assert.deepEqual(Object.keys(projection).sort(), ["resumeBlockedReason", "entry", "leaseActive", "inputChanged", "canResume", "error", "operationId", "partialText", "savedDraft", "status", "steps"].sort());
+  assert.deepEqual(Object.keys(projection).sort(), ["resumeBlockedReason", "entry", "leaseActive", "inputChanged", "canResume", "canAcknowledge", "error", "operationId", "partialText", "savedDraft", "status", "steps"].sort());
   assert.equal(projection.partialText, "partial draft"); assert.equal(projection.savedDraft, "original");
   assert.equal(projection.steps.find(step => step.key === "writer").status, "unknown");
   assert.equal(JSON.stringify(projection).includes("hidden"), false);

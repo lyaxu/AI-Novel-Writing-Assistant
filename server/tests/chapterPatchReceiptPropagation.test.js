@@ -38,6 +38,7 @@ for (const outcome of ["candidate_passed", "original_retained", "patch_failed"])
     }
     const selection = load("runtime/selection/ChapterRepairCandidateSelection.ts", { "node:crypto": require("node:crypto") });
     const pipeline = load("runtime/chapterRuntimePipeline.ts", {
+      "../production/reliability": { productionStep: async (_key, action) => action() },
       "./acceptance": load("runtime/acceptance/actionableIssues.ts", {}),
       "./artifactSync/ChapterArtifactSyncResult": { ChapterArtifactSyncBoundaryError: class extends Error {} },
       "../../styleEngine/styleGenerationSanitizer": { detectForbiddenStyleEntities: () => [] },

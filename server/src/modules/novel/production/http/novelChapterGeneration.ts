@@ -34,8 +34,36 @@ export function registerNovelChapterGenerationRoutes(input: RegisterNovelChapter
       try {
         const { id, chapterId } = req.params as z.infer<typeof chapterParamsSchema>;
         const recovery = await createDefaultChapterProductionJournal().inspect({ novelId: id, chapterId });
-        res.json({ success: true, data: recovery });
+        const projection = recovery?.entry === "pipeline"
+          ? await (await import("../../../../services/novel/production/recovery")).createChapterPipelineRecoveryService().project({ novelId: id, chapterId }, recovery)
+          : undefined;
+        res.json({ success: true, data: recovery && projection ? { ...recovery, ...projection } : recovery });
       } catch (error) { next(error); }
+    },
+  );
+
+  router.post(
+    "/:id/chapters/:chapterId/runtime/recovery/resume-pipeline",
+    validate({ params: chapterParamsSchema, body: z.object({ operationId: z.string().min(1).max(200) }) }),
+    async (req, res, next) => {
+      try {
+        const { id, chapterId } = req.params as z.infer<typeof chapterParamsSchema>;
+        const service = (await import("../../../../services/novel/production/recovery")).createChapterPipelineRecoveryService();
+        const result = await service.resume({ novelId: id, chapterId, operationId: req.body.operationId });
+        res.json({ success: true, data: result });
+      } catch (error) { if (!forwardBusinessError(error, next)) next(error); }
+    },
+  );
+
+  router.post(
+    "/:id/chapters/:chapterId/runtime/recovery/acknowledge",
+    validate({ params: chapterParamsSchema, body: z.object({ operationId: z.string().min(1).max(200), acceptPossibleDuplicate: z.literal(true) }) }),
+    async (req, res, next) => {
+      try {
+        const { id, chapterId } = req.params as z.infer<typeof chapterParamsSchema>;
+        await createDefaultChapterProductionJournal().acknowledgeUnknown({ novelId: id, chapterId, operationId: req.body.operationId });
+        res.json({ success: true, data: { acknowledged: true } });
+      } catch (error) { if (!forwardBusinessError(error, next)) next(error); }
     },
   );
 

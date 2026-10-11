@@ -61,6 +61,7 @@ import {
 import { resolveChapterResourceCharacterIds } from "./context/chapterParticipantSelection";
 import { evaluateChapterContextProviderContracts } from "./context/chapterContextProviderContracts";
 import { loadPlanningWrittenEvidence } from "../volume/writtenEvidence";
+import { isPlanForCurrentContract, projectEffectiveChapterPlan } from "../../planner/contracts";
 
 export { buildBlockingPendingReviewProposalWhere } from "./context/pendingReviewContext";
 export { resolveChapterResourceCharacterIds } from "./context/chapterParticipantSelection";
@@ -144,7 +145,8 @@ export class GenerationContextAssembler {
 
     // Context assembly is a read boundary. Planning and contract writes must
     // finish in ChapterExecutionPreparationService before this method runs.
-    const ensuredPlan = await plannerService.getChapterPlan(novelId, chapterId);
+    const savedPlan = await plannerService.getChapterPlan(novelId, chapterId);
+    const ensuredPlan = isPlanForCurrentContract(savedPlan, chapter) ? savedPlan : null;
     const resourceCharacterIds = resolveChapterResourceCharacterIds({
       plan: ensuredPlan,
       characters: novel.characters,
@@ -363,7 +365,7 @@ export class GenerationContextAssembler {
         secondary: novel.secondaryStoryMode ? normalizeStoryModeOutput(novel.secondaryStoryMode) : null,
       }),
     ].filter(Boolean).join("\n\n");
-    const mappedPlan = mapPlan(ensuredPlan);
+    const mappedPlan = projectEffectiveChapterPlan(mapPlan(ensuredPlan), chapter);
     const mappedStateSnapshot = buildRuntimeStateSnapshotFromCanonical(canonicalState);
     const canonicalCharacterMap = new Map(
       canonicalState.characters.map((item) => [item.characterId, item]),
