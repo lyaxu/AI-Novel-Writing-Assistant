@@ -67,7 +67,9 @@ function reconcilePausedDirectorBinding(db, expected, { apply = false, now = Dat
       unchanged: ['manuscripts', 'journals', 'bothJobs', 'budgets', 'manualPause', 'scope', 'commands'] };
     if (apply) {
       const changed = db.prepare('UPDATE NovelWorkflowTask SET seedPayloadJson=?,lastError=?,updatedAt=? WHERE id=? AND updatedAt=? AND seedPayloadJson=? AND pendingManualRecovery=1 AND cancelRequestedAt IS NULL')
-        .run(JSON.stringify(seed), original.error, new Date(now).toISOString(), taskId, task.updatedAt, task.seedPayloadJson);
+        // Prisma's SQLite adapter binds Date values as RFC3339 with +00:00.
+        // SQLite compares the stored text exactly; an equivalent Z suffix breaks later CAS.
+        .run(JSON.stringify(seed), original.error, new Date(now).toISOString().replace(/Z$/, '+00:00'), taskId, task.updatedAt, task.seedPayloadJson);
       assert.equal(changed.changes, 1, 'Binding compare-and-set failed');
       db.exec('COMMIT');
     } else db.exec('ROLLBACK');

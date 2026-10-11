@@ -5,8 +5,8 @@ const { createHash } = require('node:crypto');
 const { chapterFingerprint } = require('../../dist/services/novel/production/reliability/types');
 const { reconcilePausedDirectorBinding } = require('../../scripts/reconcile-paused-director-binding.cjs');
 
-function fixture() {
-  const db = new DatabaseSync(':memory:');
+function fixture(filename = ':memory:') {
+  const db = new DatabaseSync(filename);
   const chapter = { id: 'chapter', novelId: 'novel', order: 1, content: '已经保存的首章', title: '首章', taskSheet: '计划', sceneCards: '{}', expectation: null, targetWordCount: 3000 };
   const job = { novelId: 'novel', currentItemKey: 'chapter', payload: JSON.stringify({ workflowTaskId: 'director', maxRetries: 1 }), startOrder: 1, endOrder: 1,
     status: 'failed', pendingManualRecovery: 1, cancelRequestedAt: null, executionOwner: null, executionLeaseExpiresAt: null,
@@ -14,7 +14,7 @@ function fixture() {
   const seed = { directorInput: { autoExecutionPlan: { mode: 'chapter_range', startOrder: 1, endOrder: 3 } }, autoExecution: {
     mode: 'chapter_range', startOrder: 1, endOrder: 3, pipelineJobId: 'wrong', pipelineStatus: 'failed', qualityLoopLedger: { used: 1 } } };
   const task = { id: 'director', novelId: 'novel', lane: 'auto_director', status: 'queued', pendingManualRecovery: 1, cancelRequestedAt: null,
-    updatedAt: 'before', seedPayloadJson: JSON.stringify(seed), lastError: 'conflict' };
+    updatedAt: '2026-10-11T17:07:19.132+00:00', seedPayloadJson: JSON.stringify(seed), lastError: 'conflict' };
   const journal = { operationId: 'pipeline:original:chapter', request: { workflowTaskId: 'director', entry: 'pipeline' }, status: 'paused', expiresAt: 0,
     expectedFingerprint: chapterFingerprint(chapter), steps: Object.fromEntries(['prepare','pipeline.options','pipeline.draft','pipeline.save_draft'].map(k=>[k,{status:'done'}])) };
   journal.steps['pipeline.review:0'] = { status: 'failed' };
@@ -28,7 +28,7 @@ function fixture() {
   table('Chapter',[chapter]); table('NovelWorkflowTask',[task]); table('GenerationJob',[{id:'original',...job},{id:'wrong',...job}]);
   table('ChapterArtifactSyncCheckpoint',[checkpoint]);
   db.exec('CREATE TABLE DirectorRunCommand(id, taskId, status)');
-  const expected={taskId:'director',novelId:'novel',chapterId:'chapter',originalJobId:'original',displacedJobId:'wrong',taskUpdatedAt:'before',
+  const expected={taskId:'director',novelId:'novel',chapterId:'chapter',originalJobId:'original',displacedJobId:'wrong',taskUpdatedAt:task.updatedAt,
     contentHash:createHash('sha256').update(chapter.content).digest('hex')};
   const snapshot=()=>Object.fromEntries(['Chapter','GenerationJob','ChapterArtifactSyncCheckpoint','DirectorRunCommand'].map(t=>[t,db.prepare(`SELECT * FROM "${t}"`).all()]));
   return { db, expected, journal, snapshot };
@@ -47,6 +47,26 @@ test('explicit paused binding reconciliation changes only pointer/error; preserv
     assert.deepEqual(JSON.parse(after.seedPayloadJson),oldSeed);assert.equal(after.pendingManualRecovery,1);
     assert.throws(()=>reconcilePausedDirectorBinding(f.db,f.expected,{apply:true}),/changed since inspection/);
   }finally{f.db.close();}
+});
+
+test('real Prisma SQLite adapter can match the maintenance timestamp in the command acceptance CAS', async()=>{
+  const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+  const {PrismaClient}=require('@prisma/client');
+  const {PrismaBetterSqlite3}=require('@prisma/adapter-better-sqlite3');
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'novel-binding-cas-'));
+  const filename=path.join(dir,'test.db');const f=fixture(filename);
+  const prisma=new PrismaClient({adapter:new PrismaBetterSqlite3({url:'file:'+filename.replaceAll('\\','/')})});
+  try {
+    reconcilePausedDirectorBinding(f.db,f.expected,{apply:true});
+    const row=await prisma.novelWorkflowTask.findUnique({where:{id:'director'},select:{id:true,updatedAt:true,seedPayloadJson:true,status:true,pendingManualRecovery:true}});
+    const result=await prisma.novelWorkflowTask.updateMany({where:{id:row.id,updatedAt:row.updatedAt,seedPayloadJson:row.seedPayloadJson,status:row.status,pendingManualRecovery:true,cancelRequestedAt:null},data:{pendingManualRecovery:false}});
+    assert.equal(result.count,1,'Date serialization must match the exact persisted timestamp');
+    const replay=await prisma.novelWorkflowTask.updateMany({where:{id:row.id,updatedAt:row.updatedAt,pendingManualRecovery:true},data:{pendingManualRecovery:false}});
+    assert.equal(replay.count,0,'Stale duplicate still fails CAS');
+  }finally{
+    await prisma.$disconnect();f.db.close();
+    for(const name of fs.readdirSync(dir))fs.unlinkSync(path.join(dir,name));fs.rmdirSync(dir);
+  }
 });
 
 const unsafe = {

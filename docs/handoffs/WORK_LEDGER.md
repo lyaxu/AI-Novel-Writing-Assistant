@@ -4,6 +4,8 @@
 
 本节为最新状态；下方历史台账保留，不把历史待办当自动执行授权。统一入口为 [CURRENT](CURRENT.md)，长期目标与记录规则为 [PROJECT_CONTEXT](PROJECT_CONTEXT.md)。
 
+**18:18 UTC恢复409修正（13:18 UTC-5）**：代理上次维护写入Z格式时间，Prisma绑定+00:00导致CAS误判。经新一致性备份、真实适配器副本命令受理、12项回归后，仅规范同一时间后缀；正文/任务/journal/命令/预算/暂停全保留，当前真实CAS只读匹配通过，无模型调用，无需重启。[根因和证据](../evals/2026-10-11-maoshan-recovery-cas-timestamp.md)。
+
 **18:07 UTC加载核验完成（13:07 UTC-5）**：用户管理员重启成功，旧后端51304/HEAD1241d05c/stale=false；新版PIDs不变。原任务恢复预检再次通过，首章3013字hash未变、原job与暂停和预算保留，无模型调用。入口修复/离线回归/安全纠正/服务加载闭环完成；由用户从本书第一章源页继续原审查，真实连续章节与十章验收未完成。[最终证据及入口](../evals/2026-10-11-maoshan-full-entry-recovery.md)。
 
 **17:51运行阻点**：修复提交ac8925a3；旧管理员后端34144停止时Windows拒绝访问，仍stale=true。已备新版管理员重启入口并通过两种PowerShell只读预检，等待加载后再核验；目标未完成，用户暂勿继续。[运行证据](../evals/2026-10-11-maoshan-full-entry-recovery.md)。
