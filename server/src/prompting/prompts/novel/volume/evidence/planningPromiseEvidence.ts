@@ -2,6 +2,26 @@ import { isOpeningPlanningPromise, selectedPlanningPromiseIds, type SelectedPlan
 import type { ChapterPlanningPromiseCheck } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import { buildChapterEvidenceIndex, matchesChapterEvidence } from "./chapterEvidence";
 
+function invalidEvidenceDetails(
+  index: ReturnType<typeof buildChapterEvidenceIndex>,
+  evidence: { sourcePath: string; quote: string },
+  source: "candidate" | "context",
+) {
+  const canonicalPath = index.aliases.get(evidence.sourcePath) ?? evidence.sourcePath;
+  const text = index.leaves.get(canonicalPath);
+  // Retry the review against the same source, not against its invalid quotation.
+  // Bound diagnostics independently of the full source already present in the prompt.
+  return {
+    source,
+    sourcePath: evidence.sourcePath,
+    quote: evidence.quote,
+    reason: text === undefined ? "source_path_not_found" : "quote_not_contiguous_in_source",
+    actualSourcePath: text === undefined ? null : canonicalPath,
+    actualSourceText: text === undefined ? null : text.slice(0, 1200),
+    actualSourceTextTruncated: text !== undefined && text.length > 1200,
+  };
+}
+
 export function planningPromiseEvidenceContext(reviewContextJson?: string, chapterOrder?: number) {
   let context: Record<string, unknown> = {};
   try {
@@ -66,7 +86,10 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
       throw new Error(`Promise ${check.sourceId} cites evidence absent from supplied plans or written facts. `
         + `candidateEvidence 不合格 ${badCandidate.length}/${check.candidateEvidence.length} 条，`
         + `contextEvidence 不合格 ${badContext.length}/${check.contextEvidence.length} 条：`
-        + JSON.stringify([...badCandidate, ...badContext].map(evidence => ({ sourcePath: evidence.sourcePath ?? null, quote: (evidence.quote ?? "").slice(0, 80) }))));
+        + JSON.stringify([
+          ...badCandidate.map(evidence => invalidEvidenceDetails(candidateIndex, evidence, "candidate")),
+          ...badContext.map(evidence => invalidEvidenceDetails(contextIndex, evidence, "context")),
+        ]));
     }
     if (["preserved", "adapted"].includes(check.status) && !check.candidateEvidence.length && !check.contextEvidence.length) {
       throw new Error(`Promise ${check.sourceId} needs evidence of its preserved narrative value. 实际 status=${JSON.stringify(check.status)}，candidateEvidence ${check.candidateEvidence.length} 条、contextEvidence ${check.contextEvidence.length} 条：preserved/adapted 至少要有一条证据。`);

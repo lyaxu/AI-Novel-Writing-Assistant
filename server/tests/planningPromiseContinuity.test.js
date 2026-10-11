@@ -95,6 +95,48 @@ test("equivalent adaptation can pass without requiring the exact original action
   assert.equal(quality.mapSemanticAssessmentToQualityGate(output, "ai_copilot").status, "passed");
 });
 
+test("invalid review feedback includes exact source without accepting reordered or stitched quotes", () => {
+  const mustAvoid = "不得向旅店老板透露信物；不得让同行发现暗门；不得当场打开匣子。";
+  const localCandidate = { ...candidate, mustAvoid };
+  const value = checks();
+  value[0].candidateEvidence = [{ sourcePath: "mustAvoid", quote: "不得让同行发现暗门；不得向旅店老板透露信物" }];
+  let feedback;
+  assert.throws(() => prompt.postValidate(assessment(value), { candidate: localCandidate, reviewContextJson: context() }), error => {
+    feedback = error.message;
+    assert.match(feedback, /quote_not_contiguous_in_source/);
+    assert.ok(feedback.includes(mustAvoid));
+    assert.match(feedback, /"source":"candidate"/);
+    return true;
+  });
+  const rendered = prompt.render({ candidate: localCandidate, reviewContextJson: context(), validationFeedback: feedback })
+    .map(message => message.content).join("\n");
+  assert.ok(rendered.includes(feedback));
+  assert.equal(localCandidate.mustAvoid, mustAvoid);
+  value[0].candidateEvidence = [{ sourcePath: "mustAvoid", quote: "不得让同行发现暗门" }];
+  assert.doesNotThrow(() => prompt.postValidate(assessment(value), { candidate: localCandidate, reviewContextJson: context() }));
+});
+
+test("invalid context path remains invalid and feedback never substitutes candidate text", () => {
+  const value = checks();
+  value[0].contextEvidence = [{ sourcePath: "summary", quote: candidate.summary }];
+  assert.throws(() => prompt.postValidate(assessment(value), { candidate, reviewContextJson: context() }), error => {
+    assert.match(error.message, /"source":"context"/);
+    assert.match(error.message, /source_path_not_found/);
+    assert.match(error.message, /"actualSourceText":null/);
+    return true;
+  });
+});
+
+test("source feedback bounds long fields without changing quotation validation", () => {
+  const value = checks();
+  value[0].candidateEvidence = [{ sourcePath: "summary", quote: "没有出现过的引文" }];
+  assert.throws(() => prompt.postValidate(assessment(value), { candidate: { ...candidate, summary: "长".repeat(1500) }, reviewContextJson: context() }), error => {
+    assert.match(error.message, /"actualSourceTextTruncated":true/);
+    assert.ok(!error.message.includes("长".repeat(1201)));
+    return true;
+  });
+});
+
 test("selected source accepts its exact context prefix but rejects guessed prefixes and paraphrases", () => {
   const value = checks();
   for (const check of value) for (const evidence of check.sourceEvidence) evidence.sourcePath = `selectedPlanningDirection.candidate.${evidence.sourcePath}`;
