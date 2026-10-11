@@ -1,6 +1,8 @@
 # 最新交接入口
 
-更新：2026-10-11 16:43 UTC。
+更新：2026-10-11 16:47 UTC。
+
+用户双击运行日志确认：预检通过，但Stop-Process PID33000被Windows拒绝访问，尚未执行启动。16:47 health仍PID33000/stale=true；5190仍34024，新版3960/21116不变。此次是Windows进程权限问题，与前次时间比较和历史工具blocked by policy分别记录。脚本已在停止前明确要求右键restart-old.cmd“以管理员身份运行”，并设置UTF-8日志；未自动提权或重启。
 
 用户手动重启的Backend identity changed是脚本把DateTime与字符串直接比较造成的误判，非服务换了身份；已修UTC比较，PowerShell 7.6.5和Windows PowerShell的CheckOnly实跑通过。服务仍未重启，原稿和暂停不变。可双击`.codex-run/maoshan-review-recovery-fix-20261011/restart-old.cmd`，日志自动保留在同目录restart-last.log；详见下方修复报告。源码修复提交为`d2cc20e5`，后续仅运行说明文档。
 
