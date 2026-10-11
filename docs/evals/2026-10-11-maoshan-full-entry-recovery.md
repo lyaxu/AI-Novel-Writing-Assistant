@@ -2,6 +2,12 @@
 
 本轮基线：`codex/production-core-refactor` / `c2319022`。用户明确授权修复完整入口、离线回归、安全处理误关联、核验服务加载；禁止模型调用、新版改动和历史导演恢复。前序[第二次停顿](2026-10-11-maoshan-resume-second-stop.md)的失败事实保留。
 
+**最终加载核验：2026-10-11 13:07 UTC-5（18:07 UTC）通过。** 用户管理员运行新版入口后，旧后端PID51304，startedAt=18:06:31.203Z，运行HEAD1241d05cc4df包含修复ac8925a3；实时health stale=false、newerSources为空。旧前端45328、新版5173/8787仍3960/21116。启动错误日志为空，正常日志仅启动及health访问。
+
+18:07:22只读真实恢复预检再次通过：关联原job cmv3x3pr500r7gow0pt92xbmt、原chapter cmv3x2mt600jsgow0e6kb0852，首章3013字符及下文hash不变，范围1—3、人工暂停保留。所有可自动运行job/task/command/side-effect计数0，本导演17:00后模型用量记录0。证据为同私有目录restart-last.log、loaded-health.json、restart-process.json及live-preflight.json。下文权限阻点是已解决的历史记录。
+
+可以打开[本书第一章源工作区](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt600jsgow0e6kb0852)，刷新后点击“继续自动导演”，按原1—3章范围从第一章未完成审查接续。代理没有点击该动作。此结论是修复、离线回归、数据安全与加载完成；真实模型接续、连续三章/十章和文学验收仍由用户进行，不能宣称未来所有故障已排除。
+
 ## 实现与根因闭环
 
 正常继续被未来规划缺口分流，规划完成进入章节节点时未携原任务身份，错误新建job撞上保留稿journal。属于恢复链路未闭合，不是用户操作或模型故障。
@@ -36,11 +42,11 @@
 
 代码修复已提交`ac8925a3`，数据已完成核验。17:49代理在完成原稿/任务/进程身份预检后尝试停止旧后端34144，被Windows以“拒绝访问”拒绝；当前会话非管理员，旧后端为用户管理员启动。这是Windows进程权限，不是本轮工具自动审批拒绝，不可把磁盘权限当作进程控制权限。
 
-17:50 health仍34144、stale=true，新版5173/8787仍3960/21116，旧前端仍45328。**修复尚未加载，总目标未完成，不能让用户继续验收。** 唯一剩余依赖为管理员重启；源码/离线测试/数据修复已完成，不再让用户反复尝试恢复按钮。
+17:50 health仍34144、stale=true，新版5173/8787仍3960/21116，旧前端仍45328。当时修复尚未加载、不能继续验收；该阻点已在顶部最终核验中解除。 唯一剩余依赖为管理员重启；源码/离线测试/数据修复已完成，不再让用户反复尝试恢复按钮。
 
 已准备`.codex-run/maoshan-full-entry-recovery-20261011/restart-repaired-old.cmd`，右键以管理员身份运行；日志固定同目录`restart-last.log`。实际执行的是同目录ps1，仅重启旧后端3000，保留旧前端及新版；验证5个源码SHA256、原稿/关联/暂停、无可自动执行任务和命令、端口及进程启动时间。PowerShell7与Windows PowerShell两种CheckOnly已实跑通过；停止/启动部分因权限未执行。启动配置保留隔离库、RAG=false、日志清理false。启动后脚本校验health新PID/源码HEAD/stale=false并再做原任务预检，不发送恢复或模型请求。
 
-用户运行后代理须先读restart-last.log、loaded-health.json与实际health，再只读核验原job/journal/首章hash/模型用量以及新版PID；完成后才能告知用户从源页继续。不得重放上轮旧PID脚本。
+后续核验要求（已按顶部记录完成）：用户运行后代理须先读restart-last.log、loaded-health.json与实际health，再只读核验原job/journal/首章hash/模型用量以及新版PID；完成后才能告知用户从源页继续。不得重放上轮旧PID脚本。
 
 服务核验通过后的源页仍是本书第一章工作区，动作“继续自动导演”；按原1—3章范围从审查接回。真正模型运行由用户触发。源页操作链接沿用[前序报告](2026-10-11-maoshan-review-recovery-fix.md)；运行记录仅查看。
 

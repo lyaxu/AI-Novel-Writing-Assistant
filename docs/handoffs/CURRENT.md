@@ -1,27 +1,27 @@
 # 最新交接入口
 
-更新：2026-10-11 17:51 UTC。
+更新：2026-10-11 13:07 UTC-5（18:07 UTC）。
 
-**运行阻点：ac8925a3修复尚未加载。** 17:49在全部预检通过后停止旧后端34144，被Windows拒绝访问；17:50 health仍stale=true。当前会话非管理员，需用户右键运行新版`.codex-run/maoshan-full-entry-recovery-20261011/restart-repaired-old.cmd`以管理员身份重启一次。两种PowerShell只读预检均通过；脚本只重启旧后端，首稿/原任务再次核验，不调用模型。运行后先读固定restart-last.log与实际health，核验新PID/stale=false、原job/hash/暂停和新版PIDs，再告诉用户源页继续。总目标仍active，不能标为完成。详见[修复证据与运行阻点](../evals/2026-10-11-maoshan-full-entry-recovery.md)。
+**最新停点：完整恢复入口已修复，误关联已纠正，旧服务已确认加载；可由用户从第一章原任务审查继续。** 本轮用户明确要求修复至可恢复验收，禁止代理模型调用、新版改动和历史导演恢复。读取[完整入口修复及最终加载证据](../evals/2026-10-11-maoshan-full-entry-recovery.md)，历史失败见[第二次停顿](../evals/2026-10-11-maoshan-resume-second-stop.md)。
 
-**最新停点：完整入口修复、离线回归与误关联纠正已完成，待核验旧服务加载。** 用户已授权直接修复。源页到原审查的13项新增回归、35文件352项封网组合、规划恢复20项通过，服务端编译通过。17:45已备份并事务纠正导演指向原job；第一章3013字hash不变，原job/journal/预算/暂停保留，无模型调用。详见[完整入口修复证据](../evals/2026-10-11-maoshan-full-entry-recovery.md)。完成旧服务加载前不要点击继续；后文均为前序历史。基线c2319022，源码与证据随本轮阶段提交；以git核对最终HEAD。
+仓库 D:/novel/AI-Novel-Writing-Assistant，分支 codex/production-core-refactor。源码修复ac8925a3；用户加载HEAD1241d05cc4df，本次仅追加核验文档，最终HEAD以git为准。预存三Structured客户端改动与WORK_LEDGER历史964行未提交追加保持原样，未跟踪材料未清理。
 
-**最新停点：用户成功加载修复后，原任务恢复仍失败，暂勿再次点击继续。** 旧服务已于17:01重启为34144/45328，运行b81e279d、stale=false；新版未动。17:07“继续”被规划恢复分支改道，进入章节节点时漏传原job身份，误建job cmv42syf1002gcgw06h79ovnu并在95毫秒内触发journal冲突。原job未恢复，首章3013字符/hash未变，无新增模型用量。详见[第二次停顿与根因](../evals/2026-10-11-maoshan-resume-second-stop.md)。本轮只读定位，未修源码或业务数据；此前307项离线成功不等于实际入口恢复通过。下方16:47及更早操作说明为历史，旧一次性重启脚本固定旧PID，不能重放。
+## 实证状态
 
-用户双击运行日志确认：预检通过，但Stop-Process PID33000被Windows拒绝访问，尚未执行启动。16:47 health仍PID33000/stale=true；5190仍34024，新版3960/21116不变。此次是Windows进程权限问题，与前次时间比较和历史工具blocked by policy分别记录。脚本已在停止前明确要求右键restart-old.cmd“以管理员身份运行”，并设置UTF-8日志；未自动提权或重启。
+- 实时health旧后端3000为PID51304，18:06:31.203Z启动，stale=false、newerSources=[]，包含完整入口修复。旧前端5190为45328。新版5173/8787仍3960/21116，未动。
+- 35文件352/352封网回归、规划恢复20/20及服务端编译通过。13项新增入口测试跨源页HTTP、命令预检、实际恢复选择和范围准备、原job resume、实际Coordinator/Adapter/管线/journal。审查响应与worker排队/外部副作用为离线替身，后续2/3章只验证连续调度；不是模型或文学验收。
+- 书《外卖小哥的茅山账本》cmv3wyvw40015gow0780pycx9；导演cmv3wvaqm000sgow0l5or2pke；原job cmv3x3pr500r7gow0pt92xbmt；首章cmv3x2mt600jsgow0e6kb0852。
+- 17:45已一致性备份、完整副本演练、CAS纠正导演误关联，误建job cmv42syf1002gcgw06h79ovnu保留为失败证据。原稿、job、journal、预算、范围、命令均未改写，人工暂停未解除。
+- 18:07:22真实prepareDirector只读核验通过。首章3013字符，SHA256 d4fb3b8f6b9230632a4bafe29740ae8744950ab105bc1e5e08562e7f883dcda6。范围1—3；原job仍第一章审查暂停。无可自动执行的任务或命令，本导演17:00后模型用量0。
 
-用户手动重启的Backend identity changed是脚本把DateTime与字符串直接比较造成的误判，非服务换了身份；已修UTC比较，PowerShell 7.6.5和Windows PowerShell的CheckOnly实跑通过。服务仍未重启，原稿和暂停不变。可双击`.codex-run/maoshan-review-recovery-fix-20261011/restart-old.cmd`，日志自动保留在同目录restart-last.log；详见下方修复报告。源码修复提交为`d2cc20e5`，后续仅运行说明文档。
+## 下一步与边界
 
-**当前停点：两处修复与离线回归完成，旧运行服务待加载修复，再由用户从原任务第一章审查继续。** 本轮用户授权修复审查证据校验及failed暂停原job恢复，并要求记录与整体台账同步。没有真实模型调用、恢复或正文写入。
+用户从[本书第一章源工作区](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt600jsgow0e6kb0852)刷新后点“继续自动导演”，沿原审查和1—3范围推进；不改范围、不跳质检、不单独生成第二章。运行记录只读。代理未触发恢复，真实接续、连续章节与十章全文验收仍待用户执行。
 
-必读：[完整交接](2026-10-11_1615Z_maoshan-review-recovery_thread_handoff.md) → [修复证据及继续步骤](../evals/2026-10-11-maoshan-review-recovery-fix.md) → [批准方案](../plans/2026-10-11-production-core-refactor.md)。长期约束见[PROJECT_CONTEXT](PROJECT_CONTEXT.md)，总体事项见[WORK_LEDGER](WORK_LEDGER.md)。[断线续作与书内agent](../plans/2026-10-11-resilient-writing-and-book-agent-ideas.md)均为讨论未实施，已接入台账。
+本次Windows权限阻点已通过用户管理员重启解决；无需重放重启脚本。禁止仅凭旧日志/PID再次停止进程。新版不动，不自动模型调用或恢复历史书，不另建GUI，不push/合并发布。
 
-仓库 `D:/novel/AI-Novel-Writing-Assistant`，分支 `codex/production-core-refactor`。本轮基线HEAD `254e93da5479b354173890eabafa75b4fc409d76`；修复提交与本指针一同落库，实际HEAD用git核验。原三Structured客户端改动及WORK_LEDGER下方原964行未提交追加保留；本轮只提交台账顶部新记录。历史未跟踪材料保留。
+## 记录与整体目标
 
-本轮最终服务端编译通过；31文件307/307封网离线测试通过，无跳过。证据包含真实3013字符正文、原审查回答与暂停journal；纠正回答是离线替身。没有本轮客户端修改/UI测试。前序阶段2/3的417项结果是历史基线，不能与本轮数目相加或代替真实验收。
+长期约束[PROJECT_CONTEXT](PROJECT_CONTEXT.md)，统一[台账](WORK_LEDGER.md)，[批准方案](../plans/2026-10-11-production-core-refactor.md)，[十章验收单](../evals/2026-10-11-ten-chapter-acceptance.md)。旧[完整交接](2026-10-11_1615Z_maoshan-review-recovery_thread_handoff.md)保留前序实现及用户目标，其运行停点和操作限制以本页为准。[断线续作与书内agent](../plans/2026-10-11-resilient-writing-and-book-agent-ideas.md)仍为讨论未实施。稳定恢复规则已入[wiki](../wiki/workflows/chapter-review-resume.md)。
 
-书《外卖小哥的茅山账本》`cmv3wyvw40015gow0780pycx9`；导演`cmv3wvaqm000sgow0l5or2pke`；原job`cmv3x3pr500r7gow0pt92xbmt`。16:12只读确认首章hash未变，job failed/pendingManualRecovery=1/reviewing；第二章原停点为空。导演持久范围已核实 **sample3/chapter_range 1—3**，job为1—1；full_book_autopilot是推进策略，不代表本次全书范围。
-
-16:10服务：旧3000 PID33000/5190 PID34024，health stale=true，未加载修复；新版5173 PID3960/8787 PID21116未变。本轮未停止或重启进程。此前自动审批以blocked by policy拒绝启动；未绕过。已准备用户执行的一次性重启脚本（报告内附命令），只读预检与语法检查通过，启动部分未执行。
-
-下一步：用户重启成功、刷新本书第一章源页，点击“继续自动导演”，沿原任务从审查继续；保留原范围/预算，勿单独生成第二章或跳过质检。运行记录只读。真实原任务恢复、完整三章及十章文学验收待做。不开历史导演、不自动调用模型、不改新版、不造GUI、不push/main/beta；历史清理与发布单列待办。
+私有证据目录 .codex-run/maoshan-full-entry-recovery-20261011/，含1,027,043,328字节一致性备份（quick_check=ok）、副本演练、真实纠正结果、最终测试日志及重启日志。保留备份和原始失败证据。
