@@ -1,5 +1,5 @@
 import type { CharacterCastOption, VolumePlanDocument } from "@ai-novel/shared/types/novel";
-import type { DirectorConfirmRequest } from "@ai-novel/shared/types/novelDirector";
+import type { DirectorAutoExecutionState, DirectorConfirmRequest } from "@ai-novel/shared/types/novelDirector";
 import {
   isDirectorAutoExecutionRunMode,
   isFullBookAutopilotRunMode,
@@ -56,6 +56,9 @@ export interface DirectorPipelineRunInput {
   batchAlreadyStartedCount?: number;
   approveCurrentGate?: boolean;
   approveAutoExecutionScope?: boolean;
+  existingPipelineJobId?: string | null;
+  existingState?: DirectorAutoExecutionState | null;
+  resumePendingManualRecovery?: boolean;
 }
 
 function isDirectorCharacterSetupPauseResult(value: unknown): value is Extract<
@@ -396,6 +399,9 @@ export class NovelDirectorPipelineRuntime {
       taskId: input.taskId,
       novelId: input.novelId,
       request: input.input,
+      existingPipelineJobId: input.existingPipelineJobId,
+      existingState: input.existingState,
+      resumePendingManualRecovery: input.resumePendingManualRecovery,
       resumeCheckpointType: "chapter_batch_ready",
       approveCurrentGate: approval.approveCurrentGate,
       approveAutoExecutionScope: approval.approveAutoExecutionScope,

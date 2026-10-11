@@ -12,4 +12,6 @@ GET 只读取，返回 `pipelineJobId / pipelineRange / canResumePipeline`。外
 
 稳定规则见 [章节审查与原任务恢复](../../../../../../docs/wiki/workflows/chapter-review-resume.md)。真实现场回放及命令竞争由 firstChapterReviewRecovery、failedReviewOriginalJobRecovery、directorPausedCommandRecovery、directorOriginalJobRuntime 测试覆盖，修正后的审查响应仅为离线替身，不是模型实测。
 
+继续命令清除导演暂停后，原 job/journal 的暂停仍须由执行入口重新核验，并优先于未来规划缺口恢复。fullContinueRecovery 从源页 HTTP 进入真实命令与恢复选择；维护脚本 reconcile-paused-director-binding 只在明确指定的新旧身份、安全预检和事务比较成功时纠正指针，不执行章节、不重置预算，先备份并演练后使用。
+
 `pipelineSourceRecovery.test.js` 使用明确替身覆盖投影、范围归属、未知与过期本地步骤、取消竞争和薄路由；默认数据库、模型及网络不可访问。

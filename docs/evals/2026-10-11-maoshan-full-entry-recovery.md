@@ -1,0 +1,41 @@
+# 原任务完整恢复入口修复与误关联纠正
+
+本轮基线：`codex/production-core-refactor` / `c2319022`。用户明确授权修复完整入口、离线回归、安全处理误关联、核验服务加载；禁止模型调用、新版改动和历史导演恢复。前序[第二次停顿](2026-10-11-maoshan-resume-second-stop.md)的失败事实保留。
+
+## 实现与根因闭环
+
+正常继续被未来规划缺口分流，规划完成进入章节节点时未携原任务身份，错误新建job撞上保留稿journal。属于恢复链路未闭合，不是用户操作或模型故障。
+
+- 继续入口重新检查真实job/journal暂停；命令已清导演暂停标记也不能丢失恢复意图。已保存章的恢复先于未来未写章规划。
+- 原job处于reviewing时，以原恢复位置覆盖陈旧重规划投影；不重规划、跳章或跳审查。
+- 规划→章节适配传递原job、执行范围状态和显式授权；缺身份、关联变化或恢复失败时拒绝新建替代任务。
+- 已成功job向后续章正常推进，授权规划修复仍保留原语义；孤立failed绑定不能仅凭章节approved投影宣称完成。
+- 原范围、请求、写法、模型、质量检查和剩余预算保留。
+
+## 离线证据
+
+最终服务端tsc通过。35个测试文件 **352/352** 全封网通过；规划恢复专用 **20/20** 通过（数据库替身、仅本地回环HTTP），均0跳过。两组单列，不与旧307/417结果相加。
+
+新增13项完整入口测试使用实际现场workspace和原暂停journal：源页HTTP→实际命令受理与预检→实际Continue→范围准备→core原任务resume→实际Coordinator/Adapter/章节管线/journal，writer和首稿保存禁止重复。覆盖再次审查失败后仍显式恢复同job、陈旧replan、改范围、改稿、取消、错误绑定、缺授权和漏身份。
+
+测试中的worker调度由内存drain替身承接；审查响应和外部持久副作用为离线替身。后续第2/3章以执行替身确认顺序和范围；真实Executor的租约、预算、恢复检查由同组pipelineExecutorRecovery等覆盖。不是模型实测、浏览器验收或连续三章文学验收，不保证未来没有其他类型故障。
+
+初次扩大回归348/349，旧测试允许failed孤立绑定直接宣称完成；保留正常无绑定完成测试，孤立绑定改为明确拒绝。规划恢复授权边界也重新回归，未通过放宽原稿保护使测试变绿。
+
+日志：`.codex-run/maoshan-full-entry-recovery-20261011/final-tsc.log`、`final-offline-tests.log`、`final-planning-recovery-tests.log`；精确清单`test-files.txt`。
+
+## 真实数据纠正
+
+17:45 UTC完成用户授权的单行事务纠正。导演`cmv3wvaqm000sgow0l5or2pke`从误建`cmv42syf1002gcgw06h79ovnu`关联回原`cmv3x3pr500r7gow0pt92xbmt`；仅更换seed内job指针和原暂停错误显示、更新时间。两个job均保留，未改状态、正文、journal、预算、范围或命令。
+
+先使用SQLite backup API做含WAL的一致性备份：`.codex-run/maoshan-full-entry-recovery-20261011/before-reconciliation.db`，**1,027,043,328字节**，quick_check=ok。另建完整副本演练，校验正文、job、journal与命令全行不变。维护工具11项安全测试通过；实际回写采用快照CAS，验证唯一journal归属、合同/正文指纹、任务范围/父级、无取消/租约/活动命令、误建任务零模型调用且无journal。事务未清人工暂停。
+
+随后只读运行真实ChapterPipelineRecoveryService.prepareDirector预检通过。首章3013字符、SHA256 `d4fb3b8f6b9230632a4bafe29740ae8744950ab105bc1e5e08562e7f883dcda6`未变，原审查failed，范围1—3，17:00后本导演模型用量记录0。证据：`live-reconciliation-result.json`、`live-preflight.json`及副本演练记录。
+
+## 运行加载与剩余边界
+
+代码和数据已完成核验；服务加载尚待本轮重启核验，不能把源码通过当作已加载。重启只针对旧3000/5190，原数据库隔离配置、RAG=false与日志清理false保留；新版5173/8787不动。重启前再次确认无可自动执行任务/命令，重启后核对PID/startedAt/stale及原稿/暂停状态。未核验完成前用户不要点击继续。
+
+服务核验通过后的源页仍是本书第一章工作区，动作“继续自动导演”；按原1—3章范围从审查接回。真正模型运行由用户触发。源页操作链接沿用[前序报告](2026-10-11-maoshan-review-recovery-fix.md)；运行记录仅查看。
+
+稳定规则已同步[wiki](../wiki/workflows/chapter-review-resume.md)，本轮状态同步[CURRENT](../handoffs/CURRENT.md)与[台账](../handoffs/WORK_LEDGER.md)。原三客户端未提交改动、台账下方历史964行和未跟踪材料均保留；不push或合并发布。

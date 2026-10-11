@@ -415,6 +415,7 @@ export class NovelDirectorRuntimeOrchestrator {
     existingState?: DirectorAutoExecutionState | null;
     resumeCheckpointType?: "chapter_batch_ready" | "replan_required" | null;
     resumeStage?: "chapter" | "pipeline";
+    resumePendingManualRecovery?: boolean;
     previousFailureMessage?: string | null;
     allowSkipReviewBlockedChapter?: boolean;
     approveCurrentGate?: boolean;

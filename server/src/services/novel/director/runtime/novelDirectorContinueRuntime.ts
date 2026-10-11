@@ -42,6 +42,8 @@ import { prisma } from "../../../../db/prisma";
 import { assertPlanningRepairResumeAllowed, readPlanningRepairSeed, resolvePlanningRepairResumePhase } from "../recovery/planningRepair/planningRepairRecovery";
 import { normalizeDirectorAutoExecutionPlan } from "../automation/novelDirectorAutoExecution";
 import { buildRequestedAutoExecutionState } from "../automation/novelDirectorAutoExecutionScopeRuntime";
+import { createChapterPipelineRecoveryService, type PipelineRecoveryExpectation } from "../../production/recovery";
+import { ChapterProductionError } from "../../production/reliability";
 
 export type DirectorAssetFirstRecovery =
   | {
@@ -53,6 +55,8 @@ export type DirectorAssetFirstRecovery =
     phase: "story_macro" | "book_contract" | "world_setup" | "character_setup" | "volume_strategy" | "structured_outline";
   }
   | null;
+
+type SavedPipelineRecovery = PipelineRecoveryExpectation & { currentStage?: string | null };
 
 function mergeResumeTargets(
   primary: ReturnType<typeof parseResumeTarget>,
@@ -155,6 +159,9 @@ export class NovelDirectorContinueRuntime {
       directorInput: DirectorConfirmRequest;
     }) => Promise<DirectorAssetFirstRecovery>;
     runDirectorPipeline?: (input: DirectorPipelineRunInput) => Promise<void>;
+    prepareSavedPipelineRecovery?: (input: {
+      taskId: string; novelId: string; pipelineJobId: string; forceResume: boolean;
+    }) => Promise<SavedPipelineRecovery | null>;
     buildDirectorSeedPayload: (
       input: DirectorConfirmRequest,
       novelId: string | null,
@@ -309,7 +316,7 @@ export class NovelDirectorContinueRuntime {
       throw new Error("自动导演任务缺少恢复所需上下文。");
     }
 
-    const requestedReplanRecovery = !planningRepairRecovery && row.checkpointType === "replan_required"
+    let requestedReplanRecovery = !planningRepairRecovery && row.checkpointType === "replan_required"
       && continuationMode !== "skip_quality_repair";
     const requestedSkipQualityRepair = !planningRepairRecovery && !requestedReplanRecovery && shouldSkipCurrentQualityRepair({
       continuationMode,
@@ -328,7 +335,20 @@ export class NovelDirectorContinueRuntime {
       runMode,
       ...(input?.acceptManualChanges ? { stepCalibrationInstruction: null } : {}),
     });
-    const assetFirstRecovery: DirectorAssetFirstRecovery = planningRepairRecovery
+    // A saved chapter boundary owns its recovery route. Future, unwritten planning
+    // gaps must not redirect it into a fresh pipeline. Command acceptance may have
+    // cleared the director's pause, so inspect the saved job rather than that flag.
+    const savedPipelineRecovery = !planningRepairRecovery && seedPayload.autoExecution?.pipelineJobId
+      ? await this.prepareSavedPipelineRecovery({
+        taskId, novelId, pipelineJobId: seedPayload.autoExecution.pipelineJobId,
+        forceResume: input?.forceResume === true,
+      }) : null;
+    // An interrupted review has not produced a replan decision yet. A stale
+    // director checkpoint cannot make it run planning ahead of that saved review.
+    if (savedPipelineRecovery?.currentStage === "reviewing") requestedReplanRecovery = false;
+    const assetFirstRecovery: DirectorAssetFirstRecovery = savedPipelineRecovery
+      ? { type: "auto_execution", resumeCheckpointType: requestedReplanRecovery ? "replan_required" : "chapter_batch_ready" }
+      : planningRepairRecovery
       ? planningRepairRecovery.resumePhase === "chapter_execution"
         ? { type: "auto_execution", resumeCheckpointType: "chapter_batch_ready" }
         : { type: "phase", phase: "structured_outline" }
@@ -336,7 +356,7 @@ export class NovelDirectorContinueRuntime {
       novelId,
       directorInput: effectiveDirectorInput,
     });
-    const canSkipReviewBlockedChapter = !planningRepairRecovery && (
+    const canSkipReviewBlockedChapter = !savedPipelineRecovery && !planningRepairRecovery && (
       row.status === "failed"
       || row.status === "cancelled"
     ) && (
@@ -351,7 +371,7 @@ export class NovelDirectorContinueRuntime {
       // Recovery can bypass the structured-outline phase that normally saves this gate.
       // A keyed planning recovery continues an already saved execution scope; legacy tasks
       // may lack the presentation preference, which must not turn recovery into first-run setup.
-      const resumesAuthorizedExecution = planningRepairRecovery?.resumePhase === "chapter_execution"
+      const resumesAuthorizedExecution = Boolean(savedPipelineRecovery) || planningRepairRecovery?.resumePhase === "chapter_execution"
         && seedPayload.autoExecution?.enabled === true
         && Boolean(input?.planningRepairRecoveryKey)
         && planningRepairSeed.recovery?.idempotencyKey === input?.planningRepairRecoveryKey;
@@ -400,7 +420,7 @@ export class NovelDirectorContinueRuntime {
         ))
         || (requestedPlan.mode === "volume" && previousState.volumeOrder !== requestedPlan.volumeOrder)
       ));
-      if (changedExecutionScope && previousState?.pipelineJobId && (row.pendingManualRecovery || previousState.pipelineStatus === "failed")) {
+      if (!planningRepairRecovery && changedExecutionScope && previousState?.pipelineJobId && (savedPipelineRecovery || row.pendingManualRecovery || previousState.pipelineStatus === "failed")) {
         throw new Error("原章节审查尚未完成，请先按原任务范围恢复，再调整后续写作范围。");
       }
       const existingPipelineJobId = planningRepairRecovery || changedExecutionScope
@@ -425,7 +445,8 @@ export class NovelDirectorContinueRuntime {
           ? { ...previousState, pipelineJobId: null, pipelineStatus: null }
           : previousState;
       const checkpointChapterId = (
-        parseResumeTargetLike(row.resumeTargetJson)?.chapterId
+        savedPipelineRecovery?.chapterId
+        ?? parseResumeTargetLike(row.resumeTargetJson)?.chapterId
         ?? parseResumeTargetLike(seedPayload.resumeTarget)?.chapterId
         ?? seedPayload.autoExecution?.nextChapterId
         ?? null
@@ -499,7 +520,7 @@ export class NovelDirectorContinueRuntime {
             previousFailureMessage: row.lastError ?? null,
             allowSkipReviewBlockedChapter: canSkipReviewBlockedChapter,
             approveAutoExecutionScope: requestedAutoExecutionContinue || isFullBookAutopilot,
-            resumePendingManualRecovery: input?.forceResume === true,
+            resumePendingManualRecovery: !planningRepairRecovery && input?.forceResume === true,
           });
           return;
         }
@@ -513,8 +534,8 @@ export class NovelDirectorContinueRuntime {
           previousFailureMessage: row.lastError ?? null,
           allowSkipReviewBlockedChapter: canSkipReviewBlockedChapter,
           approveAutoExecutionScope: requestedAutoExecutionContinue || isFullBookAutopilot,
-          skipCurrentQualityRepair: requestedSkipQualityRepair || requestedReplanRecovery,
-          resumePendingManualRecovery: input?.forceResume === true,
+          skipCurrentQualityRepair: !savedPipelineRecovery && (requestedSkipQualityRepair || requestedReplanRecovery),
+          resumePendingManualRecovery: !planningRepairRecovery && input?.forceResume === true,
         });
       });
       return;
@@ -564,6 +585,9 @@ export class NovelDirectorContinueRuntime {
       seedPayload: this.deps.buildDirectorSeedPayload(effectiveDirectorInput, novelId, {
         directorSession,
         resumeTarget,
+        autoExecution: planningRepairRecovery && seedPayload.autoExecution
+          ? { ...seedPayload.autoExecution, pipelineJobId: null, pipelineStatus: null }
+          : seedPayload.autoExecution,
       }),
     });
     await this.deps.workflowService.markTaskRunning(taskId, {
@@ -585,6 +609,11 @@ export class NovelDirectorContinueRuntime {
         batchAlreadyStartedCount: input?.batchAlreadyStartedCount,
         approveCurrentGate,
         approveAutoExecutionScope: requestedAutoExecutionContinue || isFullBookAutopilot,
+        existingPipelineJobId: planningRepairRecovery ? null : seedPayload.autoExecution?.pipelineJobId,
+        existingState: planningRepairRecovery
+          ? seedPayload.autoExecution && { ...seedPayload.autoExecution, pipelineJobId: null, pipelineStatus: null }
+          : seedPayload.autoExecution,
+        resumePendingManualRecovery: !planningRepairRecovery && input?.forceResume === true,
       });
     });
   }
@@ -623,6 +652,30 @@ export class NovelDirectorContinueRuntime {
     return this.deps.runDirectorPipeline
       ? this.deps.runDirectorPipeline(input)
       : this.deps.pipelineRuntime.runPipeline(input);
+  }
+
+  private async prepareSavedPipelineRecovery(input: {
+    taskId: string; novelId: string; pipelineJobId: string; forceResume: boolean;
+  }): Promise<SavedPipelineRecovery | null> {
+    if (this.deps.prepareSavedPipelineRecovery) return this.deps.prepareSavedPipelineRecovery(input);
+    const job = await prisma.generationJob.findUnique({
+      where: { id: input.pipelineJobId },
+      select: { novelId: true, pendingManualRecovery: true, currentStage: true, updatedAt: true },
+    });
+    if (!job || job.novelId !== input.novelId) {
+      throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "原章节任务关联无法核对，请保留正文并返回本书工作区核对。");
+    }
+    if (!job.pendingManualRecovery) return null;
+    if (!input.forceResume) {
+      throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "请从本书工作区明确确认原章节任务恢复。");
+    }
+    const recovery = await createChapterPipelineRecoveryService().prepareDirector(input.pipelineJobId, {
+      novelId: input.novelId, directorTaskId: input.taskId,
+    });
+    if (job.updatedAt.getTime() !== recovery.updatedAt.getTime()) {
+      throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "原章节任务恢复位置已变化，请刷新工作区后核对。");
+    }
+    return { ...recovery, currentStage: job.currentStage };
   }
 
   async resolveAssetFirstRecovery(input: {

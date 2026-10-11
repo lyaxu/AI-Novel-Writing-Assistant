@@ -381,7 +381,7 @@ function buildPreparedWorkspace() {
   };
 }
 
-test("runFromReady completes immediately when repaired chapters leave no remaining auto-execution work", async () => {
+for (const orphanedBinding of [false, true]) test("completed chapters " + (orphanedBinding ? "cannot conceal an unverified failed job binding" : "complete immediately without an unfinished job binding"), async () => {
   const calls = [];
   const runtime = new NovelDirectorAutoExecutionRuntime({
     novelContextService: {
@@ -435,7 +435,7 @@ test("runFromReady completes immediately when repaired chapters leave no remaini
     },
   });
 
-  await runtime.runFromReady({
+  const run = () => runtime.runFromReady({
     taskId: "task-auto-exec",
     novelId: "novel-1",
     request: buildRequest(),
@@ -445,11 +445,16 @@ test("runFromReady completes immediately when repaired chapters leave no remaini
       startOrder: 1,
       endOrder: 2,
       totalChapterCount: 2,
-      pipelineJobId: "job-failed",
-      pipelineStatus: "failed",
+      ...(orphanedBinding ? { pipelineJobId: "job-failed", pipelineStatus: "failed" } : {}),
     },
   });
 
+  if (orphanedBinding) {
+    await assert.rejects(run(), { code: "CHAPTER_PRODUCTION_CONFLICT" });
+    assert.equal(calls.length, 0);
+    return;
+  }
+  await run();
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[0], ["bootstrapTask", 0]);
   assert.deepEqual(calls[1].slice(0, 3), ["recordCheckpoint", "task-auto-exec", "workflow_completed"]);

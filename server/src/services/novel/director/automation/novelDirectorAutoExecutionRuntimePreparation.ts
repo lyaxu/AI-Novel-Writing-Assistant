@@ -12,6 +12,7 @@ import {
 import { isSkippableAutoExecutionReviewFailure } from "./novelDirectorAutoExecutionFailure";
 import type { DirectorAutoExecutionRange } from "./novelDirectorAutoExecution";
 import type { AutoExecutionTaskIdentityRow, NovelDirectorAutoExecutionRuntimeDeps } from "./novelDirectorAutoExecutionRuntimePorts";
+import { ChapterProductionError } from "../../production/reliability";
 
 export async function readAutoExecutionIdentity(deps: NovelDirectorAutoExecutionRuntimeDeps, taskId: string) {
   return deps.workflowService.getTaskByIdWithoutHealing
@@ -73,6 +74,11 @@ export async function prepareRequestedAutoExecution(
     input.allowSkipReviewBlockedChapter
     && isSkippableAutoExecutionReviewFailure(input.previousFailureMessage),
   );
+  if (!shouldSkipReviewBlockedChapter && input.existingState?.pipelineJobId
+    && input.existingState.pipelineStatus !== "succeeded"
+    && input.existingState.pipelineJobId !== input.existingPipelineJobId?.trim()) {
+    throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "原章节任务关联不完整，请回到本书工作区核对后继续。");
+  }
   const pipelineJobId = shouldSkipReviewBlockedChapter
     ? ""
     : (input.existingPipelineJobId?.trim() || "");

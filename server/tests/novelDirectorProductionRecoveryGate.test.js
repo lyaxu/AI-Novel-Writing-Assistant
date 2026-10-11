@@ -34,6 +34,8 @@ for (const experience of [undefined, "simple", "professional"]) {
       },
       directorRuntime: { initializeRun: async () => {}, recordRunResumed: async () => {} },
       continueCandidateStageTask: async () => false,
+      // This fixture is an unpaused cancelled historical job, not saved-draft recovery.
+      prepareSavedPipelineRecovery: async () => null,
       resolveAssetFirstRecovery: async () => ({ type: "auto_execution", resumeCheckpointType: "chapter_batch_ready" }),
       buildDirectorSeedPayload: (request, novelId, extra) => ({ directorInput: request, novelId, ...extra }),
       autoExecutionRuntime: { runFromReady: async (input) => runs.push(input) },

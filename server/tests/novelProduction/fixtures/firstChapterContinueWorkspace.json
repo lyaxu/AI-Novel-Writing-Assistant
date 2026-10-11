@@ -1,0 +1,420 @@
+{
+  "provenance": "Read-only snapshot 2026-10-11; live failed-continue task, persisted chapter range and active planning workspace. No credentials or provider settings. Unrelated candidate batches, command history and repair snapshots removed; workspace is exact active contentJson.",
+  "row": {
+    "id": "cmv3wvaqm000sgow0l5or2pke",
+    "novelId": "cmv3wyvw40015gow0780pycx9",
+    "lane": "auto_director",
+    "title": "外卖小哥的茅山账本",
+    "status": "queued",
+    "progress": 0.978,
+    "currentStage": "质量修复",
+    "currentItemKey": "quality_repair",
+    "currentItemLabel": "第 1-3 章自动执行已暂停",
+    "checkpointType": "chapter_batch_ready",
+    "checkpointSummary": "章节正文、执行约定或执行所有权已变化，已停止写入，请回到章节工作区核对。",
+    "resumeTargetJson": "{\"route\":\"/novels/:id/edit\",\"novelId\":\"cmv3wyvw40015gow0780pycx9\",\"taskId\":\"cmv3wvaqm000sgow0l5or2pke\",\"lane\":\"auto_director\",\"stage\":\"chapter\",\"chapterId\":null,\"volumeId\":null}",
+    "seedPayloadJson": "{\"runMode\":\"full_book_autopilot\",\"novelId\":\"cmv3wyvw40015gow0780pycx9\",\"directorInput\":{\"aiFreedom\":\"medium\",\"autoApproval\":{\"enabled\":true,\"approvalPointCodes\":[\"candidate_direction_confirmed\",\"character_setup_ready\",\"volume_strategy_ready\",\"structured_outline_ready\",\"chapter_execution_continue\",\"low_risk_quality_repair_continue\",\"replan_continue\",\"rewrite_cleanup_confirmed\"]},\"batchId\":\"0bd385c3-6172-453a-875f-40fded54909e\",\"candidate\":{\"bookStoryFoundation\":{\"characterDynamics\":[{\"independentGoal\":\"凑齐房租、保住外卖工作，逐步摆脱账本的控制。\",\"mainlineEffect\":\"他的每一次驱邪选择都会改变账本上的名字和阴司对他的关注度。\",\"relationshipChange\":\"从孤身一人到拥有几个信任的客户和同行，再到与阴司对立。\",\"role\":\"劳梓凡\"},{\"independentGoal\":\"完成阴司的坏账回收，维持阴阳两界的债务平衡。\",\"mainlineEffect\":\"通过浮现名字和规则提示，推动劳梓凡不断行动。\",\"relationshipChange\":\"从工具变成对手，最终被劳梓凡烧毁。\",\"role\":\"账本（阴司代理人）\"},{\"independentGoal\":\"完成自己的催收任务，与劳梓凡竞争或合作。\",\"mainlineEffect\":\"提供信息差和博弈，推动劳梓凡了解阴司规则。\",\"relationshipChange\":\"从敌对到有限合作，再到分道扬镳。\",\"role\":\"同行（催收人）\"},{\"independentGoal\":\"解决自己的灵异问题，不想被卷入更深。\",\"mainlineEffect\":\"作为早期盟友，提供现实帮助（如撤销差评、介绍客户）。\",\"relationshipChange\":\"从陌生人到信任劳梓凡的帮手。\",\"role\":\"第一个客户（差评师）\"}],\"progression\":{\"emotionalMovement\":\"从最初的无奈和恐惧，到逐渐掌握主动的自信，再到面对阴司时的决绝，情绪随事件升级而积累。\",\"escalationLogic\":\"每解决一个灵异事件，账本会浮现更复杂的名字，涉及更强大的灵异势力，劳梓凡的术法水平和人际关系也随之扩展。\"},\"throughline\":{\"centralQuestion\":\"一个普通人被超自然规则强行绑定后，能否在现实生存压力与灵异风险之间找到自己的活法？\",\"choiceCost\":\"他失去所有灵异收入来源，且烧掉账本会引来阴司的追责，他必须独自承担后果。\",\"endingChoice\":\"劳梓凡选择烧掉账本，但在此之前他用自己的方式把账本上的‘债务’全部理清，让阴司无法再以此要挟活人。\",\"resolution\":\"他回归普通外卖员生活，但身边多了几个被他救过的人，他们共同组成一个小圈子，继续用各自的方式处理都市里的灵异小事。\",\"setupPayoffs\":[{\"payoff\":\"第80章左右揭示账本是阴司的坏账清单，名字是‘债务’的标记，不去就会替人背债。\",\"setup\":\"第1章账本自动浮现名字，且写着‘不去，债转你身’\"},{\"payoff\":\"第50章左右揭示同行是阴司的‘催收人’，与劳梓凡是竞争关系，后期可能合作。\",\"setup\":\"第2章同行也在找旧物件\"},{\"payoff\":\"第30章左右揭示差评团伙被某个灵异势力控制，用来收集活人信息。\",\"setup\":\"第3章差评团伙与账本名字有关\"}],\"thematicAnswer\":\"真正的安稳不是摆脱规则，而是理解规则并用自己的方式重新定义它。\"},\"viewpoint\":{\"anchor\":\"劳梓凡作为外卖员的日常处境：送餐、差评、房租、同行竞争，以及他在出租屋、外卖站、客户家之间的活动范围。\",\"scopeConnection\":\"阴司的坏账规则通过账本影响劳梓凡的每一单外卖和每一次驱邪，他的选择又反过来改变账本上的名字和阴司的布局。\"},\"worldBoundary\":{\"baseline\":\"现代都市，存在隐秘的茅山术法传承和阴司体系，但普通人不了解；术法需要符咒、法器、口诀等媒介，八极拳是实打实的杀人技。\",\"crossingRules\":\"不涉及跨时空，故事发生在当代都市，阴阳两界通过特定地点（如老宅、坟地、二手市场）和媒介（如账本、旧物）交互。\",\"hardLimits\":[\"茅山术法不能无中生有，必须借助符咒、法器或特定地点。\",\"八极拳是物理攻击，对灵体需要配合术法才能生效。\",\"账本上的名字必须由劳梓凡亲自处理，不能转交他人。\",\"阴司不能直接干涉阳间，必须通过代理人或规则漏洞。\",\"劳梓凡的术法水平在故事初期有限，不能越级解决强大灵异。\"],\"knowledgeBoundary\":\"作者知道账本来源和阴司规则；劳梓凡初期只知道账本有用但不知原理；其他角色各有自己的认知局限；叙述中不直接揭示真相，通过事件逐步透露。\"}},\"coreConflict\":\"劳梓凡想靠驱邪赚钱还债过安稳日子，但账本背后的势力（阴司、债主、同行）不允许他置身事外；他必须在‘继续按账本做事’和‘毁掉账本回归普通生活’之间反复抉择。\",\"endingDirection\":\"劳梓凡发现账本其实是阴司的‘坏账清单’，他选择烧掉账本，用自己的方式重新定义阴阳债务规则，代价是失去所有灵异收入来源，但换回普通生活与身边人的安全。\",\"hookStrategy\":\"第1章用‘送外卖被讹诈’与‘账本自动浮现新名字’双线并进，第2章用‘按账本找到第一个客户’兑现驱邪首秀，第3章用‘客户竟是差评师’完成第一次反转，让读者在前三章看到‘账本有用、驱邪能赚钱、但麻烦更大’的完整循环。\",\"id\":\"ec6bd0c8-d2ef-4e42-9fe0-05fb8f0c6101\",\"logline\":\"茅山旁支后裔劳梓凡靠送外卖维生，意外捡到一本记录都市灵异交易的旧账本，为了还清房租和摆脱差评，他不得不按账本上的线索驱邪赚钱，却发现自己正被卷入一场横跨阴阳两界的债务纠纷。\",\"positioning\":\"都市灵异+市井生活流，以送外卖的日常为舞台，用一本账本串联起单元式驱邪事件与主线悬念，满足读者对‘普通人靠手艺吃饭’的代入感和‘灵异事件逐步升级’的探索欲。\",\"productionFoundation\":{\"summary\":\"这套组合以《都市 / 都市异能》为题材底座，用《成长冒险》做主线推进，再用《悬念博弈》做副线钩子，最贴合“外卖小哥靠账本接单驱邪、边还债边打鬼”的轻快男频开局。都市异能能稳住现实职业与灵异规则碰撞的反差感，成长冒险能保证前30章按单推进、阶段兑现，悬念博弈则负责让账本背后的阴阳债务主线持续牵引追读。\",\"genre\":{\"id\":\"genre_urban_superpower\",\"name\":\"都市异能\",\"path\":\"都市 / 都市异能\",\"source\":\"user_selected\",\"reason\":\"故事舞台是现代都市，主角是外卖员，核心超常元素是茅山道术、灵异账本与阴阳交易，属于典型的现代都市框架叠加隐秘规则和特殊职业，选《都市 / 都市异能》比纯都市生活或纯悬疑更贴合目标读者的第一预期。\"},\"primaryStoryMode\":{\"id\":\"story_mode_growth_root\",\"name\":\"成长冒险\",\"path\":\"成长冒险\",\"source\":\"user_selected\",\"reason\":\"前30章需要完成“捡账本、懂规则、接单赚钱、缓解房租差评、完成两到三次独立驱邪小单”的阶段性推进，成长冒险的升级、探索和阶段突破结构最能稳定兑现这种接单变强、逐单解锁的追读动力。\"},\"secondaryStoryMode\":{\"id\":\"story_mode_mystery_root\",\"name\":\"悬念博弈\",\"path\":\"悬念博弈\",\"source\":\"user_selected\",\"reason\":\"账本背后的债务规则和阴阳两界纠纷是主线悬念，悬念博弈能补充信息差、规则推演和布局回收，让每单驱邪不只是打怪，而是逐步靠近更大的债务真相。\"},\"powerSystem\":{\"mode\":\"soft\",\"reason\":\"茅山道术、灵异规则和阴阳债务需要定性强弱、代价与克制关系，但当前卖点更偏接单驱邪和还债爽感，不适合一开始就上严密等级表；用软性体系既能保留成长空间，又不会给新手增加设定负担。\",\"source\":\"ai_recommended\"},\"caution\":\"最容易翻车的点是把账本写成万能外挂，导致每单驱邪变成重复接任务、缺少规则代价和人物选择；同时要控制悬念博弈的比重，别让阴阳债务主线过早压过轻松接单赚钱的爽感。\",\"recommendedAt\":\"2026-10-11T14:23:56.359Z\"},\"progressionLoop\":\"接单（账本浮现名字）→调查（线索指向灵异事件）→解决（术法+拳法+推演）→收钱（现实收益与灵异代价）→账本更新（新名字带来新麻烦），每次解决都会改变劳梓凡与客户、同行、阴司的关系。\",\"protagonistPath\":\"从被动接单的外卖小哥，到主动利用账本规则与各方周旋的‘阳间讨债人’，最终成为能在阴阳两界制定规则的人。\",\"recommendedWritingPlatform\":\"fanqie_free\",\"sellingPoint\":\"主角用茅山术法和八极拳在都市底层讨生活，每一次驱邪都是一次‘接单-解决-收钱’的闭环，但账本上的名字会一个个变成他的债主或客户，现实压力与灵异风险同步升级。\",\"storyPrototype\":{\"appealRisk\":\"最可能无聊之处是驱邪过程变成重复的‘接单-打怪-收钱’流水账；改进方向是让每个客户都有独立的人际关系与动机，驱邪结果会改变劳梓凡在现实中的处境（如客户成为盟友或敌人），并逐步揭示账本与阴司的规则。\",\"difficultChoice\":\"继续按账本驱邪赚钱，但每次都会卷入更深的灵异纠纷；或者毁掉账本回归普通外卖员生活，但将失去唯一能改变经济状况的手段，且账本上的‘债’不会消失。\",\"distinctiveEngine\":\"账本每浮现一个新名字，劳梓凡就必须在限定时间内找到并解决对方的灵异问题，否则自己会替对方承担‘债务’——这种‘债务转移’机制让每一次选择都直接改变他与客户、阴司、同行之间的利害关系，而不是单纯接任务升级。\",\"earlyPayoff\":\"第1章末账本首次浮现名字，第2章劳梓凡按线索找到第一个客户并完成驱邪，获得第一笔收入，同时发现客户正是给他差评的人；第3章他利用这笔收入暂时解决房租，但账本上又出现新名字，且这次的名字是他认识的人。\",\"openingChain\":[{\"action\":\"劳梓凡在送外卖时被大妈讹诈，赔了钱还吃了差评，回到出租屋发现床底旧账本自动翻开，浮现一个名字和地址。\",\"chapterOrder\":1,\"choice\":\"他决定按地址去看一眼，因为账本上写着‘不去，债转你身’。\",\"consequence\":\"他到达地址后发现住户被阴气缠身，自己被迫出手，用八极拳和茅山术法暂时压制，但没彻底解决。\",\"nextQuestion\":\"这个客户为什么会被阴气缠身？账本到底是谁写的？\",\"payoff\":\"读者看到账本确实有用，劳梓凡的术法和拳法在实战中有效，且他获得了第一个客户的基本信任。\",\"resistance\":\"大妈胡搅蛮缠、平台扣钱、账本浮现的名字指向一个陌生小区，劳梓凡怀疑是恶作剧。\"},{\"action\":\"劳梓凡再次来到客户家，用茅山术法仔细排查，发现阴气来源是客户捡回来的一个旧物件，他需要决定是直接毁掉物件还是追查来源。\",\"chapterOrder\":2,\"choice\":\"他选择追查物件来源，因为账本上提示‘毁物不毁根，债还在’。\",\"consequence\":\"他追踪到物件来自一个二手市场，并遇到另一个也在调查此物的同行，双方发生短暂冲突。\",\"nextQuestion\":\"同行是谁？他为什么也在找这个物件？\",\"payoff\":\"劳梓凡成功解决客户的阴气问题，获得报酬，并得知同行也在找类似的东西，悬念加深。\",\"resistance\":\"客户不舍得毁掉物件，且阴气在夜间增强，劳梓凡的术法准备不足。\"},{\"action\":\"劳梓凡用报酬交了房租，回到外卖站却发现新差评来自那个客户，他找客户理论，客户却说自己根本没给差评，是账号被盗。\",\"chapterOrder\":3,\"choice\":\"劳梓凡决定追查差评来源，因为这关系到他的外卖工作能否保住。\",\"consequence\":\"他发现差评来自一个批量刷差评的团伙，而这个团伙背后似乎与账本上的某个名字有关。\",\"nextQuestion\":\"刷差评团伙和账本有什么关系？账本下一个名字会是谁？\",\"payoff\":\"他不仅解决了差评问题（找到证据申诉），还发现账本上的名字与现实中的人有对应关系，早期疑问‘账本名字从哪来’得到部分回答。\",\"resistance\":\"平台规则无法撤销差评，客户也说不清账号被盗的细节。\"}],\"opposition\":\"外卖平台的差评机制、讹诈他的大妈、以及账本背后不愿他脱离控制的阴司势力，都在阻止他获得安稳生活。\",\"protagonistWant\":\"劳梓凡眼下最想凑齐下季度房租，并消除外卖平台上的差评，保住这份唯一能糊口的工作。\"},\"targetChapterCount\":100,\"titleOptions\":[{\"angle\":\"外卖员配茅山账本\",\"clickRate\":88,\"reason\":\"职业反差与灵异账本双重钩子，一看就知道是底层讨生活撞上驱邪生意。\",\"style\":\"high_concept\",\"title\":\"外卖小哥的茅山账本\"},{\"angle\":\"阴司坏账找上外卖员\",\"clickRate\":82,\"reason\":\"把阴司债务和外卖职业强绑定，冲突直接，悬念感强，容易引发点击。\",\"style\":\"conflict\",\"title\":\"送外卖撞上阴司坏账\"},{\"angle\":\"拳法驱邪加现实催债\",\"clickRate\":79,\"reason\":\"拳法打鬼与差评师催债并置，市井黑色幽默和灵异动作感同时拉满。\",\"style\":\"conflict\",\"title\":\"八极拳打鬼，差评师催债\"},{\"angle\":\"账本规则下的讨债人\",\"clickRate\":76,\"reason\":\"账本规则感明确，讨债人身份有新鲜度，适合喜欢规则类灵异故事的读者。\",\"style\":\"suspense\",\"title\":\"我靠账本在阳间讨债\"}],\"toneKeywords\":[\"市井烟火\",\"灵异悬疑\",\"黑色幽默\",\"成长逆袭\"],\"whyItFits\":\"种子想法中的‘外卖小哥+茅山旁支+八极拳’天然适合单元式推进，账本作为核心道具能同时承载成长线（术法提升）和悬念线（账本来源），且市井生活细节能落实‘细腻推进’的风格要求。\",\"workingTitle\":\"外卖小哥的茅山账本\",\"writingPlatformReason\":\"免费平台读者偏好快节奏、强代入感的都市异能，单元式驱邪+现实压力（房租、差评）能快速建立共鸣，且每章有明确回报，适合免费阅读的追读习惯。\"},\"defaultChapterLength\":2800,\"emotionIntensity\":\"high\",\"estimatedChapterCount\":100,\"idea\":\"茅山一个不为人知的旁支后裔——劳梓凡，学了一些三脚猫的术法和一身不俗的古法八极拳（杀人技，非“舞术”），但这些在俗世生活中也不能吃啊，万一再被哪个大妈讹上......因此每天却只能玩命卷送外卖这个“非常有前途的”职业，挣扎在房租、差评的漩涡中，他却被命运驱使着卷入了一系列波谲云诡的离奇事件中，最终他会被命运推到何处？\",\"model\":\"deepseek-v4-flash\",\"narrativePov\":\"third_person\",\"outlineStatus\":\"not_started\",\"pacePreference\":\"fast\",\"postGenerationStyleReviewEnabled\":true,\"powerSystemPreference\":\"ai_recommend\",\"projectMode\":\"ai_led\",\"projectStatus\":\"not_started\",\"provider\":\"deepseek\",\"readerChannelPreference\":\"ai_judge\",\"resourceReadyScore\":0,\"round\":1,\"runMode\":\"full_book_autopilot\",\"storylineStatus\":\"not_started\",\"styleProfileId\":\"cmugh26y40000vkw0i94nzwam\",\"temperature\":0.7,\"workflowTaskId\":\"cmv3wvaqm000sgow0l5or2pke\",\"worldSetupMode\":\"auto_generate\",\"writingMode\":\"original\",\"writingPlatformPreference\":\"ai_recommend\",\"issueGovernanceVersion\":1,\"issuePolicy\":{\"maxAutomaticRetries\":1,\"issueActions\":{}},\"issuePolicySource\":\"global\",\"styleIntentSummary\":{\"source\":\"style_profile\",\"styleProfileId\":\"cmugh26y40000vkw0i94nzwam\",\"styleProfileName\":\"市井见微·细腻推进\",\"headline\":\"市井见微·细腻推进\",\"readingFeel\":\"个人写法：普通人视角，心里有盘算、嘴上有分寸；细腻写人，利落推事。不模仿特定作者，不以检测分数为目标。\",\"languageFocus\":\"叙述清楚、口气有生活经验；有滋味不等于句句比喻，细腻不等于副词加倍。把你的判断写进选取的细节，而不是旁白点评。\",\"dialogueFocus\":\"话是说给对面的人听的：可能试探、搪塞、讨价还价、怕丢脸，也可能嘴硬心软。身份与关系决定措辞，不让每句对白都成为金句或设定讲解。\",\"emotionFocus\":\"动作、对白和贴近人物口气的内心声音共同写人；不是只能展示动作，也不是旁白解释一切。\",\"antiAiFocus\":[],\"stageSummaryLines\":[\"读感承诺：个人写法：普通人视角，心里有盘算、嘴上有分寸；细腻写人，利落推事。不模仿特定作者，不以检测分数为目标。\",\"语言密度：叙述清楚、口气有生活经验；有滋味不等于句句比喻，细腻不等于副词加倍。把你的判断写进选取的细节，而不是旁白点评。\",\"对白风格：话是说给对面的人听的：可能试探、搪塞、讨价还价、怕丢脸，也可能嘴硬心软。身份与关系决定措辞，不让每句对白都成为金句或设定讲解。\",\"情绪外显：动作、对白和贴近人物口气的内心声音共同写人；不是只能展示动作，也不是旁白解释一切。\"]},\"startupPreparation\":{\"strategy\":\"fast_start\",\"routeWindow\":{\"min\":3,\"target\":5,\"detailAhead\":1},\"backgroundEnrichment\":\"after_first_draft\"},\"completionProfile\":{\"mode\":\"serial_book\",\"targetChapterCount\":100,\"maxChapterCount\":100,\"promiseScope\":\"first_30_chapters\",\"structure\":\"serial_staged\",\"endingRequiredBy\":100},\"autoExecutionPlan\":{\"mode\":\"chapter_range\",\"startOrder\":1,\"endOrder\":3,\"autoReview\":true,\"autoRepair\":true},\"targetAudience\":\"喜欢都市灵异、道士驱邪、小人物逆袭的男频读者，尤其是想看外卖员等底层职业主角靠一本旧账本接单赚钱、边还债边打鬼的轻松爽感读者。\",\"bookSellingPoint\":\"一本记录都市灵异交易的旧账本，让送外卖的茅山旁支后裔按单驱邪赚钱，把还房租、消差评的现实焦虑和阴阳两界的债务纠纷绑在一起，读者点开就想看下一单怎么接、账怎么还。\",\"competingFeel\":\"读起来像跟着主角一起接单跑腿，每单都有灵异麻烦和即时报酬，节奏轻快不压抑；账本线索不断牵引新事件，欠债压力变成追读动力，既有驱邪的紧张感，也有赚钱还债的爽感。\",\"first30ChapterPromise\":\"前30章必须让读者看到：主角捡到账本并弄懂基本用法，靠第一笔驱邪订单赚到钱、缓解房租和差评危机；账本背后的债务规则初步亮相，至少完成两到三次独立驱邪小单，并埋下阴阳两界债务纠纷的主线悬念。\",\"commercialTags\":[\"都市灵异\",\"道士下山\",\"系统流账本\",\"小人物逆袭\",\"驱邪赚钱\",\"阴阳债务\"],\"genreId\":\"genre_urban_superpower\",\"primaryStoryModeId\":\"story_mode_growth_root\",\"secondaryStoryModeId\":\"story_mode_mystery_root\"},\"autoExecution\":{\"enabled\":true,\"latestRiskAssessment\":null,\"completionProfile\":{\"mode\":\"serial_book\",\"targetChapterCount\":100,\"maxChapterCount\":100,\"promiseScope\":\"first_30_chapters\",\"structure\":\"serial_staged\",\"endingRequiredBy\":100},\"closingExtensionCount\":0,\"mode\":\"chapter_range\",\"autoReview\":true,\"autoRepair\":true,\"artifactSyncMode\":\"adaptive\",\"scopeLabel\":\"第 1-3 章\",\"volumeTitle\":null,\"preparedVolumeIds\":[],\"skippedChapterIds\":[],\"skippedChapterOrders\":[],\"qualityDebtChapterIds\":[],\"qualityDebtChapterOrders\":[],\"qualityDebtSummaries\":[],\"qualityLoopLedger\":null,\"circuitBreaker\":null,\"firstChapterId\":\"cmv3x2mt600jsgow0e6kb0852\",\"startOrder\":1,\"endOrder\":3,\"totalChapterCount\":3,\"completedChapterCount\":0,\"remainingChapterCount\":2,\"remainingChapterIds\":[\"cmv3x2mt600jsgow0e6kb0852\",\"cmv3x2mt800jtgow0la32yn38\"],\"remainingChapterOrders\":[1,2],\"nextChapterId\":\"cmv3x2mt600jsgow0e6kb0852\",\"nextChapterOrder\":1,\"pipelineJobId\":\"cmv42syf1002gcgw06h79ovnu\",\"pipelineStatus\":\"failed\"},\"productionExperience\":\"professional\",\"productionScope\":\"sample3\",\"resumeTarget\":{\"route\":\"/novels/:id/edit\",\"novelId\":\"cmv3wyvw40015gow0780pycx9\",\"taskId\":\"cmv3wvaqm000sgow0l5or2pke\",\"lane\":null,\"stage\":\"pipeline\",\"chapterId\":\"cmv3x2mt600jsgow0e6kb0852\",\"volumeId\":null},\"directorSession\":{\"runMode\":\"full_book_autopilot\",\"phase\":\"chapter_execution\",\"isBackgroundRunning\":false,\"lockedScopes\":[],\"reviewScope\":\"chapter\"},\"planningRepair\":{\"version\":1,\"key\":\"cmv3wyvw40015gow0780pycx9:cmv3wyvw40015gow0780pycx9-volume-aba7a8e2-4a3b-49d3-bc43-b33d4cca4a7e:cmv3wyvw40015gow0780pycx9-chapter-cd576eb4-d521-4666-b9ca-d1c5c958f060\",\"novelId\":\"cmv3wyvw40015gow0780pycx9\",\"volumeId\":\"cmv3wyvw40015gow0780pycx9-volume-aba7a8e2-4a3b-49d3-bc43-b33d4cca4a7e\",\"chapterId\":\"cmv3wyvw40015gow0780pycx9-chapter-cd576eb4-d521-4666-b9ca-d1c5c958f060\",\"chapterOrder\":1,\"rounds\":0,\"maxRounds\":2,\"phase\":\"committed\",\"history\":[{\"round\":0,\"kind\":\"review\",\"result\":{\"chapters\":{\"cmv3wyvw40015gow0780pycx9-chapter-cd576eb4-d521-4666-b9ca-d1c5c958f060\":{\"status\":\"passed\",\"canEnterExecution\":true,\"verdict\":\"usable\",\"safeToSync\":true,\"loadRisk\":\"normal\",\"recommendedHandling\":\"use_as_is\",\"issues\":[],\"summary\":\"第1章合同目标清晰、边界明确，四张场景卡完整覆盖从现实挤压到账本浮现再到出门决定的推进链，因果桥梁可执行，读者体验合同明确本章问题与可见回报。原选承诺在本章范围内均有对应安排，后续章节承接明确，无阻塞性缺口。\",\"repairGuidance\":[],\"confidence\":0.86,\"issueChecks\":[],\"promiseChecks\":[{\"sourceId\":\"sellingPoint\",\"scope\":\"book_arc\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.sellingPoint\",\"quote\":\"主角用茅山术法和八极拳在都市底层讨生活，每一次驱邪都是一次‘接单-解决-收钱’的闭环，但账本上的名字会一个个变成他的债主或客户，现实压力与灵异风险同步升级。\"}],\"candidateEvidence\":[{\"sourcePath\":\"purpose\",\"quote\":\"劳梓凡在赔钱、差评、催租三重挤压下，发现床底旧账本自动浮现陌生名字地址与‘不去，债转你身’，因只剩几十块而决定按地址去看一眼。\"},{\"sourcePath\":\"scene_3.mustAdvance[1]\",\"quote\":\"账面浮现‘郑小满’、老旧小区地址和‘不去，债转你身’\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyNext.summary\",\"quote\":\"劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。郑小满付了第一笔钱，劳梓凡确认账本有用，也确认事情没完。\"}],\"explanation\":\"本章作为开篇，已安排现实压力（讹诈、差评、催租）与账本浮现名字的闭环起点，第2章承接驱邪首秀与第一笔收入，卖点在本章范围内以setup形式保留，后续承接明确。\",\"repairHint\":\"\"},{\"sourceId\":\"coreConflict\",\"scope\":\"book_arc\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.coreConflict\",\"quote\":\"劳梓凡想靠驱邪赚钱还债过安稳日子，但账本背后的势力（阴司、债主、同行）不允许他置身事外；他必须在‘继续按账本做事’和‘毁掉账本回归普通生活’之间反复抉择。\"}],\"candidateEvidence\":[{\"sourcePath\":\"readerExperience.netChange\",\"quote\":\"劳梓凡从‘怀疑账本是恶作剧’变为‘确认地址真实并决定按地址去看一眼’，账本从床底旧物变成他必须面对的下一步。\"},{\"sourcePath\":\"scene_4.causality.motive\",\"quote\":\"地址真实存在，且‘不去，债转你身’的警告让他不敢赌；他需要钱，也需要弄清账本是什么。\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyPlanningHorizon.beats[0].mustDeliver[1]\",\"quote\":\"劳梓凡被现实压力逼到必须按地址去看一眼\"}],\"explanation\":\"本章已安排主角在现实压力与账本警告之间被迫行动，核心冲突的‘被迫卷入’起点成立，后续抉择在卷级节拍中持续承接。\",\"repairHint\":\"\"},{\"sourceId\":\"protagonistPath\",\"scope\":\"book_arc\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.protagonistPath\",\"quote\":\"从被动接单的外卖小哥，到主动利用账本规则与各方周旋的‘阳间讨债人’，最终成为能在阴阳两界制定规则的人。\"}],\"candidateEvidence\":[{\"sourcePath\":\"scene_4.causality.choice\",\"quote\":\"把账本塞进外卖箱，锁门按地址出发。\"},{\"sourcePath\":\"readerExperience.netChange\",\"quote\":\"劳梓凡从‘怀疑账本是恶作剧’变为‘确认地址真实并决定按地址去看一眼’，账本从床底旧物变成他必须面对的下一步。\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyPlanningHorizon.beats[0].mustDeliver[3]\",\"quote\":\"账本确实有用且驱邪能赚到第一笔钱\"}],\"explanation\":\"本章完成从‘被动外卖员’到‘被迫按账本行动’的第一步，主角路径的起点动作已安排，后续成长在卷级节拍中承接。\",\"repairHint\":\"\"},{\"sourceId\":\"storyPrototype.distinctiveEngine\",\"scope\":\"current_chapter\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.storyPrototype.distinctiveEngine\",\"quote\":\"账本每浮现一个新名字，劳梓凡就必须在限定时间内找到并解决对方的灵异问题，否则自己会替对方承担‘债务’——这种‘债务转移’机制让每一次选择都直接改变他与客户、阴司、同行之间的利害关系，而不是单纯接任务升级。\"}],\"candidateEvidence\":[{\"sourcePath\":\"exclusiveEvent\",\"quote\":\"床底旧账本首次自动翻开，浮现郑小满的名字、地址和‘不去，债转你身’字样。\"},{\"sourcePath\":\"scene_3.mustAdvance[1]\",\"quote\":\"账面浮现‘郑小满’、老旧小区地址和‘不去，债转你身’\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyNext.summary\",\"quote\":\"劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。\"}],\"explanation\":\"本章已安排账本首次浮现名字与‘不去，债转你身’的债务转移威胁，独特引擎的规则起点在本章显形，第2章承接实际驱邪与债务未清。\",\"repairHint\":\"\"},{\"sourceId\":\"storyPrototype.earlyPayoff\",\"scope\":\"opening_sequence\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.storyPrototype.earlyPayoff\",\"quote\":\"第1章末账本首次浮现名字，第2章劳梓凡按线索找到第一个客户并完成驱邪，获得第一笔收入，同时发现客户正是给他差评的人；第3章他利用这笔收入暂时解决房租，但账本上又出现新名字，且这次的名字是他认识的人。\"}],\"candidateEvidence\":[{\"sourcePath\":\"endingState\",\"quote\":\"劳梓凡揣着账本站在出租屋门口，决定趁夜按地址去陌生小区看一眼，但尚未见到客户。\"},{\"sourcePath\":\"scene_4.mustAdvance[1]\",\"quote\":\"劳梓凡把账本塞进外卖箱锁门出发\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyNext.summary\",\"quote\":\"劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。郑小满付了第一笔钱，劳梓凡确认账本有用，也确认事情没完。\"}],\"explanation\":\"earlyPayoff覆盖开篇序列，本章完成第1章末账本首次浮现名字的节点，第2章承接驱邪首秀与第一笔收入，第3章反转在后续节拍中安排，本章贡献符合开篇序列分工。\",\"repairHint\":\"\"},{\"sourceId\":\"storyPrototype.openingChain[0]\",\"scope\":\"current_chapter\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.storyPrototype.openingChain[0].action\",\"quote\":\"劳梓凡在送外卖时被大妈讹诈，赔了钱还吃了差评，回到出租屋发现床底旧账本自动翻开，浮现一个名字和地址。\"},{\"sourcePath\":\"selectedPlanningDirection.candidate.storyPrototype.openingChain[0].choice\",\"quote\":\"他决定按地址去看一眼，因为账本上写着‘不去，债转你身’。\"}],\"candidateEvidence\":[{\"sourcePath\":\"scene_1.mustAdvance[0]\",\"quote\":\"大妈以汤洒弄脏鞋为由讹走两百块\"},{\"sourcePath\":\"scene_3.mustAdvance[1]\",\"quote\":\"账面浮现‘郑小满’、老旧小区地址和‘不去，债转你身’\"},{\"sourcePath\":\"scene_4.mustAdvance[1]\",\"quote\":\"劳梓凡把账本塞进外卖箱锁门出发\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyNext.summary\",\"quote\":\"劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。\"}],\"explanation\":\"openingChain[0]的action、resistance、choice、consequence在本章均有对应安排：讹诈与差评、账本自动翻开浮现名字地址、因‘不去，债转你身’决定出门；consequence中到达地址后的驱邪压制由第2章承接，本章边界明确不越章。\",\"repairHint\":\"\"}],\"progressionChecks\":[{\"dimension\":\"event_repetition\",\"status\":\"insufficient_context\",\"candidateEvidence\":[{\"sourcePath\":\"scene_1.mustAdvance[0]\",\"quote\":\"大妈以汤洒弄脏鞋为由讹走两百块\"},{\"sourcePath\":\"scene_3.mustAdvance[0]\",\"quote\":\"床底旧账本自动翻开\"}],\"priorEvidence\":[],\"explanation\":\"本章为第1章，无前文正文可供比较事件是否重复。场景1的现实纠纷与场景3的灵异事件功能不同，不构成同质重复，但缺少前章正文作为比较基准，无法判定与前文事件的关系。\",\"issueId\":null,\"repairHint\":\"\"},{\"dimension\":\"knowledge_repetition\",\"status\":\"insufficient_context\",\"candidateEvidence\":[{\"sourcePath\":\"readerExperience.informationReveal\",\"quote\":\"账本会自动翻开并浮现真实存在的姓名与地址，且附带‘不去，债转你身’的警告。\"}],\"priorEvidence\":[],\"explanation\":\"本章为第1章，无前文正文可判断账本信息是否已被前文揭示。账本自动浮现名字与地址在本章首次出现，属于新信息，但缺少前章正文作为比较基准。\",\"issueId\":null,\"repairHint\":\"\"},{\"dimension\":\"prior_goal_followthrough\",\"status\":\"insufficient_context\",\"candidateEvidence\":[{\"sourcePath\":\"scene_4.causality.choice\",\"quote\":\"把账本塞进外卖箱，锁门按地址出发。\"}],\"priorEvidence\":[],\"explanation\":\"本章为第1章，无前章已选择或已开始的行动可供核对。主角在本章内从被讹到决定出门形成完整行动链，但缺少前文正文作为承接比较基准。\",\"issueId\":null,\"repairHint\":\"\"}],\"refinements\":[\"scene_1的prerequisites标注为established_in_context但引用‘本章开篇送餐场景’，建议改为establish_in_scene并明确开篇即建立外卖员身份与手头现金，避免生成器误以为需要前文铺垫。\",\"scene_2的赵德柱来电可考虑在电话中带出一句旧楼或旧货的市井口吻，为后续房东作为市井线人的功能埋下轻量伏笔，但不影响本章执行。\",\"readerExperience.rewardLevel为setup符合本章开篇职责，无需调整；若后续章节需要更强即时回报，可在第2章提升为partial或major。\"]}},\"window\":{\"usable\":true,\"safeToSync\":true,\"requiresUserDecision\":false,\"summary\":\"第1章候选合同与原始合同一致，目标清晰、边界明确，四张场景卡完整覆盖从现实挤压到账本浮现再到出门决定的推进链，因果桥梁可执行。本章为开篇章，无前文正文可比较，事件与信息均为首次出现，不构成重复；账本浮现名字与‘不去，债转你身’的债务转移威胁在本章首次显形，第2章承接驱邪首秀与第一笔收入，开篇承诺在本章范围内以setup形式保留，后续承接明确。readonlyNext第2章承接劳梓凡抵达小区、见到郑小满并首次实战，与本章endingState和nextChapterEntryState衔接一致，无越界或矛盾。assessment.current与issueHistoryByChapter均无未解决阻塞问题，refinements仅为可选润色，不构成返工依据。\",\"issues\":[]}}},{\"kind\":\"assessment\",\"round\":0,\"result\":{\"chapters\":{\"cmv3wyvw40015gow0780pycx9-chapter-cd576eb4-d521-4666-b9ca-d1c5c958f060\":{\"status\":\"passed\",\"canEnterExecution\":true,\"verdict\":\"usable\",\"safeToSync\":true,\"loadRisk\":\"normal\",\"recommendedHandling\":\"use_as_is\",\"issues\":[],\"summary\":\"第1章合同目标清晰、边界明确，四张场景卡完整覆盖从现实挤压到账本浮现再到出门决定的推进链，因果桥梁可执行，读者体验合同明确本章问题与可见回报。原选承诺在本章范围内均有对应安排，后续章节承接明确，无阻塞性缺口。\",\"repairGuidance\":[],\"confidence\":0.86,\"issueChecks\":[],\"promiseChecks\":[{\"sourceId\":\"sellingPoint\",\"scope\":\"book_arc\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.sellingPoint\",\"quote\":\"主角用茅山术法和八极拳在都市底层讨生活，每一次驱邪都是一次‘接单-解决-收钱’的闭环，但账本上的名字会一个个变成他的债主或客户，现实压力与灵异风险同步升级。\"}],\"candidateEvidence\":[{\"sourcePath\":\"purpose\",\"quote\":\"劳梓凡在赔钱、差评、催租三重挤压下，发现床底旧账本自动浮现陌生名字地址与‘不去，债转你身’，因只剩几十块而决定按地址去看一眼。\"},{\"sourcePath\":\"scene_3.mustAdvance[1]\",\"quote\":\"账面浮现‘郑小满’、老旧小区地址和‘不去，债转你身’\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyNext.summary\",\"quote\":\"劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。郑小满付了第一笔钱，劳梓凡确认账本有用，也确认事情没完。\"}],\"explanation\":\"本章作为开篇，已安排现实压力（讹诈、差评、催租）与账本浮现名字的闭环起点，第2章承接驱邪首秀与第一笔收入，卖点在本章范围内以setup形式保留，后续承接明确。\",\"repairHint\":\"\"},{\"sourceId\":\"coreConflict\",\"scope\":\"book_arc\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.coreConflict\",\"quote\":\"劳梓凡想靠驱邪赚钱还债过安稳日子，但账本背后的势力（阴司、债主、同行）不允许他置身事外；他必须在‘继续按账本做事’和‘毁掉账本回归普通生活’之间反复抉择。\"}],\"candidateEvidence\":[{\"sourcePath\":\"readerExperience.netChange\",\"quote\":\"劳梓凡从‘怀疑账本是恶作剧’变为‘确认地址真实并决定按地址去看一眼’，账本从床底旧物变成他必须面对的下一步。\"},{\"sourcePath\":\"scene_4.causality.motive\",\"quote\":\"地址真实存在，且‘不去，债转你身’的警告让他不敢赌；他需要钱，也需要弄清账本是什么。\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyPlanningHorizon.beats[0].mustDeliver[1]\",\"quote\":\"劳梓凡被现实压力逼到必须按地址去看一眼\"}],\"explanation\":\"本章已安排主角在现实压力与账本警告之间被迫行动，核心冲突的‘被迫卷入’起点成立，后续抉择在卷级节拍中持续承接。\",\"repairHint\":\"\"},{\"sourceId\":\"protagonistPath\",\"scope\":\"book_arc\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.protagonistPath\",\"quote\":\"从被动接单的外卖小哥，到主动利用账本规则与各方周旋的‘阳间讨债人’，最终成为能在阴阳两界制定规则的人。\"}],\"candidateEvidence\":[{\"sourcePath\":\"scene_4.causality.choice\",\"quote\":\"把账本塞进外卖箱，锁门按地址出发。\"},{\"sourcePath\":\"readerExperience.netChange\",\"quote\":\"劳梓凡从‘怀疑账本是恶作剧’变为‘确认地址真实并决定按地址去看一眼’，账本从床底旧物变成他必须面对的下一步。\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyPlanningHorizon.beats[0].mustDeliver[3]\",\"quote\":\"账本确实有用且驱邪能赚到第一笔钱\"}],\"explanation\":\"本章完成从‘被动外卖员’到‘被迫按账本行动’的第一步，主角路径的起点动作已安排，后续成长在卷级节拍中承接。\",\"repairHint\":\"\"},{\"sourceId\":\"storyPrototype.distinctiveEngine\",\"scope\":\"current_chapter\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.storyPrototype.distinctiveEngine\",\"quote\":\"账本每浮现一个新名字，劳梓凡就必须在限定时间内找到并解决对方的灵异问题，否则自己会替对方承担‘债务’——这种‘债务转移’机制让每一次选择都直接改变他与客户、阴司、同行之间的利害关系，而不是单纯接任务升级。\"}],\"candidateEvidence\":[{\"sourcePath\":\"exclusiveEvent\",\"quote\":\"床底旧账本首次自动翻开，浮现郑小满的名字、地址和‘不去，债转你身’字样。\"},{\"sourcePath\":\"scene_3.mustAdvance[1]\",\"quote\":\"账面浮现‘郑小满’、老旧小区地址和‘不去，债转你身’\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyNext.summary\",\"quote\":\"劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。\"}],\"explanation\":\"本章已安排账本首次浮现名字与‘不去，债转你身’的债务转移威胁，独特引擎的规则起点在本章显形，第2章承接实际驱邪与债务未清。\",\"repairHint\":\"\"},{\"sourceId\":\"storyPrototype.earlyPayoff\",\"scope\":\"opening_sequence\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.storyPrototype.earlyPayoff\",\"quote\":\"第1章末账本首次浮现名字，第2章劳梓凡按线索找到第一个客户并完成驱邪，获得第一笔收入，同时发现客户正是给他差评的人；第3章他利用这笔收入暂时解决房租，但账本上又出现新名字，且这次的名字是他认识的人。\"}],\"candidateEvidence\":[{\"sourcePath\":\"endingState\",\"quote\":\"劳梓凡揣着账本站在出租屋门口，决定趁夜按地址去陌生小区看一眼，但尚未见到客户。\"},{\"sourcePath\":\"scene_4.mustAdvance[1]\",\"quote\":\"劳梓凡把账本塞进外卖箱锁门出发\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyNext.summary\",\"quote\":\"劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。郑小满付了第一笔钱，劳梓凡确认账本有用，也确认事情没完。\"}],\"explanation\":\"earlyPayoff覆盖开篇序列，本章完成第1章末账本首次浮现名字的节点，第2章承接驱邪首秀与第一笔收入，第3章反转在后续节拍中安排，本章贡献符合开篇序列分工。\",\"repairHint\":\"\"},{\"sourceId\":\"storyPrototype.openingChain[0]\",\"scope\":\"current_chapter\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.storyPrototype.openingChain[0].action\",\"quote\":\"劳梓凡在送外卖时被大妈讹诈，赔了钱还吃了差评，回到出租屋发现床底旧账本自动翻开，浮现一个名字和地址。\"},{\"sourcePath\":\"selectedPlanningDirection.candidate.storyPrototype.openingChain[0].choice\",\"quote\":\"他决定按地址去看一眼，因为账本上写着‘不去，债转你身’。\"}],\"candidateEvidence\":[{\"sourcePath\":\"scene_1.mustAdvance[0]\",\"quote\":\"大妈以汤洒弄脏鞋为由讹走两百块\"},{\"sourcePath\":\"scene_3.mustAdvance[1]\",\"quote\":\"账面浮现‘郑小满’、老旧小区地址和‘不去，债转你身’\"},{\"sourcePath\":\"scene_4.mustAdvance[1]\",\"quote\":\"劳梓凡把账本塞进外卖箱锁门出发\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyNext.summary\",\"quote\":\"劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。\"}],\"explanation\":\"openingChain[0]的action、resistance、choice、consequence在本章均有对应安排：讹诈与差评、账本自动翻开浮现名字地址、因‘不去，债转你身’决定出门；consequence中到达地址后的驱邪压制由第2章承接，本章边界明确不越章。\",\"repairHint\":\"\"}],\"progressionChecks\":[{\"dimension\":\"event_repetition\",\"status\":\"insufficient_context\",\"candidateEvidence\":[{\"sourcePath\":\"scene_1.mustAdvance[0]\",\"quote\":\"大妈以汤洒弄脏鞋为由讹走两百块\"},{\"sourcePath\":\"scene_3.mustAdvance[0]\",\"quote\":\"床底旧账本自动翻开\"}],\"priorEvidence\":[],\"explanation\":\"本章为第1章，无前文正文可供比较事件是否重复。场景1的现实纠纷与场景3的灵异事件功能不同，不构成同质重复，但缺少前章正文作为比较基准，无法判定与前文事件的关系。\",\"issueId\":null,\"repairHint\":\"\"},{\"dimension\":\"knowledge_repetition\",\"status\":\"insufficient_context\",\"candidateEvidence\":[{\"sourcePath\":\"readerExperience.informationReveal\",\"quote\":\"账本会自动翻开并浮现真实存在的姓名与地址，且附带‘不去，债转你身’的警告。\"}],\"priorEvidence\":[],\"explanation\":\"本章为第1章，无前文正文可判断账本信息是否已被前文揭示。账本自动浮现名字与地址在本章首次出现，属于新信息，但缺少前章正文作为比较基准。\",\"issueId\":null,\"repairHint\":\"\"},{\"dimension\":\"prior_goal_followthrough\",\"status\":\"insufficient_context\",\"candidateEvidence\":[{\"sourcePath\":\"scene_4.causality.choice\",\"quote\":\"把账本塞进外卖箱，锁门按地址出发。\"}],\"priorEvidence\":[],\"explanation\":\"本章为第1章，无前章已选择或已开始的行动可供核对。主角在本章内从被讹到决定出门形成完整行动链，但缺少前文正文作为承接比较基准。\",\"issueId\":null,\"repairHint\":\"\"}],\"refinements\":[\"scene_1的prerequisites标注为established_in_context但引用‘本章开篇送餐场景’，建议改为establish_in_scene并明确开篇即建立外卖员身份与手头现金，避免生成器误以为需要前文铺垫。\",\"scene_2的赵德柱来电可考虑在电话中带出一句旧楼或旧货的市井口吻，为后续房东作为市井线人的功能埋下轻量伏笔，但不影响本章执行。\",\"readerExperience.rewardLevel为setup符合本章开篇职责，无需调整；若后续章节需要更强即时回报，可在第2章提升为partial或major。\"]}},\"window\":{\"usable\":true,\"safeToSync\":true,\"requiresUserDecision\":false,\"summary\":\"第1章候选合同与原始合同一致，目标清晰、边界明确，四张场景卡完整覆盖从现实挤压到账本浮现再到出门决定的推进链，因果桥梁可执行。本章为开篇章，无前文正文可比较，事件与信息均为首次出现，不构成重复；账本浮现名字与‘不去，债转你身’的债务转移威胁在本章首次显形，第2章承接驱邪首秀与第一笔收入，开篇承诺在本章范围内以setup形式保留，后续承接明确。readonlyNext第2章承接劳梓凡抵达小区、见到郑小满并首次实战，与本章endingState和nextChapterEntryState衔接一致，无越界或矛盾。assessment.current与issueHistoryByChapter均无未解决阻塞问题，refinements仅为可选润色，不构成返工依据。\",\"issues\":[]}}}],\"quality\":{\"chapters\":{\"cmv3wyvw40015gow0780pycx9-chapter-cd576eb4-d521-4666-b9ca-d1c5c958f060\":{\"status\":\"passed\",\"canEnterExecution\":true,\"verdict\":\"usable\",\"safeToSync\":true,\"loadRisk\":\"normal\",\"recommendedHandling\":\"use_as_is\",\"issues\":[],\"summary\":\"第1章合同目标清晰、边界明确，四张场景卡完整覆盖从现实挤压到账本浮现再到出门决定的推进链，因果桥梁可执行，读者体验合同明确本章问题与可见回报。原选承诺在本章范围内均有对应安排，后续章节承接明确，无阻塞性缺口。\",\"repairGuidance\":[],\"confidence\":0.86,\"issueChecks\":[],\"promiseChecks\":[{\"sourceId\":\"sellingPoint\",\"scope\":\"book_arc\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.sellingPoint\",\"quote\":\"主角用茅山术法和八极拳在都市底层讨生活，每一次驱邪都是一次‘接单-解决-收钱’的闭环，但账本上的名字会一个个变成他的债主或客户，现实压力与灵异风险同步升级。\"}],\"candidateEvidence\":[{\"sourcePath\":\"purpose\",\"quote\":\"劳梓凡在赔钱、差评、催租三重挤压下，发现床底旧账本自动浮现陌生名字地址与‘不去，债转你身’，因只剩几十块而决定按地址去看一眼。\"},{\"sourcePath\":\"scene_3.mustAdvance[1]\",\"quote\":\"账面浮现‘郑小满’、老旧小区地址和‘不去，债转你身’\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyNext.summary\",\"quote\":\"劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。郑小满付了第一笔钱，劳梓凡确认账本有用，也确认事情没完。\"}],\"explanation\":\"本章作为开篇，已安排现实压力（讹诈、差评、催租）与账本浮现名字的闭环起点，第2章承接驱邪首秀与第一笔收入，卖点在本章范围内以setup形式保留，后续承接明确。\",\"repairHint\":\"\"},{\"sourceId\":\"coreConflict\",\"scope\":\"book_arc\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.coreConflict\",\"quote\":\"劳梓凡想靠驱邪赚钱还债过安稳日子，但账本背后的势力（阴司、债主、同行）不允许他置身事外；他必须在‘继续按账本做事’和‘毁掉账本回归普通生活’之间反复抉择。\"}],\"candidateEvidence\":[{\"sourcePath\":\"readerExperience.netChange\",\"quote\":\"劳梓凡从‘怀疑账本是恶作剧’变为‘确认地址真实并决定按地址去看一眼’，账本从床底旧物变成他必须面对的下一步。\"},{\"sourcePath\":\"scene_4.causality.motive\",\"quote\":\"地址真实存在，且‘不去，债转你身’的警告让他不敢赌；他需要钱，也需要弄清账本是什么。\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyPlanningHorizon.beats[0].mustDeliver[1]\",\"quote\":\"劳梓凡被现实压力逼到必须按地址去看一眼\"}],\"explanation\":\"本章已安排主角在现实压力与账本警告之间被迫行动，核心冲突的‘被迫卷入’起点成立，后续抉择在卷级节拍中持续承接。\",\"repairHint\":\"\"},{\"sourceId\":\"protagonistPath\",\"scope\":\"book_arc\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.protagonistPath\",\"quote\":\"从被动接单的外卖小哥，到主动利用账本规则与各方周旋的‘阳间讨债人’，最终成为能在阴阳两界制定规则的人。\"}],\"candidateEvidence\":[{\"sourcePath\":\"scene_4.causality.choice\",\"quote\":\"把账本塞进外卖箱，锁门按地址出发。\"},{\"sourcePath\":\"readerExperience.netChange\",\"quote\":\"劳梓凡从‘怀疑账本是恶作剧’变为‘确认地址真实并决定按地址去看一眼’，账本从床底旧物变成他必须面对的下一步。\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyPlanningHorizon.beats[0].mustDeliver[3]\",\"quote\":\"账本确实有用且驱邪能赚到第一笔钱\"}],\"explanation\":\"本章完成从‘被动外卖员’到‘被迫按账本行动’的第一步，主角路径的起点动作已安排，后续成长在卷级节拍中承接。\",\"repairHint\":\"\"},{\"sourceId\":\"storyPrototype.distinctiveEngine\",\"scope\":\"current_chapter\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.storyPrototype.distinctiveEngine\",\"quote\":\"账本每浮现一个新名字，劳梓凡就必须在限定时间内找到并解决对方的灵异问题，否则自己会替对方承担‘债务’——这种‘债务转移’机制让每一次选择都直接改变他与客户、阴司、同行之间的利害关系，而不是单纯接任务升级。\"}],\"candidateEvidence\":[{\"sourcePath\":\"exclusiveEvent\",\"quote\":\"床底旧账本首次自动翻开，浮现郑小满的名字、地址和‘不去，债转你身’字样。\"},{\"sourcePath\":\"scene_3.mustAdvance[1]\",\"quote\":\"账面浮现‘郑小满’、老旧小区地址和‘不去，债转你身’\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyNext.summary\",\"quote\":\"劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。\"}],\"explanation\":\"本章已安排账本首次浮现名字与‘不去，债转你身’的债务转移威胁，独特引擎的规则起点在本章显形，第2章承接实际驱邪与债务未清。\",\"repairHint\":\"\"},{\"sourceId\":\"storyPrototype.earlyPayoff\",\"scope\":\"opening_sequence\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.storyPrototype.earlyPayoff\",\"quote\":\"第1章末账本首次浮现名字，第2章劳梓凡按线索找到第一个客户并完成驱邪，获得第一笔收入，同时发现客户正是给他差评的人；第3章他利用这笔收入暂时解决房租，但账本上又出现新名字，且这次的名字是他认识的人。\"}],\"candidateEvidence\":[{\"sourcePath\":\"endingState\",\"quote\":\"劳梓凡揣着账本站在出租屋门口，决定趁夜按地址去陌生小区看一眼，但尚未见到客户。\"},{\"sourcePath\":\"scene_4.mustAdvance[1]\",\"quote\":\"劳梓凡把账本塞进外卖箱锁门出发\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyNext.summary\",\"quote\":\"劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。郑小满付了第一笔钱，劳梓凡确认账本有用，也确认事情没完。\"}],\"explanation\":\"earlyPayoff覆盖开篇序列，本章完成第1章末账本首次浮现名字的节点，第2章承接驱邪首秀与第一笔收入，第3章反转在后续节拍中安排，本章贡献符合开篇序列分工。\",\"repairHint\":\"\"},{\"sourceId\":\"storyPrototype.openingChain[0]\",\"scope\":\"current_chapter\",\"status\":\"preserved\",\"handoffStatus\":\"not_needed\",\"sourceEvidence\":[{\"sourcePath\":\"selectedPlanningDirection.candidate.storyPrototype.openingChain[0].action\",\"quote\":\"劳梓凡在送外卖时被大妈讹诈，赔了钱还吃了差评，回到出租屋发现床底旧账本自动翻开，浮现一个名字和地址。\"},{\"sourcePath\":\"selectedPlanningDirection.candidate.storyPrototype.openingChain[0].choice\",\"quote\":\"他决定按地址去看一眼，因为账本上写着‘不去，债转你身’。\"}],\"candidateEvidence\":[{\"sourcePath\":\"scene_1.mustAdvance[0]\",\"quote\":\"大妈以汤洒弄脏鞋为由讹走两百块\"},{\"sourcePath\":\"scene_3.mustAdvance[1]\",\"quote\":\"账面浮现‘郑小满’、老旧小区地址和‘不去，债转你身’\"},{\"sourcePath\":\"scene_4.mustAdvance[1]\",\"quote\":\"劳梓凡把账本塞进外卖箱锁门出发\"}],\"contextEvidence\":[{\"sourcePath\":\"readonlyNext.summary\",\"quote\":\"劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。\"}],\"explanation\":\"openingChain[0]的action、resistance、choice、consequence在本章均有对应安排：讹诈与差评、账本自动翻开浮现名字地址、因‘不去，债转你身’决定出门；consequence中到达地址后的驱邪压制由第2章承接，本章边界明确不越章。\",\"repairHint\":\"\"}],\"progressionChecks\":[{\"dimension\":\"event_repetition\",\"status\":\"insufficient_context\",\"candidateEvidence\":[{\"sourcePath\":\"scene_1.mustAdvance[0]\",\"quote\":\"大妈以汤洒弄脏鞋为由讹走两百块\"},{\"sourcePath\":\"scene_3.mustAdvance[0]\",\"quote\":\"床底旧账本自动翻开\"}],\"priorEvidence\":[],\"explanation\":\"本章为第1章，无前文正文可供比较事件是否重复。场景1的现实纠纷与场景3的灵异事件功能不同，不构成同质重复，但缺少前章正文作为比较基准，无法判定与前文事件的关系。\",\"issueId\":null,\"repairHint\":\"\"},{\"dimension\":\"knowledge_repetition\",\"status\":\"insufficient_context\",\"candidateEvidence\":[{\"sourcePath\":\"readerExperience.informationReveal\",\"quote\":\"账本会自动翻开并浮现真实存在的姓名与地址，且附带‘不去，债转你身’的警告。\"}],\"priorEvidence\":[],\"explanation\":\"本章为第1章，无前文正文可判断账本信息是否已被前文揭示。账本自动浮现名字与地址在本章首次出现，属于新信息，但缺少前章正文作为比较基准。\",\"issueId\":null,\"repairHint\":\"\"},{\"dimension\":\"prior_goal_followthrough\",\"status\":\"insufficient_context\",\"candidateEvidence\":[{\"sourcePath\":\"scene_4.causality.choice\",\"quote\":\"把账本塞进外卖箱，锁门按地址出发。\"}],\"priorEvidence\":[],\"explanation\":\"本章为第1章，无前章已选择或已开始的行动可供核对。主角在本章内从被讹到决定出门形成完整行动链，但缺少前文正文作为承接比较基准。\",\"issueId\":null,\"repairHint\":\"\"}],\"refinements\":[\"scene_1的prerequisites标注为established_in_context但引用‘本章开篇送餐场景’，建议改为establish_in_scene并明确开篇即建立外卖员身份与手头现金，避免生成器误以为需要前文铺垫。\",\"scene_2的赵德柱来电可考虑在电话中带出一句旧楼或旧货的市井口吻，为后续房东作为市井线人的功能埋下轻量伏笔，但不影响本章执行。\",\"readerExperience.rewardLevel为setup符合本章开篇职责，无需调整；若后续章节需要更强即时回报，可在第2章提升为partial或major。\"]}},\"window\":{\"usable\":true,\"safeToSync\":true,\"requiresUserDecision\":false,\"summary\":\"第1章候选合同与原始合同一致，目标清晰、边界明确，四张场景卡完整覆盖从现实挤压到账本浮现再到出门决定的推进链，因果桥梁可执行。本章为开篇章，无前文正文可比较，事件与信息均为首次出现，不构成重复；账本浮现名字与‘不去，债转你身’的债务转移威胁在本章首次显形，第2章承接驱邪首秀与第一笔收入，开篇承诺在本章范围内以setup形式保留，后续承接明确。readonlyNext第2章承接劳梓凡抵达小区、见到郑小满并首次实战，与本章endingState和nextChapterEntryState衔接一致，无越界或矛盾。assessment.current与issueHistoryByChapter均无未解决阻塞问题，refinements仅为可选润色，不构成返工依据。\",\"issues\":[]}},\"obligationMoves\":[],\"summary\":\"第1章起的规划已通过复核并保存（1章）。\",\"affectedChapterIds\":[\"cmv3wyvw40015gow0780pycx9-chapter-cd576eb4-d521-4666-b9ca-d1c5c958f060\"],\"candidateVersionId\":\"cmv3x464y00rbgow010u86vjh\"}}",
+    "milestonesJson": "[{\"checkpointType\":\"candidate_selection_required\",\"summary\":\"第 1 轮 已生成 2 套书级方向，并完成每套书名组。\",\"createdAt\":\"2026-10-11T14:22:25.068Z\"},{\"checkpointType\":\"production_experience_required\",\"summary\":\"《外卖小哥的茅山账本》已完成前期准备，请选择创作界面。\",\"createdAt\":\"2026-10-11T14:26:51.436Z\"},{\"checkpointType\":\"chapter_batch_ready\",\"summary\":\"AI 已自动通过「节奏拆章完成后继续」，并继续推进。\",\"createdAt\":\"2026-10-11T17:07:16.928Z\"}]",
+    "pendingManualRecovery": 1,
+    "heartbeatAt": "2026-10-11T17:07:19.124+00:00",
+    "startedAt": "2026-10-11T14:21:13.171+00:00",
+    "finishedAt": null,
+    "cancelRequestedAt": null,
+    "attemptCount": 0,
+    "maxAttempts": 3,
+    "lastError": "章节正文、执行约定或执行所有权已变化，已停止写入，请回到章节工作区核对。",
+    "createdAt": "2026-10-11T14:21:09.022+00:00",
+    "updatedAt": "2026-10-11T17:07:19.132+00:00",
+    "promptTokens": 275909,
+    "completionTokens": 99138,
+    "totalTokens": 375047,
+    "llmCallCount": 26,
+    "lastTokenRecordedAt": "2026-10-11T14:33:20.125+00:00"
+  },
+  "versionId": "cmv3x464y00rbgow010u86vjh",
+  "versionUpdatedAt": "2026-10-11T14:28:20.988+00:00",
+  "workspace": {
+    "novelId": "cmv3wyvw40015gow0780pycx9",
+    "workspaceVersion": "v2",
+    "volumes": [
+      {
+        "id": "cmv3wyvw40015gow0780pycx9-volume-aba7a8e2-4a3b-49d3-bc43-b33d4cca4a7e",
+        "novelId": "cmv3wyvw40015gow0780pycx9",
+        "sortOrder": 1,
+        "title": "账本浮现",
+        "summary": "劳梓凡被房租和差评逼到绝境，床底旧账本自动浮现名字，他被迫按地址接单，用八极拳和茅山术法解决第一单，赚到钱却发现客户正是差评师。",
+        "openingHook": "送外卖被大妈讹诈赔钱又吃差评，回出租屋发现床底账本自动翻开，浮现陌生名字和地址，写着“不去，债转你身”。",
+        "mainPromise": "账本有用、驱邪能赚钱、差评可反制，但每解决一单，新名字带来更麻烦的灵异与现实纠葛。",
+        "primaryPressureSource": "房租到期、差评扣钱、外卖站考核，以及账本“债转你身”的债务转移威胁。",
+        "coreSellingPoint": "外卖员按账本接单驱邪，用八极拳和茅山术法解决旧物附灵，即时收钱缓解现实焦虑。",
+        "escalationMode": "从单件旧物附灵扩展到差评团伙与阴司耳目，术法拳法在实战中初步成型，现实与灵异麻烦同步加码。",
+        "protagonistChange": "从怀疑账本是恶作剧的被动外卖员，变成确认账本有效、开始主动接单还债的阳间讨债人。",
+        "midVolumeRisk": "驱邪过程容易变成重复的接单打怪收钱流水账，客户沦为工具人，账本线索停滞。",
+        "climax": "劳梓凡追查差评来源，发现批量刷差评团伙背后与账本上某个名字有关，第一次窥见阴司对阳间的渗透。",
+        "payoffType": "开篇承诺兑现：账本有用、驱邪能赚钱、差评可反制，两到三次独立驱邪小单完成。",
+        "nextVolumeHook": "账本浮现新名字，指向一个劳梓凡认识的人，而同行催收人也开始盯上他的单子。",
+        "resetPoint": "劳梓凡暂时稳住房租和差评，但账本更新出更复杂的名字，他意识到接单不是终点，规则本身才是问题。",
+        "openPayoffs": [
+          "账本名字从何而来，为何选中劳梓凡，不去为何会债转己身。",
+          "同行也在找旧物件，他的身份和目的尚未揭晓。",
+          "差评团伙被灵异势力控制，该势力与阴司的关系待查。",
+          "房东旧楼里封着与账本有关的旧物，尚未打开。",
+          "第一个客户郑小满能梦见账本名字的模糊画面，未告诉劳梓凡。"
+        ],
+        "status": "chapter_list_partial:active",
+        "sourceVersionId": null,
+        "chapters": [
+          {
+            "id": "cmv3wyvw40015gow0780pycx9-chapter-cd576eb4-d521-4666-b9ca-d1c5c958f060",
+            "volumeId": "cmv3wyvw40015gow0780pycx9-volume-aba7a8e2-4a3b-49d3-bc43-b33d4cca4a7e",
+            "chapterId": "cmv3x2mt600jsgow0e6kb0852",
+            "chapterOrder": 1,
+            "beatKey": "open_hook",
+            "title": "差评与旧账本",
+            "summary": "劳梓凡送餐被大妈讹走两百块，又因超时吃差评，回出租屋发现床底旧账本自动翻开，浮现陌生名字地址和“不去，债转你身”。他翻遍全身只剩几十块，房东电话催租，决定按地址去看一眼。",
+            "protagonistAction": "劳梓凡在赔钱和差评的双重打击下，选择按账本地址去陌生小区看一眼，而不是把账本扔回床底。",
+            "chapterPayoff": "账本首次自动浮现名字和债务转移威胁，劳梓凡被现实压力逼出行动，读者看到“不去就背债”的规则正式亮出。",
+            "purpose": "劳梓凡在赔钱、差评、催租三重挤压下，发现床底旧账本自动浮现陌生名字地址与‘不去，债转你身’，因只剩几十块而决定按地址去看一眼。",
+            "exclusiveEvent": "床底旧账本首次自动翻开，浮现郑小满的名字、地址和‘不去，债转你身’字样。",
+            "endingState": "劳梓凡揣着账本站在出租屋门口，决定趁夜按地址去陌生小区看一眼，但尚未见到客户。",
+            "nextChapterEntryState": "劳梓凡已抵达账本地址所在的老旧小区楼下，准备上楼找郑小满，身上只有几十块和随身几件旧物。",
+            "conflictLevel": 20,
+            "conflictLevelSource": "ai",
+            "revealLevel": 30,
+            "targetWordCount": 2800,
+            "mustAvoid": "不得让劳梓凡在本章见到郑小满或进入客户家中；不得在本章展示驱邪实战或八极拳对灵体生效；不得揭示账本来源、阴司规则或债务转移原理；不得让劳梓凡获得任何驱邪收入；不得把账本浮现名字处理成梦境、幻觉或他人伪造。",
+            "taskSheet": "开篇用被讹与差评把劳梓凡逼到墙角；回屋后翻钱、接房东催租电话，强化只剩几十块的绝境。床底账本自动翻开，浮现郑小满、地址、‘不去，债转你身’。他先当恶作剧，用手机查地址发现真实存在，犹豫后把账本塞进外卖箱出门。不写见到客户、不写驱邪、不写收钱。",
+            "sceneCards": "{\"targetWordCount\":2800,\"lengthBudget\":{\"targetWordCount\":2800,\"softMinWordCount\":2380,\"softMaxWordCount\":3220,\"hardMaxWordCount\":3500},\"scenes\":[{\"key\":\"scene_1\",\"title\":\"送餐被讹与差评\",\"purpose\":\"用一场具体的送餐纠纷把劳梓凡的现实困境压到最低点。\",\"mustAdvance\":[\"大妈以汤洒弄脏鞋为由讹走两百块\",\"外卖站因超时扣钱并记差评\"],\"mustPreserve\":[\"劳梓凡外卖员身份和市井语言\",\"现实压力先于灵异出现\"],\"entryState\":\"劳梓凡拎着外卖赶到老旧居民楼，已因堵车超时。\",\"exitState\":\"劳梓凡赔了两百块，收到差评通知，蹲在路边看手机余额。\",\"forbiddenExpansion\":[\"不得出现灵异元素\",\"不得让劳梓凡当场使用术法或八极拳\"],\"targetWordCount\":700,\"resistance\":\"大妈胡搅蛮缠堵住楼道，围观邻居帮腔，平台规则偏向顾客。\",\"turn\":\"大妈从指责汤洒升级为索赔鞋子，劳梓凡为赶下一单选择私了赔钱。\",\"emotionalShift\":\"从着急送单到憋屈赔钱，再到看到差评通知的麻木。\",\"readerValue\":\"读者立刻感知主角被现实按在地上摩擦，产生‘他还能更惨吗’的追读动力。\",\"causality\":{\"actor\":\"劳梓凡\",\"choice\":\"掏两百块私了，先保住不超时。\",\"motive\":\"下一单只剩十分钟，报警或争执会误工扣更多钱。\",\"prerequisites\":[{\"condition\":\"劳梓凡正在送外卖，手头有当天跑单的现金。\",\"sourceKind\":\"established_in_context\",\"reference\":\"本章开篇送餐场景\"}],\"resistanceResponse\":\"大妈收钱后仍向平台投诉汤洒，平台自动记差评并扣钱。\",\"outcomeMechanism\":\"私了没有消除投诉，反而让劳梓凡既赔钱又吃差评，经济与考核双重受损。\",\"resultingConstraints\":[{\"constraint\":\"劳梓凡当天收入减少两百块并被记一次差评。\",\"persistence\":\"持续到外卖站考核周期结束或差评被撤销。\"}]}},{\"key\":\"scene_2\",\"title\":\"出租屋翻钱与催租电话\",\"purpose\":\"把经济绝境具体化，让劳梓凡回到出租屋面对账本前先面对现实。\",\"mustAdvance\":[\"劳梓凡翻遍全身只剩几十块\",\"房东赵德柱打电话催下季度房租\"],\"mustPreserve\":[\"出租屋的逼仄环境和劳梓凡的日常状态\",\"赵德柱作为现实压力源的声音出场\"],\"entryState\":\"劳梓凡回到城中村出租屋，把外卖箱扔在门口。\",\"exitState\":\"劳梓凡坐在床边数钱，手机里是赵德柱的催租短信和未接来电。\",\"forbiddenExpansion\":[\"不得让赵德柱上门\",\"不得让劳梓凡此时发现账本\"],\"targetWordCount\":600,\"resistance\":\"翻遍口袋和抽屉只有几十块，赵德柱电话里态度强硬。\",\"turn\":\"赵德柱从催租升级为警告‘下礼拜不交就换锁’。\",\"emotionalShift\":\"从赔钱后的疲惫到数钱时的焦躁，再到接完电话的窒息感。\",\"readerValue\":\"读者看到房租倒计时，理解劳梓凡为什么后面会冒险按账本地址走。\",\"causality\":{\"actor\":\"劳梓凡\",\"choice\":\"接起赵德柱电话，承诺下周凑钱。\",\"motive\":\"他不想被换锁，出租屋是他唯一能落脚的地方。\",\"prerequisites\":[{\"condition\":\"劳梓凡租住赵德柱的城中村旧楼，下季度房租即将到期。\",\"sourceKind\":\"established_in_context\",\"reference\":\"本章出租屋场景与赵德柱来电\"}],\"resistanceResponse\":\"赵德柱不接受口头承诺，给出下礼拜交钱的硬期限。\",\"outcomeMechanism\":\"电话催租把模糊的经济压力变成具体倒计时，逼劳梓凡必须尽快找到来钱的路子。\",\"resultingConstraints\":[{\"constraint\":\"劳梓凡必须在一周内凑齐下季度房租。\",\"persistence\":\"持续到房租交清或被换锁。\"}]}},{\"key\":\"scene_3\",\"title\":\"床底账本自动翻开\",\"purpose\":\"让账本以无法用恶作剧解释的方式登场，抛出核心悬念。\",\"mustAdvance\":[\"床底旧账本自动翻开\",\"账面浮现‘郑小满’、老旧小区地址和‘不去，债转你身’\"],\"mustPreserve\":[\"账本作为旧物的质感\",\"劳梓凡对账本来源一无所知\"],\"entryState\":\"劳梓凡坐在床边，脚碰到床底一个硬物。\",\"exitState\":\"劳梓凡举着账本站在灯下，账面字迹清晰，地址陌生。\",\"forbiddenExpansion\":[\"不得让账本说话或解释规则\",\"不得让劳梓凡认出账本或知道其来源\"],\"targetWordCount\":800,\"resistance\":\"劳梓凡第一反应是恶作剧，翻找床底想找出是谁塞的。\",\"turn\":\"账本在他手里自动翻页，墨迹从空白中浮现，不是他见过的任何笔迹。\",\"emotionalShift\":\"从烦躁到疑惑，再到看见字迹浮现时的后背发凉。\",\"readerValue\":\"核心卖点首次显形：账本有用且带威胁，读者想知道名字和地址意味着什么。\",\"causality\":{\"actor\":\"劳梓凡\",\"choice\":\"把账本从床底抽出来翻看，没有立刻扔掉。\",\"motive\":\"‘不去，债转你身’六个字让他想起欠债的滋味，他怕是什么人设的局。\",\"prerequisites\":[{\"condition\":\"劳梓凡床底有旧物，账本此前未被发现。\",\"sourceKind\":\"establish_in_scene\",\"reference\":\"scene_3中脚碰硬物、抽出账本\"}],\"resistanceResponse\":\"账本不回应他的翻找，只是自动翻到有字的一页，字迹稳定不褪。\",\"outcomeMechanism\":\"无法解释的自动翻页和浮现字迹让‘恶作剧’解释站不住脚，劳梓凡被迫认真对待账本。\",\"resultingConstraints\":[{\"constraint\":\"劳梓凡无法把账本当普通旧物扔掉，必须处理‘不去，债转你身’的警告。\",\"persistence\":\"持续到账本名字被处理或债务转移发生。\"}]}},{\"key\":\"scene_4\",\"title\":\"查证地址与出门决定\",\"purpose\":\"让劳梓凡用现实手段验证账本，并做出按地址去看一眼的决定。\",\"mustAdvance\":[\"劳梓凡用手机查地址发现是真实存在的老旧小区\",\"劳梓凡把账本塞进外卖箱锁门出发\"],\"mustPreserve\":[\"劳梓凡的怀疑与恐惧并存\",\"决定出于现实压力而非主动冒险\"],\"entryState\":\"劳梓凡盯着账本上的地址，手机搜索结果页面打开。\",\"exitState\":\"劳梓凡锁好门，背着外卖箱走进城中村夜色，账本在箱内。\",\"forbiddenExpansion\":[\"不得让劳梓凡到达小区或见到郑小满\",\"不得让劳梓凡联系任何人商量\"],\"targetWordCount\":700,\"resistance\":\"劳梓凡犹豫是否该去，怕惹上麻烦，也怕不去真的应验‘债转你身’。\",\"turn\":\"手机地图显示地址真实存在，且距离他只有四站公交。\",\"emotionalShift\":\"从怀疑到确认地址真实后的紧绷，再到出门时‘先看一眼再说’的决然。\",\"readerValue\":\"读者看到主角被账本推着迈出第一步，期待下一章见到客户和阴气。\",\"causality\":{\"actor\":\"劳梓凡\",\"choice\":\"把账本塞进外卖箱，锁门按地址出发。\",\"motive\":\"地址真实存在，且‘不去，债转你身’的警告让他不敢赌；他需要钱，也需要弄清账本是什么。\",\"prerequisites\":[{\"condition\":\"账本上的地址经手机查证真实存在。\",\"sourceKind\":\"establish_in_scene\",\"reference\":\"scene_4中手机地图搜索结果\"}],\"resistanceResponse\":\"夜色中的城中村和陌生小区让他本能发怵，但公交末班车提示催促他动身。\",\"outcomeMechanism\":\"查证结果把‘恶作剧’可能性压到最低，现实压力和警告共同推动他出门。\",\"resultingConstraints\":[{\"constraint\":\"劳梓凡已离开出租屋前往陌生小区，无法中途轻易回头。\",\"persistence\":\"持续到抵达小区或改变主意。\"}]}}],\"readerExperience\":{\"readerQuestion\":\"账本上的名字和地址是真的吗？去了会怎样？\",\"promisedReward\":\"读者看到账本确实自动浮现真实地址，并跟着劳梓凡出门，悬念从‘恶作剧’升级为‘必须去看一眼’。\",\"rewardLevel\":\"setup\",\"protagonistWant\":\"劳梓凡想保住外卖工作、凑齐房租，不想被一本旧账本继续拖进麻烦。\",\"primaryResistance\":\"大妈讹诈、平台差评扣钱、房东催租，以及劳梓凡自己对‘债转你身’的怀疑和恐惧。\",\"keyTurn\":\"劳梓凡用手机查证地址真实存在，确认账本不是随手涂鸦，决定出门。\",\"emotionalShift\":\"从被讹后的憋屈和差评后的麻木，到发现账本自动翻页的惊疑，再到查证地址后‘不去不行’的紧绷。\",\"informationReveal\":\"账本会自动翻开并浮现真实存在的姓名与地址，且附带‘不去，债转你身’的警告。\",\"netChange\":\"劳梓凡从‘怀疑账本是恶作剧’变为‘确认地址真实并决定按地址去看一眼’，账本从床底旧物变成他必须面对的下一步。\",\"inheritedHookResponsibilities\":[\"承接开篇钩子：送外卖被大妈讹诈赔钱又吃差评，回出租屋发现床底账本自动翻开，浮现陌生名字和地址，写着‘不去，债转你身’。\"],\"endingHook\":\"劳梓凡锁门出发，账本在外卖箱里，地址指向一个他从未去过的老旧小区——门后是谁，为什么会被账本盯上？\"},\"requiredElements\":[\"劳梓凡送外卖被大妈以‘汤洒了弄脏鞋’为由讹走两百块，外卖站因超时扣钱并记差评。\",\"劳梓凡回到出租屋翻遍全身只剩几十块，房东赵德柱打电话催下季度房租。\",\"床底旧账本自动翻开，浮现‘郑小满’的名字、一个老旧小区地址和‘不去，债转你身’。\",\"劳梓凡怀疑是恶作剧，用手机查地址发现是真实存在的老旧小区。\",\"劳梓凡把账本塞进外卖箱，锁门出发，决定按地址去看一眼——第一轮循环完整显形（pending_payoff，本章到期（第 1 章）；硬截止第 3 章；尚无推进记录；预定兑现强度 major）。\"]}",
+            "styleContract": null,
+            "payoffRefs": [
+              "第1章账本自动浮现名字，且写着‘不去，债转你身’，劳梓凡因这句话被迫按地址去看一眼。"
+            ],
+            "createdAt": "1970-01-01T00:00:00.000Z",
+            "updatedAt": "1970-01-01T00:00:00.000Z",
+            "requiredElements": [
+              "劳梓凡送外卖被大妈以‘汤洒了弄脏鞋’为由讹走两百块，外卖站因超时扣钱并记差评。",
+              "劳梓凡回到出租屋翻遍全身只剩几十块，房东赵德柱打电话催下季度房租。",
+              "床底旧账本自动翻开，浮现‘郑小满’的名字、一个老旧小区地址和‘不去，债转你身’。",
+              "劳梓凡怀疑是恶作剧，用手机查地址发现是真实存在的老旧小区。",
+              "劳梓凡把账本塞进外卖箱，锁门出发，决定按地址去看一眼——第一轮循环完整显形（pending_payoff，本章到期（第 1 章）；硬截止第 3 章；尚无推进记录；预定兑现强度 major）。"
+            ]
+          },
+          {
+            "id": "cmv3wyvw40015gow0780pycx9-chapter-16834f2a-6dcf-4a3b-b521-c80e3bf18e6e",
+            "volumeId": "cmv3wyvw40015gow0780pycx9-volume-aba7a8e2-4a3b-49d3-bc43-b33d4cca4a7e",
+            "chapterId": "cmv3x2mt800jtgow0la32yn38",
+            "chapterOrder": 2,
+            "beatKey": "open_hook",
+            "title": "八极拳压不住阴气",
+            "summary": "劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。郑小满付了第一笔钱，劳梓凡确认账本有用，也确认事情没完。",
+            "protagonistAction": "劳梓凡在术法准备不足的情况下，选择用符咒和八极拳强行压制阴气，并接下郑小满的报酬，承诺追查物件根源。",
+            "chapterPayoff": "八极拳配合茅山术法首次实战生效，劳梓凡赚到第一笔驱邪钱，但账本提示债根未除，郑小满的身份和物件来源成为新疑问。",
+            "purpose": null,
+            "exclusiveEvent": null,
+            "endingState": null,
+            "nextChapterEntryState": null,
+            "conflictLevel": null,
+            "conflictLevelSource": "ai",
+            "revealLevel": null,
+            "targetWordCount": null,
+            "mustAvoid": null,
+            "taskSheet": null,
+            "sceneCards": null,
+            "styleContract": null,
+            "payoffRefs": [],
+            "createdAt": "1970-01-01T00:00:00.000Z",
+            "updatedAt": "1970-01-01T00:00:00.000Z"
+          }
+        ],
+        "createdAt": "1970-01-01T00:00:00.000Z",
+        "updatedAt": "1970-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "cmv3wyvw40015gow0780pycx9-volume-3de19954-b7a7-48e2-8f29-920aef23fdf3",
+        "novelId": "cmv3wyvw40015gow0780pycx9",
+        "sortOrder": 2,
+        "title": "规则博弈",
+        "summary": "劳梓凡从被动接单转为主动追查每笔债务根源，与同行催收人从敌对到有限合作，逐步摸清债务转移机制和阴司在阳间的渗透规模。",
+        "openingHook": "账本新名字指向劳梓凡认识的人，他必须在限定时间内解决对方的灵异问题，否则自己替对方背债。",
+        "mainPromise": "摸清债务转移机制和阴司代理规则，从接单者变为规则周旋者，用推演和信息差反制同行与阴司耳目。",
+        "primaryPressureSource": "同行催收人的竞争与信息封锁、阴司耳目的暗中布局，以及多客户多势力交叉带来的精力与信任危机。",
+        "coreSellingPoint": "利用账本规则漏洞与同行博弈，通过证据链和推演反制阴司耳目，每揭一层真相就多一分主动。",
+        "escalationMode": "从单线接单升级为多客户多势力交叉，账本来源线索汇聚，现实与灵异压力同步抬升至阴司层级。",
+        "protagonistChange": "从靠账本指路的接单者，变成主动调查债务根源、利用规则漏洞周旋的阳间讨债人。",
+        "midVolumeRisk": "谜团只堆不解，同行博弈沦为纯体力对抗，推演感被动作戏吃掉，阴司布局迟迟不落地。",
+        "climax": "劳梓凡与同行催收人正面交锋后达成有限合作，共同揭开差评团伙背后的阴司耳目，确认账本是阴司坏账清单。",
+        "payoffType": "中期兑现：同行身份揭晓、差评团伙真相落地、账本来源初步确认，主角完成从接单到周旋的转变。",
+        "nextVolumeHook": "账本真相揭开后，阴司开始追责劳梓凡的越界调查，他必须在被清算前理清所有债务关系。",
+        "resetPoint": "劳梓凡掌握阴司代理机制的关键信息，但同行分道扬镳，阴司追责启动，他被迫从周旋转向反制布局。",
+        "openPayoffs": [
+          "账本上全部债务关系尚未理清，烧账本的条件不成熟。",
+          "阴司判官的真实意图和规则漏洞尚未完全暴露。",
+          "同行催收人的“规则漏洞手册”内容未公开。",
+          "房东旧楼里的秘密与账本的关系待揭。",
+          "劳梓凡能感知债主情绪的能力仍未对任何人坦白。"
+        ],
+        "status": "active",
+        "sourceVersionId": null,
+        "chapters": [],
+        "createdAt": "1970-01-01T00:00:00.000Z",
+        "updatedAt": "1970-01-01T00:00:00.000Z"
+      },
+      {
+        "id": "cmv3wyvw40015gow0780pycx9-volume-bf42455f-fde2-45aa-854a-e0b71206e60e",
+        "novelId": "cmv3wyvw40015gow0780pycx9",
+        "sortOrder": 3,
+        "title": "烧账终局",
+        "summary": "劳梓凡集齐账本所有债务关系的证据，当众烧掉账本并用阳间方式固定债务结清的事实，逼阴司承认规则改写，代价是失去灵异收入并独自面对阴司追责。",
+        "openingHook": "阴司追责启动，账本开始反噬劳梓凡，他必须在被清算前把每一笔债务的来龙去脉用阳间能留存的方式固定下来。",
+        "mainPromise": "理清全部债务关系，当众烧账本逼阴司承认规则改写，回归普通生活但不再任人摆布。",
+        "primaryPressureSource": "阴司判官的正面对抗与规则追责、同行催收人的立场清算，以及烧账本后失去灵异收入来源的现实生存压力。",
+        "coreSellingPoint": "用“毁物不毁根”的反向逻辑瓦解阴司规则优势，当众烧账本并固定债务结清证据，完成从利用规则到挑战规则的终局反制。",
+        "escalationMode": "从利用规则到挑战规则，正面对抗阴司追责，兑现核心问题与终局落点，不可回退感拉满。",
+        "protagonistChange": "从利用规则周旋的阳间讨债人，变成敢于烧账本、重新定义阴阳债务规则的制定者，最终回归普通外卖员但不再任人摆布。",
+        "midVolumeRisk": "终局反制靠天降答案，阴司判官降智，债务清算变成清单式罗列，主题落点空洞。",
+        "climax": "劳梓凡集齐所有债务证据，当众烧掉账本，用阳间方式固定债务结清事实，逼阴司承认规则被改写，独自承担追责后果。",
+        "payoffType": "终局兑现：账本真相、债务转移逻辑、同行合作与分道扬镳、阴司规则改写全部落地，主题落点完成。",
+        "nextVolumeHook": "劳梓凡回归普通外卖员生活，身边多了几个被他救过的人，小圈子继续处理都市灵异小事，阴司追责余波未平。",
+        "resetPoint": "账本已毁，灵异收入来源断绝，阴司追责余波未平，劳梓凡以普通外卖员身份和信任小圈子为锚点，用现实手段兜底灵异麻烦。",
+        "openPayoffs": [
+          "阴司追责余波未平，劳梓凡如何用现实手段应对。",
+          "小圈子成员各自处理都市灵异小事的方式待展开。",
+          "劳梓凡对茅山术法和八极拳的新层次理解如何用于日常。",
+          "同行催收人分道扬镳后的去向与立场留白。",
+          "郑小满能梦见账本名字的能力是否还有后续作用。"
+        ],
+        "status": "active",
+        "sourceVersionId": null,
+        "chapters": [],
+        "createdAt": "1970-01-01T00:00:00.000Z",
+        "updatedAt": "1970-01-01T00:00:00.000Z"
+      }
+    ],
+    "strategyPlan": {
+      "recommendedVolumeCount": 3,
+      "hardPlannedVolumeCount": 3,
+      "readerRewardLadder": "卷一给接单赚钱、差评反转、术法拳法生效的即时爽感；卷二给规则摸清、同行博弈、阴司渗透规模带来的推演快感；卷三给真相拼合、反制布局与烧账本改规则的终局满足。",
+      "escalationLadder": "从单件旧物附灵与房租差评压力，升级到差评团伙、阴司耳目与同行竞争，再升级到账本真相、阴司追责与债务规则改写，灵异层级与现实压力同步抬升。",
+      "midpointShift": "中段由‘按账本接单赚钱’转为‘主动追查每笔债务根源’，主角从被动还债工具变成利用规则周旋的阳间讨债人，悬念从下一单是谁转向阴司布局与账本来源。",
+      "notes": "三卷均硬规划，锁定开书承诺、规则揭示节奏与终局反制秩序；每卷末必须完成阶段兑现并打开更大空间，避免驱邪流水账。soft空间留给后续篇幅自然增长时的单卷拆分与事件密度调整。",
+      "volumes": [
+        {
+          "sortOrder": 1,
+          "planningMode": "hard",
+          "roleLabel": "被迫接单与规则初窥",
+          "coreReward": "账本有用、驱邪能赚钱、差评可反制，但新名字与债务转移带来更大麻烦",
+          "escalationFocus": "从单件旧物附灵到差评团伙与阴司耳目，术法拳法在实战中初步成型",
+          "uncertaintyLevel": "low"
+        },
+        {
+          "sortOrder": 2,
+          "planningMode": "hard",
+          "roleLabel": "规则博弈与真相逼近",
+          "coreReward": "摸清债务转移机制、同行信息差与阴司渗透规模，从接单者变为规则周旋者",
+          "escalationFocus": "多客户多势力交叉，账本来源线索汇聚，现实与灵异压力同步升级至阴司层级",
+          "uncertaintyLevel": "medium"
+        },
+        {
+          "sortOrder": 3,
+          "planningMode": "hard",
+          "roleLabel": "反制布局与烧账终局",
+          "coreReward": "理清全部债务关系，当众烧账本逼阴司承认规则改写，回归普通生活但不再任人摆布",
+          "escalationFocus": "从利用规则到挑战规则，正面对抗阴司追责，兑现核心问题与终局落点",
+          "uncertaintyLevel": "medium"
+        }
+      ],
+      "uncertainties": [
+        {
+          "targetType": "book",
+          "targetRef": "账本真相与阴司布局的揭示节奏",
+          "level": "medium",
+          "reason": "第80章左右才揭账本为坏账清单，前期需控制信息透露量，避免谜团只堆不解或过早泄底"
+        },
+        {
+          "targetType": "book",
+          "targetRef": "中后期单卷拆分弹性",
+          "level": "low",
+          "reason": "三卷为紧凑结构，若实际篇幅增长，可在卷二与卷三内按债务层级自然拆分子阶段"
+        }
+      ]
+    },
+    "critiqueReport": null,
+    "beatSheets": [
+      {
+        "volumeId": "cmv3wyvw40015gow0780pycx9-volume-aba7a8e2-4a3b-49d3-bc43-b33d4cca4a7e",
+        "volumeSortOrder": 1,
+        "status": "generated",
+        "beats": [
+          {
+            "key": "open_hook",
+            "label": "开卷抓手",
+            "title": "账本浮现",
+            "summary": "承接卷骨架 openingHook：劳梓凡送餐被讹诈赔钱又吃差评，回出租屋发现床底账本自动翻开浮现名字地址和‘不去，债转你身’。他被逼按地址去看一眼，用八极拳配合茅山术法暂时压制阴气，获得第一个客户的基本信任。这一拍立住账本有用、驱邪能赚钱的初始承诺，同时抛出账本来源与债务转移的疑问。",
+            "chapterSpanHint": "1-2章",
+            "mustDeliver": [
+              "读者看到账本自动浮现名字和‘不去，债转你身’的威胁",
+              "劳梓凡被现实压力逼到必须按地址去看一眼",
+              "八极拳配合茅山术法在实战中首次生效",
+              "账本确实有用且驱邪能赚到第一笔钱"
+            ]
+          },
+          {
+            "key": "first_escalation",
+            "label": "首次升级",
+            "title": "毁物不毁根",
+            "summary": "承接 primaryPressure 与 escalation：劳梓凡再入客户家排查阴气来源，发现是旧物件附灵。客户不舍得毁物，账本提示‘毁物不毁根，债还在’，他选择追查来源而非一毁了之。追踪到二手市场时遇到同样在找此物的同行沈墨，双方短暂冲突。这一拍把单件旧物附灵升级为来源追踪与同行竞争，兑现第一单驱邪并埋下同行线。",
+            "chapterSpanHint": "3-5章",
+            "mustDeliver": [
+              "确认阴气来源是旧物件附灵而非单纯阴气渗透",
+              "劳梓凡在客户和账本之间做出第一次关键选择",
+              "第一单驱邪完成并获得报酬",
+              "同行沈墨登场并暴露他在找同类旧物"
+            ]
+          },
+          {
+            "key": "early_complication",
+            "label": "早期变数",
+            "title": "差评即客户",
+            "summary": "承接开篇回报承诺：劳梓凡用报酬交房租，回外卖站发现新差评竟来自第一个客户郑小满。他找客户理论，郑小满说账号被盗，平台规则无法撤销。他追查差评来源，发现批量刷差评团伙，且团伙背后与账本上某个名字有关。这一拍兑现‘客户竟是差评师’反转，把现实差评危机与账本名字对应关系绑在一起，早期疑问‘账本名字从哪来’得到部分回答。",
+            "chapterSpanHint": "6-9章",
+            "mustDeliver": [
+              "读者看到差评来自第一个客户，完成开篇反转承诺",
+              "平台规则无法撤销差评，现实压力继续加码",
+              "劳梓凡发现差评团伙与账本名字存在对应关系",
+              "账本名字来源的疑问得到部分回答，但引出更大疑问"
+            ]
+          },
+          {
+            "key": "midpoint_turn",
+            "label": "中段转向",
+            "title": "第二单换挡",
+            "summary": "承接 midVolumeRisk 与 progressionLoop：劳梓凡完成第二单独立驱邪，但这次客户是外卖站同事或熟识的人，账本浮现的名字不再是陌生人。他意识到账本选人并非随机，而是与他的人际关系网有关，接单从‘找陌生人’变成‘可能对身边人下手’。这一拍把节奏从单件旧物附灵换挡到关系网与规则博弈，避免驱邪变成重复流水账。",
+            "chapterSpanHint": "10-14章",
+            "mustDeliver": [
+              "第二单独立驱邪完成，术法或拳法有可感知的成长",
+              "账本浮现的名字指向劳梓凡认识的人",
+              "劳梓凡意识到账本选人与自身关系网有关",
+              "驱邪模式从随机接单转向关系网博弈"
+            ]
+          },
+          {
+            "key": "pressure_lock",
+            "label": "高潮前挤压",
+            "title": "催收人盯单",
+            "summary": "承接 primaryPressure 与 escalation：沈墨正式以阴司催收人身份介入，指出劳梓凡处理账本名字的方式不合规矩，要求他交出部分客户或放弃追查差评团伙。房东赵德柱催租升级，外卖站考核临近，劳梓凡必须在保住工作、完成账本任务和应对同行之间分配精力。这一拍把现实压力与灵异压力同时锁死，逼出最后的选择。",
+            "chapterSpanHint": "15-20章",
+            "mustDeliver": [
+              "沈墨以催收人身份正式施压，要求劳梓凡让出客户或停止追查",
+              "房东催租与外卖站考核同时逼近，现实压力锁死",
+              "劳梓凡必须在送餐、驱邪和应对同行之间做出取舍",
+              "账本给出限时警告，债务转移后果具体化"
+            ]
+          },
+          {
+            "key": "late_complication",
+            "label": "后段变数",
+            "title": "旧楼线索",
+            "summary": "承接 open payoffs 与 worldBoundary：劳梓凡为查差评团伙来源找到房东赵德柱，意外得知旧楼里封着一间从不出租的房间，里面存有与账本有关的旧物。他必须在未完成账本任务的情况下决定是否打开旧楼房间。这一拍把差评团伙、房东秘密和账本来源三条线交汇，为高潮提供关键情报入口，同时保持悬念不提前揭底。",
+            "chapterSpanHint": "21-25章",
+            "mustDeliver": [
+              "赵德柱透露旧楼封存房间与账本旧物有关",
+              "劳梓凡获得差评团伙与阴司耳目关联的关键线索",
+              "打开旧楼房间的代价或限制被明确",
+              "三条线交汇，高潮调查方向确立"
+            ]
+          },
+          {
+            "key": "climax",
+            "label": "卷高潮",
+            "title": "耳目现形",
+            "summary": "承接 climax 承诺：劳梓凡追查差评来源，发现批量刷差评团伙背后与账本上某个名字有关，该名字对应的灵异势力正是阴司在阳间的耳目之一，用来收集活人信息。他必须在限时内解决这个耳目，同时保住外卖工作。这一拍第一次窥见阴司对阳间的渗透规模，完成开篇承诺的最终兑现：账本有用、驱邪能赚钱、差评可反制，但麻烦升级。",
+            "chapterSpanHint": "26-30章",
+            "mustDeliver": [
+              "差评团伙背后灵异势力被确认为阴司在阳间的耳目",
+              "劳梓凡在限时内解决耳目，完成本卷最大驱邪行动",
+              "差评问题得到反制，外卖工作暂时保住",
+              "读者第一次感知到阴司对阳间渗透的规模"
+            ]
+          },
+          {
+            "key": "end_hook",
+            "label": "卷尾钩子",
+            "title": "熟人名字",
+            "summary": "承接 nextVolumeHook 与 resetPoint：耳目解决后，账本浮现新名字，指向劳梓凡认识的人；沈墨也开始盯上他的单子，暗示下一卷竞争升级。劳梓凡用报酬暂时稳住房租和差评，但账本上的债务并未减少，反而更复杂。这一拍完成残局重组，把入口从陌生人接单转向熟人危机与同行对抗。",
+            "chapterSpanHint": "31-34章",
+            "mustDeliver": [
+              "账本浮现新名字，指向劳梓凡认识的人",
+              "沈墨开始盯上劳梓凡的单子，同行竞争升级",
+              "房租和差评暂时缓解，但债务总量未减",
+              "下一卷入口确立：熟人危机与催收人对抗"
+            ]
+          }
+        ]
+      }
+    ],
+    "rebalanceDecisions": [],
+    "readiness": {
+      "canGenerateStrategy": true,
+      "canGenerateSkeleton": true,
+      "canGenerateBeatSheet": true,
+      "canGenerateChapterList": true,
+      "blockingReasons": []
+    },
+    "derivedOutline": "【第1卷】账本浮现\n卷摘要：劳梓凡被房租和差评逼到绝境，床底旧账本自动浮现名字，他被迫按地址接单，用八极拳和茅山术法解决第一单，赚到钱却发现客户正是差评师。\n开卷抓手：送外卖被大妈讹诈赔钱又吃差评，回出租屋发现床底账本自动翻开，浮现陌生名字和地址，写着“不去，债转你身”。\n主承诺：账本有用、驱邪能赚钱、差评可反制，但每解决一单，新名字带来更麻烦的灵异与现实纠葛。\n主压迫源：房租到期、差评扣钱、外卖站考核，以及账本“债转你身”的债务转移威胁。\n核心卖点：外卖员按账本接单驱邪，用八极拳和茅山术法解决旧物附灵，即时收钱缓解现实焦虑。\n升级方式：从单件旧物附灵扩展到差评团伙与阴司耳目，术法拳法在实战中初步成型，现实与灵异麻烦同步加码。\n主角变化：从怀疑账本是恶作剧的被动外卖员，变成确认账本有效、开始主动接单还债的阳间讨债人。\n中段风险：驱邪过程容易变成重复的接单打怪收钱流水账，客户沦为工具人，账本线索停滞。\n卷末高潮：劳梓凡追查差评来源，发现批量刷差评团伙背后与账本上某个名字有关，第一次窥见阴司对阳间的渗透。\n兑现类型：开篇承诺兑现：账本有用、驱邪能赚钱、差评可反制，两到三次独立驱邪小单完成。\n下卷钩子：账本浮现新名字，指向一个劳梓凡认识的人，而同行催收人也开始盯上他的单子。\n重置点：劳梓凡暂时稳住房租和差评，但账本更新出更复杂的名字，他意识到接单不是终点，规则本身才是问题。\n未兑现事项：账本名字从何而来，为何选中劳梓凡，不去为何会债转己身。、同行也在找旧物件，他的身份和目的尚未揭晓。、差评团伙被灵异势力控制，该势力与阴司的关系待查。、房东旧楼里封着与账本有关的旧物，尚未打开。、第一个客户郑小满能梦见账本名字的模糊画面，未告诉劳梓凡。\n章节范围：1-2\n\n【第2卷】规则博弈\n卷摘要：劳梓凡从被动接单转为主动追查每笔债务根源，与同行催收人从敌对到有限合作，逐步摸清债务转移机制和阴司在阳间的渗透规模。\n开卷抓手：账本新名字指向劳梓凡认识的人，他必须在限定时间内解决对方的灵异问题，否则自己替对方背债。\n主承诺：摸清债务转移机制和阴司代理规则，从接单者变为规则周旋者，用推演和信息差反制同行与阴司耳目。\n主压迫源：同行催收人的竞争与信息封锁、阴司耳目的暗中布局，以及多客户多势力交叉带来的精力与信任危机。\n核心卖点：利用账本规则漏洞与同行博弈，通过证据链和推演反制阴司耳目，每揭一层真相就多一分主动。\n升级方式：从单线接单升级为多客户多势力交叉，账本来源线索汇聚，现实与灵异压力同步抬升至阴司层级。\n主角变化：从靠账本指路的接单者，变成主动调查债务根源、利用规则漏洞周旋的阳间讨债人。\n中段风险：谜团只堆不解，同行博弈沦为纯体力对抗，推演感被动作戏吃掉，阴司布局迟迟不落地。\n卷末高潮：劳梓凡与同行催收人正面交锋后达成有限合作，共同揭开差评团伙背后的阴司耳目，确认账本是阴司坏账清单。\n兑现类型：中期兑现：同行身份揭晓、差评团伙真相落地、账本来源初步确认，主角完成从接单到周旋的转变。\n下卷钩子：账本真相揭开后，阴司开始追责劳梓凡的越界调查，他必须在被清算前理清所有债务关系。\n重置点：劳梓凡掌握阴司代理机制的关键信息，但同行分道扬镳，阴司追责启动，他被迫从周旋转向反制布局。\n未兑现事项：账本上全部债务关系尚未理清，烧账本的条件不成熟。、阴司判官的真实意图和规则漏洞尚未完全暴露。、同行催收人的“规则漏洞手册”内容未公开。、房东旧楼里的秘密与账本的关系待揭。、劳梓凡能感知债主情绪的能力仍未对任何人坦白。\n章节范围：未拆章\n\n【第3卷】烧账终局\n卷摘要：劳梓凡集齐账本所有债务关系的证据，当众烧掉账本并用阳间方式固定债务结清的事实，逼阴司承认规则改写，代价是失去灵异收入并独自面对阴司追责。\n开卷抓手：阴司追责启动，账本开始反噬劳梓凡，他必须在被清算前把每一笔债务的来龙去脉用阳间能留存的方式固定下来。\n主承诺：理清全部债务关系，当众烧账本逼阴司承认规则改写，回归普通生活但不再任人摆布。\n主压迫源：阴司判官的正面对抗与规则追责、同行催收人的立场清算，以及烧账本后失去灵异收入来源的现实生存压力。\n核心卖点：用“毁物不毁根”的反向逻辑瓦解阴司规则优势，当众烧账本并固定债务结清证据，完成从利用规则到挑战规则的终局反制。\n升级方式：从利用规则到挑战规则，正面对抗阴司追责，兑现核心问题与终局落点，不可回退感拉满。\n主角变化：从利用规则周旋的阳间讨债人，变成敢于烧账本、重新定义阴阳债务规则的制定者，最终回归普通外卖员但不再任人摆布。\n中段风险：终局反制靠天降答案，阴司判官降智，债务清算变成清单式罗列，主题落点空洞。\n卷末高潮：劳梓凡集齐所有债务证据，当众烧掉账本，用阳间方式固定债务结清事实，逼阴司承认规则被改写，独自承担追责后果。\n兑现类型：终局兑现：账本真相、债务转移逻辑、同行合作与分道扬镳、阴司规则改写全部落地，主题落点完成。\n下卷钩子：劳梓凡回归普通外卖员生活，身边多了几个被他救过的人，小圈子继续处理都市灵异小事，阴司追责余波未平。\n重置点：账本已毁，灵异收入来源断绝，阴司追责余波未平，劳梓凡以普通外卖员身份和信任小圈子为锚点，用现实手段兜底灵异麻烦。\n未兑现事项：阴司追责余波未平，劳梓凡如何用现实手段应对。、小圈子成员各自处理都市灵异小事的方式待展开。、劳梓凡对茅山术法和八极拳的新层次理解如何用于日常。、同行催收人分道扬镳后的去向与立场留白。、郑小满能梦见账本名字的能力是否还有后续作用。\n章节范围：未拆章",
+    "derivedStructuredOutline": "{\n  \"volumes\": [\n    {\n      \"volumeTitle\": \"账本浮现\",\n      \"summary\": \"劳梓凡被房租和差评逼到绝境，床底旧账本自动浮现名字，他被迫按地址接单，用八极拳和茅山术法解决第一单，赚到钱却发现客户正是差评师。\",\n      \"openingHook\": \"送外卖被大妈讹诈赔钱又吃差评，回出租屋发现床底账本自动翻开，浮现陌生名字和地址，写着“不去，债转你身”。\",\n      \"mainPromise\": \"账本有用、驱邪能赚钱、差评可反制，但每解决一单，新名字带来更麻烦的灵异与现实纠葛。\",\n      \"primaryPressureSource\": \"房租到期、差评扣钱、外卖站考核，以及账本“债转你身”的债务转移威胁。\",\n      \"coreSellingPoint\": \"外卖员按账本接单驱邪，用八极拳和茅山术法解决旧物附灵，即时收钱缓解现实焦虑。\",\n      \"escalationMode\": \"从单件旧物附灵扩展到差评团伙与阴司耳目，术法拳法在实战中初步成型，现实与灵异麻烦同步加码。\",\n      \"protagonistChange\": \"从怀疑账本是恶作剧的被动外卖员，变成确认账本有效、开始主动接单还债的阳间讨债人。\",\n      \"midVolumeRisk\": \"驱邪过程容易变成重复的接单打怪收钱流水账，客户沦为工具人，账本线索停滞。\",\n      \"climax\": \"劳梓凡追查差评来源，发现批量刷差评团伙背后与账本上某个名字有关，第一次窥见阴司对阳间的渗透。\",\n      \"payoffType\": \"开篇承诺兑现：账本有用、驱邪能赚钱、差评可反制，两到三次独立驱邪小单完成。\",\n      \"nextVolumeHook\": \"账本浮现新名字，指向一个劳梓凡认识的人，而同行催收人也开始盯上他的单子。\",\n      \"resetPoint\": \"劳梓凡暂时稳住房租和差评，但账本更新出更复杂的名字，他意识到接单不是终点，规则本身才是问题。\",\n      \"openPayoffs\": [\n        \"账本名字从何而来，为何选中劳梓凡，不去为何会债转己身。\",\n        \"同行也在找旧物件，他的身份和目的尚未揭晓。\",\n        \"差评团伙被灵异势力控制，该势力与阴司的关系待查。\",\n        \"房东旧楼里封着与账本有关的旧物，尚未打开。\",\n        \"第一个客户郑小满能梦见账本名字的模糊画面，未告诉劳梓凡。\"\n      ],\n      \"chapters\": [\n        {\n          \"chapter_id\": \"cmv3x2mt600jsgow0e6kb0852\",\n          \"order\": 1,\n          \"beat_key\": \"open_hook\",\n          \"title\": \"差评与旧账本\",\n          \"summary\": \"劳梓凡送餐被大妈讹走两百块，又因超时吃差评，回出租屋发现床底旧账本自动翻开，浮现陌生名字地址和“不去，债转你身”。他翻遍全身只剩几十块，房东电话催租，决定按地址去看一眼。\",\n          \"purpose\": \"劳梓凡在赔钱、差评、催租三重挤压下，发现床底旧账本自动浮现陌生名字地址与‘不去，债转你身’，因只剩几十块而决定按地址去看一眼。\",\n          \"exclusive_event\": \"床底旧账本首次自动翻开，浮现郑小满的名字、地址和‘不去，债转你身’字样。\",\n          \"ending_state\": \"劳梓凡揣着账本站在出租屋门口，决定趁夜按地址去陌生小区看一眼，但尚未见到客户。\",\n          \"next_chapter_entry_state\": \"劳梓凡已抵达账本地址所在的老旧小区楼下，准备上楼找郑小满，身上只有几十块和随身几件旧物。\",\n          \"conflict_level\": 20,\n          \"reveal_level\": 30,\n          \"target_word_count\": 2800,\n          \"must_avoid\": \"不得让劳梓凡在本章见到郑小满或进入客户家中；不得在本章展示驱邪实战或八极拳对灵体生效；不得揭示账本来源、阴司规则或债务转移原理；不得让劳梓凡获得任何驱邪收入；不得把账本浮现名字处理成梦境、幻觉或他人伪造。\",\n          \"task_sheet\": \"开篇用被讹与差评把劳梓凡逼到墙角；回屋后翻钱、接房东催租电话，强化只剩几十块的绝境。床底账本自动翻开，浮现郑小满、地址、‘不去，债转你身’。他先当恶作剧，用手机查地址发现真实存在，犹豫后把账本塞进外卖箱出门。不写见到客户、不写驱邪、不写收钱。\",\n          \"scene_cards\": \"{\\\"targetWordCount\\\":2800,\\\"lengthBudget\\\":{\\\"targetWordCount\\\":2800,\\\"softMinWordCount\\\":2380,\\\"softMaxWordCount\\\":3220,\\\"hardMaxWordCount\\\":3500},\\\"scenes\\\":[{\\\"key\\\":\\\"scene_1\\\",\\\"title\\\":\\\"送餐被讹与差评\\\",\\\"purpose\\\":\\\"用一场具体的送餐纠纷把劳梓凡的现实困境压到最低点。\\\",\\\"mustAdvance\\\":[\\\"大妈以汤洒弄脏鞋为由讹走两百块\\\",\\\"外卖站因超时扣钱并记差评\\\"],\\\"mustPreserve\\\":[\\\"劳梓凡外卖员身份和市井语言\\\",\\\"现实压力先于灵异出现\\\"],\\\"entryState\\\":\\\"劳梓凡拎着外卖赶到老旧居民楼，已因堵车超时。\\\",\\\"exitState\\\":\\\"劳梓凡赔了两百块，收到差评通知，蹲在路边看手机余额。\\\",\\\"forbiddenExpansion\\\":[\\\"不得出现灵异元素\\\",\\\"不得让劳梓凡当场使用术法或八极拳\\\"],\\\"targetWordCount\\\":700,\\\"resistance\\\":\\\"大妈胡搅蛮缠堵住楼道，围观邻居帮腔，平台规则偏向顾客。\\\",\\\"turn\\\":\\\"大妈从指责汤洒升级为索赔鞋子，劳梓凡为赶下一单选择私了赔钱。\\\",\\\"emotionalShift\\\":\\\"从着急送单到憋屈赔钱，再到看到差评通知的麻木。\\\",\\\"readerValue\\\":\\\"读者立刻感知主角被现实按在地上摩擦，产生‘他还能更惨吗’的追读动力。\\\",\\\"causality\\\":{\\\"actor\\\":\\\"劳梓凡\\\",\\\"choice\\\":\\\"掏两百块私了，先保住不超时。\\\",\\\"motive\\\":\\\"下一单只剩十分钟，报警或争执会误工扣更多钱。\\\",\\\"prerequisites\\\":[{\\\"condition\\\":\\\"劳梓凡正在送外卖，手头有当天跑单的现金。\\\",\\\"sourceKind\\\":\\\"established_in_context\\\",\\\"reference\\\":\\\"本章开篇送餐场景\\\"}],\\\"resistanceResponse\\\":\\\"大妈收钱后仍向平台投诉汤洒，平台自动记差评并扣钱。\\\",\\\"outcomeMechanism\\\":\\\"私了没有消除投诉，反而让劳梓凡既赔钱又吃差评，经济与考核双重受损。\\\",\\\"resultingConstraints\\\":[{\\\"constraint\\\":\\\"劳梓凡当天收入减少两百块并被记一次差评。\\\",\\\"persistence\\\":\\\"持续到外卖站考核周期结束或差评被撤销。\\\"}]}},{\\\"key\\\":\\\"scene_2\\\",\\\"title\\\":\\\"出租屋翻钱与催租电话\\\",\\\"purpose\\\":\\\"把经济绝境具体化，让劳梓凡回到出租屋面对账本前先面对现实。\\\",\\\"mustAdvance\\\":[\\\"劳梓凡翻遍全身只剩几十块\\\",\\\"房东赵德柱打电话催下季度房租\\\"],\\\"mustPreserve\\\":[\\\"出租屋的逼仄环境和劳梓凡的日常状态\\\",\\\"赵德柱作为现实压力源的声音出场\\\"],\\\"entryState\\\":\\\"劳梓凡回到城中村出租屋，把外卖箱扔在门口。\\\",\\\"exitState\\\":\\\"劳梓凡坐在床边数钱，手机里是赵德柱的催租短信和未接来电。\\\",\\\"forbiddenExpansion\\\":[\\\"不得让赵德柱上门\\\",\\\"不得让劳梓凡此时发现账本\\\"],\\\"targetWordCount\\\":600,\\\"resistance\\\":\\\"翻遍口袋和抽屉只有几十块，赵德柱电话里态度强硬。\\\",\\\"turn\\\":\\\"赵德柱从催租升级为警告‘下礼拜不交就换锁’。\\\",\\\"emotionalShift\\\":\\\"从赔钱后的疲惫到数钱时的焦躁，再到接完电话的窒息感。\\\",\\\"readerValue\\\":\\\"读者看到房租倒计时，理解劳梓凡为什么后面会冒险按账本地址走。\\\",\\\"causality\\\":{\\\"actor\\\":\\\"劳梓凡\\\",\\\"choice\\\":\\\"接起赵德柱电话，承诺下周凑钱。\\\",\\\"motive\\\":\\\"他不想被换锁，出租屋是他唯一能落脚的地方。\\\",\\\"prerequisites\\\":[{\\\"condition\\\":\\\"劳梓凡租住赵德柱的城中村旧楼，下季度房租即将到期。\\\",\\\"sourceKind\\\":\\\"established_in_context\\\",\\\"reference\\\":\\\"本章出租屋场景与赵德柱来电\\\"}],\\\"resistanceResponse\\\":\\\"赵德柱不接受口头承诺，给出下礼拜交钱的硬期限。\\\",\\\"outcomeMechanism\\\":\\\"电话催租把模糊的经济压力变成具体倒计时，逼劳梓凡必须尽快找到来钱的路子。\\\",\\\"resultingConstraints\\\":[{\\\"constraint\\\":\\\"劳梓凡必须在一周内凑齐下季度房租。\\\",\\\"persistence\\\":\\\"持续到房租交清或被换锁。\\\"}]}},{\\\"key\\\":\\\"scene_3\\\",\\\"title\\\":\\\"床底账本自动翻开\\\",\\\"purpose\\\":\\\"让账本以无法用恶作剧解释的方式登场，抛出核心悬念。\\\",\\\"mustAdvance\\\":[\\\"床底旧账本自动翻开\\\",\\\"账面浮现‘郑小满’、老旧小区地址和‘不去，债转你身’\\\"],\\\"mustPreserve\\\":[\\\"账本作为旧物的质感\\\",\\\"劳梓凡对账本来源一无所知\\\"],\\\"entryState\\\":\\\"劳梓凡坐在床边，脚碰到床底一个硬物。\\\",\\\"exitState\\\":\\\"劳梓凡举着账本站在灯下，账面字迹清晰，地址陌生。\\\",\\\"forbiddenExpansion\\\":[\\\"不得让账本说话或解释规则\\\",\\\"不得让劳梓凡认出账本或知道其来源\\\"],\\\"targetWordCount\\\":800,\\\"resistance\\\":\\\"劳梓凡第一反应是恶作剧，翻找床底想找出是谁塞的。\\\",\\\"turn\\\":\\\"账本在他手里自动翻页，墨迹从空白中浮现，不是他见过的任何笔迹。\\\",\\\"emotionalShift\\\":\\\"从烦躁到疑惑，再到看见字迹浮现时的后背发凉。\\\",\\\"readerValue\\\":\\\"核心卖点首次显形：账本有用且带威胁，读者想知道名字和地址意味着什么。\\\",\\\"causality\\\":{\\\"actor\\\":\\\"劳梓凡\\\",\\\"choice\\\":\\\"把账本从床底抽出来翻看，没有立刻扔掉。\\\",\\\"motive\\\":\\\"‘不去，债转你身’六个字让他想起欠债的滋味，他怕是什么人设的局。\\\",\\\"prerequisites\\\":[{\\\"condition\\\":\\\"劳梓凡床底有旧物，账本此前未被发现。\\\",\\\"sourceKind\\\":\\\"establish_in_scene\\\",\\\"reference\\\":\\\"scene_3中脚碰硬物、抽出账本\\\"}],\\\"resistanceResponse\\\":\\\"账本不回应他的翻找，只是自动翻到有字的一页，字迹稳定不褪。\\\",\\\"outcomeMechanism\\\":\\\"无法解释的自动翻页和浮现字迹让‘恶作剧’解释站不住脚，劳梓凡被迫认真对待账本。\\\",\\\"resultingConstraints\\\":[{\\\"constraint\\\":\\\"劳梓凡无法把账本当普通旧物扔掉，必须处理‘不去，债转你身’的警告。\\\",\\\"persistence\\\":\\\"持续到账本名字被处理或债务转移发生。\\\"}]}},{\\\"key\\\":\\\"scene_4\\\",\\\"title\\\":\\\"查证地址与出门决定\\\",\\\"purpose\\\":\\\"让劳梓凡用现实手段验证账本，并做出按地址去看一眼的决定。\\\",\\\"mustAdvance\\\":[\\\"劳梓凡用手机查地址发现是真实存在的老旧小区\\\",\\\"劳梓凡把账本塞进外卖箱锁门出发\\\"],\\\"mustPreserve\\\":[\\\"劳梓凡的怀疑与恐惧并存\\\",\\\"决定出于现实压力而非主动冒险\\\"],\\\"entryState\\\":\\\"劳梓凡盯着账本上的地址，手机搜索结果页面打开。\\\",\\\"exitState\\\":\\\"劳梓凡锁好门，背着外卖箱走进城中村夜色，账本在箱内。\\\",\\\"forbiddenExpansion\\\":[\\\"不得让劳梓凡到达小区或见到郑小满\\\",\\\"不得让劳梓凡联系任何人商量\\\"],\\\"targetWordCount\\\":700,\\\"resistance\\\":\\\"劳梓凡犹豫是否该去，怕惹上麻烦，也怕不去真的应验‘债转你身’。\\\",\\\"turn\\\":\\\"手机地图显示地址真实存在，且距离他只有四站公交。\\\",\\\"emotionalShift\\\":\\\"从怀疑到确认地址真实后的紧绷，再到出门时‘先看一眼再说’的决然。\\\",\\\"readerValue\\\":\\\"读者看到主角被账本推着迈出第一步，期待下一章见到客户和阴气。\\\",\\\"causality\\\":{\\\"actor\\\":\\\"劳梓凡\\\",\\\"choice\\\":\\\"把账本塞进外卖箱，锁门按地址出发。\\\",\\\"motive\\\":\\\"地址真实存在，且‘不去，债转你身’的警告让他不敢赌；他需要钱，也需要弄清账本是什么。\\\",\\\"prerequisites\\\":[{\\\"condition\\\":\\\"账本上的地址经手机查证真实存在。\\\",\\\"sourceKind\\\":\\\"establish_in_scene\\\",\\\"reference\\\":\\\"scene_4中手机地图搜索结果\\\"}],\\\"resistanceResponse\\\":\\\"夜色中的城中村和陌生小区让他本能发怵，但公交末班车提示催促他动身。\\\",\\\"outcomeMechanism\\\":\\\"查证结果把‘恶作剧’可能性压到最低，现实压力和警告共同推动他出门。\\\",\\\"resultingConstraints\\\":[{\\\"constraint\\\":\\\"劳梓凡已离开出租屋前往陌生小区，无法中途轻易回头。\\\",\\\"persistence\\\":\\\"持续到抵达小区或改变主意。\\\"}]}}],\\\"readerExperience\\\":{\\\"readerQuestion\\\":\\\"账本上的名字和地址是真的吗？去了会怎样？\\\",\\\"promisedReward\\\":\\\"读者看到账本确实自动浮现真实地址，并跟着劳梓凡出门，悬念从‘恶作剧’升级为‘必须去看一眼’。\\\",\\\"rewardLevel\\\":\\\"setup\\\",\\\"protagonistWant\\\":\\\"劳梓凡想保住外卖工作、凑齐房租，不想被一本旧账本继续拖进麻烦。\\\",\\\"primaryResistance\\\":\\\"大妈讹诈、平台差评扣钱、房东催租，以及劳梓凡自己对‘债转你身’的怀疑和恐惧。\\\",\\\"keyTurn\\\":\\\"劳梓凡用手机查证地址真实存在，确认账本不是随手涂鸦，决定出门。\\\",\\\"emotionalShift\\\":\\\"从被讹后的憋屈和差评后的麻木，到发现账本自动翻页的惊疑，再到查证地址后‘不去不行’的紧绷。\\\",\\\"informationReveal\\\":\\\"账本会自动翻开并浮现真实存在的姓名与地址，且附带‘不去，债转你身’的警告。\\\",\\\"netChange\\\":\\\"劳梓凡从‘怀疑账本是恶作剧’变为‘确认地址真实并决定按地址去看一眼’，账本从床底旧物变成他必须面对的下一步。\\\",\\\"inheritedHookResponsibilities\\\":[\\\"承接开篇钩子：送外卖被大妈讹诈赔钱又吃差评，回出租屋发现床底账本自动翻开，浮现陌生名字和地址，写着‘不去，债转你身’。\\\"],\\\"endingHook\\\":\\\"劳梓凡锁门出发，账本在外卖箱里，地址指向一个他从未去过的老旧小区——门后是谁，为什么会被账本盯上？\\\"},\\\"requiredElements\\\":[\\\"劳梓凡送外卖被大妈以‘汤洒了弄脏鞋’为由讹走两百块，外卖站因超时扣钱并记差评。\\\",\\\"劳梓凡回到出租屋翻遍全身只剩几十块，房东赵德柱打电话催下季度房租。\\\",\\\"床底旧账本自动翻开，浮现‘郑小满’的名字、一个老旧小区地址和‘不去，债转你身’。\\\",\\\"劳梓凡怀疑是恶作剧，用手机查地址发现是真实存在的老旧小区。\\\",\\\"劳梓凡把账本塞进外卖箱，锁门出发，决定按地址去看一眼——第一轮循环完整显形（pending_payoff，本章到期（第 1 章）；硬截止第 3 章；尚无推进记录；预定兑现强度 major）。\\\"]}\",\n          \"payoff_refs\": [\n            \"第1章账本自动浮现名字，且写着‘不去，债转你身’，劳梓凡因这句话被迫按地址去看一眼。\"\n          ]\n        },\n        {\n          \"chapter_id\": \"cmv3x2mt800jtgow0la32yn38\",\n          \"order\": 2,\n          \"beat_key\": \"open_hook\",\n          \"title\": \"八极拳压不住阴气\",\n          \"summary\": \"劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。郑小满付了第一笔钱，劳梓凡确认账本有用，也确认事情没完。\",\n          \"payoff_refs\": []\n        }\n      ]\n    },\n    {\n      \"volumeTitle\": \"规则博弈\",\n      \"summary\": \"劳梓凡从被动接单转为主动追查每笔债务根源，与同行催收人从敌对到有限合作，逐步摸清债务转移机制和阴司在阳间的渗透规模。\",\n      \"openingHook\": \"账本新名字指向劳梓凡认识的人，他必须在限定时间内解决对方的灵异问题，否则自己替对方背债。\",\n      \"mainPromise\": \"摸清债务转移机制和阴司代理规则，从接单者变为规则周旋者，用推演和信息差反制同行与阴司耳目。\",\n      \"primaryPressureSource\": \"同行催收人的竞争与信息封锁、阴司耳目的暗中布局，以及多客户多势力交叉带来的精力与信任危机。\",\n      \"coreSellingPoint\": \"利用账本规则漏洞与同行博弈，通过证据链和推演反制阴司耳目，每揭一层真相就多一分主动。\",\n      \"escalationMode\": \"从单线接单升级为多客户多势力交叉，账本来源线索汇聚，现实与灵异压力同步抬升至阴司层级。\",\n      \"protagonistChange\": \"从靠账本指路的接单者，变成主动调查债务根源、利用规则漏洞周旋的阳间讨债人。\",\n      \"midVolumeRisk\": \"谜团只堆不解，同行博弈沦为纯体力对抗，推演感被动作戏吃掉，阴司布局迟迟不落地。\",\n      \"climax\": \"劳梓凡与同行催收人正面交锋后达成有限合作，共同揭开差评团伙背后的阴司耳目，确认账本是阴司坏账清单。\",\n      \"payoffType\": \"中期兑现：同行身份揭晓、差评团伙真相落地、账本来源初步确认，主角完成从接单到周旋的转变。\",\n      \"nextVolumeHook\": \"账本真相揭开后，阴司开始追责劳梓凡的越界调查，他必须在被清算前理清所有债务关系。\",\n      \"resetPoint\": \"劳梓凡掌握阴司代理机制的关键信息，但同行分道扬镳，阴司追责启动，他被迫从周旋转向反制布局。\",\n      \"openPayoffs\": [\n        \"账本上全部债务关系尚未理清，烧账本的条件不成熟。\",\n        \"阴司判官的真实意图和规则漏洞尚未完全暴露。\",\n        \"同行催收人的“规则漏洞手册”内容未公开。\",\n        \"房东旧楼里的秘密与账本的关系待揭。\",\n        \"劳梓凡能感知债主情绪的能力仍未对任何人坦白。\"\n      ],\n      \"chapters\": []\n    },\n    {\n      \"volumeTitle\": \"烧账终局\",\n      \"summary\": \"劳梓凡集齐账本所有债务关系的证据，当众烧掉账本并用阳间方式固定债务结清的事实，逼阴司承认规则改写，代价是失去灵异收入并独自面对阴司追责。\",\n      \"openingHook\": \"阴司追责启动，账本开始反噬劳梓凡，他必须在被清算前把每一笔债务的来龙去脉用阳间能留存的方式固定下来。\",\n      \"mainPromise\": \"理清全部债务关系，当众烧账本逼阴司承认规则改写，回归普通生活但不再任人摆布。\",\n      \"primaryPressureSource\": \"阴司判官的正面对抗与规则追责、同行催收人的立场清算，以及烧账本后失去灵异收入来源的现实生存压力。\",\n      \"coreSellingPoint\": \"用“毁物不毁根”的反向逻辑瓦解阴司规则优势，当众烧账本并固定债务结清证据，完成从利用规则到挑战规则的终局反制。\",\n      \"escalationMode\": \"从利用规则到挑战规则，正面对抗阴司追责，兑现核心问题与终局落点，不可回退感拉满。\",\n      \"protagonistChange\": \"从利用规则周旋的阳间讨债人，变成敢于烧账本、重新定义阴阳债务规则的制定者，最终回归普通外卖员但不再任人摆布。\",\n      \"midVolumeRisk\": \"终局反制靠天降答案，阴司判官降智，债务清算变成清单式罗列，主题落点空洞。\",\n      \"climax\": \"劳梓凡集齐所有债务证据，当众烧掉账本，用阳间方式固定债务结清事实，逼阴司承认规则被改写，独自承担追责后果。\",\n      \"payoffType\": \"终局兑现：账本真相、债务转移逻辑、同行合作与分道扬镳、阴司规则改写全部落地，主题落点完成。\",\n      \"nextVolumeHook\": \"劳梓凡回归普通外卖员生活，身边多了几个被他救过的人，小圈子继续处理都市灵异小事，阴司追责余波未平。\",\n      \"resetPoint\": \"账本已毁，灵异收入来源断绝，阴司追责余波未平，劳梓凡以普通外卖员身份和信任小圈子为锚点，用现实手段兜底灵异麻烦。\",\n      \"openPayoffs\": [\n        \"阴司追责余波未平，劳梓凡如何用现实手段应对。\",\n        \"小圈子成员各自处理都市灵异小事的方式待展开。\",\n        \"劳梓凡对茅山术法和八极拳的新层次理解如何用于日常。\",\n        \"同行催收人分道扬镳后的去向与立场留白。\",\n        \"郑小满能梦见账本名字的能力是否还有后续作用。\"\n      ],\n      \"chapters\": []\n    }\n  ]\n}",
+    "source": "volume",
+    "activeVersionId": "cmv3x464y00rbgow010u86vjh"
+  },
+  "chapters": [
+    {
+      "id": "cmv3x2mt600jsgow0e6kb0852",
+      "title": "差评与旧账本",
+      "content": "电梯坏了。\n\n劳梓凡拎着那份酸菜鱼站在六楼楼道口，手机屏幕上超时提醒已经跳了两次。汤从打包盒边沿渗出来，在他手指上糊了一层油。\n\n他腾不出手擦，只能拿肩膀撞了撞防盗门。门从里面拉开一条缝，一个烫着卷发的大妈探出半张脸，先看外卖，再看他的脸，最后目光落在他拎袋子的手上。\n\n“怎么才来？都凉了。”\n\n“堵车，阿姨。电梯又坏了，我跑上来的。”劳梓凡把袋子递过去，喘着气赔笑，“您看汤还热着，刚出锅的。”\n\n大妈接过袋子，手指在塑料袋底下一摸，脸色变了。\n\n“这汤洒了。”\n\n“就渗了点，不影响吃。”\n\n“什么不影响？你看看，都滴到我拖鞋上了。”大妈把脚往前一伸，塑料拖鞋面上确实有一小片油渍，不仔细看根本瞧不出来。她声音陡然拔高，“我这鞋新买的，两百多！”\n\n劳梓凡下意识往楼道里看了一眼。隔壁门开着一条缝，有个中年男人探头张望，没说话，但也没关门。楼下传来脚步声，又有人上楼了。\n\n“阿姨，真就一滴，我给您擦擦。”\n\n“擦什么擦？这鞋还能穿吗？”大妈把外卖往鞋柜上一搁，双手叉腰，“你这人怎么回事，送餐不看着点，洒了也不说一声。”\n\n劳梓凡张了张嘴。他手机又震了一下，下一单取餐倒计时只剩八分钟。从这里赶到商家至少要六分钟，再晚又要超时。他今天已经吃了两个超时警告，再来一个，这周的准时率就保不住了。\n\n“这样，阿姨，我赔您二十，您买瓶清洁剂擦擦。”\n\n“二十？”大妈像听到什么笑话，“你打发要饭的呢？两百。”\n\n“两百？”劳梓凡声音也上去了，“阿姨，您这鞋——”\n\n“我这鞋怎么了？你洒了汤还有理了？”大妈往前迈了一步，堵住楼道口，“要不咱报警，让警察来评评理。你耽误我吃饭，还弄脏我鞋，看谁吃亏。”\n\n隔壁门缝里那个中年男人终于开口了：“小伙子，赔点算了，别耽误大家时间。”\n\n楼下上来的脚步也停了，显然在听热闹。劳梓凡攥着手机，指节发白。报警？警察来了至少折腾半小时，今天下午的单全得黄，全勤奖也没了。两百块是肉疼，但误工扣的钱更多。\n\n他从裤兜里摸出钱包，数了两张一百的递过去。大妈接过钱，对着光看了看，塞进围裙口袋，又把外卖拎起来。\n\n“这饭我也不要了，你拿走吧。”\n\n“钱都赔了，饭您留着吃。”\n\n“谁知道你路上动没动手脚。”大妈把袋子往他怀里一推，砰地关上门。\n\n劳梓凡站在楼道里，手里拎着那份已经凉透的酸菜鱼。隔壁门缝也悄无声息地合上了。他下楼的时候，手机屏幕亮起来，一条新通知。\n\n“您有一条差评：送餐超时，餐品洒漏，态度恶劣。”\n\n他盯着那行字看了三秒，把手机塞回兜里。差评扣五十，超时扣三十，加上赔出去的两百，今天跑了四个小时，倒贴。\n\n回到出租屋已经是晚上九点多。城中村的巷子窄得只能过一辆电动车，头顶电线缠得像蛛网，晾着的衣服往下滴水。劳梓凡把外卖箱靠在门边，掏出钥匙开了那扇掉漆的铁门。\n\n屋里一股闷了一天的潮气。十平米的单间，一张床，一个塑料衣柜，一张折叠桌，桌上堆着泡面箱和几瓶矿泉水。他把兜里所有的钱掏出来扔在床上。\n\n一张五十，三张十块，几个硬币。他数了两遍，六十七块三毛。\n\n手机又响了。屏幕上跳着“赵德柱”三个字，他盯着看了两秒才接起来。\n\n“小劳啊，下季度房租该交了，一万二，你什么时候方便？”\n\n“赵哥，再宽限几天，这两天单子不太顺。”\n\n“不太顺？”赵德柱声音不冷不热，“小劳，我也要还贷的。你住了大半年，我从来没催过你吧？下礼拜之前，行不行？”\n\n“行，我想办法。”\n\n“不是想办法，是下礼拜之前。”赵德柱顿了顿，“不交的话，我只能换锁了。你东西自己来收。”\n\n电话挂了。劳梓凡坐在床边，手机屏幕暗下去，映出他一张没什么表情的脸。一万二。他跑一个月外卖，省吃俭用能攒四千，还得是没差评、没罚款、没意外的月份。\n\n他把手机扔在枕头上，弯腰脱鞋。脚后跟碰到床底一个硬邦邦的东西，发出闷响。\n\n他愣了一下，趴下去看。床底堆着几个落灰的纸箱和一只旧旅行袋，都是搬进来时房东留下的杂物。他伸手进去摸，指尖碰到一个硬壳的边角，拽出来一看，是本旧册子。\n\n牛皮纸封面，边角磨得发毛，摸上去有点潮，像在床底压了很多年。封面没有字。他翻开第一页，空白。\n\n第二页，空白。\n\n第三页，还是空白。\n\n“什么玩意儿。”劳梓凡嘟囔了一句，正要扔回床底，册子在他手里自己翻了一页。\n\n他手一抖，册子差点掉地上。\n\n没有风。窗户关着，门也关着。可那页纸确确实实在他眼皮底下翻了过去，像有人用手指轻轻挑了一下。\n\n新的一页上，墨迹正从纸面里渗出来。先是一横，再是一竖，笔画慢慢显形，像有人用看不见的笔在纸背面写字。劳梓凡盯着那行字，后背的汗毛一根根竖起来。\n\n“郑小满。”\n\n三个字，工工整整，不是他的笔迹，也不是他见过的任何人的笔迹。\n\n下面还有一行小字，是个地址：城西区柳巷街三十七号，老供销社家属楼。\n\n再下面，六个字。\n\n“不去，债转你身。”\n\n劳梓凡把册子扔在床上，退了两步。心跳得厉害，耳朵里嗡嗡响。他盯着那本摊开的册子看了十几秒，纸页没有再动，字迹清清楚楚地印在那里。\n\n恶作剧。肯定是恶作剧。谁塞的？赵德柱？不对，那老头连微信都不太会用。合租的？这间房就他一个人住。同事？没人知道他住哪儿。\n\n他蹲下去翻床底，把纸箱一个个拖出来。旧报纸，破台灯，一只没配对的运动鞋，半袋发霉的石灰。没有第二本册子，没有什么机关。床底除了灰就是潮气。\n\n他站起来，又去看那本册子。还在床上摊着，字还在。\n\n劳梓凡掏出手机，打开地图，输入“柳巷街三十七号”。\n\n搜索结果跳出来。城西区，老供销社家属楼，建成于九十年代初，距离他这里四站公交。地图上甚至能看到那栋楼的轮廓，六层，灰扑扑的，夹在一排临街商铺后面。\n\n真实存在。\n\n他把手机锁屏，又解锁，重新搜了一遍。还是那个结果，连街景照片都有。一栋老楼，外墙皮剥落了大半，楼道口堆着几辆生锈的自行车。\n\n劳梓凡坐在床边，盯着那本册子。封皮上什么也没有，内页的字迹稳定，没有褪色，没有消失。他用手指蹭了一下“郑小满”三个字，墨迹干透了，蹭不掉。\n\n“不去，债转你身。”\n\n他念了一遍，声音在空荡荡的房间里显得很轻。什么意思？谁的债？转给谁？他想起赵德柱刚才的电话，想起手机上那条差评通知，想起钱包里那六十七块三毛。\n\n他需要钱。他更需要弄清楚这到底是怎么回事。\n\n劳梓凡站起来，把册子塞进外卖箱最底层，压在一件旧雨衣下面。他穿上外套，检查了一下钥匙和手机，又看了一眼床底。那些纸箱还摊在地上，他没管。\n\n锁门的时候，手有点抖，钥匙在锁孔里卡了一下。他用力拧了一圈，咔嗒。\n\n城中村的巷子里，路灯坏了两盏，剩下的那盏忽明忽暗地亮着。劳梓凡背着外卖箱往外走，箱子里那本册子隔着雨衣和塑料壳，什么动静也没有。\n\n他走到巷口，回头看了一眼自己的窗户。黑着。\n\n手机屏幕亮了一下，公交末班车还有十二分钟到站。他加快脚步，拐上大路。\n\n柳巷街三十七号。郑小满。\n\n他不知道自己去了会看见什么。但“债转你身”四个字像根刺扎在脑子里，拔不掉。他欠赵德柱一万二，欠平台一个差评，欠自己一个说法。再多一笔，他扛不住。\n\n公交站台的灯牌下，他停下来喘了口气。外卖箱的肩带勒进肩膀，他往上提了提，目光落在马路对面那排老旧的临街商铺上。再过去两条街，就是柳巷街。\n\n夜色里，城市的灯光一层叠着一层，把远处那栋老楼的轮廓照得模模糊糊。劳梓凡盯着那个方向看了几秒，把手机揣进口袋，踏上了进站的公交车。",
+      "order": 1,
+      "generationState": "drafted",
+      "chapterStatus": "generating",
+      "targetWordCount": 2800,
+      "conflictLevel": 20,
+      "revealLevel": 30,
+      "mustAvoid": "不得让劳梓凡在本章见到郑小满或进入客户家中；不得在本章展示驱邪实战或八极拳对灵体生效；不得揭示账本来源、阴司规则或债务转移原理；不得让劳梓凡获得任何驱邪收入；不得把账本浮现名字处理成梦境、幻觉或他人伪造。",
+      "taskSheet": "开篇用被讹与差评把劳梓凡逼到墙角；回屋后翻钱、接房东催租电话，强化只剩几十块的绝境。床底账本自动翻开，浮现郑小满、地址、‘不去，债转你身’。他先当恶作剧，用手机查地址发现真实存在，犹豫后把账本塞进外卖箱出门。不写见到客户、不写驱邪、不写收钱。",
+      "sceneCards": "{\"targetWordCount\":2800,\"lengthBudget\":{\"targetWordCount\":2800,\"softMinWordCount\":2380,\"softMaxWordCount\":3220,\"hardMaxWordCount\":3500},\"scenes\":[{\"key\":\"scene_1\",\"title\":\"送餐被讹与差评\",\"purpose\":\"用一场具体的送餐纠纷把劳梓凡的现实困境压到最低点。\",\"mustAdvance\":[\"大妈以汤洒弄脏鞋为由讹走两百块\",\"外卖站因超时扣钱并记差评\"],\"mustPreserve\":[\"劳梓凡外卖员身份和市井语言\",\"现实压力先于灵异出现\"],\"entryState\":\"劳梓凡拎着外卖赶到老旧居民楼，已因堵车超时。\",\"exitState\":\"劳梓凡赔了两百块，收到差评通知，蹲在路边看手机余额。\",\"forbiddenExpansion\":[\"不得出现灵异元素\",\"不得让劳梓凡当场使用术法或八极拳\"],\"targetWordCount\":700,\"resistance\":\"大妈胡搅蛮缠堵住楼道，围观邻居帮腔，平台规则偏向顾客。\",\"turn\":\"大妈从指责汤洒升级为索赔鞋子，劳梓凡为赶下一单选择私了赔钱。\",\"emotionalShift\":\"从着急送单到憋屈赔钱，再到看到差评通知的麻木。\",\"readerValue\":\"读者立刻感知主角被现实按在地上摩擦，产生‘他还能更惨吗’的追读动力。\",\"causality\":{\"actor\":\"劳梓凡\",\"choice\":\"掏两百块私了，先保住不超时。\",\"motive\":\"下一单只剩十分钟，报警或争执会误工扣更多钱。\",\"prerequisites\":[{\"condition\":\"劳梓凡正在送外卖，手头有当天跑单的现金。\",\"sourceKind\":\"established_in_context\",\"reference\":\"本章开篇送餐场景\"}],\"resistanceResponse\":\"大妈收钱后仍向平台投诉汤洒，平台自动记差评并扣钱。\",\"outcomeMechanism\":\"私了没有消除投诉，反而让劳梓凡既赔钱又吃差评，经济与考核双重受损。\",\"resultingConstraints\":[{\"constraint\":\"劳梓凡当天收入减少两百块并被记一次差评。\",\"persistence\":\"持续到外卖站考核周期结束或差评被撤销。\"}]}},{\"key\":\"scene_2\",\"title\":\"出租屋翻钱与催租电话\",\"purpose\":\"把经济绝境具体化，让劳梓凡回到出租屋面对账本前先面对现实。\",\"mustAdvance\":[\"劳梓凡翻遍全身只剩几十块\",\"房东赵德柱打电话催下季度房租\"],\"mustPreserve\":[\"出租屋的逼仄环境和劳梓凡的日常状态\",\"赵德柱作为现实压力源的声音出场\"],\"entryState\":\"劳梓凡回到城中村出租屋，把外卖箱扔在门口。\",\"exitState\":\"劳梓凡坐在床边数钱，手机里是赵德柱的催租短信和未接来电。\",\"forbiddenExpansion\":[\"不得让赵德柱上门\",\"不得让劳梓凡此时发现账本\"],\"targetWordCount\":600,\"resistance\":\"翻遍口袋和抽屉只有几十块，赵德柱电话里态度强硬。\",\"turn\":\"赵德柱从催租升级为警告‘下礼拜不交就换锁’。\",\"emotionalShift\":\"从赔钱后的疲惫到数钱时的焦躁，再到接完电话的窒息感。\",\"readerValue\":\"读者看到房租倒计时，理解劳梓凡为什么后面会冒险按账本地址走。\",\"causality\":{\"actor\":\"劳梓凡\",\"choice\":\"接起赵德柱电话，承诺下周凑钱。\",\"motive\":\"他不想被换锁，出租屋是他唯一能落脚的地方。\",\"prerequisites\":[{\"condition\":\"劳梓凡租住赵德柱的城中村旧楼，下季度房租即将到期。\",\"sourceKind\":\"established_in_context\",\"reference\":\"本章出租屋场景与赵德柱来电\"}],\"resistanceResponse\":\"赵德柱不接受口头承诺，给出下礼拜交钱的硬期限。\",\"outcomeMechanism\":\"电话催租把模糊的经济压力变成具体倒计时，逼劳梓凡必须尽快找到来钱的路子。\",\"resultingConstraints\":[{\"constraint\":\"劳梓凡必须在一周内凑齐下季度房租。\",\"persistence\":\"持续到房租交清或被换锁。\"}]}},{\"key\":\"scene_3\",\"title\":\"床底账本自动翻开\",\"purpose\":\"让账本以无法用恶作剧解释的方式登场，抛出核心悬念。\",\"mustAdvance\":[\"床底旧账本自动翻开\",\"账面浮现‘郑小满’、老旧小区地址和‘不去，债转你身’\"],\"mustPreserve\":[\"账本作为旧物的质感\",\"劳梓凡对账本来源一无所知\"],\"entryState\":\"劳梓凡坐在床边，脚碰到床底一个硬物。\",\"exitState\":\"劳梓凡举着账本站在灯下，账面字迹清晰，地址陌生。\",\"forbiddenExpansion\":[\"不得让账本说话或解释规则\",\"不得让劳梓凡认出账本或知道其来源\"],\"targetWordCount\":800,\"resistance\":\"劳梓凡第一反应是恶作剧，翻找床底想找出是谁塞的。\",\"turn\":\"账本在他手里自动翻页，墨迹从空白中浮现，不是他见过的任何笔迹。\",\"emotionalShift\":\"从烦躁到疑惑，再到看见字迹浮现时的后背发凉。\",\"readerValue\":\"核心卖点首次显形：账本有用且带威胁，读者想知道名字和地址意味着什么。\",\"causality\":{\"actor\":\"劳梓凡\",\"choice\":\"把账本从床底抽出来翻看，没有立刻扔掉。\",\"motive\":\"‘不去，债转你身’六个字让他想起欠债的滋味，他怕是什么人设的局。\",\"prerequisites\":[{\"condition\":\"劳梓凡床底有旧物，账本此前未被发现。\",\"sourceKind\":\"establish_in_scene\",\"reference\":\"scene_3中脚碰硬物、抽出账本\"}],\"resistanceResponse\":\"账本不回应他的翻找，只是自动翻到有字的一页，字迹稳定不褪。\",\"outcomeMechanism\":\"无法解释的自动翻页和浮现字迹让‘恶作剧’解释站不住脚，劳梓凡被迫认真对待账本。\",\"resultingConstraints\":[{\"constraint\":\"劳梓凡无法把账本当普通旧物扔掉，必须处理‘不去，债转你身’的警告。\",\"persistence\":\"持续到账本名字被处理或债务转移发生。\"}]}},{\"key\":\"scene_4\",\"title\":\"查证地址与出门决定\",\"purpose\":\"让劳梓凡用现实手段验证账本，并做出按地址去看一眼的决定。\",\"mustAdvance\":[\"劳梓凡用手机查地址发现是真实存在的老旧小区\",\"劳梓凡把账本塞进外卖箱锁门出发\"],\"mustPreserve\":[\"劳梓凡的怀疑与恐惧并存\",\"决定出于现实压力而非主动冒险\"],\"entryState\":\"劳梓凡盯着账本上的地址，手机搜索结果页面打开。\",\"exitState\":\"劳梓凡锁好门，背着外卖箱走进城中村夜色，账本在箱内。\",\"forbiddenExpansion\":[\"不得让劳梓凡到达小区或见到郑小满\",\"不得让劳梓凡联系任何人商量\"],\"targetWordCount\":700,\"resistance\":\"劳梓凡犹豫是否该去，怕惹上麻烦，也怕不去真的应验‘债转你身’。\",\"turn\":\"手机地图显示地址真实存在，且距离他只有四站公交。\",\"emotionalShift\":\"从怀疑到确认地址真实后的紧绷，再到出门时‘先看一眼再说’的决然。\",\"readerValue\":\"读者看到主角被账本推着迈出第一步，期待下一章见到客户和阴气。\",\"causality\":{\"actor\":\"劳梓凡\",\"choice\":\"把账本塞进外卖箱，锁门按地址出发。\",\"motive\":\"地址真实存在，且‘不去，债转你身’的警告让他不敢赌；他需要钱，也需要弄清账本是什么。\",\"prerequisites\":[{\"condition\":\"账本上的地址经手机查证真实存在。\",\"sourceKind\":\"establish_in_scene\",\"reference\":\"scene_4中手机地图搜索结果\"}],\"resistanceResponse\":\"夜色中的城中村和陌生小区让他本能发怵，但公交末班车提示催促他动身。\",\"outcomeMechanism\":\"查证结果把‘恶作剧’可能性压到最低，现实压力和警告共同推动他出门。\",\"resultingConstraints\":[{\"constraint\":\"劳梓凡已离开出租屋前往陌生小区，无法中途轻易回头。\",\"persistence\":\"持续到抵达小区或改变主意。\"}]}}],\"readerExperience\":{\"readerQuestion\":\"账本上的名字和地址是真的吗？去了会怎样？\",\"promisedReward\":\"读者看到账本确实自动浮现真实地址，并跟着劳梓凡出门，悬念从‘恶作剧’升级为‘必须去看一眼’。\",\"rewardLevel\":\"setup\",\"protagonistWant\":\"劳梓凡想保住外卖工作、凑齐房租，不想被一本旧账本继续拖进麻烦。\",\"primaryResistance\":\"大妈讹诈、平台差评扣钱、房东催租，以及劳梓凡自己对‘债转你身’的怀疑和恐惧。\",\"keyTurn\":\"劳梓凡用手机查证地址真实存在，确认账本不是随手涂鸦，决定出门。\",\"emotionalShift\":\"从被讹后的憋屈和差评后的麻木，到发现账本自动翻页的惊疑，再到查证地址后‘不去不行’的紧绷。\",\"informationReveal\":\"账本会自动翻开并浮现真实存在的姓名与地址，且附带‘不去，债转你身’的警告。\",\"netChange\":\"劳梓凡从‘怀疑账本是恶作剧’变为‘确认地址真实并决定按地址去看一眼’，账本从床底旧物变成他必须面对的下一步。\",\"inheritedHookResponsibilities\":[\"承接开篇钩子：送外卖被大妈讹诈赔钱又吃差评，回出租屋发现床底账本自动翻开，浮现陌生名字和地址，写着‘不去，债转你身’。\"],\"endingHook\":\"劳梓凡锁门出发，账本在外卖箱里，地址指向一个他从未去过的老旧小区——门后是谁，为什么会被账本盯上？\"},\"requiredElements\":[\"劳梓凡送外卖被大妈以‘汤洒了弄脏鞋’为由讹走两百块，外卖站因超时扣钱并记差评。\",\"劳梓凡回到出租屋翻遍全身只剩几十块，房东赵德柱打电话催下季度房租。\",\"床底旧账本自动翻开，浮现‘郑小满’的名字、一个老旧小区地址和‘不去，债转你身’。\",\"劳梓凡怀疑是恶作剧，用手机查地址发现是真实存在的老旧小区。\",\"劳梓凡把账本塞进外卖箱，锁门出发，决定按地址去看一眼——第一轮循环完整显形（pending_payoff，本章到期（第 1 章）；硬截止第 3 章；尚无推进记录；预定兑现强度 major）。\"]}",
+      "repairHistory": "[contract_guard] {\"recordedAt\":\"2026-10-11T14:28:02.928Z\",\"outcome\":\"accepted\",\"attempt\":1,\"declaredConflicts\":0,\"declaredNeighborPreemptions\":0}",
+      "qualityScore": null,
+      "continuityScore": null,
+      "characterScore": null,
+      "pacingScore": null,
+      "riskFlags": null,
+      "hook": null,
+      "expectation": "劳梓凡送餐被大妈讹走两百块，又因超时吃差评，回出租屋发现床底旧账本自动翻开，浮现陌生名字地址和“不去，债转你身”。他翻遍全身只剩几十块，房东电话催租，决定按地址去看一眼。",
+      "novelId": "cmv3wyvw40015gow0780pycx9",
+      "createdAt": "2026-10-11T14:26:51.258+00:00",
+      "updatedAt": "2026-10-11T14:30:08.942+00:00"
+    },
+    {
+      "id": "cmv3x2mt800jtgow0la32yn38",
+      "title": "八极拳压不住阴气",
+      "content": "",
+      "order": 2,
+      "generationState": "planned",
+      "chapterStatus": "unplanned",
+      "targetWordCount": null,
+      "conflictLevel": null,
+      "revealLevel": null,
+      "mustAvoid": null,
+      "taskSheet": null,
+      "sceneCards": null,
+      "repairHistory": null,
+      "qualityScore": null,
+      "continuityScore": null,
+      "characterScore": null,
+      "pacingScore": null,
+      "riskFlags": null,
+      "hook": null,
+      "expectation": "劳梓凡按地址找到住户郑小满，发现她被旧物件附灵，阴气夜间增强。他贴符配合八极拳暂时压制阴气，但物件没毁，账本提示“毁物不毁根，债还在”。郑小满付了第一笔钱，劳梓凡确认账本有用，也确认事情没完。",
+      "novelId": "cmv3wyvw40015gow0780pycx9",
+      "createdAt": "2026-10-11T14:26:51.260+00:00",
+      "updatedAt": "2026-10-11T14:26:51.279+00:00"
+    }
+  ]
+}

@@ -63,6 +63,14 @@ export class NovelDirectorAutoExecutionRuntime {
   }): Promise<void> {
     const executionIdentity = await readAutoExecutionIdentity(this.deps, input.taskId);
     if (!executionIdentity || await shouldStopAutoExecution(this.deps, input.taskId, null, executionIdentity)) return;
+    let savedExecution: DirectorAutoExecutionState | undefined;
+    try { savedExecution = JSON.parse(executionIdentity.seedPayloadJson || "{}")?.autoExecution; }
+    catch { throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "原章节任务记录无法解析，请保留正文并核对恢复位置。"); }
+    if (savedExecution?.pipelineJobId
+      && savedExecution.pipelineStatus !== "succeeded"
+      && savedExecution.pipelineJobId !== input.existingPipelineJobId) {
+      throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "原章节任务关联已变化，请保留正文并核对恢复位置。");
+    }
     const allowLazyChapterPlanning = isFullBookAutopilotRunMode(input.request.runMode);
     let { range, autoExecution, pipelineJobId } = await prepareRequestedAutoExecutionState(this.deps, {
       novelId: input.novelId,
@@ -84,6 +92,9 @@ export class NovelDirectorAutoExecutionRuntime {
         }
       }
       if (!knownPipelineJob || (!knownPipelineJob.pendingManualRecovery && ["failed", "cancelled"].includes(knownPipelineJob.status))) {
+        if (input.resumePendingManualRecovery) {
+          throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "原章节任务不能恢复，请核对原任务状态，不能新建任务替代保留稿。");
+        }
         pipelineJobId = "";
         ({ range, autoExecution } = await resolveAutoExecutionRuntimeRangeAndState(this.deps, {
           novelId: input.novelId,
@@ -129,6 +140,9 @@ export class NovelDirectorAutoExecutionRuntime {
         const existingJob = knownPipelineJob ?? await this.deps.novelService.getPipelineJobById(pipelineJobId);
         knownPipelineJob = existingJob;
         if (!existingJob || (!existingJob.pendingManualRecovery && ["failed", "cancelled"].includes(existingJob.status))) {
+          if (input.resumePendingManualRecovery) {
+            throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "原章节任务在恢复期间发生变化，请回到本书工作区核对。");
+          }
           pipelineJobId = "";
         }
       }

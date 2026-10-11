@@ -390,6 +390,8 @@ test("authorized chapter recovery preserves the saved range without a production
       directorRuntime: { initializeRun: async () => {}, recordRunResumed: async () => {},
         getSnapshot: async () => null, runNode: async node => node.run() },
       continueCandidateStageTask: async () => false,
+      // Non-planning variants below exercise first-run presentation gating, not a paused chapter.
+      prepareSavedPipelineRecovery: async () => null,
       resolveAssetFirstRecovery: async () => ({ type: "auto_execution", resumeCheckpointType: "chapter_batch_ready" }),
       buildDirectorSeedPayload: (_input, _novel, extra) => extra,
       scheduleBackgroundRun: (_id, fn) => { scheduled = fn; },
@@ -404,7 +406,8 @@ test("authorized chapter recovery preserves the saved range without a production
     assert.equal(checkpoint, undefined);
     assert.equal(run.existingPipelineJobId, null);
     assert.deepEqual(run.existingState, { ...seed.autoExecution, pipelineJobId: null, pipelineStatus: null });
-    assert.equal(run.resumePendingManualRecovery, true);
+    // A planning grant cannot also authorize recovery of a discarded chapter job.
+    assert.equal(run.resumePendingManualRecovery, false);
     assert.equal(run.skipCurrentQualityRepair ?? false, false);
     assert.equal(saved.productionExperience, undefined);
   }
