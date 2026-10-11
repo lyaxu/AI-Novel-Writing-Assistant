@@ -13,6 +13,19 @@ const {
   runChapterRepairText,
 } = require("../dist/services/novel/runtime/repair/chapterRepairRuntime.js");
 
+for (const code of ["LLM_OUTPUT_LIMIT", "ECONNRESET"]) {
+  test(`patch planning preserves ${code} instead of treating it as a repairable schema failure`, async () => {
+    const original = promptRunner.runStructuredPrompt;
+    const failure = Object.assign(new Error("offline provider interruption"), { code });
+    promptRunner.runStructuredPrompt = async () => { throw failure; };
+    try {
+      await assert.rejects(new ChapterPatchRepairService().repair({
+        novelTitle: "测试小说", chapterTitle: "第一章", content: "已有正文足够执行修复。", issues: [], repairMode: "light_repair",
+      }), error => error === failure);
+    } finally { promptRunner.runStructuredPrompt = original; }
+  });
+}
+
 test("applyChapterPatchRepairPlan applies exact single-location patches", () => {
   const result = applyChapterPatchRepairPlan("第一段承接断裂。第二段继续推进。", {
     strategy: "patch_first",
@@ -179,18 +192,13 @@ test("ChapterPatchRepairService does not run local repair in rewrite-only modes"
 
 test("runChapterRepairText performs a full rewrite only when heavy repair is explicit", async () => {
   const originalRunStructuredPrompt = promptRunner.runStructuredPrompt;
+  const originalRunTextPrompt = promptRunner.runTextPrompt;
   let patchCalls = 0;
   promptRunner.runStructuredPrompt = async () => {
     patchCalls += 1;
     throw new Error("heavy repair must skip patch planning");
   };
-  promptRunner.setPromptRunnerLLMFactoryForTests(async () => ({
-    stream: async () => ({
-      async *[Symbol.asyncIterator]() {
-        yield { content: "用户明确选择后的整章重写稿。" };
-      },
-    }),
-  }));
+  promptRunner.runTextPrompt = async () => ({ output: "用户明确选择后的整章重写稿。" });
 
   try {
     const result = await runChapterRepairText({
@@ -208,14 +216,14 @@ test("runChapterRepairText performs a full rewrite only when heavy repair is exp
     assert.equal(patchCalls, 0);
   } finally {
     promptRunner.runStructuredPrompt = originalRunStructuredPrompt;
-    promptRunner.setPromptRunnerLLMFactoryForTests();
+    promptRunner.runTextPrompt = originalRunTextPrompt;
   }
 });
 
 test("ChapterPatchRepairService reports structured patch schema failures as recoverable", async () => {
   const originalRunStructuredPrompt = promptRunner.runStructuredPrompt;
   promptRunner.runStructuredPrompt = async () => {
-    throw new Error("patches.1.targetExcerpt: Too small");
+    throw Object.assign(new Error("patches.1.targetExcerpt: Too small"), { name: "StructuredOutputError", category: "schema_mismatch" });
   };
 
   try {

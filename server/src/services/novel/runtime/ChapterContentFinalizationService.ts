@@ -20,6 +20,7 @@ import {
   detectProseQuality,
 } from "./proseQuality/ProseQualityDetector";
 import type { ChapterLifecycleService } from "./lifecycle";
+import { currentProductionSession, productionStep } from "../production/reliability";
 
 export interface ChapterContentFinalizationAgentRuntime {
   finishChapterGenRun: (runId: string, summary: string, durationMs: number) => Promise<void>;
@@ -92,6 +93,14 @@ export class ChapterContentFinalizationService {
   }
 
   async finalizeChapterContent(input: FinalizeChapterContentInput): Promise<FinalizeChapterContentResult> {
+    if (!currentProductionSession()) return this.evaluateChapterContent(input);
+    const result = await productionStep(`evaluation:${createHash("sha256").update(input.content).digest("hex")}`,
+      () => this.evaluateChapterContent({ ...input, deferTerminalCommit: true }), true);
+    if (!input.deferTerminalCommit) await this.commitFinalizedChapterContent({ ...input, evaluation: result });
+    return result;
+  }
+
+  private async evaluateChapterContent(input: FinalizeChapterContentInput): Promise<FinalizeChapterContentResult> {
     const finalContent = input.content;
     await input.assertExecutionOwnership?.();
     const acceptance = await this.qualityGateService.runAcceptanceGate({
@@ -166,18 +175,20 @@ export class ChapterContentFinalizationService {
 
   async commitFinalizedChapterContent(input: CommitFinalizedChapterContentInput): Promise<void> {
     const { finalContent, runtimePackage, needsRepair } = input.evaluation;
+    const key = `commit:${createHash("sha256").update(finalContent).digest("hex")}`;
     await input.assertExecutionOwnership?.();
     if (input.evaluation.acceptancePersistenceDeferred && input.evaluation.acceptanceResult) {
-      await this.qualityGateService.persistAcceptanceResult?.({
+      await productionStep(`${key}:assessment`, async () => this.qualityGateService.persistAcceptanceResult?.({
         novelId: input.novelId,
         chapterId: input.chapterId,
         contextPackage: input.contextPackage,
         content: finalContent,
         request: input.request,
-      }, input.evaluation.acceptanceResult);
+      }, input.evaluation.acceptanceResult!));
       await input.assertExecutionOwnership?.();
     }
-    const timelineFinalization = await this.timelineFinalizer.finalizeCurrentContent({
+    const timelineFinalization = await productionStep(`${key}:timeline`, async () => {
+      const result = await this.timelineFinalizer.finalizeCurrentContent({
       novelId: input.novelId,
       chapterId: input.chapterId,
       content: finalContent,
@@ -186,6 +197,9 @@ export class ChapterContentFinalizationService {
       mode: needsRepair ? "degraded" : "stable",
       sourceStage: "chapter_content_finalization",
       qualityDebt: needsRepair,
+      });
+      if (!result.checkpointWritten) throw new Error("Chapter timeline finalization is still running");
+      return result;
     });
     if (!timelineFinalization.checkpointWritten) {
       throw new Error("Chapter timeline finalization is still running");
@@ -196,14 +210,15 @@ export class ChapterContentFinalizationService {
       // 保证义务账本在下一章 JIT 上下文组装前完成；失败只告警，不阻断定稿返回。
       try {
         await input.assertExecutionOwnership?.();
-        await this.writeAcceptedFacts(
+        await productionStep(`${key}:facts`, () => this.writeAcceptedFacts(
           input.novelId,
           input.chapterId,
           input.runId,
           input.contextPackage,
           runtimePackage,
-        );
+        ));
       } catch (error) {
+        if (currentProductionSession()) throw error;
         console.warn("[chapter-runtime] fact ledger write failed", {
           novelId: input.novelId,
           chapterId: input.chapterId,
@@ -215,7 +230,8 @@ export class ChapterContentFinalizationService {
 
     if (!needsRepair && input.deferArtifactBackgroundSync && input.scheduleDeferredArtifactBackgroundSync !== false) {
       await input.assertExecutionOwnership?.();
-      await this.artifactSyncService.syncChapterArtifacts(
+      await productionStep(`${key}:artifacts`, async () => {
+        const result = await this.artifactSyncService.syncChapterArtifacts(
         input.novelId,
         input.chapterId,
         finalContent,
@@ -227,7 +243,12 @@ export class ChapterContentFinalizationService {
           provider: input.request.provider,
           model: input.request.model,
         },
-      );
+        );
+        if (result.status !== "completed" && result.status !== "degraded") {
+          throw new Error(result.reason ?? "章节状态尚未同步，正文已保留。");
+        }
+        return result;
+      });
       await input.assertExecutionOwnership?.();
     }
 

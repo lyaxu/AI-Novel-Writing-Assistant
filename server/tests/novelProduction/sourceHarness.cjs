@@ -39,6 +39,8 @@ function createPipelineHarness({
     "node:crypto": { createHash: require("node:crypto").createHash },
   });
   const { runPipelineChapterWithRuntime } = loadRuntimeSource("chapterRuntimePipeline.ts", {
+    "../production/reliability": { productionStep: (_key, fn) => fn() },
+    "./acceptance": { filterVerifiedRepairIssues: (issues) => issues },
     "../../styleEngine/styleGenerationSanitizer": { detectForbiddenStyleEntities: () => [] },
     "./chapterEmptyContentError": { assertChapterContentNotEmpty: (value) => value, isChapterEmptyContentError: () => false },
     "./repair/chapterRepairRuntime": {

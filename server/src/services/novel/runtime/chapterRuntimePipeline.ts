@@ -6,6 +6,7 @@ import type { ChapterPatchIssueResolution } from "@ai-novel/shared/types/chapter
 import type { ChapterRuntimeRequestInput } from "./chapterRuntimeSchema";
 import type { ChapterAcceptanceAssessmentResult } from "./ChapterAcceptanceAssessmentService";
 import { filterVerifiedRepairIssues } from "./acceptance";
+import { productionStep } from "../production/reliability";
 import {
   ChapterArtifactSyncBoundaryError,
   type ChapterArtifactSyncResult,
@@ -198,6 +199,7 @@ export async function runPipelineChapterWithRuntime(
   options: PipelineRuntimeInput = {},
   hooks: PipelineRuntimeHooks = {},
 ): Promise<PipelineRuntimeResult> {
+  options = await productionStep("pipeline.options", async () => options);
   const {
     maxRetries = 1,
     autoReview = true,
@@ -238,38 +240,43 @@ export async function runPipelineChapterWithRuntime(
   for (let attempt = 0; attempt <= effectiveMaxRetries; attempt += 1) {
     await hooks.onCheckCancelled?.();
     if (!content.trim()) {
-      const generatedDraft = await generateNonEmptyDraftFromWriter({
+      const generatedDraft = await productionStep("pipeline.draft", () => generateNonEmptyDraftFromWriter({
         deps,
         novelId,
         chapterId,
         request,
         assembled,
         hooks,
-      });
+      }), true);
       content = generatedDraft.content;
       latestLengthControl = generatedDraft.lengthControl;
       if (!generatedDraft.artifactsAlreadySynced) {
-        await deps.saveDraftAndArtifacts(novelId, chapterId, content, "drafted", {
+        await hooks.onCheckCancelled?.();
+        await productionStep("pipeline.save_draft", () => deps.saveDraftAndArtifacts(novelId, chapterId, content, "drafted", {
           scheduleBackgroundSync: false,
           artifactSyncMode,
           syncArtifacts: false,
-        });
+        }));
       }
     }
 
     if (!autoReview) {
       await hooks.onCheckCancelled?.();
-      const artifactSyncResult = await syncFinalRetainedChapterArtifacts(
+      const artifactSyncResult = await productionStep("pipeline.sync_unreviewed", async () => {
+        const result = await syncFinalRetainedChapterArtifacts(
         deps,
         novelId,
         chapterId,
         content,
         artifactSyncMode,
         "confirmed",
-      );
+        );
+        assertArtifactSyncCanContinue(result);
+        return result;
+      });
       assertArtifactSyncCanContinue(artifactSyncResult);
       await hooks.onCheckCancelled?.();
-      await deps.finalizeChapterTimeline({
+      await productionStep("pipeline.timeline_unreviewed", () => deps.finalizeChapterTimeline({
         novelId,
         chapterId,
         content,
@@ -278,9 +285,9 @@ export async function runPipelineChapterWithRuntime(
         mode: "stable",
         reason: "auto_review_disabled_final_content",
         qualityDebt: false,
-      });
+      }));
       await hooks.onCheckCancelled?.();
-      await deps.markChapterGenerationState(chapterId, "approved");
+      await productionStep("pipeline.state", () => deps.markChapterGenerationState(chapterId, "approved"));
       return {
         reviewExecuted: false,
         pass: true,
@@ -302,7 +309,7 @@ export async function runPipelineChapterWithRuntime(
     }
 
     await hooks.onStageChange?.("reviewing");
-    latestResult = await deps.finalizeChapterContent({
+    latestResult = await productionStep(`pipeline.review:${attempt}`, () => deps.finalizeChapterContent({
       novelId,
       chapterId,
       request,
@@ -312,7 +319,7 @@ export async function runPipelineChapterWithRuntime(
       runId: null,
       startMs: null,
       assertExecutionOwnership: hooks.onCheckCancelled,
-    });
+    }), true);
     await hooks.onCheckCancelled?.();
     content = latestResult.finalContent;
     const styleLeakageIssues = detectStyleReferenceLeakageIssues(content, latestResult.runtimePackage);
@@ -361,11 +368,11 @@ export async function runPipelineChapterWithRuntime(
       repairSelection.issueResolutions = patchIssueResolutions;
       if (repairSelection.selected === "candidate") {
         await hooks.onCheckCancelled?.();
-        await deps.saveDraftAndArtifacts(novelId, chapterId, content, "repaired", {
+        await productionStep("pipeline.save_selected", () => deps.saveDraftAndArtifacts(novelId, chapterId, content, "repaired", {
           scheduleBackgroundSync: false,
           artifactSyncMode,
           syncArtifacts: false,
-        });
+        }));
       } else {
         content = originalEvaluation.content;
         latestResult = originalEvaluation.result;
@@ -394,22 +401,22 @@ export async function runPipelineChapterWithRuntime(
 
     await hooks.onStageChange?.("repairing");
     await hooks.onCheckCancelled?.();
-    if (await hooks.onRetryConsumed?.("quality_repair") === false) break;
+    if (await productionStep("pipeline.repair_budget", async () => hooks.onRetryConsumed?.("quality_repair")) === false) break;
     retryCountUsed += 1;
     await hooks.onCheckCancelled?.();
-    const repairResult = await repairDraftContent({
+    const repairResult = await productionStep("pipeline.repair", () => repairDraftContent({
       novelTitle: assembled.novel.title,
       chapterTitle: assembled.chapter.title,
       content,
       issues: latestIssues,
-      runtimePackage: latestResult.runtimePackage,
+      runtimePackage: latestResult!.runtimePackage,
       options: {
         provider: request.provider,
         model: request.model,
         temperature: request.temperature,
         repairMode,
       },
-    });
+    }), true);
     patchIssueResolutions = repairResult.issueResolutions;
     if (repairResult.recoverableFailure) {
       recoverableRepairFailure = repairResult.recoverableFailure;
@@ -423,26 +430,30 @@ export async function runPipelineChapterWithRuntime(
     throw new Error("Pipeline chapter runtime did not produce a result.");
   }
 
-  await deps.commitFinalizedChapterContent({
+  await productionStep("pipeline.commit", () => deps.commitFinalizedChapterContent({
     novelId,
     chapterId,
     request,
     contextPackage: assembled.contextPackage,
-    evaluation: latestResult,
+    evaluation: latestResult!,
     assertExecutionOwnership: hooks.onCheckCancelled,
-  });
+  }));
   const contentProvenance: ContentProvenance = pass ? "confirmed" : "debt";
-  const artifactSyncResult = await syncFinalRetainedChapterArtifacts(
+  const artifactSyncResult = await productionStep("pipeline.sync", async () => {
+    const result = await syncFinalRetainedChapterArtifacts(
     deps,
     novelId,
     chapterId,
-    latestResult.finalContent,
+    latestResult!.finalContent,
     artifactSyncMode,
     contentProvenance,
-  );
+    );
+    assertArtifactSyncCanContinue(result);
+    return result;
+  });
   assertArtifactSyncCanContinue(artifactSyncResult);
   await hooks.onCheckCancelled?.();
-  await deps.markChapterGenerationState(chapterId, pass ? "approved" : "reviewed");
+  await productionStep("pipeline.state", () => deps.markChapterGenerationState(chapterId, pass ? "approved" : "reviewed"));
 
   // 章节未通过时构建归因对象
   const qualityDebtAttribution: QualityDebtAttribution | null = !pass

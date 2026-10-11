@@ -12,6 +12,7 @@ import type { ChapterContentFinalizationService } from "./ChapterContentFinaliza
 import type { ChapterTimelineFinalizationService } from "./ChapterTimelineFinalizationService";
 import type { ChapterStreamGenerationOrchestrator } from "./ChapterStreamGenerationOrchestrator";
 import type { ChapterLifecycleService } from "./lifecycle";
+import { productionStep } from "../production/reliability";
 
 export interface ChapterPipelineRuntimeAdapterDeps {
   streamOrchestrator: Pick<
@@ -42,7 +43,7 @@ export class ChapterPipelineRuntimeAdapter {
     hooks: PipelineRuntimeHooks = {},
   ): Promise<PipelineRuntimeResult> {
     const { request, assembled } = await this.deps.streamOrchestrator.prepareRuntimeChapter(novelId, chapterId, options);
-    await this.deps.streamOrchestrator.markChapterStatus(chapterId, "generating");
+    await productionStep("pipeline.start", () => this.deps.streamOrchestrator.markChapterStatus(chapterId, "generating"));
     try {
       return await runPipelineChapterWithRuntime(
         {

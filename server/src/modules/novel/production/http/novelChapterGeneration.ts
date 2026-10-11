@@ -6,6 +6,7 @@ import type { ChapterRuntimeCoordinator } from "../../../../services/novel/runti
 import { chapterRuntimeRequestSchema } from "../../../../services/novel/runtime/chapterRuntimeSchema";
 import { stepModuleRunner } from "../../../../services/novel/director/workflowStepRuntime/StepModuleRunner";
 import { DIRECTOR_EXECUTION_STEP_IDS } from "../../../../services/novel/director/workflowStepRuntime/directorWorkflowStepIds";
+import { createDefaultChapterProductionJournal } from "../../../../services/novel/production/reliability";
 
 type ChapterStreamResult = Awaited<ReturnType<ChapterRuntimeCoordinator["createChapterStream"]>>;
 
@@ -24,6 +25,19 @@ export function registerNovelChapterGenerationRoutes(input: RegisterNovelChapter
     chapterParamsSchema,
     forwardBusinessError,
   } = input;
+
+  // Inspection never acquires an execution lease or heals/restarts a task.
+  router.get(
+    "/:id/chapters/:chapterId/runtime/recovery",
+    validate({ params: chapterParamsSchema }),
+    async (req, res, next) => {
+      try {
+        const { id, chapterId } = req.params as z.infer<typeof chapterParamsSchema>;
+        const recovery = await createDefaultChapterProductionJournal().inspect({ novelId: id, chapterId });
+        res.json({ success: true, data: recovery });
+      } catch (error) { next(error); }
+    },
+  );
 
   router.post(
     "/:id/chapters/:chapterId/runtime/run",

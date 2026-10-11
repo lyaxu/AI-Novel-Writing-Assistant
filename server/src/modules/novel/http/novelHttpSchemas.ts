@@ -429,6 +429,7 @@ export const reviewSchema = llmGenerateSchema.extend({
 });
 
 export const repairSchema = llmGenerateSchema.extend({
+  productionOperationId: z.string().trim().min(1).optional(),
   reviewIssues: z.array(reviewIssueSchema).optional(),
   auditIssueIds: z.array(z.string().trim().min(1)).optional(),
 });

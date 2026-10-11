@@ -4,6 +4,8 @@
 
 `NovelPipelineExecutor` 负责一次已领取流水线的章节执行循环，包括正文生成、质量闭环、滚动路线补齐和章节边界交接。它不提前生成下一章正式执行合同，也不创建第二套正文能力；具体章节写作、审校、修复和事实提交仍委托统一的 `ChapterRuntimeCoordinator`。
 
+`reliability/` 为 Coordinator 的各章入口提供持久步骤结果、流部分稿、章级所有权与正文/合同 CAS。它复用检查点表，不取代 GenerationJob 的任务状态或 job 级租约。详见[职责、写入图与恢复合同](reliability/README.md)。
+
 执行器内部按职责使用三个明确子边界：`qualityClosure/` 负责章节审校、质量债和明确重规划结果，`issueGovernance/` 负责把任务策略转换成继续、暂停或失败控制流，`handoff/` 只在章节安全落库边界处理生产体验交接。
 
 维护规则：

@@ -18,6 +18,7 @@ import { NovelContinuationService } from "./NovelContinuationService";
 import { assertChapterContentNotEmpty } from "./runtime/chapterEmptyContentError";
 import { prisma } from "../../db/prisma";
 import type { WritingPlatformSnapshot } from "@ai-novel/shared/types/writingPlatform";
+import { currentProductionSession } from "./production/reliability";
 
 async function loadWritingPlatformBlock(novelId: string) {
   const novel = await prisma.novel.findUnique({
@@ -342,10 +343,7 @@ export class ChapterWritingGraph {
     return {
       stream: streamed.stream as AsyncIterable<BaseMessageChunk>,
       onDone: async (fullContent: string) => {
-        const completed = await streamed.complete.catch((error) => {
-          if (error && typeof error === "object" && error.code === "LLM_OUTPUT_LIMIT") throw error;
-          return null;
-        });
+        const completed = await streamed.complete;
         const rawContent = completed?.output ?? fullContent;
         const normalized = await this.continuityNode(
           input.novelId,
@@ -368,7 +366,10 @@ export class ChapterWritingGraph {
           chapterOrder: input.chapter.order,
           source: "chapter_writer",
         });
-        await this.deps.saveDraftAndArtifacts(
+        // Journal-backed callers persist the completed writer output before saving Chapter.
+        // A database save failure can then resume saving without purchasing another draft.
+        const journalOwnsSave = Boolean(currentProductionSession());
+        if (!journalOwnsSave) await this.deps.saveDraftAndArtifacts(
           input.novelId,
           input.chapter.id,
           safeContent,
@@ -380,7 +381,7 @@ export class ChapterWritingGraph {
         );
         return {
           finalContent: safeContent,
-          artifactsAlreadySynced: true,
+          artifactsAlreadySynced: !journalOwnsSave,
           backgroundSyncDeferred: Boolean(input.options.deferArtifactBackgroundSync),
         };
       },

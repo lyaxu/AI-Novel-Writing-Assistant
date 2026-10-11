@@ -42,6 +42,12 @@ import {
 
 const PIPELINE_HEARTBEAT_INTERVAL_MS = 15000;
 
+function isChapterProductionSafetyError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error
+    && ["CHAPTER_PRODUCTION_BUSY", "CHAPTER_PRODUCTION_CONFLICT", "CHAPTER_PRODUCTION_UNCERTAIN", "CHAPTER_PRODUCTION_STORAGE"]
+      .includes(String(error.code)));
+}
+
 class PipelineIssueAppliedError extends Error {
   constructor(
     message: string,
@@ -564,6 +570,8 @@ export class NovelPipelineExecutor {
                 );
                 break;
               } catch (error) {
+                // Ownership, saved-version conflicts and unknown call outcomes require an explicit source-page action.
+                if (isChapterProductionSafetyError(error)) throw error;
                 if (error && typeof error === "object" && "code" in error && ["LLM_OUTPUT_LIMIT", "PLANNING_REPAIR_CONFLICT", "PLANNING_REPAIR_CONFIRMATION_REQUIRED"].includes(String(error.code))) {
                   throw error;
                 }
@@ -890,6 +898,19 @@ export class NovelPipelineExecutor {
       }
 
       const message = error instanceof Error ? error.message : "流水线执行失败";
+      if (isChapterProductionSafetyError(error)) {
+        // Preserve the saved chapter boundary; neither polling nor issue classification may resume this job.
+        await this.updateJobRequired(jobId, {
+          status: "failed",
+          pendingManualRecovery: true,
+          heartbeatAt: null,
+          error: message,
+          finishedAt: new Date(),
+          payload: this.stringifyPipelinePayload({ ...runtimePayload, qualityAlertDetails, replanAlertDetails, recoverableRepairDetails }),
+        });
+        void novelEventBus.emit({ type: "pipeline:completed", payload: { novelId, jobId, status: "failed" } }).catch(() => {});
+        return;
+      }
       if (isPlanningRepairConfirmationError(error) && runtimePayload.workflowTaskId) {
         await planningRecovery.pauseAfterPipelineFailure(
           runtimePayload.workflowTaskId, jobId, error, planningFailureBoundary,

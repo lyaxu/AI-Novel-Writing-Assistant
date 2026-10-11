@@ -30,14 +30,22 @@ import {
 } from "./lifecycle";
 import {
   defaultChapterRuntimeAgent,
+  createDefaultChapterWritingGraph,
   type ChapterRuntimeAgentPort,
 } from "./ChapterRuntimeDefaultDeps";
 import {
   ChapterExecutionPreparationService,
   createChapterExecutionPreparationService,
 } from "../production/preparation";
+import {
+  createChapterProductionJournal,
+  createDefaultChapterProductionJournal,
+  executeProduction,
+  executeProductionStream,
+} from "../production/reliability";
 
 interface ChapterRuntimeCoordinatorDeps {
+  productionJournal?: ReturnType<typeof createChapterProductionJournal>;
   assembler?: Pick<GenerationContextAssembler, "assemble">;
   preparationService?: Pick<ChapterExecutionPreparationService, "prepare">;
   chapterWritingGraph?: Pick<ChapterWritingGraph, "createChapterStream">;
@@ -68,8 +76,10 @@ export class ChapterRuntimeCoordinator {
   private readonly contentFinalizationService: ChapterContentFinalizationService;
   private readonly streamOrchestrator: ChapterStreamGenerationOrchestrator;
   private readonly pipelineAdapter: ChapterPipelineRuntimeAdapter;
+  private readonly productionJournal: ReturnType<typeof createChapterProductionJournal>;
 
   constructor(deps: ChapterRuntimeCoordinatorDeps = {}) {
+    this.productionJournal = deps.productionJournal ?? createDefaultChapterProductionJournal();
     const lifecycleService = deps.lifecycleService ?? chapterLifecycleService;
     const artifactSyncService = deps.artifactSyncService ?? new ChapterArtifactSyncService(lifecycleService);
     const agentRuntime = this.getAgentRuntime(deps.agentRuntime);
@@ -77,7 +87,7 @@ export class ChapterRuntimeCoordinator {
     const preparationService = deps.preparationService ?? createChapterExecutionPreparationService({
       ensureChapterExecutionContract: deps.ensureChapterExecutionContract,
     });
-    const chapterWritingGraph = deps.chapterWritingGraph ?? this.createDefaultChapterWritingGraph(artifactSyncService);
+    const chapterWritingGraph = deps.chapterWritingGraph ?? createDefaultChapterWritingGraph(artifactSyncService);
     const plannerRuntime = deps.plannerService ?? plannerService;
     const chapterAuditService = deps.auditService ?? auditService;
     const acceptanceAssessmentService = deps.acceptanceAssessmentService ?? new ChapterAcceptanceAssessmentService();
@@ -132,7 +142,9 @@ export class ChapterRuntimeCoordinator {
     stream: AsyncIterable<BaseMessageChunk>;
     onDone: (fullContent: string, helpers: StreamDoneHelpers) => Promise<void | StreamDonePayload>;
   }> {
-    return this.streamOrchestrator.createChapterStream(novelId, chapterId, options, config);
+    const { productionOperationId: operationId, ...request } = options;
+    const session = await this.productionJournal.open({ novelId, chapterId, operationId, request: { entry: "stream", ...request } });
+    return executeProductionStream(session, () => this.streamOrchestrator.createChapterStream(novelId, chapterId, options, config));
   }
 
   async createRepairStream(
@@ -143,7 +155,9 @@ export class ChapterRuntimeCoordinator {
     stream: AsyncIterable<BaseMessageChunk>;
     onDone: (fullContent: string, helpers: StreamDoneHelpers) => Promise<void>;
   }> {
-    return this.repairStreamRuntime.createRepairStream(novelId, chapterId, options);
+    const { productionOperationId: operationId, ...request } = options;
+    const session = await this.productionJournal.open({ novelId, chapterId, operationId, request: { entry: "repair", ...request } });
+    return executeProductionStream(session, () => this.repairStreamRuntime.createRepairStream(novelId, chapterId, options));
   }
 
   async runPipelineChapter(
@@ -152,38 +166,21 @@ export class ChapterRuntimeCoordinator {
     options: PipelineRuntimeInput = {},
     hooks: PipelineRuntimeHooks = {},
   ): Promise<PipelineRuntimeResult> {
-    return this.pipelineAdapter.runPipelineChapter(novelId, chapterId, options, hooks);
+    await hooks.onCheckCancelled?.();
+    // Remaining retry budget is a projection, not a new execution identity.
+    const { maxRetries: _remainingRetries, productionOperationId: operationId, ...identity } = options;
+    const session = await this.productionJournal.open({ novelId, chapterId, operationId, request: { entry: "pipeline", ...identity } });
+    return executeProduction(session, () => this.pipelineAdapter.runPipelineChapter(novelId, chapterId, options, {
+      ...hooks,
+      onCheckCancelled: async () => {
+        await hooks.onCheckCancelled?.();
+        await session.assertCurrent();
+      },
+    }));
   }
 
   private getAgentRuntime(agentRuntime?: ChapterRuntimeAgentPort): ChapterRuntimeAgentPort {
     return agentRuntime ?? defaultChapterRuntimeAgent;
-  }
-
-  private createDefaultChapterWritingGraph(
-    artifactSyncService: Pick<ChapterArtifactSyncService, "saveDraftAndArtifacts">,
-  ): Pick<ChapterWritingGraph, "createChapterStream"> {
-    return new ChapterWritingGraph({
-      enforceOpeningDiversity: async (_novelId, _chapterOrder, _chapterTitle, content) => ({
-        content,
-        rewritten: false,
-        maxSimilarity: 0,
-      }),
-      saveDraftAndArtifacts: (...args) => artifactSyncService.saveDraftAndArtifacts(...args),
-      logInfo: (message, meta) => {
-        if (meta) {
-          console.info(`[chapter-runtime] ${message}`, meta);
-          return;
-        }
-        console.info(`[chapter-runtime] ${message}`);
-      },
-      logWarn: (message, meta) => {
-        if (meta) {
-          console.warn(`[chapter-runtime] ${message}`, meta);
-          return;
-        }
-        console.warn(`[chapter-runtime] ${message}`);
-      },
-    });
   }
 
   private async ensureNovelCharacters(novelId: string, actionName: string, minCount = 1): Promise<void> {

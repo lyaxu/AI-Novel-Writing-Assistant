@@ -21,6 +21,7 @@ import type { ChapterContentFinalizationService } from "../ChapterContentFinaliz
 import type { GenerationContextAssembler } from "../GenerationContextAssembler";
 import type { ChapterLifecycleService } from "../lifecycle";
 import { ChapterArtifactSyncBoundaryError } from "../artifactSync/ChapterArtifactSyncResult";
+import { currentProductionSession, productionStep, captureProductionStream } from "../../production/reliability";
 import {
   ChapterContextAssemblyError,
   assembleChapterAuditContextPackage,
@@ -60,68 +61,74 @@ export class ChapterRepairStreamRuntime {
       throw new Error("小说或章节不存在");
     }
 
-    const assembledContextPackage = await assembleChapterAuditContextPackage({
-      assembler: this.deps.assembler,
-      novelId,
-      chapterId,
-      options,
-      operation: "repair",
-    });
-    const issues = await this.resolveRepairIssues(
-      novelId,
-      chapterId,
-      chapter.content ?? "",
-      options,
-      assembledContextPackage,
-    );
-    const repairContextPackage = withChapterRepairContext(assembledContextPackage, issues);
-    if (!repairContextPackage.chapterRepairContext) {
-      const error = new Error("chapterRepairContext missing after successful context assembly");
-      logPipelineError("Failed to derive repair context from assembled chapter context package.", {
+    const { assembledContextPackage, prepared } = await productionStep("manual_repair.prepare", async () => {
+      const assembledContextPackage = await assembleChapterAuditContextPackage({
+        assembler: this.deps.assembler,
         novelId,
         chapterId,
+        options,
         operation: "repair",
-        provider: options.provider ?? null,
-        model: options.model ?? null,
-        error: error.message,
       });
-      throw new ChapterContextAssemblyError(novelId, chapterId, "repair", error);
-    }
-
-    const attemptId = `manual-patch:${randomUUID()}`;
-    const recordAttempt = (issueResolutions: ChapterPatchIssueResolution[], outcome: "candidate_prepared" | "application_failed") =>
-      (this.deps.qualityLoopService ?? chapterQualityLoopService).recordPatchAttempt({
-        novelId, chapterId, entry: { attemptId, recordedAt: new Date().toISOString(),
-          source: "manual_repair", outcome, issueResolutions },
-      });
-    const prepared = await prepareChapterRepairExecution({
-      novelId,
-      chapterId,
-      novelTitle: novel.title,
-      chapterTitle: chapter.title,
-      content: chapter.content ?? "",
-      issues,
-      repairContext: repairContextPackage.chapterRepairContext,
-      bibleContent: bible?.rawContent ?? "",
-      options: {
-        provider: options.provider,
-        model: options.model,
-        temperature: options.temperature,
-        repairMode: options.repairMode,
-      },
-    }).catch(async (error: unknown) => {
-      if (error instanceof ChapterPatchRepairFailedError && error.plan?.issueResolutions?.length) {
-        try {
-          await recordAttempt(error.plan.issueResolutions, "application_failed");
-        } catch (persistenceError) {
-          throw new AggregateError([error, persistenceError], "补丁未能安全应用，且处理回执保存失败。", { cause: error });
-        }
+      const issues = await this.resolveRepairIssues(
+        novelId,
+        chapterId,
+        chapter.content ?? "",
+        options,
+        assembledContextPackage,
+      );
+      const repairContextPackage = withChapterRepairContext(assembledContextPackage, issues);
+      if (!repairContextPackage.chapterRepairContext) {
+        const error = new Error("chapterRepairContext missing after successful context assembly");
+        logPipelineError("Failed to derive repair context from assembled chapter context package.", {
+          novelId,
+          chapterId,
+          operation: "repair",
+          provider: options.provider ?? null,
+          model: options.model ?? null,
+          error: error.message,
+        });
+        throw new ChapterContextAssemblyError(novelId, chapterId, "repair", error);
       }
-      throw error;
-    });
+
+      const attemptId = `manual-patch:${randomUUID()}`;
+      const recordAttempt = (issueResolutions: ChapterPatchIssueResolution[], outcome: "candidate_prepared" | "application_failed") =>
+        (this.deps.qualityLoopService ?? chapterQualityLoopService).recordPatchAttempt({
+          novelId, chapterId, entry: { attemptId, recordedAt: new Date().toISOString(),
+            source: "manual_repair", outcome, issueResolutions },
+        });
+      const prepared = await prepareChapterRepairExecution({
+        novelId,
+        chapterId,
+        novelTitle: novel.title,
+        chapterTitle: chapter.title,
+        content: chapter.content ?? "",
+        issues,
+        repairContext: repairContextPackage.chapterRepairContext,
+        bibleContent: bible?.rawContent ?? "",
+        options: {
+          provider: options.provider,
+          model: options.model,
+          temperature: options.temperature,
+          repairMode: options.repairMode,
+        },
+      }).catch(async (error: unknown) => {
+        if (error instanceof ChapterPatchRepairFailedError && error.plan?.issueResolutions?.length) {
+          try {
+            await recordAttempt(error.plan.issueResolutions, "application_failed");
+          } catch (persistenceError) {
+            throw new AggregateError([error, persistenceError], "补丁未能安全应用，且处理回执保存失败。", { cause: error });
+          }
+        }
+        throw error;
+      });
+
+      if (prepared.kind === "patched" && prepared.issueResolutions?.length) {
+        await recordAttempt(prepared.issueResolutions, "candidate_prepared");
+      }
+      return { assembledContextPackage, prepared };
+    }, true);
 
     if (prepared.kind === "patched") {
-      if (prepared.issueResolutions?.length) await recordAttempt(prepared.issueResolutions, "candidate_prepared");
       return {
         stream: createSingleChunkStream(prepared.content),
         onDone: async (fullContent: string, helpers: StreamDoneHelpers) => {
@@ -137,11 +144,19 @@ export class ChapterRepairStreamRuntime {
       };
     }
 
-    const streamed = await streamTextPrompt(createHeavyRepairPromptExecution(prepared));
+    const session = currentProductionSession();
+    const saved = session?.get<string>("manual_repair.content");
+    if (session?.get("manual_repair.started") && !saved) {
+      throw Object.assign(new Error("修订输出尚未确认完成，部分稿已保留，请先核实。"), { code: "CHAPTER_PRODUCTION_UNCERTAIN" });
+    }
+    if (!saved) await session?.put("manual_repair.started", true);
+    const streamed = saved ? { stream: createSingleChunkStream(saved), complete: Promise.resolve({ output: saved }) }
+      : await streamTextPrompt(createHeavyRepairPromptExecution(prepared));
     return {
-      stream: streamed.stream as AsyncIterable<BaseMessageChunk>,
+      stream: captureProductionStream(streamed.stream as AsyncIterable<BaseMessageChunk>),
       onDone: async (fullContent: string, helpers: StreamDoneHelpers) => {
         const completed = await streamed.complete;
+        await session?.put("manual_repair.content", completed.output);
         await this.finalizeRepairResult({
           novelId,
           chapterId,
@@ -221,12 +236,12 @@ export class ChapterRepairStreamRuntime {
       throw new ChapterPatchRepairFailedError("修复结果为空，未保存章节正文。");
     }
 
-    await this.deps.lifecycleService.saveWorkingContent({
+    await productionStep("manual_repair.save", () => this.deps.lifecycleService.saveWorkingContent({
       novelId: input.novelId,
       chapterId: input.chapterId,
       content: repairedContent,
       generationState: "repaired",
-    });
+    }));
     const finalized = await this.deps.contentFinalizationService.finalizeChapterContent({
       novelId: input.novelId,
       chapterId: input.chapterId,
@@ -243,7 +258,8 @@ export class ChapterRepairStreamRuntime {
       scheduleDeferredArtifactBackgroundSync: false,
     });
     const pass = !finalized.needsRepair && isPass(finalized.runtimePackage.audit.score);
-    const artifactSyncResult = await this.deps.artifactSyncService.syncChapterArtifacts(
+    const artifactSyncResult = await productionStep("manual_repair.sync", async () => {
+      const result = await this.deps.artifactSyncService.syncChapterArtifacts(
       input.novelId,
       input.chapterId,
       repairedContent,
@@ -255,7 +271,10 @@ export class ChapterRepairStreamRuntime {
         provider: input.options.provider,
         model: input.options.model,
       },
-    );
+      );
+      if (result.status !== "completed" && result.status !== "degraded") throw new ChapterArtifactSyncBoundaryError(result);
+      return result;
+    });
     if (artifactSyncResult.status !== "completed" && artifactSyncResult.status !== "degraded") {
       throw new ChapterArtifactSyncBoundaryError(artifactSyncResult);
     }

@@ -8,6 +8,16 @@ const { directorAutomationLedgerEventService } = require("../dist/services/novel
 const { PostGenerationStyleReviewRunner } = require("../dist/services/novel/runtime/PostGenerationStyleReviewRunner.js");
 const { openConflictService } = require("../dist/services/state/OpenConflictService.js");
 
+// These legacy unit tests exercise collaborators; journal persistence is covered separately.
+function createOfflineJournal() {
+  return { open: async () => ({
+    novelId: "novel-1", chapterId: "chapter-1", operationId: "offline", get: () => undefined, getStepOutput: () => undefined,
+    put: async () => {}, checkpoint: async () => {}, bindPrepared: async () => {},
+    saveContent: async () => {}, updateState: async () => {}, assertCurrent: async () => {}, renew: async () => {}, close: async () => {},
+    runStep: async (_key, fn) => fn(),
+  }) };
+}
+
 function createEmptyStream() {
   return {
     async *[Symbol.asyncIterator]() {},
@@ -272,6 +282,7 @@ test("createChapterStream uses lightweight readiness without forcing execution c
     temperature: 0.4,
   };
   const coordinator = new ChapterRuntimeCoordinator({
+    productionJournal: createOfflineJournal(),
     validateRequest: (input) => {
       calls.push("validate");
       return {
@@ -326,6 +337,7 @@ test("createChapterStream uses lightweight readiness without forcing execution c
 test("finalizeChapterContent runs acceptance gate once and finalizes the current timeline", async () => {
   const timelineFinalizationCalls = [];
   const coordinator = new ChapterRuntimeCoordinator({
+    productionJournal: createOfflineJournal(),
     acceptanceAssessmentService: {
       assess: async () => {
         acceptanceCalls += 1;
@@ -470,6 +482,7 @@ test("finalizeChapterContent syncs accepted artifacts only after chapter reaches
   const syncCalls = [];
   const timelineFinalizationCalls = [];
   const coordinator = new ChapterRuntimeCoordinator({
+    productionJournal: createOfflineJournal(),
     acceptanceAssessmentService: {
       assess: async () => ({
         assessment: {
@@ -512,6 +525,7 @@ test("finalizeChapterContent syncs accepted artifacts only after chapter reaches
       saveDraftAndArtifacts: async () => undefined,
       syncChapterArtifacts: async (...args) => {
         syncCalls.push(args);
+        return { status: "completed", contentHash: "test", completedArtifacts: ["artifact_delta"] };
       },
     },
     timelineFinalizer: createTimelineFinalizer(timelineFinalizationCalls),
@@ -643,6 +657,7 @@ test("finalizeChapterContent writes only acceptance-covered mustHitNow facts bef
   }];
 
   const coordinator = new ChapterRuntimeCoordinator({
+    productionJournal: createOfflineJournal(),
     acceptanceAssessmentService: {
       assess: async () => ({
         assessment: {
@@ -690,6 +705,7 @@ test("finalizeChapterContent writes only acceptance-covered mustHitNow facts bef
       syncChapterArtifacts: async (...args) => {
         calls.push("artifact");
         syncCalls.push(args);
+        return { status: "completed", contentHash: "test", completedArtifacts: ["artifact_delta"] };
       },
     },
     timelineFinalizer: createTimelineFinalizer(timelineFinalizationCalls),
@@ -783,6 +799,7 @@ test("createRepairStream discovers fallback issues through read-only audit", asy
     const assembledChapter = createRepairAssembledChapter();
     const contextPackage = assembledChapter.contextPackage;
     const coordinator = new ChapterRuntimeCoordinator({
+    productionJournal: createOfflineJournal(),
       assembler: {
         assemble: async () => assembledChapter,
       },
@@ -856,7 +873,7 @@ test("createRepairStream does not escalate patch schema failures to a heavy repa
   prisma.novelBible.findUnique = async () => ({ rawContent: "作品圣经" });
   promptRunner.runStructuredPrompt = async () => {
     patchPlanCalls += 1;
-    throw new Error("[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":6,\"inclusive\":true,\"path\":[\"patches\",0,\"targetExcerpt\"],\"message\":\"Too small: expected string to have >=6 characters\"}]");
+    throw Object.assign(new Error("[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":6,\"inclusive\":true,\"path\":[\"patches\",0,\"targetExcerpt\"],\"message\":\"Too small: expected string to have >=6 characters\"}]"), { name: "StructuredOutputError", category: "schema_mismatch" });
   };
   promptRunner.streamTextPrompt = async () => {
     heavyRepairCalls += 1;
@@ -872,6 +889,7 @@ test("createRepairStream does not escalate patch schema failures to a heavy repa
 
   try {
     const coordinator = new ChapterRuntimeCoordinator({
+    productionJournal: createOfflineJournal(),
       assembler: {
         assemble: async () => createRepairAssembledChapter(),
       },
@@ -912,6 +930,7 @@ test("createChapterStream stops before context assembly when explicit preparatio
 
   try {
     const coordinator = new ChapterRuntimeCoordinator({
+    productionJournal: createOfflineJournal(),
       validateRequest: (input) => input,
       ensureNovelCharacters: async () => undefined,
       preparationService: {
@@ -956,6 +975,7 @@ test("createChapterStream blocks when state-driven decision requires review firs
   const statusCalls = [];
 
   const coordinator = new ChapterRuntimeCoordinator({
+    productionJournal: createOfflineJournal(),
     validateRequest: (input) => input,
     ensureNovelCharacters: async () => undefined,
     ensureChapterExecutionContract: async () => undefined,
@@ -990,6 +1010,7 @@ test("createChapterStream lets full_book_autopilot continue past pending state p
   const writerCalls = [];
 
   const coordinator = new ChapterRuntimeCoordinator({
+    productionJournal: createOfflineJournal(),
     validateRequest: (input) => input,
     ensureNovelCharacters: async () => undefined,
     ensureChapterExecutionContract: async () => undefined,
@@ -1032,6 +1053,7 @@ test("createChapterStream retries once before failing empty generated content", 
   const finalized = [];
 
   const coordinator = new ChapterRuntimeCoordinator({
+    productionJournal: createOfflineJournal(),
     validateRequest: (input) => input,
     ensureNovelCharacters: async () => undefined,
     ensureChapterExecutionContract: async () => undefined,
@@ -1068,6 +1090,7 @@ test("createChapterStream retries once before failing empty generated content", 
   };
 
   const result = await coordinator.createChapterStream("novel-1", "chapter-1", {});
+  for await (const _chunk of result.stream) { /* consume before finalizing */ }
   const done = await result.onDone("", { writeFrame: () => undefined });
 
   assert.equal(writerCalls.length, 2);
@@ -1086,6 +1109,7 @@ test("runPipelineChapter does not leave a blocked chapter in generating status",
   const statusCalls = [];
 
   const coordinator = new ChapterRuntimeCoordinator({
+    productionJournal: createOfflineJournal(),
     validateRequest: (input) => input,
     ensureNovelCharacters: async () => undefined,
     ensureChapterExecutionContract: async () => undefined,

@@ -335,6 +335,38 @@ test("pipeline recovery gives an already-reserved chapter no second automatic at
 
 const pipelineIssueGovernance = require("../../dist/services/novel/production/issueGovernance/PipelineIssueGovernance.js");
 
+for (const code of ["CHAPTER_PRODUCTION_BUSY", "CHAPTER_PRODUCTION_CONFLICT", "CHAPTER_PRODUCTION_UNCERTAIN", "CHAPTER_PRODUCTION_STORAGE"]) {
+  for (const executionOwner of [null, "owner-a"]) {
+    test(`${code} preserves the chapter boundary for explicit recovery without AI or automatic retry (${executionOwner ?? "direct"})`, async () => {
+      const original = pipelineIssueGovernance.reportPipelineIssue;
+      let reports = 0;
+      pipelineIssueGovernance.reportPipelineIssue = async () => { reports += 1; return null; };
+      const harness = createExecutorHarness({
+        executionOwner,
+        chapterCount: 2,
+        executeOptions: { ...options, endOrder: 2 },
+        runChapter: async ({ hooks }) => {
+          await hooks.onStageChange("reviewing");
+          throw Object.assign(new Error("正文已保留，请从章节工作区核对保存位置后继续。"), { code });
+        },
+      });
+      try {
+        await harness.execute();
+        assert.equal(reports, 0);
+        assert.equal(harness.chapterCalls, 1);
+        assert.deepEqual(harness.claims, []);
+        assert.deepEqual(harness.routeRequests, []);
+        assert.equal(harness.jobState.status, "failed");
+        assert.equal(harness.jobState.pendingManualRecovery, true);
+        assert.equal(harness.jobState.currentItemKey, "chapter-1");
+        assert.equal(harness.jobState.currentStage, "reviewing");
+        assert.equal(harness.jobState.heartbeatAt, null);
+        assert.match(harness.jobState.error, /正文已保留/);
+      } finally { harness.restore(); pipelineIssueGovernance.reportPipelineIssue = original; }
+    });
+  }
+}
+
 test("output exhaustion fails once without AI classification or another writer attempt", async () => {
   const original = pipelineIssueGovernance.reportPipelineIssue;
   let reports = 0;

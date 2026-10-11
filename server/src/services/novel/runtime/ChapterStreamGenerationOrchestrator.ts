@@ -8,6 +8,7 @@ import { ChapterRuntimeReadinessService } from "./ChapterRuntimeReadinessService
 import type { ChapterRuntimeRequestInput } from "./chapterRuntimeSchema";
 import type { AssembledRuntimeChapter } from "./chapterRuntimePipeline";
 import type { ChapterExecutionPreparationService } from "../production/preparation";
+import { currentProductionSession, productionStep, captureProductionStream } from "../production/reliability";
 import {
   assertChapterContentNotEmpty,
   isChapterEmptyContentError,
@@ -55,17 +56,28 @@ export class ChapterStreamGenerationOrchestrator {
     onDone: (fullContent: string, helpers: StreamDoneHelpers) => Promise<void | StreamDonePayload>;
   }> {
     const { request, assembled } = await this.prepareRuntimeChapter(novelId, chapterId, options);
-    await this.markChapterStatus(chapterId, "generating");
+    await productionStep("stream.start", () => this.markChapterStatus(chapterId, "generating"));
 
     let traceRunId: string | null = null;
     try {
-      traceRunId = await this.deps.agentRuntime.createChapterGenRun(novelId, chapterId, assembled.chapter.order);
+      traceRunId = await productionStep("stream.trace", () => this.deps.agentRuntime.createChapterGenRun(novelId, chapterId, assembled.chapter.order));
     } catch {
       traceRunId = null;
     }
 
     const startMs = Date.now();
-    const writerResult = await this.deps.chapterWritingGraph.createChapterStream({
+    const session = currentProductionSession();
+    const savedDraft = session?.getStepOutput<{ finalContent: string; artifactsAlreadySynced?: boolean; lengthControl?: ChapterRuntimePackage["lengthControl"] }>("stream.normalize");
+    if (session?.get("stream.started") && !savedDraft) {
+      throw Object.assign(new Error("上次正文调用尚未确认完成，部分稿已保留，请先核实输出再继续。"), {
+        code: "CHAPTER_PRODUCTION_UNCERTAIN",
+      });
+    }
+    if (!savedDraft) await session?.put("stream.started", true);
+    const writerResult = savedDraft ? {
+      stream: (async function* () { yield { content: savedDraft.finalContent } as BaseMessageChunk; })(),
+      onDone: async () => savedDraft,
+    } : await this.deps.chapterWritingGraph.createChapterStream({
       novelId,
       novelTitle: assembled.novel.title,
       chapter: assembled.chapter,
@@ -74,7 +86,7 @@ export class ChapterStreamGenerationOrchestrator {
     });
 
     return {
-      stream: writerResult.stream,
+      stream: savedDraft ? writerResult.stream : captureProductionStream(writerResult.stream),
       onDone: async (fullContent: string, helpers: StreamDoneHelpers) => {
         const runStatusId = traceRunId ?? `chapter-runtime:${chapterId}`;
         this.emitRunStatus(helpers, {
@@ -84,15 +96,18 @@ export class ChapterStreamGenerationOrchestrator {
           phase: "finalizing",
           message: "正文已生成，正在整理章节文本并保存草稿。",
         });
-        const normalized = await this.resolveWriterResultWithEmptyRetry({
+        const normalized = savedDraft ?? await productionStep("stream.normalize", () => this.resolveWriterResultWithEmptyRetry({
           novelId,
           chapterId,
           request,
           assembled,
           writerDone: () => writerResult.onDone(fullContent),
           fallbackContent: fullContent,
-        });
+        }), true);
         const generatedContent = normalized.finalContent;
+        if (session && !normalized.artifactsAlreadySynced) {
+          await productionStep("stream.save", () => session.saveContent({ content: generatedContent, generationState: "drafted", chapterStatus: "generating" }));
+        }
         this.emitRunStatus(helpers, {
           type: "run_status",
           runId: runStatusId,
@@ -100,7 +115,7 @@ export class ChapterStreamGenerationOrchestrator {
           phase: "finalizing",
           message: "正在完成正文接收检查并同步章节状态。",
         });
-        const finalized = await this.finalizeChapterContent({
+        const finalized = await productionStep("stream.finalize", () => this.finalizeChapterContent({
           novelId,
           chapterId,
           request,
@@ -110,7 +125,8 @@ export class ChapterStreamGenerationOrchestrator {
           runId: traceRunId,
           startMs,
           deferArtifactBackgroundSync: true,
-        });
+          assertExecutionOwnership: () => session?.assertCurrent() ?? Promise.resolve(),
+        }));
         this.emitRunStatus(helpers, {
           type: "run_status",
           runId: runStatusId,
@@ -136,16 +152,23 @@ export class ChapterStreamGenerationOrchestrator {
     chapterId: string,
     options: ChapterRuntimeRequestInput = {},
   ): Promise<PreparedRuntimeChapter> {
-    const request = this.deps.validateRequest(options);
-    await this.deps.ensureNovelCharacters(novelId, "generate chapter content");
-    await this.deps.preparationService.prepare(novelId, chapterId, request);
-    const assembled = await this.deps.assembler.assemble(novelId, chapterId, request);
-    this.deps.readinessService.assertReady(assembled.contextPackage);
-    this.assertStateDrivenReady(assembled.contextPackage, request);
-    return {
-      request,
-      assembled: assembled as AssembledRuntimeChapter,
-    };
+    return productionStep("prepare", async () => {
+      const request = this.deps.validateRequest(options);
+      await this.deps.ensureNovelCharacters(novelId, "generate chapter content");
+      await productionStep("prepare.contract", async () => {
+        const result = await this.deps.preparationService.prepare(novelId, chapterId, request);
+        await currentProductionSession()?.bindPrepared({ preparation: result });
+        return result;
+      }, true);
+      const assembled = await this.deps.assembler.assemble(novelId, chapterId, request);
+      this.deps.readinessService.assertReady(assembled.contextPackage);
+      this.assertStateDrivenReady(assembled.contextPackage, request);
+      const prepared = {
+        request,
+        assembled: assembled as AssembledRuntimeChapter,
+      };
+      return prepared;
+    });
   }
 
   async generateDraftFromWriter(input: {
@@ -171,7 +194,7 @@ export class ChapterStreamGenerationOrchestrator {
     });
 
     let fullContent = "";
-    for await (const chunk of writerResult.stream) {
+    for await (const chunk of captureProductionStream(writerResult.stream)) {
       fullContent += toText(chunk.content);
     }
     const normalized = await writerResult.onDone(fullContent);

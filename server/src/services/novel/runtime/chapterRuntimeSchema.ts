@@ -14,6 +14,7 @@ const chapterRuntimeControlPolicySchema = z.object({
 });
 
 export const chapterRuntimeRequestSchema = z.object({
+  productionOperationId: z.string().trim().min(1).optional(),
   workflowTaskId: z.string().trim().optional(),
   provider: llmProviderSchema.optional(),
   model: z.string().trim().optional(),

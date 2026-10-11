@@ -1,3 +1,4 @@
+import { isDefinitiveProductionFailure } from "./production/reliability";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import type { ReviewIssue } from "@ai-novel/shared/types/novel";
 import type { ChapterRepairContext, ChapterRuntimePackage } from "@ai-novel/shared/types/chapterRuntime";
@@ -97,6 +98,8 @@ export class ChapterPatchRepairService {
         },
       });
     } catch (error) {
+      // Transport uncertainty and output exhaustion must not become a safe patch failure.
+      if (!isDefinitiveProductionFailure(error)) throw error;
       const message = error instanceof Error && error.message.trim()
         ? error.message.trim()
         : String(error);

@@ -8,6 +8,7 @@ import type {
 } from "@ai-novel/shared/types/timeline";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import { prisma } from "../../../db/prisma";
+import { currentProductionSession } from "../production/reliability";
 import {
   storyTimelineService,
   timelineCheckerService,
@@ -320,6 +321,7 @@ export class ChapterTimelineFinalizationService {
     }
 
     try {
+      await currentProductionSession()?.assertCurrent();
       await storyTimelineService.commitChapterTimeline({
         novelId: input.novelId,
         chapterId: input.chapterId,
@@ -332,6 +334,7 @@ export class ChapterTimelineFinalizationService {
         timelineContext: gate.timelineContext,
       });
     } catch (error) {
+      if (error && typeof error === "object" && "code" in error && String(error.code).startsWith("CHAPTER_PRODUCTION_")) throw error;
       await this.markCheckpointFailed({
         novelId: input.novelId,
         chapterId: input.chapterId,
