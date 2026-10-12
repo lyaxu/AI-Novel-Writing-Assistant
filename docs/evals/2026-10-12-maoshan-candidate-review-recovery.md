@@ -40,3 +40,11 @@ journal已完成pipeline.review:0、pipeline.repair_budget、pipeline.repair；p
 代理随后实际运行在管理员身份检查处停止，未停启任何进程；agent-restart.log保留结果。这是Windows管理员身份边界，非磁盘权限不足或自动审批拒绝，仍须用户管理员运行后核验。
 
 待管理员加载后，由代理看restart-last.log/health/只读预检，再指导用户从原第一章源页继续。恢复应复用原稿评估和补丁，进入候选复审及选稿/保留原稿处理，不重生成第一章、不再领取修订预算。真实候选审查、后续资产状态提交、下一章规划和十章验收仍未完成。统一入口[CURRENT](../handoffs/CURRENT.md)，上一轮[v9初审修复](2026-10-11-maoshan-review-state-contract.md)。
+
+## 用户重启后的加载核验（2026-10-12 13:29 UTC）
+
+用户已以管理员身份完成本轮重启。restart-last.log记录13:23:05预检、13:23:34启动后预检成功；restart-process.json确认隔离数据库仍为D:/novel/.comparison/2026-10-10/old-test.db。旧后端PID55320，health应用启动13:23:28.714Z，运行HEAD1c0cb9a3b31c，stale=false；stderr为空。旧前端5190/PID45328及新版5173/8787的PID3960/21116均未变。
+
+13:29:49代理执行同一脚本CheckOnly：10个源码hash全部匹配，真实prepareDirector只读预检通过，报告修复已加载，无进程停启及恢复命令。原稿3013字和候选hash与上文一致，原稿审查已保存，修订预算已消耗，原job与范围1—3及人工暂停保留。可自动执行job/command/task/sideEffect均0，模型记录仍6条，没有新增调用。
+
+本次仅补加载记录，源码未改，复用1c0cb9a3的179项封网回归与服务端编译结果，不重复测试。无新增稳定机制知识或产品行为，wiki与发布说明沿用修复提交，避免加入纯运行记录。CURRENT与WORK_LEDGER同步。用户从CURRENT的第一章源页F5刷新，点一次“继续自动导演”；无需再次重启。真实v10候选复审和连续十章仍待用户验收。
