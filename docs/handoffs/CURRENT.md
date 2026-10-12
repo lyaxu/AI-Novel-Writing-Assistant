@@ -1,16 +1,16 @@
 # 最新交接入口
 
-更新：2026-10-12 17:00 UTC。
+更新：2026-10-12 17:32 UTC。
 
-**最新停点：第一章已完成；第二章规划修复与现场协调完成，待管理员加载修复。** 用户确认旧账本后，首章状态提交及原job成功，3013字原稿未变。第二章模型正常返回，但未来承接引用无效，被误报“外部调用中断”。完整上下文纠正、确定失败分类和人工暂停已修，130/130封网 + 5/5 Prompt、shared/server编译通过。[本轮完整证据](../evals/2026-10-12-maoshan-chapter-two-planning-recovery.md)。
+**最新停点：第二章规划修复已加载并核验，可由用户从原任务继续。** 17:19用户管理员重启成功，17:31核验旧后端58352/4b4aa6fdd3e3/stale=false、25文件hash及原任务只读预检通过。首章3013字原稿、账本committed、第二章暂停和原范围均保留，模型记录仍18条，代理未调用模型。复用源码未变的130/130封网 + 5/5 Prompt及shared/server编译证据。[本轮完整证据](../evals/2026-10-12-maoshan-chapter-two-planning-recovery.md)。
 
 **主线：旧版可靠保存、失败恢复和连续生产，保留认可文笔/创作能力/质量检查，最后固定版本十章验收。** 当前阶段4推进至第二章准备，正文仍为空，十章未完成。用户认可文笔和情节，但资源面板难懂的体验问题仍待改进与验收，展示更多字段不等于解决。
 
 ## 仓库与服务
 
 - 仓库 D:/novel/AI-Novel-Writing-Assistant，分支 codex/production-core-refactor。接续HEAD17f1aa8ce328，本轮阶段提交以git为准。预存三份Structured客户端改动及台账历史964行未提交追加保持原样，未跟踪材料未清理。
-- 旧后端3000/PID14328仍加载da52839c4fbe，应用启动14:17:11.606Z，OS启动14:17:04.3697377Z；前端5190/PID45328。新版5173/PID3960、8787/PID21116未动。
-- 仅用隔离库D:/novel/.comparison/2026-10-10/old-test.db。代理非管理员，旧后端为管理员进程，待用户通过本轮cmd加载；磁盘授权不等于Windows提升令牌。
+- 旧后端3000/PID58352加载4b4aa6fdd3e3，应用启动17:19:50.720Z；前端5190/PID45328。新版5173/PID3960、8787/PID21116未动。本轮后续提交仅更新加载记录，运行代码已核验。
+- 仅用隔离库D:/novel/.comparison/2026-10-10/old-test.db。用户管理员启动成功，当前无需再次重启。
 
 ## 实证与恢复状态
 
@@ -24,9 +24,9 @@
 
 ## 下一步
 
-本轮加载入口.codex-run/maoshan-chapter-two-planning-20261012/restart-old-planning.cmd，用户右键管理员运行。脚本校验源码、旧服务PID及启动时间、旧前端和新版端口、原第二章任务与稿件，再仅重启旧后端；不调用模型或恢复任务。不要复用前轮resource/candidate脚本，其预检停点已过期。
+本轮restart-last.log、loaded-health.json和17:31 CheckOnly已核验成功，stderr为空，无新模型调用。无需再次运行启动脚本；前轮resource/candidate脚本的停点已经过期。
 
-用户运行后读取同目录restart-last.log、loaded-health.json及原任务预检，确认本轮代码加载；再从[本书第二章源工作区](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt800jtgow0la32yn38)F5，点一次“继续自动导演”。这时已不是首章审查停点，不重做首章或账本确认。
+用户可从[本书第二章源工作区](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt800jtgow0la32yn38)F5，点一次“继续自动导演”。恢复第二章未完成规划，复用已完成执行合同；不重做首章或账本确认。真实模型、后续规划与十章验收仍待用户执行。
 
 真实只拆了前两章。节奏板3—5/6—9章区段不是具体未来章纲；第二章场景卡对第3章的设想与节奏板存在层次漂移。v6不保证模型必过；若明确requires_replan，应在既有授权范围补真实后续章纲及复核，不能盲试同一空窗口。后续规划和十章验收仍待用户。
 
