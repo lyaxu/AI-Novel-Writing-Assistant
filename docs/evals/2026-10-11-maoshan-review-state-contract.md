@@ -33,3 +33,11 @@
 源码提交c16169dd。04:44 UTC新脚本Windows PowerShell CheckOnly通过；实际尝试在管理员身份检查停止，未停止或启动服务，agent-restart.log保留证据。此处是Windows管理员进程权限要求，不是磁盘授权或自动审批策略拦截。待用户管理员运行新cmd，固定日志restart-last.log，加载后再核验。本段与CURRENT为内部运行事实补记，无额外用户能力，发布说明不重复追加。
 
 运行提示v9后，再由用户从[本书第一章原工作区](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt600jsgow0e6kb0852)继续原审查。真实模型、后续章节与十章验收未完成，不能承诺一次通过。规则见[接收证据模块](../../server/src/prompting/prompts/novel/acceptance/README.md)，历史入口故障及维护时间故障保留在[上一轮证据](2026-10-11-maoshan-recovery-cas-timestamp.md)。
+
+## 用户重启后的加载核验
+
+2026-10-12 00:19 UTC-5（05:19 UTC）实时确认：旧后端PID25564，health启动05:15:34.618Z，运行HEAD623ff6c05967，stale=false、newerSources=[]。新脚本CheckOnly重新验证7个源码hash（含v9与前序恢复入口），返回修复已加载，未再次停止/启动服务。restart-last.log含重启前后原稿/任务检查成功，当前err日志为空。
+
+真实只读prepareDirector再次通过；首章3013字hash与原job、1—3范围、人工暂停均保留，可自动执行job/command/director/sideEffect均0，模型记录仍此前用户触发的2条。新版5173/8787 PID3960/21116及旧前端5190 PID45328不变。此次未修改应用源码或数据库，复用c16169dd的71项封网回归与编译证据，不重复运行。记录同步CURRENT/台账，纯运行核验不新增发布说明或wiki规则。
+
+加载阻点已解除，用户可F5刷新本书第一章源页，点一次“继续自动导演”；代理不代点，真实v9模型审查和后续章节仍待验收。后续无需重复运行重启脚本。
