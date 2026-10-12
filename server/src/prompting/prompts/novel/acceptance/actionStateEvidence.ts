@@ -64,6 +64,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
         if (state.beforeEvidence.some((item) => item.source === "current_prose"
           && !positions(input.content, item.quote).some((position) => position <= actionStart))) {
           invalid.push(`before_state_after_action:${key}`);
+          correctionHints.push(`${field}.beforeEvidence：所引当前正文位于actionEvidence起点之后，不能证明所选行动开始前的状态。actionEvidence=${JSON.stringify(check.actionEvidence.map(item => item.quote))}；beforeEvidence=${JSON.stringify(state.beforeEvidence.map(item => item.quote))}。请先明确action及其原文边界：接听后才得知的内容属于after或transition；复合行动中途的状态不能当作整个行动之前的状态。重新选择准确的行动/证据或如实标未知，不改正文、不凭空补前置情节。`);
         }
         // Missing evidence can be an honest audit result; supplied evidence must still match the action boundary.
         const explicitlyUnknownAfter = !state.afterEvidence.length

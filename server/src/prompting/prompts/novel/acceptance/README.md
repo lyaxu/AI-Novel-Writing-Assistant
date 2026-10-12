@@ -16,6 +16,8 @@ AI 从正文中选择每场一个决定结果的动作，给出相关状态、�
 
 `not_applicable` 是AI明确判定没有比较职责，允许语义布尔为null；这不是已比较并确认无问题。后章没有已写前文仍必须标无法核验，且所有引用即使在not_applicable行也要逐字匹配。
 
+当not_applicable没有声称重复或新增后果时，两侧证据数组都可空；例如首章根本不存在跨章比较，不能强制找一句无关正文充数。声称progressed/stalled/justified_repetition仍要求相应证据，后章缺前文与主动提供的无效引文仍拦截。beforeEvidence的时序错误须反馈具体状态字段、行动边界和实际引文；复合行动中途的状态不能充当整个行动开始前的状态。
+
 ### 状态变化与纠正反馈
 
 `stateChanged` 描述审查区间内状态是否变化；`enablingTransitionRequired` 描述本次行动是否需要先建立条件。行动自身造成变化时，前者可为true、后者为false，但`transitionStatus`仍应为established并引用实际动作，不能用not_needed代替变化证据。afterEvidence指向行动中或之后的表现；已知事实不要求正文重复讲解，可以引用该知识在行动中的实际运用。

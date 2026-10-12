@@ -249,6 +249,9 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
           await mutate((current) => {
             current.status = closeOptions.completed ? "completed" : "paused";
             current.expiresAt = 0;
+            // A handled candidate failure remains in its step; completed execution
+            // must not project that historical error as a currently unfinished run.
+            if (closeOptions.completed) delete current.error;
             if (closeOptions.error) current.error = message(closeOptions.error);
           }, closeOptions.completed === true);
           closed = true;

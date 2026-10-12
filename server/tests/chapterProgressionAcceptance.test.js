@@ -138,6 +138,22 @@ test("missing or duplicate dimensions are visible, not assumed reviewed", () => 
   }
 });
 
+test("inapplicable comparison may have no quotes without certifying progress or excusing false citations", () => {
+  const rows = checks('not_applicable').map(row => ({ ...row, repeatsEstablishedBeat: null, addsNewConsequence: null,
+    previousEvidence: [], currentEvidence: [], actualChange: '', newConsequence: '' }));
+  const first = input({ chapterOrder: 1, establishedProse: [] });
+  assert.ok(evidence.validateProgressionEvidence(rows, first).checks.every(row => row.validationIssues.length === 0));
+  assert.ok(evidence.validateProgressionEvidence(rows, input({ establishedProse: [] })).checks.every(row => row.validationIssues.includes('previous_prose_unavailable')));
+  const bad = structuredClone(rows); bad[0].currentEvidence = [quote('不存在的原文')];
+  assert.ok(evidence.validateProgressionEvidence(bad, first).checks[0].validationIssues.includes('current_quote_not_in_current_prose'));
+  for (const status of ['progressed', 'stalled', 'justified_repetition']) {
+    const claim = rows.map(row => ({ ...row, status, repeatsEstablishedBeat: false, addsNewConsequence: true, actualChange: '变化', newConsequence: '后果' }));
+    assert.ok(evidence.validateProgressionEvidence(claim, first).checks.every(row => row.validationIssues.includes('current_evidence_missing')));
+  }
+  const falseClaim = rows.map(row => ({ ...row, addsNewConsequence: true, newConsequence: '声称新后果' }));
+  assert.ok(evidence.validateProgressionEvidence(falseClaim, first).checks.every(row => row.validationIssues.includes('current_evidence_missing')));
+});
+
 test("legacy schema accepts absent progression, fresh schema requires three checks and excludes self-validation", () => {
   const old = assessment(undefined);
   assert.equal(prompts.chapterAcceptanceAssessmentSchema.safeParse(old).success, true);

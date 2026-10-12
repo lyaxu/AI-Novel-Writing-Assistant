@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fixture = require('./fixtures/firstChapterReview.json');
 const resumed = require('./fixtures/resumedFirstChapterReview.json');
+const candidateReview = require('./fixtures/firstChapterCandidateReview.json');
 const { chapterAcceptanceAssessmentPrompt: asset } = require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts');
 const { validateProgressionEvidence } = require('../../dist/prompting/prompts/novel/acceptance/progressionEvidence');
 const { assertReviewCompleted } = require('../../dist/services/novel/runtime/acceptance/reviewCompletion');
@@ -22,7 +23,7 @@ function correctedResponse() {
   output.progressionChecks[0].currentEvidence[0].quote = quote;
   return output;
 }
-async function runWithResponses(responses, work) {
+async function runWithResponses(responses, work, promptInput = fixture.input) {
   const calls = [];
   setPromptRunnerStructuredInvokerForTests(async request => {
     calls.push(request);
@@ -30,7 +31,7 @@ async function runWithResponses(responses, work) {
     if (response instanceof Error) throw response;
     return { data: structuredClone(response), repairUsed: false, repairAttempts: 0 };
   });
-  try { await work(calls, () => runStructuredPrompt({ asset, promptInput: fixture.input,
+  try { await work(calls, () => runStructuredPrompt({ asset, promptInput,
     options: { provider: 'deepseek', model: 'offline-fixture', disableFallbackModel: true, transportRetryCount: 0, disableStrategyFallback: true } })); }
   finally { setPromptRunnerStructuredInvokerForTests(); }
 }
@@ -163,4 +164,39 @@ test('replaying both real unchanged responses still pauses after exactly one cor
     assert.deepEqual(result.output.repairDirectives, []);
     assert.equal(result.output.actionStateChecks.length, 4);
   });
+});
+
+test('real v9 original passes; candidate comparison without a duty is valid but its two timing errors remain rejected', () => {
+  assert.doesNotThrow(() => assertReviewCompleted(asset.postValidate(structuredClone(candidateReview.originalOutput), fixture.input)));
+  assert.equal(candidateReview.input.content.length, 3265);
+  for (const output of candidateReview.outputs) {
+    assert.ok(validateProgressionEvidence(output.progressionChecks, candidateReview.input).checks.every(row => row.validationIssues.length === 0));
+    assert.throws(() => asset.postValidate(structuredClone(output), candidateReview.input), error => {
+      const errors = error.message.split('\n').filter(line => /^actionStateChecks\[scene_/.test(line));
+      assert.equal(errors.length, 2);
+      assert.ok(errors.every(line => line.includes('before_state_after_action')));
+      assert.match(error.message, /states\[0\]\.beforeEvidence/);
+      assert.match(error.message, /复合行动中途/);
+      assert.doesNotMatch(error.message, /current_evidence_missing/);
+      return true;
+    });
+  }
+});
+
+test('candidate evidence correction receives precise before/action boundaries and never rewrites the saved input', async () => {
+  // Simulated reviewer correction of quoted action boundaries; not a live model success.
+  const corrected = structuredClone(candidateReview.outputs[1]);
+  corrected.actionStateChecks[1].states[0].before = '电话响起，尚未知晓本次催租期限';
+  corrected.actionStateChecks[1].states[0].beforeEvidence = structuredClone(corrected.actionStateChecks[1].actionEvidence);
+  corrected.actionStateChecks[3].states[1].beforeEvidence[0].quote = '劳梓凡坐在床边，盯着那本册子。';
+  await runWithResponses([candidateReview.outputs[0], corrected], async (calls, invoke) => {
+    const result = await invoke();
+    assert.equal(calls.length, 2);
+    const feedback = String(calls[1].messages.at(-1).content).split('上一次的 JSON 输出')[0];
+    assert.match(feedback, /beforeEvidence=.*所选行动|beforeEvidence=/);
+    assert.doesNotThrow(() => assertReviewCompleted(result.output));
+    assert.equal(result.output.status, 'repairable');
+    assert.ok(result.output.blockingIssues.length > 0, 'valid local issues are retained');
+    assert.ok(calls[1].messages.some(message => String(message.content).includes(candidateReview.input.content)));
+  }, candidateReview.input);
 });

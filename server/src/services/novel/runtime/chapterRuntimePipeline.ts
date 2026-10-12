@@ -107,6 +107,13 @@ export interface PipelineRecoverableRepairFailure {
   occurredAt: string;
 }
 
+interface CandidateReviewIncomplete {
+  kind: "candidate_review_incomplete";
+  failure: PipelineRecoverableRepairFailure;
+  /** Private journal evidence; never used as a valid candidate assessment. */
+  reviewOutput?: unknown;
+}
+
 export interface AssembledRuntimeChapter {
   novel: { id: string; title: string };
   chapter: { id: string; title: string; order: number; content: string | null; expectation: string | null };
@@ -309,18 +316,52 @@ export async function runPipelineChapterWithRuntime(
     }
 
     await hooks.onStageChange?.("reviewing");
-    latestResult = await productionStep(`pipeline.review:${attempt}`, () => deps.finalizeChapterContent({
-      novelId,
-      chapterId,
-      request,
-      contextPackage: assembled.contextPackage,
-      content,
-      lengthControl: latestLengthControl,
-      runId: null,
-      startMs: null,
-      assertExecutionOwnership: hooks.onCheckCancelled,
-    }), true);
+    const reviewResult = await productionStep<FinalizedRuntimeResult | CandidateReviewIncomplete>(`pipeline.review:${attempt}`, async () => {
+      try {
+        return await deps.finalizeChapterContent({
+          novelId,
+          chapterId,
+          request,
+          contextPackage: assembled.contextPackage,
+          content,
+          lengthControl: latestLengthControl,
+          runId: null,
+          startMs: null,
+          assertExecutionOwnership: hooks.onCheckCancelled,
+        });
+      } catch (error) {
+        const failure = error as { code?: unknown; reviewOutput?: unknown } | null;
+        if (attempt === 0 || !originalEvaluation || failure?.code !== "CHAPTER_REVIEW_INCOMPLETE") throw error;
+        await hooks.onCheckCancelled?.();
+        // Persist a definitive rejected-candidate outcome. A later commit/sync failure
+        // must not replay the patch or charge for another candidate review.
+        return {
+          kind: "candidate_review_incomplete",
+          failure: {
+            chapterId,
+            message: "修复候选的审查未完成，已保留原稿及其审查结果；原稿的质量问题仍待处理。",
+            repairMode,
+            failureTypes: ["candidate_review_incomplete"],
+            occurredAt: new Date().toISOString(),
+          },
+          ...(failure.reviewOutput === undefined ? {} : { reviewOutput: failure.reviewOutput }),
+        };
+      }
+    }, true);
     await hooks.onCheckCancelled?.();
+    if ("kind" in reviewResult && reviewResult.kind === "candidate_review_incomplete") {
+      if (!originalEvaluation) throw new Error("Rejected candidate review is missing the original evaluation.");
+      recoverableRepairFailure = reviewResult.failure;
+      content = originalEvaluation.content;
+      latestResult = originalEvaluation.result;
+      latestIssues = originalEvaluation.issues;
+      pass = originalEvaluation.pass;
+      // The attempted patch receipt remains in pipeline.repair. It does not describe
+      // the retained original and must not mark its unresolved issues as patched.
+      patchIssueResolutions = undefined;
+      break;
+    }
+    latestResult = reviewResult as FinalizedRuntimeResult;
     content = latestResult.finalContent;
     const styleLeakageIssues = detectStyleReferenceLeakageIssues(content, latestResult.runtimePackage);
     latestIssues = [
