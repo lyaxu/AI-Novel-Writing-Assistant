@@ -4,6 +4,8 @@
 
 本节为最新状态；下方历史台账保留，不把历史待办当自动执行授权。统一入口为 [CURRENT](CURRENT.md)，长期目标与记录规则为 [PROJECT_CONTEXT](PROJECT_CONTEXT.md)。
 
+**10-12 17:50 UTC第二章审查时序修复**：用户继续后v6规划一次成功、第二章3652字已保存，后续审查误将行动后补述“练了十几年”当事后获得能力，错误反馈又诱发unknown/earned矛盾。v11增加AI结构化叙事时序及纠正反馈，不改正文/写作风格、不关键词豁免、不放行真实事后前提；72/72封网、shared/server编译通过，两旧答仍拒绝，正确回叙为手工模拟非AI验收。首章3013字、第二章hash、原job/预算/暂停保留，17:43真实恢复预检通过，模型记录22均用户触发，代理0；DB只读。旧58352仍v10，待本轮restart-old-review.cmd管理员加载核验后只恢复第二章原审查。任意倒叙的after/transition支持、后续章纲、资源体验和十章仍待验。[完整证据](../evals/2026-10-12-maoshan-chapter-two-review-timing.md)。
+
 **10-12 17:31 UTC第二章规划修复加载核验完成**：用户17:19管理员重启成功，旧后端58352/4b4aa6fdd3e3/stale=false，25文件hash与原第二章job prepareDirector只读预检通过。首章3013字hash不变、账本committed、第二章0字、原范围1—3和人工暂停保留，活跃工作0，模型记录仍18条，无新调用；新版PID不变。用户可从第二章源页F5后点一次继续自动导演，无需再重启或确认账本。复用源码未变的130+5离线与shared/server编译；本次仅运行证据文档，不重复测试或发布说明。[加载证据](../evals/2026-10-12-maoshan-chapter-two-planning-recovery.md)。
 
 **10-12 17:00 UTC第二章规划恢复修复**：用户确认旧账本后首章原job成功、3013字原稿及历史候选保留；第二章规划三次正常回答引用虚构后续章，JSON修复缺上下文且journal误报unknown。v6完整上下文纠正与承诺范围判断、完整拒绝回答留存、required人工暂停通过130/130封网+5/5 Prompt及shared/server编译。13项维护故障回归和副本预检后，一致性备份并CAS协调两个误标步骤，162张表比对确认仅journal metadata及原始归档变化；16:59真实原第二章job预检通过，暂停/预算/范围不变，模型记录18均用户触发，代理0。旧PID14328仍前轮代码，待本轮restart-old-planning.cmd管理员加载后核验。源页第二章继续，不重做首章/账本确认。资源面板难懂和未来章纲/节奏板漂移记录为主线剩余项，十章未完成。[完整证据](../evals/2026-10-12-maoshan-chapter-two-planning-recovery.md)。

@@ -10,7 +10,7 @@ export interface ActionStateEvidenceInput {
 
 const compact = (text: string) => text.replace(/\s+/gu, "");
 
-/** Text positions validate provenance and sequence only; they do not infer fictional physics. */
+/** Positions locate quotations. Story time is an AI finding, not an inference from character offsets. */
 function positions(text: string, quote: string): number[] {
   const source = compact(text);
   const needle = compact(quote);
@@ -60,11 +60,30 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
       const cited = [...state.beforeEvidence, ...state.afterEvidence, ...state.transitionEvidence];
       if (cited.some((item) => !isFact(item))) invalid.push(`unverified_source:${key}`);
       if (!state.beforeEvidence.length || !state.afterEvidence.length) unknown = true;
+      const timing = state.beforeEvidenceTiming;
+      const timingReasonPresent = Boolean(timing?.reason?.trim());
+      if (timing && !timingReasonPresent) invalid.push(`before_timing_reason_missing:${key}`);
+      const retrospective = timing?.relation === "retrospective_prior_state";
+      const retrospectiveSourceValid = state.beforeEvidence.some(item => item.source === "current_prose" && isFact(item))
+        && state.beforeEvidence.every(isFact);
+      if (retrospective && !retrospectiveSourceValid) invalid.push(`retrospective_before_source_missing:${key}`);
+      if (retrospective && state.enablingTransitionRequired) {
+        invalid.push(`retrospective_conflicts_with_required_transition:${key}`);
+        correctionHints.push(`${field}：既有状态回叙与enablingTransitionRequired=true不能同时用来豁免前提核验。请按正文判断是早已具备条件，还是本次行动需要先发生变化；后者仍须给出真实的前置transitionEvidence，不能用回叙标签替代。`);
+      }
+      if (timing?.relation === "not_before_action") contradiction = true;
+      if (timing?.relation === "unknown") unknown = true;
+      // Only consume an explicit, source-backed semantic finding. This does not certify
+      // the AI's literary judgment, infer tense, or excuse a missing enabling transition.
+      const explicitTiming = timingReasonPresent && (
+        (retrospective && retrospectiveSourceValid && !state.enablingTransitionRequired)
+        || timing?.relation === "not_before_action" || timing?.relation === "unknown"
+      );
       if (actionStart !== undefined) {
-        if (state.beforeEvidence.some((item) => item.source === "current_prose"
+        if (!explicitTiming && state.beforeEvidence.some((item) => item.source === "current_prose"
           && !positions(input.content, item.quote).some((position) => position <= actionStart))) {
           invalid.push(`before_state_after_action:${key}`);
-          correctionHints.push(`${field}.beforeEvidence：所引当前正文位于actionEvidence起点之后，不能证明所选行动开始前的状态。actionEvidence=${JSON.stringify(check.actionEvidence.map(item => item.quote))}；beforeEvidence=${JSON.stringify(state.beforeEvidence.map(item => item.quote))}。请先明确action及其原文边界：接听后才得知的内容属于after或transition；复合行动中途的状态不能当作整个行动之前的状态。重新选择准确的行动/证据或如实标未知，不改正文、不凭空补前置情节。`);
+          correctionHints.push(`${field}.beforeEvidence：引文在文本中的位置晚于actionEvidence起点，尚缺故事时间判断；晚叙述不等于晚发生。actionEvidence=${JSON.stringify(check.actionEvidence.map(item => item.quote))}；beforeEvidence=${JSON.stringify(state.beforeEvidence.map(item => item.quote))}。请结合完整正文判断：若引文回述行动前已有的状态，保留准确引文并填写beforeEvidenceTiming={relation:"retrospective_prior_state",reason:"说明该事实为何早于本次行动且无需临时获得"}；若确实在行动后才成立，填not_before_action并同步给出contradicted/unearned；无法判断填unknown并将动作与场景结论同步为insufficient_evidence。不可换一个行动躲开核验、删除真实依据或改写正文。`);
         }
         // Missing evidence can be an honest audit result; supplied evidence must still match the action boundary.
         const explicitlyUnknownAfter = !state.afterEvidence.length
@@ -78,6 +97,9 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
       if (state.transitionStatus === "contradicted") contradiction = true;
       if (state.transitionStatus === "missing") missing = true;
       if (state.transitionStatus === "unknown") unknown = true;
+      if ((!state.beforeEvidence.length || timing?.relation === "unknown" || state.transitionStatus === "unknown") && check.verdict === "earned") {
+        correctionHints.push(`${field}：前状态缺少证据或已声明时序/变化未知，却仍将动作判为earned。若能从完整正文确认既有状态，保留准确来源及明确时序理由；确实未知则transitionStatus=unknown、动作和对应场景verdict=insufficient_evidence。动作发生不等于能力在此刻新获得，不能只为通过校验把stateChanged改成true。`);
+      }
       if (state.transitionStatus === "not_needed" && (state.enablingTransitionRequired || state.stateChanged)) missing = true;
       if (state.transitionStatus === "not_needed" && (state.enablingTransitionRequired || state.stateChanged)) {
         correctionHints.push(`${field}：stateChanged=${state.stateChanged}、enablingTransitionRequired=${state.enablingTransitionRequired}与transitionStatus=not_needed矛盾。not_needed只适用于两者都为false。若正文写出了变化，使用established并从正文填写transitionEvidence；变化就是行动本身时可以引用该动作，无需另造前置情节。若变化缺失/相互冲突/无法判断，分别使用missing/contradicted/unknown并同步核对verdict。不要为了通过检查机械修改布尔值或降低结论。`);
@@ -123,6 +145,9 @@ export function reconcileSceneActionVerdicts(scenes: SceneCausalityVerdict[], ch
 }
 
 export const ACTION_STATE_AUDIT_RULES = [
+  "文本排列顺序与故事发生时间分开判断。beforeEvidence晚于action被叙述，不等于状态晚于行动才成立；紧随动作补叙的既有技能、早先拿到的物品、此前已知的信息均须按完整正文语义判断，不能凭字符位置判成凭空获得。不要改选行动或删掉真实前状态证据来躲开时序核验。",
+  "每项state可填beforeEvidenceTiming={relation,reason}，reason为180字内的非空语义依据。relation=retrospective_prior_state表示准确的本章beforeEvidence是在回述行动前已有状态，不是行动后才取得的条件；这时enablingTransitionRequired=false，其余状态变化字段仍按正文判断。not_before_action表示该条件实际在行动后才成立，即使引文写在前面也不能支持earned；unknown表示无法判断故事时间，动作和场景须为insufficient_evidence。没有特殊叙事时序可省略该字段，不能只给标签不解释原文依据。此字段只说明beforeEvidence，不替代afterEvidence或必需的transitionEvidence。",
+  "回叙结构示例（不带入当前故事）：正文‘她用钥匙打开保险柜。那把钥匙是父亲前一天交给她的。’，action=打开保险柜；beforeEvidence引用第二句，beforeEvidenceTiming={relation:\"retrospective_prior_state\",reason:\"叙述明确钥匙在前一天交付，本次开柜之前已持有\"}，持有钥匙这一状态stateChanged=false、enablingTransitionRequired=false、transitionStatus=not_needed；afterEvidence引用开柜动作。不能把先开柜后才拿到钥匙误判成回叙既有状态。",
   "先选择明确的关键action，再以该action为时间边界填写状态。beforeEvidence证明行动前或开始时；afterEvidence证明行动中或之后（可引用actionEvidence），不能只用更早的认知/决定证明行动后的状态。对未变化的知识，可引用它在该行动中的实际运用，不要求正文再解释一遍知识。",
   "状态字段联合检查：not_needed仅在stateChanged=false且enablingTransitionRequired=false时成立。stateChanged=true不等于必须有前置准备：变化就是action的结果时，enablingTransitionRequired=false、transitionStatus=established，并引用该动作作为transitionEvidence。必要前提在行动前或行动内建立才可enablingTransitionRequired=true且established。",
   "字段示例（只示范结构，不带入当前故事）：正文‘她拿着钥匙。她将钥匙交给门卫。门卫收下了钥匙。’，action=交钥匙，item状态before=她持有、after=门卫持有；stateChanged=true、enablingTransitionRequired=false、transitionStatus=established、transitionEvidence引用‘她将钥匙交给门卫。’。不能因为不需要提前准备就填not_needed。",

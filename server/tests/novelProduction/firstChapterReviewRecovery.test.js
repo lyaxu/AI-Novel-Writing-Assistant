@@ -176,7 +176,8 @@ test('real v9 original passes; candidate comparison without a duty is valid but 
       assert.equal(errors.length, 2);
       assert.ok(errors.every(line => line.includes('before_state_after_action')));
       assert.match(error.message, /states\[0\]\.beforeEvidence/);
-      assert.match(error.message, /复合行动中途/);
+      assert.match(error.message, /晚叙述不等于晚发生/);
+      assert.match(error.message, /not_before_action/);
       assert.doesNotMatch(error.message, /current_evidence_missing/);
       return true;
     });
