@@ -40,8 +40,8 @@ export const characterResourceExtractionUpdateSchema = z.object({
   constraints: z.array(z.string().trim().min(1)).default([]),
   evidence: z.array(z.string().trim().min(1)).default([]),
   confidence: z.preprocess(normalizeOptionalConfidence, z.number().min(0).max(1).optional().nullable()),
-  riskLevel: z.enum(["low", "medium", "high"]).default("low"),
-  riskReason: z.string().trim().optional().nullable(),
+  riskLevel: z.enum(["low", "medium", "high"]).default("low").describe("将变化写入事实账本的风险；不是物品在剧情中的危险程度。high 需要证据、归属、状态冲突等具体依据。"),
+  riskReason: z.string().trim().optional().nullable().describe("具体的事实写入风险依据；物品危险和未知用途写入 constraints/narrativeImpact。"),
 });
 
 export const characterResourceContinuityRiskSchema = z.object({

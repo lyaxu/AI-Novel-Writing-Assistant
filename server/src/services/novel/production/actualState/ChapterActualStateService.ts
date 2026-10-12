@@ -51,7 +51,7 @@ export class ChapterActualStateService {
         where: { novelId: input.novelId, chapterId: input.chapterId, status: { in: ["pending_review", "rejected"] } },
         select: { payloadJson: true, status: true, validationNotesJson: true },
       });
-      if (hasUnresolvedActualStateProposal(proposals, session.operationId, contentHash)) throw new ChapterProductionError("CHAPTER_PRODUCTION_STORAGE", "本章资源变化有待核对提案；请在小说状态工作区确认后恢复状态提交，正文与提案均已保留。");
+      if (hasUnresolvedActualStateProposal(proposals, session.operationId, contentHash)) throw new ChapterProductionError("CHAPTER_PRODUCTION_STORAGE", "正文和审查结果已保存，故事状态提交等待资源核对。请在本章右侧“资源风险”的“需要判断的资源变更”中核对并确认或忽略，再点“继续自动导演”；恢复会复用已有结果，不重写正文。");
       const result: ChapterArtifactSyncResult = { status: "completed", contentHash, completedArtifacts: [...CHAPTER_ARTIFACT_CONSUMERS] };
       await tx.chapterArtifactSyncCheckpoint.upsert({
         where: { novelId_chapterId_contentHash_artifactType_syncMode: {

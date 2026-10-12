@@ -44,7 +44,7 @@ export const characterResourceExtractionPrompt: PromptAsset<
   z.infer<typeof characterResourceExtractionOutputSchema>
 > = {
   id: "novel.character_resource.extract_updates",
-  version: "v1",
+  version: "v2",
   taskType: "fact_extraction",
   mode: "structured",
   language: "zh",
@@ -89,6 +89,8 @@ export const characterResourceExtractionPrompt: PromptAsset<
       "4. 影响后续卷级规划、伏笔兑现或主角行动边界的变化，风险至少为 medium。",
       "5. 明显连续性问题放入 continuityRisks，例如未获得却使用、已消耗却复用、读者未知却被当作已铺垫。",
       "6. updates 最多输出 8 条；优先保留会跨章影响行动边界、伏笔兑现或资源归属的变化。",
+      "7. riskLevel/riskReason 评估把变化写入事实账本的风险，不是物品对人物的危险程度。危险物品、神秘线索和未知用途本身不构成 high；剧情危险写入 constraints/narrativeImpact。high 必须说明证据不足、人物/归属矛盾、状态冲突或未发生能力被当事实等具体问题。",
+      "8. 只记录正文已发生的变化；任务目标、未来用途、传言与角色猜测不证明事实。持有不等于所有权或已掌握隐藏能力；未知归属保持 unknown，警告只记录为所见/所知，不写成已生效规则。",
     ].join("\n")),
     new HumanMessage([
       `小说：${input.novelTitle}`,

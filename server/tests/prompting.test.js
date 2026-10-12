@@ -179,7 +179,7 @@ test("prompt registry exposes versioned planning assets", () => {
     "state.snapshot.extract@v4",
     "novel.payoff_ledger.sync@v8",
     "novel.characterDynamics.volumeProjection@v3",
-    "novel.character_resource.extract_updates@v1",
+    "novel.character_resource.extract_updates@v2",
     "storyMode.child.generate@v1",
     "storyMode.expansion.recommend@v1",
     "storyMode.tree.generate@v1",
@@ -284,6 +284,9 @@ test("chapter artifact delta prompt captures summary facts and knowledge boundar
   assert.match(systemText, /characterMindDeltas/);
   assert.match(systemText, /characterDialogueInfluenceResolutions/);
   assert.match(systemText, /80-180/);
+  assert.match(systemText, /riskLevel\/riskReason.*事实账本.*不是.*危险程度/);
+  assert.match(systemText, /章节任务要求.*不能作为已经发生的事实/);
+  assert.match(systemText, /持有物品不等于确认其.*所有权/);
 });
 
 test("character mind snapshot prompt keeps subjective reasoning evidence-backed", () => {

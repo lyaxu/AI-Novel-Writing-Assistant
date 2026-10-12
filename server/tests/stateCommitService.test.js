@@ -370,10 +370,14 @@ test("StateCommitService commitExistingProposals applies ledger update and write
         },
       },
       stateChangeProposal: {
-        update: async (args) => {
+        findFirst: async () => proposalRow,
+        updateMany: async (args) => {
           calls.proposalUpdate += 1;
           assert.equal(args.where.id, "proposal-1");
+          assert.equal(args.where.status, "pending_review");
+          assert.equal(args.where.payloadJson, proposalRow.payloadJson);
           assert.equal(args.data.status, "committed");
+          return { count: 1 };
         },
       },
     });

@@ -563,7 +563,7 @@ export const chapterArtifactDeltaPrompt: PromptAsset<
   ChapterArtifactDeltaOutput
 > = {
   id: "novel.chapter.artifact_delta.extract",
-  version: "v1",
+  version: "v2",
   taskType: "fact_extraction",
   mode: "structured",
   language: "zh",
@@ -577,7 +577,7 @@ export const chapterArtifactDeltaPrompt: PromptAsset<
     example: CHAPTER_ARTIFACT_DELTA_EXAMPLE,
     note: [
       "一次性抽取章节摘要、硬事实、状态快照、角色资源、伏笔/payoff、关系动态、信息边界和同步计划。",
-      "只记录正文中有明确证据或与任务目标强相关的变化。",
+      "只记录正文中有明确证据的变化；任务目标和后续计划不能证明变化已经发生。",
       "syncPlan 与 requiresFullReconcile 由你基于剧情风险判断，代码只负责校验与落库。",
     ].join(" "),
   },
@@ -590,7 +590,7 @@ export const chapterArtifactDeltaPrompt: PromptAsset<
       "只输出合法 JSON 对象，不要输出 Markdown、解释、注释或代码块。",
       "",
       "抽取原则：",
-      "1. 只抽取正文中已经发生、被读者知道、被角色知道，或由章节任务明确要求产生的变化。",
+      "1. 只抽取正文中已经发生、被读者知道或被角色知道的变化；章节任务要求、未来用途与角色猜测不能作为已经发生的事实。",
       "2. 不要把普通描写、一次性环境物、纯心理形容误判为长期账本资产。",
       "3. 角色资源必须有 evidence；伏笔/payoff 必须能说明 setup、推进、兑现或风险。",
       "4. 关系动态只记录本章发生了阶段变化、阵营立场变化或新角色候选时的内容。",
@@ -611,6 +611,9 @@ export const chapterArtifactDeltaPrompt: PromptAsset<
       "17. characterResourceDeltas.narrativeFunction 只能使用 tool、clue、weapon、proof、key、cost、promise、hidden_card、constraint；修炼增益通常用 tool，消耗材料/积分用 cost，凭据/借据用 proof 或 constraint。",
       "18. characterResourceDeltas.statusAfter 只能使用 available、hidden、borrowed、transferred、lost、consumed、damaged、destroyed、stale；不要输出 active、owned、usable、used、broken 等自定义状态。",
       "19. characterResourceDeltas 最多输出 8 条；优先保留会跨章影响行动边界、伏笔兑现或资源归属的变化。",
+      "19a. characterResourceDeltas.riskLevel/riskReason 评估把本条变化写入事实账本的风险，不是物品对人物的危险程度或情节重要性。明确获得危险物品、发现神秘线索或未知用途，本身不构成 high。剧情中的危险和使用限制写入 constraints/narrativeImpact。",
+      "19b. 正文证据明确、归属与已有账本一致的首次获得或信息揭示可为 low；有需核对的重大状态影响为 medium；证据不足、人物/归属矛盾、与已销毁/消耗状态冲突或把未发生能力当事实才为 high。riskReason 必须解释具体的证据、归属或状态冲突，不用未来可能发生的剧情危险代替。",
+      "19c. 记录角色持有物品不等于确认其法律所有权、隐藏能力或传言真实。未知归属保持 unknown；未验证能力和警告只记录为角色所见/所知，不扩展成已生效规则。",
       "20. payoffDeltas.scopeType 只能使用 book、volume、chapter；全书/故事级伏笔统一用 book，不要输出 story、novel 或 global。",
       "21. stateDeltas.foreshadowStates 的 setupChapterId/payoffChapterId 只有在能确认真实 chapterId 时才填写；如果只能确认第几章，宁可省略或写入章节序号字符串，不要输出数字。",
       "22. syncPlan.stateSnapshot、characterResources、characterDynamics 只能是 skip 或 write；只有 payoffLedger 可以是 skip、delta 或 full_reconcile。",

@@ -185,17 +185,20 @@ export class StateCommitService {
       };
     }
 
-    const committed = rows.map((row) => {
-      const proposal = this.toProposal(row);
-      return {
-        ...proposal,
-        status: "committed" as const,
-        validationNotes: proposal.validationNotes.concat(`proposal_commit:${input.reason}`),
-      };
-    });
-
-    await prisma.$transaction(async (tx) => {
-      for (const proposal of committed) {
+    const committed = await prisma.$transaction(async (tx) => {
+      const applied: StateChangeProposal[] = [];
+      for (const originalRow of rows) {
+        const currentRow = await tx.stateChangeProposal.findFirst({
+          where: { id: originalRow.id, novelId: input.novelId, status: "pending_review" },
+        });
+        if (!currentRow) continue;
+        if (currentRow.payloadJson !== originalRow.payloadJson || currentRow.evidenceJson !== originalRow.evidenceJson
+          || currentRow.validationNotesJson !== originalRow.validationNotesJson) {
+          throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "资源提案已变化，请刷新并核对后再确认。");
+        }
+        const pending = this.toProposal(currentRow);
+        const proposal: StateChangeProposal = { ...pending, status: "committed",
+          validationNotes: pending.validationNotes.concat(`proposal_commit:${input.reason}`) };
         if (proposal.validationNotes.includes(ACTUAL_STATE_INVALID_PROPOSAL)) throw new ChapterProductionError("CHAPTER_PRODUCTION_STORAGE", "该提案未通过抽取校验，请核对后明确忽略；不能作为有效事实直接确认。");
         const fingerprint = (proposal.payload as Record<string, unknown>).syncContentHash;
         if (proposal.chapterId && typeof fingerprint === "string") {
@@ -205,26 +208,34 @@ export class StateCommitService {
           }
           const row = await tx.chapterArtifactSyncCheckpoint.findFirst({ where: { novelId: input.novelId, chapterId: proposal.chapterId,
             contentHash: "active", artifactType: "production_execution" }, select: { metadataJson: true } });
+          const operationId = (proposal.payload as Record<string, unknown>).syncOperationId;
+          const owner = row?.metadataJson
+            ? JSON.parse(row.metadataJson) as { operationId?: string; status?: string; expiresAt?: number }
+            : null;
+          if (typeof operationId === "string" && owner?.operationId !== operationId) {
+            throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "该提案所属的章节执行已变化，请核对当前任务的资源提案。");
+          }
           if (row?.metadataJson) {
-            const owner = JSON.parse(row.metadataJson) as { status?: string; expiresAt?: number };
-            if (owner.status === "running" && (owner.expiresAt ?? 0) > Date.now()) {
+            if (owner?.status === "running" && (owner.expiresAt ?? 0) > Date.now()) {
               throw new ChapterProductionError("CHAPTER_PRODUCTION_BUSY", "本章正在提交状态，请待执行停止后确认提案。");
             }
           }
         }
-        await this.applyCommittedProposal(tx, proposal);
-        if (!proposal.id) {
-          continue;
-        }
-        await tx.stateChangeProposal.update({
-          where: { id: proposal.id },
+        const claimed = await tx.stateChangeProposal.updateMany({
+          where: { id: originalRow.id, novelId: input.novelId, status: "pending_review", payloadJson: originalRow.payloadJson },
           data: {
             status: "committed",
             validationNotesJson: JSON.stringify(proposal.validationNotes),
           },
         });
+        if (claimed.count !== 1) continue;
+        await this.applyCommittedProposal(tx, proposal);
+        applied.push(proposal);
       }
+      return applied;
     });
+
+    if (committed.length === 0) return { versionRecord: null, committed: [], pendingReview: [], rejected: [] };
 
     const snapshot = await canonicalStateService.getSnapshot(input.novelId, {
       chapterId: input.chapterId ?? committed[0]?.chapterId ?? undefined,
