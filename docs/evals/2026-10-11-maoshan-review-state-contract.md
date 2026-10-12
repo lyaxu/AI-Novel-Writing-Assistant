@@ -30,4 +30,6 @@
 
 新重启入口仅针对核验过的旧后端PID/启动时间，检查稿件hash、原job/暂停/范围和无待运行工作，再沿原隔离配置启动；不触发continue。路径`.codex-run/maoshan-review-contract-20261011/restart-old-review.cmd`。不要重跑上一版固定旧PID的脚本。加载与最终测试结果见[CURRENT](../handoffs/CURRENT.md)。
 
+源码提交c16169dd。04:44 UTC新脚本Windows PowerShell CheckOnly通过；实际尝试在管理员身份检查停止，未停止或启动服务，agent-restart.log保留证据。此处是Windows管理员进程权限要求，不是磁盘授权或自动审批策略拦截。待用户管理员运行新cmd，固定日志restart-last.log，加载后再核验。本段与CURRENT为内部运行事实补记，无额外用户能力，发布说明不重复追加。
+
 运行提示v9后，再由用户从[本书第一章原工作区](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt600jsgow0e6kb0852)继续原审查。真实模型、后续章节与十章验收未完成，不能承诺一次通过。规则见[接收证据模块](../../server/src/prompting/prompts/novel/acceptance/README.md)，历史入口故障及维护时间故障保留在[上一轮证据](2026-10-11-maoshan-recovery-cas-timestamp.md)。
