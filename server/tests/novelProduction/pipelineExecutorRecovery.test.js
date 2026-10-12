@@ -16,9 +16,19 @@ const { novelEventBus } = require("../../dist/events/index.js");
 const {
   ChapterContentPersistenceError,
 } = require("../../dist/services/novel/runtime/lifecycle/ChapterLifecycleService.js");
-const {
-  NovelPipelineExecutor,
-} = require("../../dist/services/novel/production/NovelPipelineExecutor.js");
+const { loadRuntimeSource } = require("./sourceHarness.cjs");
+const executorRequire = require("node:module").createRequire(require.resolve("../../dist/services/novel/production/NovelPipelineExecutor.js"));
+const executorDependencies = [
+  "node:async_hooks", "@ai-novel/shared/types/directorIssue", "../../../db/prisma", "../../../events",
+  "../../../llm/usageTracking", "@ai-novel/shared/types/directorCompletion", "../planning/ChapterRouteWindowService",
+  "../runtime/ChapterRuntimeCoordinator", "../director/recovery/planningRepair", "../runtime/artifactSync",
+  "../runtime/chapterEmptyContentError", "../runtime/lifecycle", "../novelCoreShared", "../../planner/PlannerService",
+  "./qualityClosure/ChapterQualityClosure", "./attempts", "./completion", "../director/issues",
+  "./issueGovernance/PipelineIssueGovernance", "../pipelineJobState",
+];
+// Exercise the current executor source even before a full server build; its adapters remain explicitly stubbed below.
+const { NovelPipelineExecutor } = loadRuntimeSource("../production/NovelPipelineExecutor.ts",
+  Object.fromEntries(executorDependencies.map(id => [id, executorRequire(id)])));
 const { ChapterRouteWindowService } = require("../../dist/services/novel/planning/ChapterRouteWindowService.js");
 const { ChapterExecutionPreparationService } = require("../../dist/services/novel/production/preparation/ChapterExecutionPreparationService.js");
 const { PlanningRepairRecoveryService } = require("../../dist/services/novel/director/recovery/planningRepair/PlanningRepairRecoveryService.js");
@@ -402,6 +412,55 @@ test("output exhaustion fails once without AI classification or another writer a
     assert.deepEqual(harness.claims, []);
     assert.equal(harness.jobState.status, "failed");
     assert.match(harness.jobState.error, /额度耗尽/);
+  } finally { harness.restore(); pipelineIssueGovernance.reportPipelineIssue = original; }
+});
+
+for (const executionOwner of [null, "owner-a"]) {
+  test(`completed prompt rejection requires durable manual recovery without AI classification (${executionOwner ?? "direct"})`, async () => {
+    const original = pipelineIssueGovernance.reportPipelineIssue;
+    let reports = 0;
+    pipelineIssueGovernance.reportPipelineIssue = async () => { reports++; throw new Error("must not classify a completed rejected response"); };
+    const harness = createExecutorHarness({ executionOwner, chapterCount: 2,
+      executeOptions: { ...options, endOrder: 2 },
+      runChapter: async () => { throw Object.assign(new Error("long private validator detail"), { code: "PROMPT_POST_VALIDATION_FAILED" }); },
+    });
+    try {
+      await harness.execute();
+      assert.equal(reports, 0);
+      assert.equal(harness.chapterCalls, 1);
+      assert.deepEqual(harness.claims, []);
+      assert.deepEqual(harness.routeRequests, []);
+      assert.equal(harness.jobState.status, "failed");
+      assert.equal(harness.jobState.pendingManualRecovery, true);
+      assert.equal(harness.jobState.heartbeatAt, null);
+      assert.equal(harness.jobState.currentItemKey, "chapter-1");
+      assert.equal(harness.jobState.error, "AI回答未通过内容检查，已保留结果；请从原任务继续处理。");
+      if (executionOwner) {
+        assert.equal(harness.updates.at(-1).where.executionOwner, executionOwner);
+        assert.equal(harness.updates.at(-1).where.pendingManualRecovery, false);
+      }
+    } finally { harness.restore(); pipelineIssueGovernance.reportPipelineIssue = original; }
+  });
+}
+
+test("completed prompt rejection cannot swallow failure to persist its required manual pause", async () => {
+  const original = pipelineIssueGovernance.reportPipelineIssue;
+  let reports = 0;
+  pipelineIssueGovernance.reportPipelineIssue = async () => { reports++; return null; };
+  const harness = createExecutorHarness({ runChapter: async () => {
+    throw Object.assign(new Error("validator rejected"), { code: "PROMPT_POST_VALIDATION_FAILED" });
+  } });
+  const update = prisma.generationJob.update;
+  prisma.generationJob.update = async input => {
+    if (input.data.pendingManualRecovery === true) throw new Error("manual pause write failed");
+    return update(input);
+  };
+  try {
+    await assert.rejects(harness.execute(), /manual pause write failed/);
+    assert.equal(reports, 0);
+    assert.equal(harness.chapterCalls, 1);
+    assert.deepEqual(harness.claims, []);
+    assert.equal(harness.jobState.pendingManualRecovery, false);
   } finally { harness.restore(); pipelineIssueGovernance.reportPipelineIssue = original; }
 });
 

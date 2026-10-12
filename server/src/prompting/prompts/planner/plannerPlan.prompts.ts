@@ -3,7 +3,7 @@ import type { StoryPlanLevel } from "@ai-novel/shared/types/novel";
 import type { PromptAsset } from "../../core/promptTypes";
 import { normalizePlannerOutput, type PlannerOutput } from "../../../services/planner/plannerOutputNormalization";
 import { plannerOutputSchema } from "../../../services/planner/plannerSchemas";
-import { validateChapterPayoffDecisions, type ChapterPayoffValidationInput } from "../../../services/planner/payoff";
+import { buildPayoffFollowUpGuidance, validateChapterPayoffDecisions, type ChapterPayoffValidationInput } from "../../../services/planner/payoff";
 
 interface PlannerPlanPromptInput {
   scopeLabel: string;
@@ -106,7 +106,8 @@ function buildPlannerPlanAsset(input: {
         "",
         "字段要求：",
         ...(input.planLevel === "chapter" ? ["followUp只可指向planningWindow里实际提供的未来chapterOrder，账本的目标日期不代表该章已拆出。尚未到期且仅seed/touch/pressure的铺垫可以followUp:null，不为完整性虚构后续安排；到期未兑、defer、partial_reveal仍须实际承接证据。"] : []),
-        ...(input.planLevel === "chapter" ? ["回报与秘密分开判断：可以本章获得奖励而暂不揭示奖励来源。账本提及某个秘密不等于整个回报禁止推进；forbid只用于明确禁止的事项，在authorizedScope写清该事项。受保护信息仍须遵守，不用‘保密’取消已授权的收益。"] : []),
+        ...(input.planLevel === "chapter" && promptInput.payoffValidation ? [buildPayoffFollowUpGuidance(promptInput.payoffValidation)] : []),
+        ...(input.planLevel === "chapter" ? ["兑现范围按每条候选自身的承诺判断，不等于解决整条故事线。候选承诺的行动与结果已在本章合同中完整交付时，可以选择payoff，同时保留合同要求继续隐藏的根源、来源和机制；不能把所有未揭谜团追加为该候选的remainingObligation。只有候选自身约定的交付仍有一部分未完成时才是partial_reveal，并须给出真实后续承接。未到期、仅推进线索或加大压力且尚未交付候选承诺时，按实际推进选择seed/touch/pressure，不把每次剧情进展都叫部分兑现；也不得为了规避未来规划要求而虚称完整兑现、纯铺垫或无关。"] : []),
         ...(input.planLevel === "chapter" ? ["回报与秘密分开判断：可以本章获得奖励而暂不揭示奖励来源。账本提及某个秘密不等于整个回报禁止推进；forbid只用于明确禁止的事项，在authorizedScope写清该事项。受保护信息仍须遵守，不用‘保密’取消已授权的收益。"] : []),
         "1. title：写当前层级规划条目的标题，简洁明确，不要占位词。",
         "2. objective：必须明确说明这一层规划最核心的推进目标，不能写成泛泛摘要。",
@@ -155,6 +156,11 @@ function buildPlannerPlanAsset(input: {
       return [new SystemMessage(systemPrompt), new HumanMessage(userPrompt)];
     },
     postValidate: (output, promptInput) => {
+      // Validate the raw decisions before strict normalization so semantic retry
+      // receives the actual planning window when operation/follow-up rules fail.
+      if (input.planLevel === "chapter" && promptInput?.payoffValidation && output.payoffDecisions !== undefined) {
+        validateChapterPayoffDecisions({ ...promptInput.payoffValidation, decisions: output.payoffDecisions }, { allowReplan: true });
+      }
       const normalized = normalizePlannerOutput(output);
 
       if (!normalized.title?.trim()) {
@@ -180,9 +186,6 @@ function buildPlannerPlanAsset(input: {
       if (input.planLevel === "chapter") {
         if (!Array.isArray(normalized.payoffDecisions)) {
           throw new Error(`Chapter planner output is missing payoffDecisions. planLevel=${input.planLevel}; 实际收到 ${Array.isArray(normalized.payoffDecisions) ? "数组" : typeof normalized.payoffDecisions}，需要为本章给出给付决策数组。`);
-        }
-        if (promptInput?.payoffValidation) {
-          validateChapterPayoffDecisions({ ...promptInput.payoffValidation, decisions: normalized.payoffDecisions }, { allowReplan: true });
         }
         if (!normalized.planRole) {
           throw new Error(`Chapter planner output is missing planRole. planLevel=${input.planLevel}; 实际值 ${JSON.stringify(normalized.planRole ?? null)}。`);
@@ -241,7 +244,7 @@ export const plannerArcPlanPrompt = buildPlannerPlanAsset({
 
 export const plannerChapterPlanPrompt = buildPlannerPlanAsset({
   id: "planner.chapter.plan",
-  version: "v5",
+  version: "v6",
   planLevel: "chapter",
   includeScenes: true,
   maxTokensBudget: 2400,

@@ -23,11 +23,22 @@ export interface JournalContentWrite {
   chapterStatus?: "unplanned" | "pending_generation" | "generating" | "pending_review" | "needs_repair" | "completed" | null;
 }
 export type JournalStateWrite = Omit<JournalContentWrite, "content"> & { riskFlags?: string | null; repairHistory?: string | null };
+/** Private rejected model responses; never expose raw output through inspection projections. */
+export interface CompletedPromptResponse {
+  promptId: string;
+  promptVersion: string;
+  output: unknown;
+  validationError: string;
+  semanticRetryAttempts: number;
+  maxSemanticRetryAttempts: number;
+  repairAttempts: number;
+}
 export interface JournalStep {
   status: "running" | "done" | "failed" | "unknown";
   external: boolean;
   output?: unknown;
   error?: string;
+  rejectedResponses?: CompletedPromptResponse[];
 }
 export interface ChapterProductionJournalRecord {
   version: 1;
@@ -86,9 +97,25 @@ const definitiveStructuredCategories: ReadonlySet<StructuredOutputErrorCategory>
   "unsupported_native_json", "thinking_pollution", "incomplete_json", "malformed_json", "schema_mismatch",
 ]);
 
+export function completedPromptResponseFromError(error: unknown): CompletedPromptResponse | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const typed = error as Error & { code?: unknown; completedPromptResponse?: CompletedPromptResponse };
+  const response = typed.completedPromptResponse;
+  return typed.code === "PROMPT_POST_VALIDATION_FAILED" && response
+    && typeof response.promptId === "string" && typeof response.promptVersion === "string"
+    && Object.prototype.hasOwnProperty.call(response, "output")
+    && typeof response.validationError === "string"
+    && Number.isInteger(response.semanticRetryAttempts) && response.semanticRetryAttempts >= 0
+    && Number.isInteger(response.maxSemanticRetryAttempts) && response.maxSemanticRetryAttempts >= 0
+    && response.semanticRetryAttempts >= response.maxSemanticRetryAttempts
+    && Number.isInteger(response.repairAttempts) && response.repairAttempts >= 0
+    ? response : undefined;
+}
+
 /** Structural error protocols avoid importing prompt execution/DB into the journal boundary. */
 export function isDefinitiveProductionFailure(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
+  if (completedPromptResponseFromError(error)) return true;
   if (["CHAPTER_EMPTY_CONTENT", "CHAPTER_REVIEW_INCOMPLETE"].includes(String((error as Error & { code?: unknown }).code))) return true;
   const typed: Partial<StructuredOutputError & ChapterPatchRepairFailedError> = error;
   if (typed.name === "ChapterPatchRepairFailedError") return true;

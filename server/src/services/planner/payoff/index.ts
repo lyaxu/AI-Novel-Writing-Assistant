@@ -112,11 +112,32 @@ export interface ChapterPayoffValidationInput {
   chapterOrder: number; planningWindow: unknown;
 }
 
+export function buildPayoffFollowUpGuidance(input: Pick<ChapterPayoffValidationInput, "chapterOrder" | "planningWindow">): string {
+  const orders = new Set<number>();
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) { value.forEach(visit); return; }
+    if (!value || typeof value !== "object") return;
+    const record = value as Record<string, unknown>;
+    if (typeof record.chapterOrder === "number" && record.chapterOrder > input.chapterOrder) orders.add(record.chapterOrder);
+    Object.values(record).forEach(visit);
+  };
+  visit(input.planningWindow);
+  return `planningWindow实际可引用的未来章序：${JSON.stringify([...orders].sort((a, b) => a - b))}。`
+    + "partial_reveal和defer必须有真实未来规划及逐字引文，不能保留该operation而只把followUp删成null。"
+    + "没有合法承接时，请根据当前合同重新判断operation：未到期且仅铺垫可用seed/touch/pressure并followUp:null；"
+    + "只有本章真正完整交付该候选才可payoff，不能为过校验伪装兑现或无关。"
+    + "若必须部分交付或延期却无真实未来规划，返回requires_replan并说明缺失的承接，followUp:null。不得编造章节或引用当前章文字冒充未来规划。";
+}
+
 export function validateChapterPayoffDecisions(
   input: ChapterPayoffValidationInput & { decisions: unknown },
   options: { allowReplan?: boolean } = {},
 ): ChapterPayoffDecision[] {
-  const decisions = chapterPayoffDecisionsSchema.parse(input.decisions);
+  let decisions: ChapterPayoffDecision[];
+  try { decisions = chapterPayoffDecisionsSchema.parse(input.decisions); }
+  catch (error) {
+    throw new Error(`${error instanceof Error ? error.message : String(error)} ${buildPayoffFollowUpGuidance(input)}`, { cause: error });
+  }
   const seen = new Set<string>();
   for (const decision of decisions) {
     const candidate = input.candidates.find((item) => item.ledgerKey === decision.ledgerKey);
@@ -146,7 +167,7 @@ export function validateChapterPayoffDecisions(
     if (decision.followUp) {
       const targets = findFutureChapter(input.planningWindow, decision.followUp.chapterOrder);
       if (decision.followUp.chapterOrder <= input.chapterOrder || !targets.length) {
-        throw new Error(`Payoff follow-up must cite a supplied future planning target: ${decision.ledgerKey}. Chapter ${decision.followUp.chapterOrder} is not a supplied future chapter in planningWindow. A ledger target date is not an existing chapter plan. ${due ? "This payoff is due; do not remove its required follow-up while keeping seed/touch/pressure. Choose a valid authorized decision or requires_replan." : "This payoff is not due. For seed/touch/pressure an optional followUp may be null; do not invent a future chapter. Defer and partial_reveal still require real follow-up evidence."}`);
+        throw new Error(`Payoff follow-up must cite a supplied future planning target: ${decision.ledgerKey}. operation=${decision.operation}. Chapter ${decision.followUp.chapterOrder} is not a supplied future chapter in planningWindow. A ledger target date is not an existing chapter plan. ${due ? "This payoff is due; do not remove its required follow-up while keeping seed/touch/pressure. Choose a valid authorized decision or requires_replan." : "This payoff is not due. For seed/touch/pressure an optional followUp may be null; do not invent a future chapter. Defer and partial_reveal still require real follow-up evidence."} ${buildPayoffFollowUpGuidance(input)}`);
       }
       // Sibling of the contract-evidence check above: same question, same tolerance. It used a raw
       // `includes` on the decoded leaves, so a quote spanning a line break in the planning text was

@@ -574,9 +574,17 @@ async function resolveStructuredOutput<I, O, R = O>(input: {
             postValidateFailureRecovered: true,
           };
         }
-        const failure = error instanceof Error ? error : new Error(String(error));
+        const failure = Object.assign(new Error(stringifyPromptError(error), { cause: error }), {
+          name: "PromptPostValidationError",
+          code: "PROMPT_POST_VALIDATION_FAILED",
+        });
         Object.defineProperty(failure, "completedPromptResponse", {
-          value: { promptId: asset.id, output: currentResult.data },
+          value: {
+            promptId: asset.id, promptVersion: asset.version, output: currentResult.data,
+            validationError: stringifyPromptError(error),
+            semanticRetryAttempts, maxSemanticRetryAttempts,
+            repairAttempts: totalRepairAttempts,
+          },
           configurable: true,
         });
         throw markPromptQualityFailure(failure, "post_validate_failed");

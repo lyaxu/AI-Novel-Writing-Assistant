@@ -151,7 +151,7 @@ test("prompt registry exposes versioned planning assets", () => {
     "agent.runtime.fallback_answer@v1",
     "agent.runtime.setup_guidance@v1",
     "agent.runtime.setup_ideation@v1",
-    "planner.chapter.plan@v5",
+    "planner.chapter.plan@v6",
     "novel.director.candidates@v6",
     "novel.director.candidate_patch@v5",
     "novel.director.blueprint@v1",
@@ -213,7 +213,7 @@ test("prompt registry exposes versioned planning assets", () => {
     assert.ok(getRegisteredPromptAsset(id, version), `missing prompt asset ${key}`);
   }
 
-  const chapterAsset = getRegisteredPromptAsset("planner.chapter.plan", "v5");
+  const chapterAsset = getRegisteredPromptAsset("planner.chapter.plan", "v6");
   assert.ok(chapterAsset);
   assert.equal(chapterAsset.taskType, "planner");
 });
@@ -1482,7 +1482,11 @@ test("terminal post-validation failures retain the completed response as non-pub
         postValidate: () => { throw new Error("contract rejected"); } },
       promptInput: {},
     }), error => {
-      assert.deepEqual(error.completedPromptResponse, { promptId: plannerChapterPlanPrompt.id, output: data });
+      assert.equal(error.code, "PROMPT_POST_VALIDATION_FAILED");
+      assert.deepEqual(error.completedPromptResponse, {
+        promptId: plannerChapterPlanPrompt.id, promptVersion: plannerChapterPlanPrompt.version, output: data,
+        validationError: "contract rejected", semanticRetryAttempts: 0, maxSemanticRetryAttempts: 0, repairAttempts: 0,
+      });
       assert.equal(Object.keys(error).includes("completedPromptResponse"), false);
       return true;
     });

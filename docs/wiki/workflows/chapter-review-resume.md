@@ -48,4 +48,16 @@ SQLite维护写入必须与应用的Prisma适配器采用相同时间序列化�
 
 导演所属章节从本书工作区“继续自动导演”进入；独立批量从章节源页原范围任务入口进入；单章手动操作从“稿件与恢复”进入。运行记录只读。按钮可用不等于已完成真实恢复验收，离线测试必须覆盖命令接受、原job调度、journal重入与已保存正文不重做，真实模型与UI另行记录。
 
-相关模块：`production/recovery`、`production/reliability`、`director/commands`、`director/automation`、`runtime/acceptance`、`prompting/prompts/novel/acceptance`。
+## 完整回答与未知调用必须分开
+
+模型以正常结束返回完整回答，随后因缺少合同证据或引用不存在的未来章而被拒绝，属于确定的内容校验失败。Prompt Runner 保存拒绝回答、版本与已用纠正次数，journal 记录 failed；管线不能把它包装成“外部调用中断”，也不能整轮自动重试重置纠正预算。重新进入原任务必须来自源工作区的明确操作，原失败回答保留为证据而非可执行计划。
+
+网络中断、额度终止、进程退出和结果落盘失败继续遵守未知结果/安全终止规则。尤其不能通过匹配错误文案批量清除 unknown。历史误分类只有在请求响应唯一对应、正常结束、章节合同与操作不变、无活跃租约且任务仍人工暂停时，才能经备份、原始记录归档及 CAS 做一次性协调；不改正文、任务范围、预算或暂停状态。
+
+## 未来承接证据属于规划语义
+
+规划输出的字段形状与语义门禁分开。部分兑现、延期与未来章引用的约束需要当前合同、回报候选和真实 planningWindow，不能交给只有 JSON 的通用修复器。一次带完整上下文的语义纠正仍然有界；最终非法回答必须拒绝。
+
+账本目标章号、节奏板章跨度和场景卡对未来的设想，都不是已拆出的具体章纲。空未来窗口不能捏造第三章；如确需后续承接，应走已有规划工作流生成和复核实际章纲。兑现按候选承诺范围判断，获得报酬可以完成一次服务闭环，仍有世界观谜团不自动扩大该候选义务。该语义决定由 AI 在结构化合同内作出，程序不能硬改成 touch 或 payoff 以绕过停点。
+
+相关模块：`production/recovery`、`production/reliability`、`director/commands`、`director/automation`、`runtime/acceptance`、`prompting/prompts/novel/acceptance`、`prompting/prompts/planner`、`services/planner/payoff`。

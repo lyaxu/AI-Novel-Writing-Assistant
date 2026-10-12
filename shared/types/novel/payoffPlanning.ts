@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { chapterPayoffDirectiveOperationSchema } from "../canonicalState.js";
 
-export const chapterPayoffDecisionSchema = z.object({
+// Transport shape only: rules that may require choosing another operation belong
+// to the chapter planner's context-aware validation, not context-free JSON repair.
+export const chapterPayoffDecisionOutputSchema = z.object({
   ledgerKey: z.string().trim().min(1),
   operation: z.union([chapterPayoffDirectiveOperationSchema, z.enum(["defer", "out_of_scope", "requires_replan"])]),
   reason: z.string().trim().min(1),
@@ -16,7 +18,9 @@ export const chapterPayoffDecisionSchema = z.object({
     expectedChange: z.string().trim().min(1),
     planningQuote: z.string().trim().min(1),
   }).nullable(),
-}).superRefine((decision, ctx) => {
+});
+
+export const chapterPayoffDecisionSchema = chapterPayoffDecisionOutputSchema.superRefine((decision, ctx) => {
   if (decision.operation === "defer" && !decision.followUp) {
     ctx.addIssue({ code: "custom", path: ["followUp"], message: "Deferred payoff requires a concrete planned follow-up." });
   }

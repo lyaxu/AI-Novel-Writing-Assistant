@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { chapterPayoffDecisionsSchema } from "@ai-novel/shared/types/novel/payoffPlanning";
+import { chapterPayoffDecisionOutputSchema } from "@ai-novel/shared/types/novel/payoffPlanning";
 import type { PlannerOutput } from "./plannerOutputNormalization";
 
 // Planner 输出需要尽量宽容：不同模型可能在字段类型上有差异（字符串/数组等）。
@@ -14,7 +14,9 @@ const plannerSceneSchema = z.object({
 }).passthrough();
 
 export const plannerOutputSchema = z.object({
-  payoffDecisions: chapterPayoffDecisionsSchema.optional(),
+  // Keep context-dependent operation/follow-up rules in postValidate. A JSON
+  // repairer without planningWindow must never be asked to invent a future plan.
+  payoffDecisions: z.array(chapterPayoffDecisionOutputSchema).max(20).optional(),
   title: z.string().trim().optional(),
   objective: z.string().trim().optional(),
   participants: z.array(z.string().trim()).optional(),

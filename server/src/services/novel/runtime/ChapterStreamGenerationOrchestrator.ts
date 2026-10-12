@@ -162,7 +162,7 @@ export class ChapterStreamGenerationOrchestrator {
         const result = await this.deps.preparationService.prepare(novelId, chapterId, request);
         await currentProductionSession()?.bindPrepared({ preparation: result });
         return result;
-      }, true);
+      });
       const assembled = await this.deps.assembler.assemble(novelId, chapterId, request);
       if (preparation?.effectiveContract
         && buildChapterExecutionContractHash(assembled.contextPackage.chapter) !== preparation.effectiveContract.hash) {

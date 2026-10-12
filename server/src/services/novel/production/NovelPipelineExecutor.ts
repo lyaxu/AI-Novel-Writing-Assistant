@@ -573,7 +573,7 @@ export class NovelPipelineExecutor {
               } catch (error) {
                 // Ownership, saved-version conflicts and unknown call outcomes require an explicit source-page action.
                 if (isChapterProductionSafetyError(error)) throw error;
-                if (error && typeof error === "object" && "code" in error && ["LLM_OUTPUT_LIMIT", "PLANNING_REPAIR_CONFLICT", "PLANNING_REPAIR_CONFIRMATION_REQUIRED"].includes(String(error.code))) {
+                if (error && typeof error === "object" && "code" in error && ["LLM_OUTPUT_LIMIT", "PROMPT_POST_VALIDATION_FAILED", "PLANNING_REPAIR_CONFLICT", "PLANNING_REPAIR_CONFIRMATION_REQUIRED"].includes(String(error.code))) {
                   throw error;
                 }
                 if (error instanceof PipelineExecutionLeaseLostError) {
@@ -898,8 +898,11 @@ export class NovelPipelineExecutor {
         return;
       }
 
-      const message = error instanceof Error ? error.message : "流水线执行失败";
-      if (isChapterProductionSafetyError(error)) {
+      const message = error && typeof error === "object" && "code" in error && error.code === "PROMPT_POST_VALIDATION_FAILED"
+        ? "AI回答未通过内容检查，已保留结果；请从原任务继续处理。"
+        : error instanceof Error ? error.message : "流水线执行失败";
+      if (isChapterProductionSafetyError(error)
+        || (error && typeof error === "object" && "code" in error && error.code === "PROMPT_POST_VALIDATION_FAILED")) {
         // Preserve the saved chapter boundary; neither polling nor issue classification may resume this job.
         await this.updateJobRequired(jobId, {
           status: "failed",

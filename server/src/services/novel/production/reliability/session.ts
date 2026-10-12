@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
-import { ChapterProductionError, chapterFingerprint, productionFingerprint, isDefinitiveProductionFailure, type ChapterProductionInspection, type ChapterProductionJournalRecord, type ChapterProductionJournalRepository, type JournalChapter, type JournalContentWrite, type JournalStateWrite, type JournalTransaction } from "./types";
+import { ChapterProductionError, chapterFingerprint, productionFingerprint, isDefinitiveProductionFailure, completedPromptResponseFromError, type ChapterProductionInspection, type ChapterProductionJournalRecord, type ChapterProductionJournalRepository, type JournalChapter, type JournalContentWrite, type JournalStateWrite, type JournalTransaction } from "./types";
 
 export interface ChapterProductionSession {
   readonly novelId: string;
@@ -157,6 +157,8 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
         return next;
       });
       let closed = false;
+      // A new user recovery opens a new session; an automatic loop in this session cannot reset semantic attempts.
+      const completedFailures = new Map<string, unknown>();
       let tail: Promise<unknown> = Promise.resolve();
       // Serialize only short journal transactions, never user callbacks: nested steps are valid.
       function mutate<T>(fn: (current: ChapterProductionJournalRecord, chapter: JournalChapter, tx: JournalTransaction) => Promise<T> | T, checkVersion = true): Promise<T> {
@@ -211,12 +213,14 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
           return output;
         }),
         async runStep<T>(key: string, fn: () => Promise<T>, stepOptions: { external?: boolean } = {}): Promise<T> {
+          if (completedFailures.has(key)) throw completedFailures.get(key);
           const state = await mutate((current) => {
             const previous = current.steps[key];
             if (previous?.status === "unknown") throw new ChapterProductionError("CHAPTER_PRODUCTION_UNCERTAIN", "外部调用结果尚不确定，已保留已接收内容，请核对后再处理。");
             if (previous?.status === "running") throw new ChapterProductionError("CHAPTER_PRODUCTION_BUSY", "本章的这一步已在执行。");
             if (previous?.status === "done") return { reused: true as const, output: previous.output as T };
-            current.steps[key] = { status: "running", external: stepOptions.external ?? false };
+            current.steps[key] = { status: "running", external: stepOptions.external ?? false,
+              ...(previous?.rejectedResponses ? { rejectedResponses: previous.rejectedResponses } : {}) };
             return { reused: false as const };
           });
           if (state.reused) return state.output;
@@ -224,10 +228,14 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
           try { output = await fn(); }
           catch (error) {
             const definitive = isDefinitiveProductionFailure(error);
+            const rejectedResponse = completedPromptResponseFromError(error);
             await mutate((current) => {
-              current.steps[key] = { status: stepOptions.external && !definitive ? "unknown" : "failed", external: stepOptions.external ?? false, error: message(error) };
+              const rejectedResponses = [...(current.steps[key]?.rejectedResponses ?? []), ...(rejectedResponse ? [rejectedResponse] : [])];
+              current.steps[key] = { status: stepOptions.external && !definitive ? "unknown" : "failed", external: stepOptions.external ?? false, error: message(error),
+                ...(rejectedResponses.length ? { rejectedResponses } : {}) };
               current.error = message(error);
             }, false);
+            if (rejectedResponse) completedFailures.set(key, error);
             // Preserve typed safety/limit codes for the caller while the journal blocks resending.
             const typed = error as { code?: unknown; name?: string; category?: string } | null;
             const terminalCode = typeof typed?.code === "string" && (
@@ -241,7 +249,8 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
             throw error;
           }
           // Persist failure here is NOT a callback failure: keep running/unknown, never allow resending.
-          await mutate((current) => { current.steps[key] = { status: "done", external: stepOptions.external ?? false, output }; });
+          await mutate((current) => { current.steps[key] = { status: "done", external: stepOptions.external ?? false, output,
+            ...(current.steps[key]?.rejectedResponses ? { rejectedResponses: current.steps[key].rejectedResponses } : {}) }; });
           return output;
         },
         async close(closeOptions = {}) {
