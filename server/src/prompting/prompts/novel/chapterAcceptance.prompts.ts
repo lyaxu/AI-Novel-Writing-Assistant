@@ -363,7 +363,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ChapterAcceptanceAssessmentOutput
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v8",
+  version: "v9",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -455,6 +455,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       throw new Error([
         "审查回答的证据校验未通过；只纠正审查 JSON，不改正文、不补造剧情。",
         ...problems,
+        ...audit.correctionHints,
         "从声明来源逐字复制连续准确原文，保留标点；补齐覆盖、状态变化证据，区分行动前提与行动结果。",
         "没有比较职责时使用 not_applicable；无法核实则如实标记未知，不用高分或 earned 掩盖缺证据。",
       ].join("\n"));

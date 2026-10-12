@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fixture = require('./fixtures/firstChapterReview.json');
+const resumed = require('./fixtures/resumedFirstChapterReview.json');
 const { chapterAcceptanceAssessmentPrompt: asset } = require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts');
 const { validateProgressionEvidence } = require('../../dist/prompting/prompts/novel/acceptance/progressionEvidence');
 const { assertReviewCompleted } = require('../../dist/services/novel/runtime/acceptance/reviewCompletion');
@@ -100,5 +101,66 @@ test('valid negative findings remain local review work rather than triggering an
     assert.equal(calls.length, 1);
     assert.equal(result.output.actionStateChecks[2].verdict, 'unearned');
     assert.doesNotThrow(() => assertReviewCompleted(result.output));
+  });
+});
+
+test('both real resumed reviewer responses reproduce the same five validation failures', () => {
+  for (const output of resumed.outputs) {
+    assert.throws(() => asset.postValidate(structuredClone(output), fixture.input), error => {
+      const issues = error.message.split('\n').filter(line => /^actionStateChecks\[scene_/.test(line));
+      assert.equal(issues.length, 5);
+      assert.equal(issues.filter(line => line.includes('after_state_not_in_current_action')).length, 2);
+      assert.equal(issues.filter(line => line.includes('earned_without_required_transition')).length, 3);
+      assert.doesNotMatch(error.message, /unverified_source|quote_not_in_current_prose/);
+      assert.match(error.message, /actionStateChecks\[0\].*states\[0\].*stateChanged=true.*not_needed/);
+      assert.match(error.message, /actionStateChecks\[3\].*states\[0\]\.afterEvidence/);
+      assert.match(error.message, /行动前的判断.*beforeEvidence/);
+      return true;
+    });
+  }
+});
+
+// Hand-authored correction for exercising the contract only; never persisted to the book.
+function correctedResumedResponse() {
+  const output = structuredClone(resumed.outputs[1]);
+  for (const check of output.actionStateChecks) {
+    for (const state of check.states) {
+      if (state.stateChanged) {
+        state.transitionStatus = 'established';
+        state.transitionEvidence = structuredClone(state.afterEvidence);
+      }
+    }
+  }
+  const paid = output.actionStateChecks[0];
+  paid.states[1].afterEvidence = structuredClone(paid.actionEvidence);
+  const departed = output.actionStateChecks[3];
+  departed.states[0].enablingTransitionRequired = true;
+  departed.states[0].afterEvidence = structuredClone(departed.actionEvidence);
+  return output;
+}
+
+test('actual runner carries actionable state-specific feedback and accepts a consistent simulated correction', async () => {
+  await runWithResponses([resumed.outputs[0], correctedResumedResponse()], async (calls, invoke) => {
+    const result = await invoke();
+    assert.equal(calls.length, 2);
+    const feedback = String(calls[1].messages.at(-1).content).split('上一次的 JSON 输出')[0];
+    assert.match(feedback, /states\[0\].*stateChanged=true/);
+    assert.match(feedback, /actionEvidence=.*afterEvidence=/);
+    assert.match(feedback, /无需另造前置情节/);
+    assert.match(feedback, /不要为了通过检查机械修改布尔值或降低结论/);
+    assert.doesNotThrow(() => assertReviewCompleted(result.output));
+    assert.equal(result.output.status, 'accepted');
+    assert.equal(result.output.repairDirectives.length, 0);
+    assert.equal(fixture.input.content.length, 3013);
+  });
+});
+
+test('replaying both real unchanged responses still pauses after exactly one correction, never fabricates acceptance', async () => {
+  await runWithResponses(resumed.outputs, async (calls, invoke) => {
+    const result = await invoke();
+    assert.equal(calls.length, 2);
+    assert.throws(() => assertReviewCompleted(result.output), error => error.code === 'CHAPTER_REVIEW_INCOMPLETE');
+    assert.deepEqual(result.output.repairDirectives, []);
+    assert.equal(result.output.actionStateChecks.length, 4);
   });
 });

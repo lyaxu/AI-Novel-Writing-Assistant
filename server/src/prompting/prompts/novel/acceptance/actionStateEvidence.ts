@@ -21,6 +21,7 @@ function positions(text: string, quote: string): number[] {
 }
 
 export function validateActionStateEvidence(checks: ActionStateCheck[], input: ActionStateEvidenceInput) {
+  const correctionHints: string[] = [];
   const expected = input.expectedSceneKeys?.length ? input.expectedSceneKeys : ["chapter"];
   const coverageIssues = expected.filter((key) => !checks.some((check) => check.sceneKey === key))
     .map((key) => `action_state_coverage_missing:${key}`);
@@ -38,7 +39,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
       : context.get(evidence.sourceId);
     return content !== undefined && positions(content, evidence.quote).length > 0;
   };
-  const rows = checks.map((check): ActionStateCheck => {
+  const rows = checks.map((check, checkIndex): ActionStateCheck => {
     const invalid: string[] = [];
     let missing = false;
     let contradiction = false;
@@ -51,7 +52,8 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
     const actionStart = actionPositions[0];
     const actionEnd = actionStart === undefined ? undefined : actionStart + compact(check.actionEvidence[0].quote).length;
     const entities = new Set<string>();
-    for (const state of check.states) {
+    for (const [stateIndex, state] of check.states.entries()) {
+      const field = `actionStateChecks[${checkIndex}](sceneKey=${check.sceneKey}).states[${stateIndex}]`;
       const key = `${state.dimension}:${state.entity}`;
       if (entities.has(key)) invalid.push(`duplicate_state:${key}`);
       entities.add(key);
@@ -63,17 +65,25 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
           && !positions(input.content, item.quote).some((position) => position <= actionStart))) {
           invalid.push(`before_state_after_action:${key}`);
         }
-        if (!state.afterEvidence.some((item) => item.source === "current_prose"
+        // Missing evidence can be an honest audit result; supplied evidence must still match the action boundary.
+        const explicitlyUnknownAfter = !state.afterEvidence.length
+          && check.verdict === "insufficient_evidence" && state.transitionStatus === "unknown";
+        if (!explicitlyUnknownAfter && !state.afterEvidence.some((item) => item.source === "current_prose"
           && positions(input.content, item.quote).some((position) => position >= actionStart))) {
           invalid.push(`after_state_not_in_current_action:${key}`);
+          correctionHints.push(`${field}.afterEvidence：所引证据未定位到关键行动发生时或之后。actionEvidence=${JSON.stringify(check.actionEvidence.map(item => item.quote))}；afterEvidence=${JSON.stringify(state.afterEvidence.map(item => item.quote))}。行动前的判断可作为beforeEvidence或必要过渡，不能单独证明after；请重新核对所选行动的边界，并引用正文中该行动发生时或之后的状态表现。无需正文重复解释知识，但须引用其在行动中的实际运用；原文不足则如实标未知，不编写新句子。`);
         }
       }
       if (state.transitionStatus === "contradicted") contradiction = true;
       if (state.transitionStatus === "missing") missing = true;
       if (state.transitionStatus === "unknown") unknown = true;
       if (state.transitionStatus === "not_needed" && (state.enablingTransitionRequired || state.stateChanged)) missing = true;
+      if (state.transitionStatus === "not_needed" && (state.enablingTransitionRequired || state.stateChanged)) {
+        correctionHints.push(`${field}：stateChanged=${state.stateChanged}、enablingTransitionRequired=${state.enablingTransitionRequired}与transitionStatus=not_needed矛盾。not_needed只适用于两者都为false。若正文写出了变化，使用established并从正文填写transitionEvidence；变化就是行动本身时可以引用该动作，无需另造前置情节。若变化缺失/相互冲突/无法判断，分别使用missing/contradicted/unknown并同步核对verdict。不要为了通过检查机械修改布尔值或降低结论。`);
+      }
       if (state.transitionStatus === "established") {
         if (!state.transitionEvidence.length) unknown = true;
+        if (!state.transitionEvidence.length) correctionHints.push(`${field}.transitionEvidence：transitionStatus=established但证据为空；请逐字引用正文中的变化过程，行动本身造成变化时可引用actionEvidence。没有证据时须如实重评transitionStatus和verdict。`);
         // A transition can occur within the same action (e.g. an authorized awakening).
         // Only disjoint evidence after that action is deterministically too late; the AI reviews overlapping causality.
         if (state.enablingTransitionRequired && state.transitionEvidence.length && actionEnd !== undefined
@@ -97,7 +107,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
     ])];
     return { ...check, verdict, ...(validationIssues.length ? { validationIssues } : { validationIssues: [] }) };
   });
-  return { checks: rows, coverageIssues };
+  return { checks: rows, coverageIssues, correctionHints };
 }
 
 /** A scene cannot remain earned when the same structured response identifies a broken key action. */
@@ -112,6 +122,9 @@ export function reconcileSceneActionVerdicts(scenes: SceneCausalityVerdict[], ch
 }
 
 export const ACTION_STATE_AUDIT_RULES = [
+  "先选择明确的关键action，再以该action为时间边界填写状态。beforeEvidence证明行动前或开始时；afterEvidence证明行动中或之后（可引用actionEvidence），不能只用更早的认知/决定证明行动后的状态。对未变化的知识，可引用它在该行动中的实际运用，不要求正文再解释一遍知识。",
+  "状态字段联合检查：not_needed仅在stateChanged=false且enablingTransitionRequired=false时成立。stateChanged=true不等于必须有前置准备：变化就是action的结果时，enablingTransitionRequired=false、transitionStatus=established，并引用该动作作为transitionEvidence。必要前提在行动前或行动内建立才可enablingTransitionRequired=true且established。",
+  "字段示例（只示范结构，不带入当前故事）：正文‘她拿着钥匙。她将钥匙交给门卫。门卫收下了钥匙。’，action=交钥匙，item状态before=她持有、after=门卫持有；stateChanged=true、enablingTransitionRequired=false、transitionStatus=established、transitionEvidence引用‘她将钥匙交给门卫。’。不能因为不需要提前准备就填not_needed。",
   "所有 quote 必须逐字复制对应正文的连续短片段，包括标点；不要换主语、补代词、把逗号改成句号或拼接分散的句子。说明写在 explanation。引用可以从句中开始，不必改成完整句。",
   "transitionStatus=established 时必须提供 transitionEvidence；动作本身就是变化时可引用该动作，不要留空。enablingTransitionRequired 只表示本次 action 发生前必须满足的变化，不能把 action 导致的后续结果倒填成行动前提。若所选 action 不能覆盖要审查的事件，请重新选择关键 action 并配准确证据。",
   "actionStateChecks 必须按 expectedSceneKeys 每场恰好选1个决定结果的关键行动（最多8条）；没有场景合同则 sceneKey=chapter，检查1个实际行动/关系决定。状态审查先于场景earned与总分；不能只确认结局发生。",

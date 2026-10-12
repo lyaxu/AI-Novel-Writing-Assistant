@@ -1,0 +1,791 @@
+{
+  "provenance": "User-triggered real acceptance v8 review, 2026-10-11T18:20:25Z through 18:20:53Z; IDs anonymized only. Input prose matches firstChapterReview.json exactly. Neither response passes validation.",
+  "outputs": [
+    {
+      "status": "accepted",
+      "score": {
+        "coherence": 88,
+        "pacing": 84,
+        "repetition": 90,
+        "engagement": 86,
+        "voice": 87,
+        "overall": 87
+      },
+      "summary": "本章作为开篇完整兑现了现实压力、账本异象与出门决定三层推进，四场因果链均有正文证据支撑，无越界或硬性义务缺口，可接收并继续推进。",
+      "sceneCausalityVerdicts": [
+        {
+          "sceneKey": "scene_1",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "劳梓凡拎着那份酸菜鱼站在六楼楼道口",
+            "手机屏幕上超时提醒已经跳了两次"
+          ],
+          "choiceAndResistanceEvidence": "大妈以鞋面油渍索赔两百，堵住楼道口并以报警施压；劳梓凡因下一单倒计时只剩八分钟而选择掏钱私了。",
+          "outcomeMechanismEvidence": "他递出两张一百后，大妈仍向平台投诉，手机随即弹出差评通知，赔钱与扣分同时落地。",
+          "constraintEvidence": [
+            "下一单取餐倒计时只剩八分钟",
+            "差评扣五十，超时扣三十"
+          ],
+          "explanation": "送餐超时、大妈讹诈、平台规则偏向顾客三重要素在正文中依次呈现，私了未消除投诉反而加重损失，结果成因完整。"
+        },
+        {
+          "sceneKey": "scene_2",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "回到出租屋已经是晚上九点多",
+            "他把兜里所有的钱掏出来扔在床上"
+          ],
+          "choiceAndResistanceEvidence": "赵德柱来电催租，劳梓凡接起电话承诺下周凑钱；对方不接受口头承诺，给出下礼拜换锁的硬期限。",
+          "outcomeMechanismEvidence": "电话把模糊的经济压力变成具体倒计时，一万二房租与六十七块三毛的现金形成直接冲突。",
+          "constraintEvidence": [
+            "下季度房租该交了，一万二",
+            "不交的话，我只能换锁了"
+          ],
+          "explanation": "翻钱与催租电话按顺序发生，赵德柱的强硬回应符合其房东身份与利益，经济压力升级机制成立。"
+        },
+        {
+          "sceneKey": "scene_3",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "脚后跟碰到床底一个硬邦邦的东西",
+            "床底堆着几个落灰的纸箱和一只旧旅行袋"
+          ],
+          "choiceAndResistanceEvidence": "劳梓凡第一反应是恶作剧，蹲下翻床底找机关，未找到第二本册子或人为痕迹；账本不回应翻找，只是自动翻页并浮现字迹。",
+          "outcomeMechanismEvidence": "无风、门窗关闭条件下纸页自行翻动，墨迹从空白中渗出，'恶作剧'解释被逐步排除。",
+          "constraintEvidence": [
+            "没有风。窗户关着，门也关着",
+            "床底除了灰就是潮气"
+          ],
+          "explanation": "账本异象建立在床底旧物与翻找失败之上，自动翻页与浮现字迹使劳梓凡无法继续用恶作剧解释，被迫认真对待。"
+        },
+        {
+          "sceneKey": "scene_4",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "劳梓凡掏出手机，打开地图，输入“柳巷街三十七号”",
+            "搜索结果跳出来。城西区，老供销社家属楼"
+          ],
+          "choiceAndResistanceEvidence": "劳梓凡犹豫是否该去，怕惹麻烦也怕警告应验；手机地图显示地址真实存在且距离四站公交，末班车提示催促他动身。",
+          "outcomeMechanismEvidence": "查证结果把恶作剧可能性压到最低，现实压力与'债转你身'警告共同推动他锁门出发。",
+          "constraintEvidence": [
+            "距离他这里四站公交",
+            "公交末班车还有十二分钟到站"
+          ],
+          "explanation": "地址查证真实存在是出门决定的关键前提，正文先查证后出门，因果顺序与动机链条完整。"
+        }
+      ],
+      "progressionChecks": [
+        {
+          "dimension": "event_repetition",
+          "status": "not_applicable",
+          "repeatsEstablishedBeat": null,
+          "addsNewConsequence": null,
+          "priorState": "无已写前章正文",
+          "actualChange": "本章为开篇，建立送餐被讹、催租、账本异象、出门决定四段新事件",
+          "newConsequence": "",
+          "previousEvidence": [],
+          "currentEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "他不知道自己去了会看见什么。但“债转你身”四个字像根刺扎在脑子里，拔不掉。"
+            }
+          ],
+          "explanation": "首章无前文可比对，不存在重演已完成事件的比较职责。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "knowledge_repetition",
+          "status": "not_applicable",
+          "repeatsEstablishedBeat": null,
+          "addsNewConsequence": null,
+          "priorState": "无已写前章正文",
+          "actualChange": "读者与主角同步首次获知账本名字、地址与警告",
+          "newConsequence": "",
+          "previousEvidence": [],
+          "currentEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "“郑小满。”"
+            }
+          ],
+          "explanation": "首章无前文，不存在重复发现已确立信息的问题。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "prior_goal_followthrough",
+          "status": "not_applicable",
+          "repeatsEstablishedBeat": null,
+          "addsNewConsequence": null,
+          "priorState": "无已写前章正文",
+          "actualChange": "本章内劳梓凡从保住工作、凑房租的即时欲望出发，最终做出按地址出门的新决定",
+          "newConsequence": "",
+          "previousEvidence": [],
+          "currentEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "劳梓凡站起来，把册子塞进外卖箱最底层，压在一件旧雨衣下面。"
+            }
+          ],
+          "explanation": "首章无前章已作出的行动决定可供核验，不适用继承目标落实检查。",
+          "repairSuggestion": ""
+        }
+      ],
+      "actionStateChecks": [
+        {
+          "sceneKey": "scene_1",
+          "actor": "劳梓凡",
+          "action": "掏两百块私了",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "他从裤兜里摸出钱包，数了两张一百的递过去。"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "item",
+              "entity": "劳梓凡的钱包现金",
+              "before": "钱包内有至少两百元现金",
+              "requiredForAction": "手头有可支配现金",
+              "after": "递出两百元，钱包现金减少",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "他从裤兜里摸出钱包"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "数了两张一百的递过去"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "not_needed"
+            },
+            {
+              "dimension": "knowledge",
+              "entity": "劳梓凡对误工损失的判断",
+              "before": "知道下一单倒计时只剩八分钟",
+              "requiredForAction": "判断争执成本高于两百元",
+              "after": "选择私了以保住后续单",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "下一单取餐倒计时只剩八分钟"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "两百块是肉疼，但误工扣的钱更多。"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": false,
+              "transitionStatus": "not_needed"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "劳梓凡手头有现金且清楚误工成本，掏钱私了有明确动机与物品前提。"
+        },
+        {
+          "sceneKey": "scene_2",
+          "actor": "劳梓凡",
+          "action": "接起赵德柱电话并承诺下周凑钱",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "“行，我想办法。”"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "knowledge",
+              "entity": "劳梓凡对房租金额与期限的知情",
+              "before": "知道下季度房租即将到期",
+              "requiredForAction": "了解催租金额与对方态度",
+              "after": "确认一万二金额与下礼拜换锁期限",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "“小劳啊，下季度房租该交了，一万二，你什么时候方便？”"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "“不是想办法，是下礼拜之前。”"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": false,
+              "transitionStatus": "not_needed"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "劳梓凡接电话前已知房租压力，通话中确认金额与期限后承诺凑钱，动机与知情前提成立。"
+        },
+        {
+          "sceneKey": "scene_3",
+          "actor": "劳梓凡",
+          "action": "把账本从床底抽出并翻看",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "他伸手进去摸，指尖碰到一个硬壳的边角，拽出来一看，是本旧册子。"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "item",
+              "entity": "床底旧册子",
+              "before": "册子压在床底杂物中未被发现",
+              "requiredForAction": "脚碰到硬物并伸手取出",
+              "after": "册子被取出并翻开，字迹浮现",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "脚后跟碰到床底一个硬邦邦的东西，发出闷响。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "新的一页上，墨迹正从纸面里渗出来。"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "not_needed"
+            },
+            {
+              "dimension": "knowledge",
+              "entity": "劳梓凡对册子性质的认知",
+              "before": "认为册子是房东遗留的普通旧物",
+              "requiredForAction": "翻看后判断是否恶作剧",
+              "after": "因自动翻页与浮现字迹而无法用恶作剧解释",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "都是搬进来时房东留下的杂物。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "他盯着那本摊开的册子看了十几秒，纸页没有再动，字迹清清楚楚地印在那里。"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "not_needed"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "脚碰硬物是取出册子的直接前提，自动翻页与浮现字迹使劳梓凡的认知从普通旧物转向无法解释。"
+        },
+        {
+          "sceneKey": "scene_4",
+          "actor": "劳梓凡",
+          "action": "把账本塞进外卖箱并锁门出发",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "劳梓凡站起来，把册子塞进外卖箱最底层，压在一件旧雨衣下面。"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "knowledge",
+              "entity": "劳梓凡对地址真实性的判断",
+              "before": "怀疑账本是恶作剧",
+              "requiredForAction": "确认地址真实存在后决定出门",
+              "after": "查证地址真实存在，决定按地址去看一眼",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "恶作剧。肯定是恶作剧。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "真实存在。"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "not_needed"
+            },
+            {
+              "dimension": "location",
+              "entity": "劳梓凡的位置",
+              "before": "在出租屋内",
+              "requiredForAction": "锁门离开出租屋",
+              "after": "走出城中村巷口，前往公交站",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "劳梓凡坐在床边，盯着那本册子。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "他走到巷口，回头看了一眼自己的窗户。"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "not_needed"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "查证地址真实存在是出门决定的关键前提，正文先查证后锁门出发，位置与认知变化均有过渡。"
+        }
+      ],
+      "blockingIssues": [],
+      "repairDirectives": [],
+      "missingObligations": [],
+      "repairability": "none",
+      "decisionReason": "本章四场因果链完整，所有 must hit now 义务均在正文中可见兑现，无越界、无连续性断裂、无角色失真，可接收并继续推进。",
+      "riskTags": [
+        "开篇信息密度较高，后续章节需注意账本规则揭示节奏",
+        "第一轮循环完整显形为跨章 payoff，本章仅完成前置提示，需在第2-3章持续承接"
+      ],
+      "assetSyncRecommendation": {
+        "priority": "high",
+        "reason": "本章为全书开篇，建立了账本异象、'不去，债转你身'警告、郑小满名字与地址等核心伏笔，且第一轮循环完整显形为跨章硬截止 payoff，需高优先级同步资产并标记后续承接节点。",
+        "requiresFullPayoffReconcile": true
+      },
+      "continuePolicy": "continue"
+    },
+    {
+      "status": "accepted",
+      "score": {
+        "coherence": 88,
+        "pacing": 84,
+        "repetition": 90,
+        "engagement": 86,
+        "voice": 87,
+        "overall": 87
+      },
+      "summary": "本章作为开篇完整兑现了现实压力、账本异象与出门决定三层推进，四场因果链均有正文证据支撑，无越界或硬性义务缺口，可接收并继续推进。",
+      "sceneCausalityVerdicts": [
+        {
+          "sceneKey": "scene_1",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "劳梓凡拎着那份酸菜鱼站在六楼楼道口",
+            "手机屏幕上超时提醒已经跳了两次"
+          ],
+          "choiceAndResistanceEvidence": "大妈以鞋面油渍索赔两百，堵住楼道口并以报警施压；劳梓凡因下一单倒计时只剩八分钟而选择掏钱私了。",
+          "outcomeMechanismEvidence": "他递出两张一百后，大妈仍向平台投诉，手机随即弹出差评通知，赔钱与扣分同时落地。",
+          "constraintEvidence": [
+            "下一单取餐倒计时只剩八分钟",
+            "差评扣五十，超时扣三十"
+          ],
+          "explanation": "送餐超时、大妈讹诈、平台规则偏向顾客三重要素在正文中依次呈现，私了未消除投诉反而加重损失，结果成因完整。"
+        },
+        {
+          "sceneKey": "scene_2",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "回到出租屋已经是晚上九点多",
+            "他把兜里所有的钱掏出来扔在床上"
+          ],
+          "choiceAndResistanceEvidence": "赵德柱来电催租，劳梓凡接起电话承诺下周凑钱；对方不接受口头承诺，给出下礼拜换锁的硬期限。",
+          "outcomeMechanismEvidence": "电话把模糊的经济压力变成具体倒计时，一万二房租与六十七块三毛的现金形成直接冲突。",
+          "constraintEvidence": [
+            "下季度房租该交了，一万二",
+            "不交的话，我只能换锁了"
+          ],
+          "explanation": "翻钱与催租电话按顺序发生，赵德柱的强硬回应符合其房东身份与利益，经济压力升级机制成立。"
+        },
+        {
+          "sceneKey": "scene_3",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "脚后跟碰到床底一个硬邦邦的东西",
+            "床底堆着几个落灰的纸箱和一只旧旅行袋"
+          ],
+          "choiceAndResistanceEvidence": "劳梓凡第一反应是恶作剧，蹲下翻床底找机关，未找到第二本册子或人为痕迹；账本不回应翻找，只是自动翻页并浮现字迹。",
+          "outcomeMechanismEvidence": "无风、门窗关闭条件下纸页自行翻动，墨迹从空白中渗出，'恶作剧'解释被逐步排除。",
+          "constraintEvidence": [
+            "没有风。窗户关着，门也关着",
+            "床底除了灰就是潮气"
+          ],
+          "explanation": "账本异象建立在床底旧物与翻找失败之上，自动翻页与浮现字迹使劳梓凡无法继续用恶作剧解释，被迫认真对待。"
+        },
+        {
+          "sceneKey": "scene_4",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "劳梓凡掏出手机，打开地图，输入“柳巷街三十七号”",
+            "搜索结果跳出来。城西区，老供销社家属楼"
+          ],
+          "choiceAndResistanceEvidence": "劳梓凡犹豫是否该去，怕惹麻烦也怕警告应验；手机地图显示地址真实存在且距离四站公交，末班车提示催促他动身。",
+          "outcomeMechanismEvidence": "查证结果把恶作剧可能性压到最低，现实压力与'债转你身'警告共同推动他锁门出发。",
+          "constraintEvidence": [
+            "距离他这里四站公交",
+            "公交末班车还有十二分钟到站"
+          ],
+          "explanation": "地址查证真实存在是出门决定的关键前提，正文先查证后出门，因果顺序与动机链条完整。"
+        }
+      ],
+      "actionStateChecks": [
+        {
+          "sceneKey": "scene_1",
+          "actor": "劳梓凡",
+          "action": "掏两百块私了",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "他从裤兜里摸出钱包，数了两张一百的递过去。"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "item",
+              "entity": "劳梓凡的钱包现金",
+              "before": "钱包内有至少两百元现金",
+              "requiredForAction": "手头有可支配现金",
+              "after": "递出两百元，钱包现金减少",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "他从裤兜里摸出钱包"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "数了两张一百的递过去"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "not_needed"
+            },
+            {
+              "dimension": "knowledge",
+              "entity": "劳梓凡对误工损失的判断",
+              "before": "知道下一单倒计时只剩八分钟",
+              "requiredForAction": "判断争执成本高于两百元",
+              "after": "选择私了以保住后续单",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "下一单取餐倒计时只剩八分钟"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "两百块是肉疼，但误工扣的钱更多。"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": false,
+              "transitionStatus": "not_needed"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "劳梓凡手头有现金且清楚误工成本，掏钱私了有明确动机与物品前提。"
+        },
+        {
+          "sceneKey": "scene_2",
+          "actor": "劳梓凡",
+          "action": "接起赵德柱电话并承诺下周凑钱",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "“行，我想办法。”"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "knowledge",
+              "entity": "劳梓凡对房租金额与期限的知情",
+              "before": "知道下季度房租即将到期",
+              "requiredForAction": "了解催租金额与对方态度",
+              "after": "确认一万二金额与下礼拜换锁期限",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "“小劳啊，下季度房租该交了，一万二，你什么时候方便？”"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "“不是想办法，是下礼拜之前。”"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": false,
+              "transitionStatus": "not_needed"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "劳梓凡接电话前已知房租压力，通话中确认金额与期限后承诺凑钱，动机与知情前提成立。"
+        },
+        {
+          "sceneKey": "scene_3",
+          "actor": "劳梓凡",
+          "action": "把账本从床底抽出并翻看",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "他伸手进去摸，指尖碰到一个硬壳的边角，拽出来一看，是本旧册子。"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "item",
+              "entity": "床底旧册子",
+              "before": "册子压在床底杂物中未被发现",
+              "requiredForAction": "脚碰到硬物并伸手取出",
+              "after": "册子被取出并翻开，字迹浮现",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "脚后跟碰到床底一个硬邦邦的东西，发出闷响。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "新的一页上，墨迹正从纸面里渗出来。"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "not_needed"
+            },
+            {
+              "dimension": "knowledge",
+              "entity": "劳梓凡对册子性质的认知",
+              "before": "认为册子是房东遗留的普通旧物",
+              "requiredForAction": "翻看后判断是否恶作剧",
+              "after": "因自动翻页与浮现字迹而无法用恶作剧解释",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "都是搬进来时房东留下的杂物。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "他盯着那本摊开的册子看了十几秒，纸页没有再动，字迹清清楚楚地印在那里。"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "not_needed"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "脚碰硬物是取出册子的直接前提，自动翻页与浮现字迹使劳梓凡的认知从普通旧物转向无法解释。"
+        },
+        {
+          "sceneKey": "scene_4",
+          "actor": "劳梓凡",
+          "action": "把账本塞进外卖箱并锁门出发",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "劳梓凡站起来，把册子塞进外卖箱最底层，压在一件旧雨衣下面。"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "knowledge",
+              "entity": "劳梓凡对地址真实性的判断",
+              "before": "怀疑账本是恶作剧",
+              "requiredForAction": "确认地址真实存在后决定出门",
+              "after": "查证地址真实存在，决定按地址去看一眼",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "恶作剧。肯定是恶作剧。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "真实存在。"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "not_needed"
+            },
+            {
+              "dimension": "location",
+              "entity": "劳梓凡的位置",
+              "before": "在出租屋内",
+              "requiredForAction": "锁门离开出租屋",
+              "after": "走出城中村巷口，前往公交站",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "劳梓凡坐在床边，盯着那本册子。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-1",
+                  "quote": "他走到巷口，回头看了一眼自己的窗户。"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "not_needed"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "查证地址真实存在是出门决定的关键前提，正文先查证后锁门出发，位置与认知变化均有过渡。"
+        }
+      ],
+      "progressionChecks": [
+        {
+          "dimension": "event_repetition",
+          "status": "not_applicable",
+          "priorState": "无已写前章正文",
+          "actualChange": "本章为开篇，建立送餐被讹、催租、账本异象、出门决定四段新事件",
+          "newConsequence": "",
+          "repeatsEstablishedBeat": null,
+          "addsNewConsequence": null,
+          "previousEvidence": [],
+          "currentEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "他不知道自己去了会看见什么。但“债转你身”四个字像根刺扎在脑子里，拔不掉。"
+            }
+          ],
+          "explanation": "首章无前文可比对，不存在重演已完成事件的比较职责。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "knowledge_repetition",
+          "status": "not_applicable",
+          "priorState": "无已写前章正文",
+          "actualChange": "读者与主角同步首次获知账本名字、地址与警告",
+          "newConsequence": "",
+          "repeatsEstablishedBeat": null,
+          "addsNewConsequence": null,
+          "previousEvidence": [],
+          "currentEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "“郑小满。”"
+            }
+          ],
+          "explanation": "首章无前文，不存在重复发现已确立信息的问题。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "prior_goal_followthrough",
+          "status": "not_applicable",
+          "priorState": "无已写前章正文",
+          "actualChange": "本章内劳梓凡从保住工作、凑房租的即时欲望出发，最终做出按地址出门的新决定",
+          "newConsequence": "",
+          "repeatsEstablishedBeat": null,
+          "addsNewConsequence": null,
+          "previousEvidence": [],
+          "currentEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-1",
+              "quote": "劳梓凡站起来，把册子塞进外卖箱最底层，压在一件旧雨衣下面。"
+            }
+          ],
+          "explanation": "首章无前章已作出的行动决定可供核验，不适用继承目标落实检查。",
+          "repairSuggestion": ""
+        }
+      ],
+      "blockingIssues": [],
+      "repairDirectives": [],
+      "missingObligations": [],
+      "repairability": "none",
+      "decisionReason": "本章四场因果链完整，所有 must hit now 义务均在正文中可见兑现，无越界、无连续性断裂、无角色失真，可接收并继续推进。",
+      "riskTags": [
+        "开篇信息密度较高，后续章节需注意账本规则揭示节奏",
+        "第一轮循环完整显形为跨章 payoff，本章仅完成前置提示，需在第2-3章持续承接"
+      ],
+      "assetSyncRecommendation": {
+        "priority": "high",
+        "reason": "本章为全书开篇，建立了账本异象、'不去，债转你身'警告、郑小满名字与地址等核心伏笔，且第一轮循环完整显形为跨章硬截止 payoff，需高优先级同步资产并标记后续承接节点。",
+        "requiresFullPayoffReconcile": true
+      },
+      "continuePolicy": "continue"
+    }
+  ]
+}

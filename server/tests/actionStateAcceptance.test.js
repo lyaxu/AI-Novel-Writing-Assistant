@@ -214,6 +214,47 @@ test("state changes and unmet preconditions cannot be excused with not_needed", 
   assert.deepEqual(repeated, result);
 });
 
+test("explicit unknown state may omit unavailable after evidence without approving the action or inventing repairs", () => {
+  const content = "他把食物送进嘴里。";
+  const row = check({ verdict: "insufficient_evidence" });
+  Object.assign(row.states[0], { before: "给定正文未说明行动前的身体状态", after: "给定正文未说明行动后的身体状态",
+    beforeEvidence: [], afterEvidence: [], transitionEvidence: [], transitionStatus: "unknown" });
+  const input = { chapterId: "c2", chapterOrder: 1, content, expectedSceneKeys: ["s"] };
+  const validated = evidence.validateActionStateEvidence([row], input);
+  assert.equal(validated.checks[0].verdict, "insufficient_evidence");
+  assert.deepEqual(validated.checks[0].validationIssues, []);
+  const raw = { ...assessment([row]), progressionChecks: progressionSchema.CHAPTER_PROGRESSION_DIMENSIONS.map(dimension => ({
+    dimension, status: "not_applicable", repeatsEstablishedBeat: null, addsNewConsequence: null,
+    priorState: "首章没有前文比较职责", actualChange: "", newConsequence: "", previousEvidence: [],
+    currentEvidence: [quote(content)], explanation: "首章无可比较的既有行动。", repairSuggestion: "",
+  })) };
+  const completed = prompts.chapterAcceptanceAssessmentPrompt.postValidate(
+    prompts.generatedChapterAcceptanceAssessmentSchema.parse(raw), input);
+  assert.doesNotThrow(() => source("../src/services/novel/runtime/acceptance/reviewCompletion.ts").assertReviewCompleted(completed));
+  assert.equal(completed.sceneCausalityVerdicts[0].verdict, "insufficient_evidence");
+  const projected = service.normalizeAssessment(completed, content);
+  assert.equal(projected.status, "continue_with_risk");
+  assert.deepEqual(projected.repairDirectives, []);
+  assert.ok(projected.riskTags.length > 0);
+});
+
+test("unknown-state allowance does not excuse earned findings, other transition claims, false quotes or earlier after evidence", () => {
+  const content = "双手反绑在背后。他把食物送进嘴里。";
+  const input = { chapterId: "c2", chapterOrder: 1, content, expectedSceneKeys: ["s"] };
+  for (const variant of ["earned", "established", "not_needed", "invented", "earlier"]) {
+    const row = check({ verdict: "insufficient_evidence" });
+    Object.assign(row.states[0], { afterEvidence: [], transitionEvidence: [], transitionStatus: "unknown" });
+    if (variant === "earned") row.verdict = "earned";
+    if (variant === "established" || variant === "not_needed") row.states[0].transitionStatus = variant;
+    if (variant === "invented") row.states[0].afterEvidence = [quote("正文中不存在的状态。")];
+    if (variant === "earlier") row.states[0].afterEvidence = [quote("双手反绑在背后。")];
+    const validated = evidence.validateActionStateEvidence([row], input).checks[0];
+    assert.ok(validated.validationIssues.some(issue => issue.startsWith("after_state_not_in_current_action:")), variant);
+    if (variant === "earned") assert.ok(validated.validationIssues.includes("earned_without_state_evidence"));
+    if (variant === "invented") assert.ok(validated.validationIssues.some(issue => issue.startsWith("unverified_source:")));
+  }
+});
+
 test("legacy persisted assessments remain readable; fresh structured output requires action rows", () => {
   const legacy = assessment(); delete legacy.actionStateChecks;
   assert.equal(prompts.chapterAcceptanceAssessmentSchema.safeParse(legacy).success, true);
