@@ -41,3 +41,9 @@ CURRENT、WORK_LEDGER、批准方案、wiki及acceptance模块README同步；REA
 http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt800jtgow0la32yn38
 
 F5后点一次“继续自动导演”，从原job的审查继续，不新建任务、不重生成正文、不在运行记录页操作。若再次失败先保存现场读证据，不连续点击。未来断线/休眠/重启续作与书内agent仍是已记录的待设计想法，不扩成本轮自动执行。
+
+## 加载核验完成
+
+2026-10-13 12:59 UTC受控加载及核验完成：旧后端3000/PID14544，应用启动2026-10-13T12:58:13.698Z，加载c10bff9c4bed/v16，health stale=false；44项源码/共享产物hash通过。旧前端5190/PID8500身份未变，新版5173/8787保持关闭。加载后原review只读prepareDirector通过，首章3013字与第二章3652字hash、原任务/范围/预算/账本不变，调用仍31、本轮0、活跃0。无需手动重启，从第二章源页F5后一次继续自动导演。
+
+生产提交c10bff9c4bed，后续仅同步本段加载记录，不重复重启。日志与health/source-manifest/paused-preflight保存在.codex-run/review-semantic-v16-20261013。加载文档为内部证据，无新增用户行为，复用前述最终491项及编译；测试后仅元数据行缩进整理，不改变执行语义。原暂停仍需用户显式继续，不由代理触发。
