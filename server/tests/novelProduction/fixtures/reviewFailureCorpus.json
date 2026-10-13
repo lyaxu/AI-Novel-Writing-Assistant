@@ -1,0 +1,642 @@
+{
+  "schemaVersion": 1,
+  "scope": "Historical real review failure corpus for the approved phase-3 acceptance-contract convergence. Paths are relative to this fixtures directory; testFile paths are relative to server/tests/novelProduction. Dates and metadata are UTC.",
+  "evidenceBoundary": "Raw recorded outputs remain immutable. Historical rejection codes describe the observed contract, not a literary verdict. A current migration may change error wording; do not silently invent a reviewer correction to make a sample pass. Canonical legacy tests are distinct from fresh ID-only wire tests.",
+  "counts": {
+    "recordedOutputs": 15,
+    "recordedFailures": 14,
+    "recordedValidOriginalControls": 1
+  },
+  "entries": [
+    {
+      "id": "first-initial",
+      "fixture": "firstChapterReview.json",
+      "outputPath": "output",
+      "promptVersion": null,
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "firstChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": false
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "quote_integrity",
+        "missing_transition_evidence",
+        "state_transition_consistency"
+      ],
+      "observedValidationCodes": [
+        "unverified_source",
+        "earned_without_state_evidence",
+        "earned_conflicts_with_state_or_transition_order",
+        "action_not_in_current_prose",
+        "current_quote_not_in_current_prose"
+      ],
+      "responseObjectSha256": "a32e6b637b794054d1bced35a6a606e545ef4a788a56431f26caa3bc62991761",
+      "coverage": [
+        {
+          "testFile": "firstChapterReviewRecovery.test.js",
+          "testName": "recorded accepted response requests correction of the review without accepting invented quotations",
+          "mode": "canonical_historical_replay"
+        },
+        {
+          "testFile": "firstChapterReviewRecovery.test.js",
+          "testName": "exhausted review correction remains incomplete with original findings retained and no rewrite directives",
+          "mode": "canonical_historical_replay"
+        }
+      ],
+      "versionEvidence": "Existing fixture preserves request ID but not prompt version; do not infer a version from later fixes."
+    },
+    {
+      "id": "first-v8-0",
+      "fixture": "resumedFirstChapterReview.json",
+      "outputPath": "outputs.0",
+      "promptVersion": "v8",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "firstChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": false
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "temporal_role",
+        "state_transition_consistency"
+      ],
+      "observedValidationCodes": [
+        "after_state_not_in_current_action",
+        "earned_without_required_transition"
+      ],
+      "responseObjectSha256": "9931e91f6752a9c82d2f0f7403bb3628acc47749bf5393342fdd365c22596763",
+      "coverage": [
+        {
+          "testFile": "firstChapterReviewRecovery.test.js",
+          "testName": "both real resumed reviewer responses reproduce the same five validation failures",
+          "mode": "canonical_historical_replay"
+        },
+        {
+          "testFile": "firstChapterReviewRecovery.test.js",
+          "testName": "replaying both real unchanged responses still pauses after exactly one correction, never fabricates acceptance",
+          "mode": "canonical_historical_replay"
+        }
+      ]
+    },
+    {
+      "id": "first-v8-1",
+      "fixture": "resumedFirstChapterReview.json",
+      "outputPath": "outputs.1",
+      "promptVersion": "v8",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "firstChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": false
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "temporal_role",
+        "state_transition_consistency"
+      ],
+      "observedValidationCodes": [
+        "after_state_not_in_current_action",
+        "earned_without_required_transition"
+      ],
+      "responseObjectSha256": "72a8ec18d2b2bc1fd32aad742766287e7a568a7ed82baa4bc38385cf7a1e0584",
+      "coverage": [
+        {
+          "testFile": "firstChapterReviewRecovery.test.js",
+          "testName": "both real resumed reviewer responses reproduce the same five validation failures",
+          "mode": "canonical_historical_replay"
+        },
+        {
+          "testFile": "firstChapterReviewRecovery.test.js",
+          "testName": "replaying both real unchanged responses still pauses after exactly one correction, never fabricates acceptance",
+          "mode": "canonical_historical_replay"
+        }
+      ]
+    },
+    {
+      "id": "first-v9-valid-original",
+      "fixture": "firstChapterCandidateReview.json",
+      "outputPath": "originalOutput",
+      "promptVersion": "v9",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "firstChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": false
+      },
+      "expectedHistoricalDisposition": "valid_original_review",
+      "failureCategories": [],
+      "observedValidationCodes": [],
+      "responseObjectSha256": "7fbc4ac7252b0ba41ad84f25383b5bb45a7c71c72fd0f0df79c873e93e2d511c",
+      "coverage": [
+        {
+          "testFile": "firstChapterReviewRecovery.test.js",
+          "testName": "real v9 original passes; candidate comparison without a duty is valid but its two timing errors remain rejected",
+          "mode": "canonical_historical_replay"
+        },
+        {
+          "testFile": "candidateReviewRecovery.test.js",
+          "testName": "recorded valid original and two invalid candidate reviews retain the 3013-character original through the real review gate",
+          "mode": "canonical_historical_replay"
+        }
+      ],
+      "role": "Positive preservation control: rejected candidate must not replace this manuscript."
+    },
+    {
+      "id": "first-v9-candidate-0",
+      "fixture": "firstChapterCandidateReview.json",
+      "outputPath": "outputs.0",
+      "promptVersion": "v9",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "firstChapterCandidateReview.json",
+        "path": "input",
+        "restoreActualChapterIds": false
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "temporal_role"
+      ],
+      "observedValidationCodes": [
+        "before_state_after_action"
+      ],
+      "responseObjectSha256": "b0feb764b235905662f4cead2ddf8e720051ac4fb531a5707e3a437068b73bfa",
+      "coverage": [
+        {
+          "testFile": "firstChapterReviewRecovery.test.js",
+          "testName": "real v9 original passes; candidate comparison without a duty is valid but its two timing errors remain rejected",
+          "mode": "canonical_historical_replay"
+        },
+        {
+          "testFile": "candidateReviewRecovery.test.js",
+          "testName": "recorded valid original and two invalid candidate reviews retain the 3013-character original through the real review gate",
+          "mode": "canonical_historical_replay"
+        }
+      ]
+    },
+    {
+      "id": "first-v9-candidate-1",
+      "fixture": "firstChapterCandidateReview.json",
+      "outputPath": "outputs.1",
+      "promptVersion": "v9",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "firstChapterCandidateReview.json",
+        "path": "input",
+        "restoreActualChapterIds": false
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "temporal_role"
+      ],
+      "observedValidationCodes": [
+        "before_state_after_action"
+      ],
+      "responseObjectSha256": "bdc15480c9ce26c166f90d6175e072b9a3fae3d8ce0b9c0165a743ffbeb1dc0d",
+      "coverage": [
+        {
+          "testFile": "firstChapterReviewRecovery.test.js",
+          "testName": "real v9 original passes; candidate comparison without a duty is valid but its two timing errors remain rejected",
+          "mode": "canonical_historical_replay"
+        },
+        {
+          "testFile": "candidateReviewRecovery.test.js",
+          "testName": "recorded valid original and two invalid candidate reviews retain the 3013-character original through the real review gate",
+          "mode": "canonical_historical_replay"
+        }
+      ]
+    },
+    {
+      "id": "second-v10-initial",
+      "fixture": "secondChapterReview.json",
+      "outputPath": "outputs.0",
+      "promptVersion": "v10",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": false
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "retrospective_timing",
+        "missing_transition_evidence"
+      ],
+      "observedValidationCodes": [
+        "before_state_after_action",
+        "earned_without_state_evidence"
+      ],
+      "responseObjectSha256": "4e85d74e779a4b82039141ad37edaaefdd828d7ce6a5d90861d2ebbd856b7145",
+      "coverage": [
+        {
+          "testFile": "secondChapterReviewRecovery.test.js",
+          "testName": "recorded chapter 2 responses remain invalid; new timing contract never silently approves old output",
+          "mode": "canonical_historical_replay"
+        },
+        {
+          "testFile": "secondChapterReviewRecovery.test.js",
+          "testName": "both real answers still exhaust review correction and preserve incomplete review rather than fiction edits",
+          "mode": "canonical_historical_replay"
+        }
+      ]
+    },
+    {
+      "id": "second-v10-correction",
+      "fixture": "secondChapterReview.json",
+      "outputPath": "outputs.1",
+      "promptVersion": "v10",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": false
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "unknown_state_with_earned"
+      ],
+      "observedValidationCodes": [
+        "earned_without_state_evidence"
+      ],
+      "responseObjectSha256": "566f95719593236525433053a44fe6d45f6762a41f3924929dd16d7ee05366b6",
+      "coverage": [
+        {
+          "testFile": "secondChapterReviewRecovery.test.js",
+          "testName": "recorded chapter 2 responses remain invalid; new timing contract never silently approves old output",
+          "mode": "canonical_historical_replay"
+        },
+        {
+          "testFile": "secondChapterReviewRecovery.test.js",
+          "testName": "both real answers still exhaust review correction and preserve incomplete review rather than fiction edits",
+          "mode": "canonical_historical_replay"
+        }
+      ],
+      "note": "Recorded correction removed ability evidence and used unknown while retaining earned; it is not a valid corrected review."
+    },
+    {
+      "id": "second-v11-0",
+      "fixture": "secondChapterReviewV11.json",
+      "outputPath": "outputs.0",
+      "promptVersion": "v11",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": false
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "quote_integrity",
+        "temporal_role"
+      ],
+      "observedValidationCodes": [
+        "quote_not_found",
+        "unverified_source",
+        "before_state_after_action"
+      ],
+      "responseObjectSha256": "462e8e4ec207d4090c3279b9b25846c8127233709ab84fd4abe1668069633e3f",
+      "coverage": [
+        {
+          "testFile": "reviewCitationFeedback.test.js",
+          "testName": "recorded v11 replies fail on a quote boundary; the original manuscripts contain the exact interior excerpt",
+          "mode": "canonical_historical_replay"
+        },
+        {
+          "testFile": "reviewCitationFeedback.test.js",
+          "testName": "two unchanged recorded replies still exhaust one correction and keep review incomplete without prose repairs",
+          "mode": "canonical_historical_replay"
+        }
+      ]
+    },
+    {
+      "id": "second-v11-1",
+      "fixture": "secondChapterReviewV11.json",
+      "outputPath": "outputs.1",
+      "promptVersion": "v11",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": false
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "quote_integrity"
+      ],
+      "observedValidationCodes": [
+        "quote_not_found",
+        "unverified_source"
+      ],
+      "responseObjectSha256": "a888f317f5405218dbf944d0a1e44b65dd9a6d52aa2c98ee93bfa925d2d8598c",
+      "coverage": [
+        {
+          "testFile": "reviewCitationFeedback.test.js",
+          "testName": "recorded v11 replies fail on a quote boundary; the original manuscripts contain the exact interior excerpt",
+          "mode": "canonical_historical_replay"
+        },
+        {
+          "testFile": "reviewCitationFeedback.test.js",
+          "testName": "two unchanged recorded replies still exhaust one correction and keep review incomplete without prose repairs",
+          "mode": "canonical_historical_replay"
+        }
+      ]
+    },
+    {
+      "id": "second-v13-initial",
+      "fixture": "secondChapterReviewV13.json",
+      "outputPath": "outputs.0",
+      "promptVersion": "v13",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": true
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "structural_schema"
+      ],
+      "observedValidationCodes": [
+        "sceneCausalityVerdicts.prerequisiteEvidence:expected_string",
+        "sceneCausalityVerdicts.constraintEvidence:expected_string"
+      ],
+      "responseObjectSha256": "7f5705c77ad34a09e92011313502ff2762de40f6c3482f694e92f85c06e68c8e",
+      "coverage": [
+        {
+          "testFile": "reviewTimingContract.test.js",
+          "testName": "recorded first answer mixes reference objects into scene explanation arrays and remains schema-invalid",
+          "mode": "wire_schema_replay"
+        }
+      ],
+      "stage": "initial_response",
+      "responseMetadataPath": "responses.0"
+    },
+    {
+      "id": "second-v13-format-repair",
+      "fixture": "secondChapterReviewV13.json",
+      "outputPath": "outputs.1",
+      "promptVersion": "v13",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": true
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "missing_transition_evidence",
+        "retrospective_timing",
+        "missing_story_timing_declaration"
+      ],
+      "observedValidationCodes": [
+        "earned_without_state_evidence",
+        "before_state_after_action",
+        "beforeEvidenceTiming_missing_in_v14_contract"
+      ],
+      "responseObjectSha256": "d1cbd0e07dfe9e30b29a00abec8919dc230731f08421473a4491e7d2c5f1def9",
+      "coverage": [
+        {
+          "testFile": "reviewTimingContract.test.js",
+          "testName": "recorded format repair still lacks the arrival transition and the semantic retry fixes only that gap",
+          "mode": "canonical_historical_replay"
+        },
+        {
+          "testFile": "reviewTimingContract.test.js",
+          "testName": "one semantic correction receives missing timing, missing transition and late before-evidence together",
+          "mode": "wire_contextual_replay"
+        }
+      ],
+      "stage": "schema_repair",
+      "responseMetadataPath": "responses.1"
+    },
+    {
+      "id": "second-v13-semantic-retry",
+      "fixture": "secondChapterReviewV13.json",
+      "outputPath": "outputs.2",
+      "promptVersion": "v13",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": true
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "retrospective_timing",
+        "missing_story_timing_declaration"
+      ],
+      "observedValidationCodes": [
+        "before_state_after_action",
+        "beforeEvidenceTiming_missing_in_v14_contract"
+      ],
+      "responseObjectSha256": "7d2fd2edd0e29750ccacb8936c7cf61814800d1da57357355f2e4c062c23e1c7",
+      "coverage": [
+        {
+          "testFile": "reviewTimingContract.test.js",
+          "testName": "recorded format repair still lacks the arrival transition and the semantic retry fixes only that gap",
+          "mode": "canonical_historical_replay"
+        },
+        {
+          "testFile": "reviewTimingContract.test.js",
+          "testName": "v14 rejects missing timing in contextual semantic validation while historical records remain readable",
+          "mode": "wire_contextual_replay"
+        }
+      ],
+      "stage": "semantic_retry",
+      "responseMetadataPath": "responses.2"
+    },
+    {
+      "id": "second-v14-0",
+      "fixture": "secondChapterReviewV14.json",
+      "outputPath": "outputs.0",
+      "promptVersion": "v14",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": true
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "state_transition_consistency",
+        "retrospective_timing"
+      ],
+      "observedValidationCodes": [
+        "earned_without_required_transition",
+        "before_state_after_action"
+      ],
+      "responseObjectSha256": "870024d8d5737c5439d41beeeeecc7777dc0b23d2b0620edde2c187277c486f7",
+      "coverage": [],
+      "stage": "initial_response",
+      "responseMetadataPath": "responses.0",
+      "coverageGap": "Newly extracted real sample. Unified review-contract regression must consume this entry.",
+      "note": "All four scenes retain earned with inconsistent state transition declarations; ability timing wrongly declares linear order."
+    },
+    {
+      "id": "second-v14-1",
+      "fixture": "secondChapterReviewV14.json",
+      "outputPath": "outputs.1",
+      "promptVersion": "v14",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": true
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "state_transition_consistency"
+      ],
+      "observedValidationCodes": [
+        "earned_without_required_transition"
+      ],
+      "responseObjectSha256": "650e554790ae00d3d215aea6908cb489822b84f2e7672e9b5b1851849ff25b3e",
+      "coverage": [],
+      "stage": "semantic_retry",
+      "responseMetadataPath": "responses.1",
+      "coverageGap": "Newly extracted real sample. Unified review-contract regression must consume this entry.",
+      "note": "The ability row fixes retrospective timing and stateChanged=false, but all four scenes retain another state-transition inconsistency. This is not a recurring quote-copy failure."
+    }
+  ],
+  "manualSimulations": [
+    {
+      "testFile": "firstChapterReviewRecovery.test.js",
+      "helper": "correctedResponse",
+      "derivedFrom": [
+        "first-initial"
+      ],
+      "origin": "hand_authored_contract_simulation",
+      "manualSimulation": true,
+      "claim": "Offline contract verification only; not a recorded model success, persisted manuscript correction, or literary acceptance."
+    },
+    {
+      "testFile": "firstChapterReviewRecovery.test.js",
+      "helper": "correctedResumedResponse",
+      "derivedFrom": [
+        "first-v8-1"
+      ],
+      "origin": "hand_authored_contract_simulation",
+      "manualSimulation": true,
+      "claim": "Offline contract verification only; not a recorded model success, persisted manuscript correction, or literary acceptance."
+    },
+    {
+      "testFile": "firstChapterReviewRecovery.test.js",
+      "helper": "candidate evidence correction receives precise before/action boundaries and never rewrites the saved input",
+      "derivedFrom": [
+        "first-v9-candidate-1"
+      ],
+      "origin": "hand_authored_contract_simulation",
+      "manualSimulation": true,
+      "claim": "Offline contract verification only; not a recorded model success, persisted manuscript correction, or literary acceptance."
+    },
+    {
+      "testFile": "secondChapterReviewRecovery.test.js",
+      "helper": "simulatedCorrectTimingResponse",
+      "derivedFrom": [
+        "second-v10-initial"
+      ],
+      "origin": "hand_authored_contract_simulation",
+      "manualSimulation": true,
+      "claim": "Offline contract verification only; not a recorded model success, persisted manuscript correction, or literary acceptance."
+    },
+    {
+      "testFile": "reviewCitationFeedback.test.js",
+      "helper": "correctedSimulation",
+      "derivedFrom": [
+        "second-v11-1"
+      ],
+      "origin": "hand_authored_contract_simulation",
+      "manualSimulation": true,
+      "claim": "Offline contract verification only; not a recorded model success, persisted manuscript correction, or literary acceptance."
+    },
+    {
+      "testFile": "referenceAcceptance.test.js",
+      "helper": "hand-authored ID reviewer simulation for the recorded Maoshan v11 reply restores exact prose without rewriting either chapter",
+      "derivedFrom": [
+        "second-v11-1"
+      ],
+      "origin": "hand_authored_contract_simulation",
+      "manualSimulation": true,
+      "claim": "Offline contract verification only; not a recorded model success, persisted manuscript correction, or literary acceptance."
+    },
+    {
+      "testFile": "reviewTimingContract.test.js",
+      "helper": "simulatedTimingResponse",
+      "derivedFrom": [
+        "second-v13-semantic-retry"
+      ],
+      "origin": "hand_authored_contract_simulation",
+      "manualSimulation": true,
+      "claim": "Offline contract verification only; not a recorded model success, persisted manuscript correction, or literary acceptance."
+    }
+  ],
+  "gaps": [
+    {
+      "id": "v14-real-transition-recurrence",
+      "status": "needs_unified_regression",
+      "entries": [
+        "second-v14-0",
+        "second-v14-1"
+      ],
+      "detail": "The v8 stateChanged/not_needed contradiction recurs in v14 despite earlier targeted tests. Require a unified state-contract check and actual v14 response replay; do not resolve by quoting fixes or suppressing review failure."
+    },
+    {
+      "id": "v12-no-real-run",
+      "status": "no_recorded_sample",
+      "detail": "No acceptance v12 live response fixture was found. v12 source/correction-feedback tests are not evidence of a real v12 model run."
+    },
+    {
+      "id": "initial-version-provenance",
+      "status": "metadata_incomplete",
+      "entries": [
+        "first-initial"
+      ],
+      "detail": "The preserved fixture has requestId and stop finish but no promptVersion. Keep unknown unless exact source log is independently recovered."
+    },
+    {
+      "id": "semantic-accuracy",
+      "status": "outside_mechanical_certification",
+      "detail": "Valid ID, exact quotation and coherent enums cannot prove actor identity, whether evidence entails a claim, scene chronology, or literary quality. Historical v11 scene explanations reverse event narration; current regression must not label structural passing as factual or literary approval."
+    },
+    {
+      "id": "version-boundary",
+      "status": "needs_unified_regression",
+      "detail": "Legacy canonical evidence remains readable and testable; fresh generation must use the current ID-only wire contract. Ensure corpus replay distinguishes historical fixtures from fresh wire validation instead of treating canonical quote payloads as new output."
+    }
+  ],
+  "excludedRelatedFixtures": [
+    {
+      "file": "secondChapterPlannerFollowUp.json",
+      "reason": "Planning failure corpus, outside acceptance review."
+    },
+    {
+      "file": "firstChapterResourceProposal.json",
+      "reason": "Actual-state/resource synchronization, outside acceptance review."
+    },
+    {
+      "file": "firstChapterPausedExecution.json",
+      "reason": "Journal/task recovery evidence rather than reviewer response."
+    },
+    {
+      "file": "firstChapterContinueWorkspace.json",
+      "reason": "Workspace recovery projection rather than reviewer response."
+    }
+  ]
+}

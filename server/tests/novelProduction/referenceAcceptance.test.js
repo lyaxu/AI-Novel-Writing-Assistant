@@ -1,10 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  chapterAcceptanceAssessmentPrompt: asset,
+  asset,
   chapterAcceptanceAssessmentSchema,
   generatedChapterAcceptanceAssessmentSchema,
-} = require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts');
+} = require('./legacyReferenceHarness.cjs');
 const { buildEvidenceCatalog, resolveEvidenceReference } = require('../../dist/prompting/prompts/novel/acceptance/evidenceCatalog');
 const { assertReviewCompleted } = require('../../dist/services/novel/runtime/acceptance/reviewCompletion');
 const { runStructuredPrompt, setPromptRunnerStructuredInvokerForTests, preparePromptExecution } = require('../../dist/prompting/core/promptRunner');
@@ -75,7 +75,7 @@ async function replay(outputs, promptInput, assertion) {
 }
 
 test('v14 accepts IDs and resolves exact source, quote and snapshot positions before existing review gates', () => {
-  assert.equal(asset.version, 'v14');
+  assert.equal(asset.outputSchema, require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts').referenceChapterAcceptanceAssessmentSchema);
   const raw = response();
   const original = structuredClone(raw);
   const output = validate(raw);

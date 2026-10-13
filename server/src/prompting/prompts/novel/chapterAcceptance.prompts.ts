@@ -11,6 +11,9 @@ import { chapterProgressionCheckSchema } from "@ai-novel/shared/types/novel/prog
 import { CHAPTER_EMOTION_AUDIT_RULES } from "./context/emotionPresence";
 import { CHAPTER_TYPOGRAPHY_AUDIT_RULES } from "./context/typography";
 import { validateProgressionEvidence, validateAcceptanceIssueSources } from "./acceptance/progressionEvidence";
+import { collectAcceptanceDiagnostics } from "./acceptance/reviewDiagnostics";
+import { referenceActionAssessmentSchema } from "./acceptance/stateAssessment";
+import { validateUnifiedAcceptance, recoverUnifiedAcceptance, unifiedExample } from "./acceptance/reviewContract";
 import { buildEvidenceCatalog } from "./acceptance/evidenceCatalog";
 import { resolveAcceptanceReferences, REFERENCE_AUDIT_RULES, BEFORE_TIMING_CONTRACT, missingReferenceTiming } from "./acceptance/referenceAssessment";
 
@@ -222,6 +225,9 @@ export const chapterAcceptanceAssessmentSchema = z.object({
   actionStateAuditIssues: z.array(z.string()).optional(),
   progressionChecks: z.array(chapterProgressionCheckSchema).max(3).optional(),
   progressionAuditIssues: z.array(z.string()).optional(),
+  reviewContractIssues: z.array(z.string()).optional(),
+  reviewRawResponse: z.unknown().optional(),
+  reviewCorrectionHints: z.array(z.string()).optional(),
   evidenceCatalogSnapshotId: z.string().optional(),
   evidenceReferenceIssues: z.array(z.string()).optional(),
   blockingIssues: z.array(z.object({
@@ -273,7 +279,7 @@ const evidenceReferenceSchema = z.object({ evidenceId: z.string().trim().min(1) 
 const referenceArray = z.array(evidenceReferenceSchema).max(2);
 /** Only IDs cross the new model boundary; canonical quotations are server-owned. */
 export const referenceChapterAcceptanceAssessmentSchema = generatedChapterAcceptanceAssessmentSchema.omit({
-  evidenceCatalogSnapshotId: true, evidenceReferenceIssues: true,
+  evidenceCatalogSnapshotId: true, evidenceReferenceIssues: true, reviewContractIssues: true, reviewCorrectionHints: true, reviewRawResponse: true,
 }).extend({
   actionStateChecks: z.array(actionStateCheckSchema.omit({ validationIssues: true }).extend({
     actionEvidence: referenceArray.min(1),
@@ -291,6 +297,10 @@ export const referenceChapterAcceptanceAssessmentSchema = generatedChapterAccept
   })),
 });
 export type ReferenceChapterAcceptanceOutput = z.infer<typeof referenceChapterAcceptanceAssessmentSchema>;
+export const unifiedChapterAcceptanceAssessmentSchema = referenceChapterAcceptanceAssessmentSchema.extend({
+  actionStateChecks: z.array(referenceActionAssessmentSchema).min(1).max(8),
+});
+export type UnifiedChapterAcceptanceOutput = z.infer<typeof unifiedChapterAcceptanceAssessmentSchema>;
 
 export interface ChapterAcceptancePromptInput {
   chapterId?: string;
@@ -301,27 +311,6 @@ export interface ChapterAcceptancePromptInput {
   content: string;
   expectedSceneKeys?: string[];
   establishedProse?: Array<{ chapterId: string; order: number; content: string }>;
-}
-
-function validateAcceptanceSceneCoverage(output: ChapterAcceptanceAssessmentOutput, input: ChapterAcceptancePromptInput): void {
-  const expected = input.expectedSceneKeys ?? [];
-  const actual = (output.sceneCausalityVerdicts ?? []).map((row) => row.sceneKey);
-  if (actual.length !== expected.length || new Set(actual).size !== actual.length
-    || expected.some((key) => !actual.includes(key))) {
-    throw new Error(`sceneCausalityVerdicts 必须逐一覆盖指定场景，不得缺漏或重复：${expected.join(", ") || "无；返回空数组"}`);
-  }
-}
-
-function reviewEvidenceProblems(
-  audit: ReturnType<typeof validateActionStateEvidence>,
-  progression: ReturnType<typeof validateProgressionEvidence>,
-): string[] {
-  return [
-    ...audit.coverageIssues,
-    ...progression.coverageIssues,
-    ...audit.checks.flatMap(row => (row.validationIssues ?? []).map(issue => `actionStateChecks[${row.sceneKey}]:${issue}`)),
-    ...progression.checks.flatMap(row => (row.validationIssues ?? []).map(issue => `progressionChecks[${row.dimension}]:${issue}`)),
-  ];
 }
 
 const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
@@ -392,7 +381,7 @@ const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
 
 export const resolvedAcceptanceValidation: Pick<PromptAsset<ChapterAcceptancePromptInput, ChapterAcceptanceAssessmentOutput>, "postValidate" | "postValidateFailureRecovery"> = {
   postValidateFailureRecovery: ({ rawOutput, promptInput, validationError }) => {
-    validateAcceptanceSceneCoverage(rawOutput, promptInput);
+    const allDiagnostics = collectAcceptanceDiagnostics(rawOutput, promptInput, { citationMode: "legacy" });
     const blockingIssues = rawOutput.blockingIssues.map((issue) => {
       try {
         validateAcceptanceIssueSources([issue], promptInput);
@@ -409,11 +398,13 @@ export const resolvedAcceptanceValidation: Pick<PromptAsset<ChapterAcceptancePro
     const audit = validateActionStateEvidence(rawOutput.actionStateChecks ?? [], promptInput);
     const progression = validateProgressionEvidence(rawOutput.progressionChecks ?? [], promptInput);
     const hasInvalidIssueSource = blockingIssues.some(issue => issue.sourceValidationIssues?.length);
-    if (!hasInvalidIssueSource && !reviewEvidenceProblems(audit, progression).length) throw new Error(validationError);
+    if (!allDiagnostics.problems.length) throw new Error(validationError);
     // Keep the last completed answer for inspection. The runtime's review-completion
     // gate pauses here; exhaustion is never approval or permission to rewrite prose.
     return {
       ...rawOutput,
+      reviewContractIssues: allDiagnostics.problems,
+      reviewCorrectionHints: allDiagnostics.correctionHints,
       status: hasInvalidIssueSource ? "continue_with_risk" : "needs_manual_review",
       continuePolicy: hasInvalidIssueSource ? "continue" : "pause",
       repairability: "none",
@@ -435,19 +426,16 @@ export const resolvedAcceptanceValidation: Pick<PromptAsset<ChapterAcceptancePro
     };
   },
   postValidate: (output, input) => {
-    validateAcceptanceIssueSources(output.blockingIssues, input);
-    validateAcceptanceSceneCoverage(output, input);
-    const audit = validateActionStateEvidence(output.actionStateChecks ?? [], input);
-    const progression = validateProgressionEvidence(output.progressionChecks ?? [], input);
-    const problems = reviewEvidenceProblems(audit, progression);
+    const diagnostics = collectAcceptanceDiagnostics(output, input, { citationMode: "legacy" });
+    const { audit, progression, problems } = diagnostics;
     if (problems.length) {
       throw Object.assign(new Error([
         "审查回答的证据校验未通过；只纠正审查 JSON，不改正文、不补造剧情。",
         ...problems,
-        ...audit.correctionHints,
+        ...diagnostics.correctionHints,
         "从声明来源逐字复制连续准确原文，保留标点；补齐覆盖、状态变化证据，区分行动前提与行动结果。",
         "没有比较职责时使用 not_applicable；无法核实则如实标记未知，不用高分或 earned 掩盖缺证据。",
-      ].join("\n")), { evidenceProblems: problems });
+      ].join("\n")), { evidenceProblems: problems, evidenceCorrectionHints: diagnostics.correctionHints });
     }
     return {
       ...output,
@@ -472,13 +460,48 @@ function referenceExample(value: unknown): unknown {
   return Object.fromEntries(Object.entries(record).map(([key, item]) => [key, referenceExample(item)]));
 }
 
+export const legacyReferenceAcceptanceValidation: Pick<PromptAsset<ChapterAcceptancePromptInput, ChapterAcceptanceAssessmentOutput, ReferenceChapterAcceptanceOutput>, "postValidate" | "postValidateFailureRecovery"> = {
+  postValidate: (raw, input, context) => {
+    const resolved = resolveAcceptanceReferences(raw, input);
+    const timingProblems = missingReferenceTiming(raw);
+    if (resolved.issues.length) throw new Error([...resolved.issues, ...timingProblems, BEFORE_TIMING_CONTRACT].join("\n"));
+    try {
+      const validated = resolvedAcceptanceValidation.postValidate!(resolved.output, input, context);
+      if (timingProblems.length) throw Object.assign(new Error(timingProblems.join("\n")), { evidenceProblems: [] });
+      return validated;
+    } catch (error) {
+      const problems = (error as { evidenceProblems?: string[] }).evidenceProblems;
+      const allProblems = [...timingProblems, ...(problems ?? [error instanceof Error ? error.message : String(error)])];
+      throw new Error(`${allProblems.join("\n")}\n${BEFORE_TIMING_CONTRACT}\n证据原文由程序按编号还原，只选evidenceId，不生成quote/source/sourceId或改正文。保留关键行动与真实依据，不换行动或删证据躲避核验。缺失前后状态证据须补正确编号或如实标未知并同步动作和场景，不可无证据仍为earned。`);
+    }
+  },
+  postValidateFailureRecovery: ({ rawOutput, promptInput, context, validationError, semanticRetryAttempts }) => {
+    const resolved = resolveAcceptanceReferences(rawOutput, promptInput);
+    const timingProblems = missingReferenceTiming(rawOutput);
+    if (!resolved.issues.length && !timingProblems.length) return resolvedAcceptanceValidation.postValidateFailureRecovery!({
+      rawOutput: resolved.output, promptInput, context, validationError, semanticRetryAttempts,
+    });
+    // Unknown IDs remain inspectable review failure, including in candidate review.
+    return {
+      ...resolved.output, status: "needs_manual_review", continuePolicy: "pause", repairability: "none",
+      evidenceReferenceIssues: resolved.issues,
+      actionStateAuditIssues: [...(resolved.output.actionStateAuditIssues ?? []), ...timingProblems],
+      decisionReason: "审查的证据编号或故事时间判断尚未核实，保留回答和正文，等待完成审查。",
+      riskTags: [...new Set([...resolved.output.riskTags, "acceptance_source_evidence_unverified"])],
+      deferredRepairDirectives: resolved.output.repairDirectives,
+      deferredMissingObligations: resolved.output.missingObligations,
+      repairDirectives: [], missingObligations: [],
+    };
+  },
+};
+
 export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ChapterAcceptancePromptInput,
   ChapterAcceptanceAssessmentOutput,
-  ReferenceChapterAcceptanceOutput
+  UnifiedChapterAcceptanceOutput
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v14",
+  version: "v15",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -512,43 +535,13 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
     { group: "open_conflicts", priority: 70 },
   ],
   structuredOutputHint: {
-    example: referenceExample(CHAPTER_ACCEPTANCE_EXAMPLE),
+    example: unifiedExample(referenceExample(CHAPTER_ACCEPTANCE_EXAMPLE)),
     note: "示例只说明结构，不是当前书的事实或判断；其中占位编号必须替换为本次目录真实编号。一次判断章节接收、修文、继续策略和资产同步优先级。",
   },
-  outputSchema: referenceChapterAcceptanceAssessmentSchema,
+  outputSchema: unifiedChapterAcceptanceAssessmentSchema,
   semanticRetryPolicy: { maxAttempts: 1 },
-  postValidate: (raw, input, context) => {
-    const resolved = resolveAcceptanceReferences(raw, input);
-    const timingProblems = missingReferenceTiming(raw);
-    if (resolved.issues.length) throw new Error([...resolved.issues, ...timingProblems, BEFORE_TIMING_CONTRACT].join("\n"));
-    try {
-      const validated = resolvedAcceptanceValidation.postValidate!(resolved.output, input, context);
-      if (timingProblems.length) throw Object.assign(new Error(timingProblems.join("\n")), { evidenceProblems: [] });
-      return validated;
-    } catch (error) {
-      const problems = (error as { evidenceProblems?: string[] }).evidenceProblems;
-      const allProblems = [...timingProblems, ...(problems ?? [error instanceof Error ? error.message : String(error)])];
-      throw new Error(`${allProblems.join("\n")}\n${BEFORE_TIMING_CONTRACT}\n证据原文由程序按编号还原，只选evidenceId，不生成quote/source/sourceId或改正文。保留关键行动与真实依据，不换行动或删证据躲避核验。缺失前后状态证据须补正确编号或如实标未知并同步动作和场景，不可无证据仍为earned。`);
-    }
-  },
-  postValidateFailureRecovery: ({ rawOutput, promptInput, context, validationError, semanticRetryAttempts }) => {
-    const resolved = resolveAcceptanceReferences(rawOutput, promptInput);
-    const timingProblems = missingReferenceTiming(rawOutput);
-    if (!resolved.issues.length && !timingProblems.length) return resolvedAcceptanceValidation.postValidateFailureRecovery!({
-      rawOutput: resolved.output, promptInput, context, validationError, semanticRetryAttempts,
-    });
-    // Unknown IDs remain inspectable review failure, including in candidate review.
-    return {
-      ...resolved.output, status: "needs_manual_review", continuePolicy: "pause", repairability: "none",
-      evidenceReferenceIssues: resolved.issues,
-      actionStateAuditIssues: [...(resolved.output.actionStateAuditIssues ?? []), ...timingProblems],
-      decisionReason: "审查的证据编号或故事时间判断尚未核实，保留回答和正文，等待完成审查。",
-      riskTags: [...new Set([...resolved.output.riskTags, "acceptance_source_evidence_unverified"])],
-      deferredRepairDirectives: resolved.output.repairDirectives,
-      deferredMissingObligations: resolved.output.missingObligations,
-      repairDirectives: [], missingObligations: [],
-    };
-  },
+  postValidate: (raw, input) => validateUnifiedAcceptance(raw, input),
+  postValidateFailureRecovery: ({ rawOutput, promptInput, validationError }) => recoverUnifiedAcceptance(rawOutput, promptInput, validationError),
   render: (input, context) => [
     new SystemMessage([
       "你是中文长篇小说正文接收闸门。",

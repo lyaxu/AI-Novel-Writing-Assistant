@@ -26,10 +26,24 @@ export const actionStateDimensionCheckSchema = z.object({
     reason: stateText,
   }).optional(),
   afterEvidence: z.array(actionStateEvidenceSchema).max(2),
-  transitionEvidence: z.array(actionStateEvidenceSchema).max(2),
+  // Compatibility projection combines two independently audited evidence roles.
+  transitionEvidence: z.array(actionStateEvidenceSchema).max(4),
   enablingTransitionRequired: z.boolean(),
   stateChanged: z.boolean(),
   transitionStatus: z.enum(["not_needed", "established", "missing", "contradicted", "unknown"]),
+  // Optional for historical records; new reviews retain the two original AI findings.
+  assessment: z.object({
+    prerequisite: z.object({
+      status: z.enum(["satisfied", "established", "missing", "contradicted", "unknown"]),
+      evidence: z.array(actionStateEvidenceSchema).max(2),
+      reason: stateText,
+    }),
+    resultChange: z.object({
+      status: z.enum(["unchanged", "changed", "unsupported", "contradicted", "unknown"]),
+      evidence: z.array(actionStateEvidenceSchema).max(2),
+      reason: stateText,
+    }),
+  }).optional(),
 });
 
 export const actionStateCheckSchema = z.object({

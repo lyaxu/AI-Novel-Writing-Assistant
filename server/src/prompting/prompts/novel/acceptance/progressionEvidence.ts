@@ -3,29 +3,49 @@ import type { ActionStateEvidenceInput } from "./actionStateEvidence";
 
 const compact = (text: string) => text.replace(/\s+/gu, "");
 
-/** Reject a falsely attributed issue citation so the existing bounded semantic repair can correct it. */
-export function validateAcceptanceIssueSources(
+export interface AcceptanceSourceDiagnostic {
+  path: string;
+  code: "current_issue_source_missing" | "issue_quote_source_mismatch";
+  message: string;
+}
+
+/** Collect every independently checkable source problem for the same bounded correction. */
+export function collectAcceptanceIssueSources(
   issues: Array<{ code: string; sourceEvidence?: Array<{ source: string; sourceId: string; quote: string }> }>,
   input: ActionStateEvidenceInput,
-) {
+): AcceptanceSourceDiagnostic[] {
+  const diagnostics: AcceptanceSourceDiagnostic[] = [];
   const prior = new Map((input.establishedProse ?? [])
     .filter((chapter) => chapter.order < input.chapterOrder && chapter.chapterId !== input.chapterId)
     .map((chapter) => [chapter.chapterId, chapter.content]));
-  for (const issue of issues) {
+  for (const [issueIndex, issue] of issues.entries()) {
+    const path = `blockingIssues[${issueIndex}](code=${issue.code}).sourceEvidence`;
     // Historical persisted records have no sourceEvidence. Never fabricate citations for them.
     if (issue.sourceEvidence === undefined) continue;
     if (!issue.sourceEvidence.some((row) => row.source === "current_prose")) {
-      throw new Error(`Issue ${issue.code}: sourceEvidence must include current_prose; prior prose alone cannot prove a current chapter defect.`);
+      diagnostics.push({ path, code: "current_issue_source_missing",
+        message: `Issue ${issue.code}: sourceEvidence must include current_prose; prior prose alone cannot prove a current chapter defect.` });
     }
-    for (const row of issue.sourceEvidence) {
+    for (const [evidenceIndex, row] of issue.sourceEvidence.entries()) {
       const source = row.source === "current_prose"
         ? row.sourceId === (input.chapterId ?? "current") ? input.content : undefined
         : row.source === "established_context" ? prior.get(row.sourceId) : undefined;
       if (source === undefined || !compact(row.quote) || !compact(source).includes(compact(row.quote))) {
-        throw new Error(`Issue ${issue.code}: sourceEvidence quote does not belong to declared ${row.source}/${row.sourceId}; copy a continuous exact quote from that source, never relabel prior prose as current prose.`);
+        diagnostics.push({ path: `${path}[${evidenceIndex}]`, code: "issue_quote_source_mismatch",
+          message: `Issue ${issue.code}: sourceEvidence quote does not belong to declared ${row.source}/${row.sourceId}; actual=${JSON.stringify(row)}.` });
       }
     }
   }
+  return diagnostics;
+}
+
+/** Historical throw-based facade retains its contract without dropping later source failures. */
+export function validateAcceptanceIssueSources(
+  issues: Parameters<typeof collectAcceptanceIssueSources>[0],
+  input: ActionStateEvidenceInput,
+) {
+  const diagnostics = collectAcceptanceIssueSources(issues, input);
+  if (diagnostics.length) throw new Error(diagnostics.map(item => `${item.path}: ${item.message}`).join("\n"));
 }
 
 /** Validate provenance only. Whether repetition earns its place remains the AI's semantic judgment. */

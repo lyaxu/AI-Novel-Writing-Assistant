@@ -37,8 +37,8 @@ test('quote feedback names the exact field and declared source, without claiming
   assert.ok(feedback.includes(badQuote));
   assert.match(feedback, /未找到连续准确原文/);
   assert.match(feedback, /不判断时序/);
-  assert.match(feedback, /不能删证据后仍保留earned/);
-  assert.match(feedback, /不能为匹配引用修改正文/);
+  assert.match(feedback, /不能删除真实证据来认证通过/);
+  assert.match(feedback, /不能修改正文/);
   assert.doesNotMatch(issues, /after_state_not_in_current_action/);
   assert.doesNotMatch(feedback, /未定位到关键行动发生时或之后/);
 });

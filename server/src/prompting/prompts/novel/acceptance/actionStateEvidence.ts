@@ -31,7 +31,7 @@ function evidencePositions(text: string, evidence: ActionStateEvidence): number[
   return positions(text, evidence.quote);
 }
 
-export function validateActionStateEvidence(checks: ActionStateCheck[], input: ActionStateEvidenceInput) {
+export function validateActionStateEvidence(checks: ActionStateCheck[], input: ActionStateEvidenceInput, options?: { citationMode: "refs" | "legacy" }) {
   const correctionHints: string[] = [];
   const expected = input.expectedSceneKeys?.length ? input.expectedSceneKeys : ["chapter"];
   const coverageIssues = expected.filter((key) => !checks.some((check) => check.sceneKey === key))
@@ -60,7 +60,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
       const reason = problem === "quote_not_found" ? "在声明来源中未找到连续准确原文"
         : problem === "declared_source_unavailable" ? "声明的来源ID未提供对应正文"
           : "计划不是已发生事实的正文来源";
-      correctionHints.push(`${field}[${index}]：${problem}，${reason}。source=${item.source}，sourceId=${JSON.stringify(item.sourceId)}，quote=${JSON.stringify(item.quote)}。这条引用尚未定位，不判断时序。先回到声明来源逐字核对并纠正本字段，不要原样保留已被拒绝的quote；摘取句中片段时不得自行在片段两端添加引号、句号、主语或其他原文没有的字符。JSON字符串的外层双引号只是语法，不属于引文内容。来源不对时核对真实已写章节，不能只换sourceId冒充当前正文。找不到依据则按证据不足同步相关结论，不能删证据后仍保留earned，也不能为匹配引用修改正文。`);
+      correctionHints.push(`${field}[${index}]：${problem}，${reason}。source=${item.source}，sourceId=${JSON.stringify(item.sourceId)}，quote=${JSON.stringify(item.quote)}。这条引用尚未定位，不判断时序。${options?.citationMode === "refs" ? "从本次目录选择支持结论的evidenceId；原文、来源和位置由程序还原，不输出quote/source/sourceId。" : "回到声明来源逐字核对连续原文，不要额外添加引号或改标点；JSON字符串外层引号不是引文内容，不可仅替换sourceId冒充来源。"}找不到依据则如实标未知，不能删除真实证据来认证通过，也不能修改正文。`);
     });
   };
   const rows = checks.map((check, checkIndex): ActionStateCheck => {
@@ -92,7 +92,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
       entities.add(key);
       const cited = [...state.beforeEvidence, ...state.afterEvidence, ...state.transitionEvidence];
       if (cited.some((item) => !isFact(item))) invalid.push(`unverified_source:${key}`);
-      for (const role of ["beforeEvidence", "afterEvidence", "transitionEvidence"] as const) {
+      for (const role of (state.assessment ? ["beforeEvidence", "afterEvidence"] : ["beforeEvidence", "afterEvidence", "transitionEvidence"]) as Array<"beforeEvidence" | "afterEvidence" | "transitionEvidence">) {
         explainSources(state[role], `${field}.${role}`);
       }
       const afterSourcesLocated = state.afterEvidence.length > 0 && state.afterEvidence.every(isFact);
@@ -109,7 +109,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
       const retrospectiveSourceValid = state.beforeEvidence.some(item => item.source === "current_prose" && isFact(item))
         && state.beforeEvidence.every(isFact);
       if (retrospective && !retrospectiveSourceValid) invalid.push(`retrospective_before_source_missing:${key}`);
-      if (retrospective && state.enablingTransitionRequired) {
+      if (retrospective && state.enablingTransitionRequired && !state.assessment) {
         invalid.push(`retrospective_conflicts_with_required_transition:${key}`);
         correctionHints.push(`${field}：既有状态回叙与enablingTransitionRequired=true不能同时用来豁免前提核验。请按正文判断是早已具备条件，还是本次行动需要先发生变化；后者仍须给出真实的前置transitionEvidence，不能用回叙标签替代。`);
       }
@@ -118,18 +118,19 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
       // Only consume an explicit, source-backed semantic finding. This does not certify
       // the AI's literary judgment, infer tense, or excuse a missing enabling transition.
       const explicitTiming = timingReasonPresent && (
-        (retrospective && retrospectiveSourceValid && !state.enablingTransitionRequired)
+        (retrospective && retrospectiveSourceValid && (!state.enablingTransitionRequired || Boolean(state.assessment)))
         || timing?.relation === "not_before_action" || timing?.relation === "unknown"
       );
       if (actionStart !== undefined) {
         if (!explicitTiming && state.beforeEvidence.some((item) => item.source === "current_prose" && isFact(item)
           && !evidencePositions(input.content, item).some((position) => position <= actionStart))) {
           invalid.push(`before_state_after_action:${key}`);
-          correctionHints.push(`${field}.beforeEvidence：引文在文本中的位置晚于actionEvidence起点，尚缺故事时间判断；晚叙述不等于晚发生。actionEvidence=${JSON.stringify(check.actionEvidence.map(item => item.quote))}；beforeEvidence=${JSON.stringify(state.beforeEvidence.map(item => item.quote))}。请结合完整正文判断：若引文回述行动前已有的状态，保留准确引文并填写beforeEvidenceTiming={relation:"retrospective_prior_state",reason:"说明该事实为何早于本次行动且无需临时获得"}；若确实在行动后才成立，填not_before_action并同步给出contradicted/unearned；无法判断填unknown并将动作与场景结论同步为insufficient_evidence。不可换一个行动躲开核验、删除真实依据或改写正文。`);
+          correctionHints.push(`${field}.beforeEvidence：引文在文本中的位置晚于actionEvidence起点，尚缺故事时间判断；晚叙述不等于晚发生。actionEvidence=${JSON.stringify(check.actionEvidence.map(item => item.quote))}；beforeEvidence=${JSON.stringify(state.beforeEvidence.map(item => item.quote))}。请结合完整正文判断：若引文回述行动前已有的状态，保留准确依据并填写beforeEvidenceTiming={relation:"retrospective_prior_state",reason:"说明该事实为何早于本次行动"}；若确实在行动后才成立，填not_before_action；无法判断填unknown。${options?.citationMode === "refs" ? "结合正文同步核对prerequisite和resultChange，行动结论由程序汇总；引用仍只选evidenceId。" : "同步给出contradicted/unearned或insufficient_evidence的动作与场景结论。"}不可换一个行动躲开核验、删除真实依据或改写正文。`);
         }
         // Missing evidence can be an honest audit result; supplied evidence must still match the action boundary.
         const explicitlyUnknownAfter = !state.afterEvidence.length
-          && check.verdict === "insufficient_evidence" && state.transitionStatus === "unknown";
+          && (state.assessment ? state.assessment.resultChange.status === "unknown"
+            : check.verdict === "insufficient_evidence" && state.transitionStatus === "unknown");
         // An unlocated quotation is a provenance failure, not evidence that it happened too early.
         if (!explicitlyUnknownAfter && state.afterEvidence.every(isFact)
           && (!state.afterEvidence.length || hasCurrentAfter)
@@ -139,6 +140,47 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
           correctionHints.push(`${field}.afterEvidence：所引证据未定位到关键行动发生时或之后。actionEvidence=${JSON.stringify(check.actionEvidence.map(item => item.quote))}；afterEvidence=${JSON.stringify(state.afterEvidence.map(item => item.quote))}。行动前的判断可作为beforeEvidence或必要过渡，不能单独证明after；请重新核对所选行动的边界，并引用正文中该行动发生时或之后的状态表现。无需正文重复解释知识，但须引用其在行动中的实际运用；原文不足则如实标未知，不编写新句子。`);
         }
       }
+      if (state.assessment) {
+        const { prerequisite, resultChange } = state.assessment;
+        explainSources(prerequisite.evidence, `${field}.prerequisite.evidence`);
+        explainSources(resultChange.evidence, `${field}.resultChange.evidence`);
+        const requireEvidence = (evidence: ActionStateEvidence[], role: string, current: boolean) => {
+          if (!evidence.length || evidence.some(item => !isFact(item) || current && item.source !== "current_prose")) {
+            invalid.push(`assessment_evidence_missing_or_invalid:${key}:${role}`);
+            correctionHints.push(`${field}.${role}.evidence：声明的判断需要${current ? "本章" : "已提供正文"}依据。选择支持该判断的目录evidenceId；不能只因结果出现就认证前提成立，也不能把计划或别人的状态当该人物的证据。`);
+          }
+        };
+        if (["satisfied", "established"].includes(prerequisite.status)) {
+          requireEvidence(prerequisite.evidence, "prerequisite", prerequisite.status === "established");
+        }
+        if (prerequisite.status === "established" && prerequisite.evidence.length && prerequisite.evidence.every(isFact)
+          && actionEnd !== undefined && prerequisite.evidence.every(item => item.source === "current_prose"
+            && evidencePositions(input.content, item).every(position => position >= actionEnd))) {
+          contradiction = true;
+          invalid.push(`prerequisite_established_after_action:${key}`);
+          correctionHints.push(`${field}.prerequisite：建立必要前提的全部证据都晚于行动结束；不能用行动后取得的条件认证行动。按完整正文重新判断前提，确实缺失/冲突则给missing/contradicted，不能凭空补过程。`);
+        }
+        if (prerequisite.status === "satisfied" && state.beforeEvidenceTiming?.relation !== "retrospective_prior_state"
+          && state.beforeEvidenceTiming?.relation !== "unknown" && state.beforeEvidenceTiming?.relation !== "not_before_action"
+          && actionStart !== undefined && prerequisite.evidence.some(item => item.source === "current_prose" && isFact(item)
+            && evidencePositions(input.content, item).every(position => position > actionStart))) {
+          invalid.push(`prerequisite_satisfied_after_action:${key}`);
+          correctionHints.push(`${field}.prerequisite：既有条件的证据后叙，需要beforeEvidenceTiming明确说明是否回述行动前已有状态；不得把事后才成立的条件填satisfied。`);
+        }
+        if (resultChange.status === "changed") {
+          requireEvidence(resultChange.evidence, "resultChange", true);
+          if (resultChange.evidence.length && resultChange.evidence.every(isFact) && actionStart !== undefined
+            && !resultChange.evidence.some(item => item.source === "current_prose" && evidencePositions(input.content, item).some(position => position >= actionStart))) {
+            invalid.push(`result_change_before_action:${key}`);
+            correctionHints.push(`${field}.resultChange：行动结果变化应由行动中或之后的本章证据支持；前置准备不能独自证明结果。无法定位则如实unknown，不改正文。`);
+          }
+        }
+        if (prerequisite.status === "missing" || resultChange.status === "unsupported") missing = true;
+        if (prerequisite.status === "contradicted" || resultChange.status === "contradicted") contradiction = true;
+        if (prerequisite.status === "unknown" || resultChange.status === "unknown") unknown = true;
+        // New assessments are authoritative; the legacy transition summary is a compatibility projection.
+        continue;
+      }
       if (state.transitionStatus === "contradicted") contradiction = true;
       if (state.transitionStatus === "missing") missing = true;
       if (state.transitionStatus === "unknown") unknown = true;
@@ -147,11 +189,12 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
       }
       if (state.transitionStatus === "not_needed" && (state.enablingTransitionRequired || state.stateChanged)) missing = true;
       if (state.transitionStatus === "not_needed" && (state.enablingTransitionRequired || state.stateChanged)) {
+        invalid.push(`inconsistent_transition_fields:${key}`);
         correctionHints.push(`${field}：stateChanged=${state.stateChanged}、enablingTransitionRequired=${state.enablingTransitionRequired}与transitionStatus=not_needed矛盾。not_needed只适用于两者都为false。若正文写出了变化，使用established并从正文填写transitionEvidence；变化就是行动本身时可以引用该动作，无需另造前置情节。若变化缺失/相互冲突/无法判断，分别使用missing/contradicted/unknown并同步核对verdict。不要为了通过检查机械修改布尔值或降低结论。`);
       }
       if (state.transitionStatus === "established") {
         if (!state.transitionEvidence.length) unknown = true;
-        if (!state.transitionEvidence.length) correctionHints.push(`${field}.transitionEvidence：transitionStatus=established但证据为空；请逐字引用正文中的变化过程，行动本身造成变化时可引用actionEvidence。没有证据时须如实重评transitionStatus和verdict。`);
+        if (!state.transitionEvidence.length) correctionHints.push(`${field}.transitionEvidence：transitionStatus=established但证据为空；${options?.citationMode === "refs" ? "从目录选择变化过程的evidenceId" : "逐字引用正文中的变化过程"}，行动本身造成变化时可引用actionEvidence。没有证据时须如实重评transitionStatus和verdict。`);
         // A transition can occur within the same action (e.g. an authorized awakening).
         // Only disjoint evidence after that action is deterministically too late; the AI reviews overlapping causality.
         if (state.enablingTransitionRequired && state.transitionEvidence.length
@@ -159,6 +202,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
           && state.transitionEvidence.every((item) => item.source === "current_prose"
             && evidencePositions(input.content, item).every((position) => position >= actionEnd))) {
           contradiction = true;
+          correctionHints.push(`${field}.transitionEvidence：所选必要前提的证据全部晚于关键行动结束；核对是否实际事后获得，不能仅以结果发生保持earned。`);
           // Unlike an invalid citation, this is a witnessed but too-late enabling event.
         }
       }

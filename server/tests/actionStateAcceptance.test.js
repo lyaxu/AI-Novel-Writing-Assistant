@@ -31,6 +31,17 @@ const evidenceCatalog = source("../src/prompting/prompts/novel/acceptance/eviden
 const referenceAssessment = source("../src/prompting/prompts/novel/acceptance/referenceAssessment.ts", {
   "./evidenceCatalog": evidenceCatalog,
 });
+const reviewDiagnostics = source("../src/prompting/prompts/novel/acceptance/reviewDiagnostics.ts", {
+  "./actionStateEvidence": evidence, "./progressionEvidence": progressionEvidence,
+});
+const stateAssessment = source("../src/prompting/prompts/novel/acceptance/stateAssessment.ts", {
+  "@ai-novel/shared/types/novel/sceneCausality": shared, "./evidenceCatalog": evidenceCatalog,
+});
+const reviewContract = source("../src/prompting/prompts/novel/acceptance/reviewContract.ts", {
+  "./evidenceCatalog": evidenceCatalog, "./referenceAssessment": referenceAssessment,
+  "./stateAssessment": stateAssessment, "./reviewDiagnostics": reviewDiagnostics,
+  "./actionStateEvidence": evidence,
+});
 const rawPrompts = source("../src/prompting/prompts/novel/chapterAcceptance.prompts.ts", {
   "@ai-novel/shared/types/novel/sceneCausality": shared,
   "@ai-novel/shared/types/chapterProseContract": { CHAPTER_PROSE_QUALITY_AUDIT_RULES: [] },
@@ -44,6 +55,9 @@ const rawPrompts = source("../src/prompting/prompts/novel/chapterAcceptance.prom
   "./acceptance/progressionEvidence": progressionEvidence,
   "./acceptance/evidenceCatalog": evidenceCatalog,
   "./acceptance/referenceAssessment": referenceAssessment,
+  "./acceptance/stateAssessment": stateAssessment,
+  "./acceptance/reviewDiagnostics": reviewDiagnostics,
+  "./acceptance/reviewContract": reviewContract,
 });
 // Quote-based fixtures exercise resolved validation; the production ID-only wire has separate tests.
 const { asset: resolvedAsset, productionAsset } = require("./novelProduction/resolvedAcceptanceHarness.cjs")
@@ -221,7 +235,8 @@ test("planned assertions, wrong source IDs and invented quotes become visible un
 test("state changes and unmet preconditions cannot be excused with not_needed", () => {
   const row = check(); row.states[0].transitionStatus = "not_needed";
   const result = evaluate(row, "双手反绑在背后。他把食物送进嘴里。");
-  assert.equal(result.actionStateChecks[0].verdict, "unearned");
+  assert.equal(result.actionStateChecks[0].verdict, "insufficient_evidence");
+  assert.ok(result.actionStateChecks[0].validationIssues.some(issue => issue.startsWith("inconsistent_transition_fields:")));
   const repeated = service.normalizeAssessment(result, "双手反绑在背后。他把食物送进嘴里。");
   assert.deepEqual(repeated, result);
 });

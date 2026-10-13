@@ -6,11 +6,11 @@ const input = structuredClone(require('./fixtures/secondChapterReview.json').inp
 input.chapterId = fixture.provenance.chapterId;
 input.establishedProse[0].chapterId = fixture.provenance.previousChapterId;
 const {
-  chapterAcceptanceAssessmentPrompt: asset,
+  asset,
   chapterAcceptanceAssessmentSchema,
   generatedChapterAcceptanceAssessmentSchema,
   resolvedAcceptanceValidation,
-} = require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts');
+} = require('./legacyReferenceHarness.cjs');
 const { buildEvidenceCatalog, resolveEvidenceReference } = require('../../dist/prompting/prompts/novel/acceptance/evidenceCatalog');
 const { validateActionStateEvidence } = require('../../dist/prompting/prompts/novel/acceptance/actionStateEvidence');
 const { assertReviewCompleted } = require('../../dist/services/novel/runtime/acceptance/reviewCompletion');
@@ -78,7 +78,7 @@ test('recorded format repair still lacks the arrival transition and the semantic
 });
 
 test('v14 rejects missing timing in contextual semantic validation while historical records remain readable', () => {
-  assert.equal(asset.version, 'v14');
+  assert.equal(asset.outputSchema, require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts').referenceChapterAcceptanceAssessmentSchema);
   const last = fixture.outputs[2];
   const result = asset.outputSchema.safeParse(last);
   assert.equal(result.success, true, 'absence must not trigger context-free JSON repair to invent story timing');

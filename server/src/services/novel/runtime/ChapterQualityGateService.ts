@@ -124,6 +124,8 @@ export class ChapterQualityGateService {
   }
 
   private isCacheable(result: ChapterAcceptanceAssessmentResult): boolean {
+    // A parsed recovery report is not a completed review and must never become a success cache.
+    try { assertReviewCompleted(result?.assessment); } catch { return false; }
     const checks = result?.assessment?.progressionChecks;
     const dimensions = ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"] as const;
     const statuses = ["progressed", "justified_repetition", "stalled", "insufficient_evidence", "not_applicable"];

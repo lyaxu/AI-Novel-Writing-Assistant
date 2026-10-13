@@ -117,11 +117,12 @@ test('valid negative findings remain local review work rather than triggering an
   });
 });
 
-test('both real resumed reviewer responses reproduce the same five validation failures', () => {
+test('both real resumed reviewer responses reproduce timing and transition failures including the inconsistent contract', () => {
   for (const output of resumed.outputs) {
     assert.throws(() => asset.postValidate(structuredClone(output), fixture.input), error => {
-      const issues = error.message.split('\n').filter(line => /^actionStateChecks\[scene_/.test(line));
-      assert.equal(issues.length, 5);
+      const issues = error.evidenceProblems.filter(line => line.startsWith('actionStateChecks['));
+      assert.equal(issues.length, 10);
+      assert.equal(issues.filter(line => line.includes('inconsistent_transition_fields')).length, 5);
       assert.equal(issues.filter(line => line.includes('after_state_not_in_current_action')).length, 2);
       assert.equal(issues.filter(line => line.includes('earned_without_required_transition')).length, 3);
       assert.doesNotMatch(error.message, /unverified_source|quote_not_in_current_prose/);
@@ -184,7 +185,7 @@ test('real v9 original passes; candidate comparison without a duty is valid but 
   for (const output of candidateReview.outputs) {
     assert.ok(validateProgressionEvidence(output.progressionChecks, candidateReview.input).checks.every(row => row.validationIssues.length === 0));
     assert.throws(() => asset.postValidate(structuredClone(output), candidateReview.input), error => {
-      const errors = error.message.split('\n').filter(line => /^actionStateChecks\[scene_/.test(line));
+      const errors = error.evidenceProblems.filter(line => line.startsWith('actionStateChecks['));
       assert.equal(errors.length, 2);
       assert.ok(errors.every(line => line.includes('before_state_after_action')));
       assert.match(error.message, /states\[0\]\.beforeEvidence/);
