@@ -47,3 +47,9 @@
 2026-10-13 17:02 UTC（用户时区12:02）受控加载完成：旧后端3000/PID5000，应用启动17:02:25.538Z，源码提交41ea6981b3e4/v17，5190代理health通过、stale=false。47项源码/共享产物hash通过；旧前端41368/5190身份未变，新版5173/8787保持关闭。加载后只读prepareDirector通过，原review人工暂停、两章hash/范围/预算/账本不变，调用35、代理0、活跃0。可从第二章原源页刷新后一次继续自动导演，无需运行脚本。
 
 证据为本轮维护目录source-manifest.json、health-loaded.json、paused-preflight.json、protected-services.json和启动日志。代码提交41ea6981；本段仅同步运行证据，复用上文565项与编译，不重复构建或重启。UI与真实模型审查仍由用户验收，不代表阶段3真实稳定性和固定版本十章已完成。
+
+## 用户实跑推进与三章误完成诊断
+
+2026-10-13 17:24 UTC只读核验：用户继续v17后第二章正文/审查/资源入账完成，原job17:13 succeeded。首章3013字hash不变，第二章已接收3680字（hash 4704d2b0170166b28e798971db8c2b6aa295a04db03c9141bf16686330da309a）。导演原范围1—3，但数据库只有1、2章，任务却succeeded/workflow_completed/100%，快照total=3/completed=2/remaining=0。纯函数复现同样漏掉第3章；主因是允许逐章补规划时，剩余量只统计已实体化Chapter行，缺号不计待办，成功分支遂提前完成。后台jobs/commands/sideEffects均0，继续等待不会推进。累计调用按原统计窗口42（上轮35，本轮用户触发7，代理0）。下一步应整体修复范围缺号计数、第三章规划衔接、成功判定、已误完成原任务的安全恢复与UI投影；不能只改100%标签或重建任务。当前仅诊断留证，不改产品代码/DB、不重启、不调用模型。
+
+证据：同维护目录completion-mismatch.json与只读inspect-completion.cjs；server日志17:13成功。buildDirectorAutoExecutionState仅从selected实体行计算remaining；ScopeRuntime允许lazy时放过missingChapterOrders，但没有将缺号交给待规划范围；Runtime成功分支remaining=0即recordCompletedCheckpoint。UI主流程完成来自该错误完成状态；用户看到仍像进行中的表现尚需连同dashboard mode投影核验，未声称做过浏览器验收。v17审查本次成功不代表整条阶段3及固定版本十章完成。当前只做诊断，无新增用户功能和稳定修复规则，不刷新发布说明或重复565项；后续修复应补缺号/范围完整性/原任务恢复回归及wiki。
