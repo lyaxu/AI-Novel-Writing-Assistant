@@ -165,7 +165,7 @@ Open-source AI novel writing assistant and long-form production studio.
 
 #### 修复
 
-- 审查引用不准确时，明确指出需要核对的原文，避免误判为情节先后问题；在原有纠正次数内处理，保留正文和严格的来源检查。
+- 审查直接选取正文片段作为依据，由程序保留准确原文与位置，避免摘录时增删引号或改写文字导致反复中断；初审和修订稿复审共用，错误依据仍需核对，原稿保持保存。
 
 完整更新历史见 [版本更新说明](docs/releases/release-notes.md)。
 

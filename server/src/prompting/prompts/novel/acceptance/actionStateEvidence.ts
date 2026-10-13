@@ -20,6 +20,17 @@ function positions(text: string, quote: string): number[] {
   return found;
 }
 
+/** Catalog citations retain their exact occurrence; legacy records alone use text search. */
+function evidencePositions(text: string, evidence: ActionStateEvidence): number[] {
+  if (evidence.start !== undefined || evidence.end !== undefined) {
+    if (!Number.isInteger(evidence.start) || !Number.isInteger(evidence.end)
+      || evidence.start! < 0 || evidence.end! <= evidence.start! || evidence.end! > text.length
+      || text.slice(evidence.start, evidence.end) !== evidence.quote || !compact(evidence.quote)) return [];
+    return [compact(text.slice(0, evidence.start)).length];
+  }
+  return positions(text, evidence.quote);
+}
+
 export function validateActionStateEvidence(checks: ActionStateCheck[], input: ActionStateEvidenceInput) {
   const correctionHints: string[] = [];
   const expected = input.expectedSceneKeys?.length ? input.expectedSceneKeys : ["chapter"];
@@ -38,7 +49,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
       ? evidence.sourceId === currentId ? input.content : undefined
       : context.get(evidence.sourceId);
     if (content === undefined) return "declared_source_unavailable";
-    if (!positions(content, evidence.quote).length) return "quote_not_found";
+    if (!evidencePositions(content, evidence).length) return "quote_not_found";
     return undefined;
   };
   const isFact = (evidence: ActionStateEvidence): boolean => sourceProblem(evidence) === undefined;
@@ -70,7 +81,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
     // No position comparison until every action anchor has a verified current-prose source.
     const actionLocated = check.actionEvidence.length > 0
       && check.actionEvidence.every(item => item.source === "current_prose" && isFact(item));
-    const actionPositions = actionLocated ? positions(input.content, check.actionEvidence[0].quote) : [];
+    const actionPositions = actionLocated ? evidencePositions(input.content, check.actionEvidence[0]) : [];
     const actionStart = actionPositions[0];
     const actionEnd = actionStart === undefined ? undefined : actionStart + compact(check.actionEvidence[0].quote).length;
     const entities = new Set<string>();
@@ -112,7 +123,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
       );
       if (actionStart !== undefined) {
         if (!explicitTiming && state.beforeEvidence.some((item) => item.source === "current_prose" && isFact(item)
-          && !positions(input.content, item.quote).some((position) => position <= actionStart))) {
+          && !evidencePositions(input.content, item).some((position) => position <= actionStart))) {
           invalid.push(`before_state_after_action:${key}`);
           correctionHints.push(`${field}.beforeEvidence：引文在文本中的位置晚于actionEvidence起点，尚缺故事时间判断；晚叙述不等于晚发生。actionEvidence=${JSON.stringify(check.actionEvidence.map(item => item.quote))}；beforeEvidence=${JSON.stringify(state.beforeEvidence.map(item => item.quote))}。请结合完整正文判断：若引文回述行动前已有的状态，保留准确引文并填写beforeEvidenceTiming={relation:"retrospective_prior_state",reason:"说明该事实为何早于本次行动且无需临时获得"}；若确实在行动后才成立，填not_before_action并同步给出contradicted/unearned；无法判断填unknown并将动作与场景结论同步为insufficient_evidence。不可换一个行动躲开核验、删除真实依据或改写正文。`);
         }
@@ -123,7 +134,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
         if (!explicitlyUnknownAfter && state.afterEvidence.every(isFact)
           && (!state.afterEvidence.length || hasCurrentAfter)
           && !state.afterEvidence.some((item) => item.source === "current_prose"
-          && positions(input.content, item.quote).some((position) => position >= actionStart))) {
+          && evidencePositions(input.content, item).some((position) => position >= actionStart))) {
           invalid.push(`after_state_not_in_current_action:${key}`);
           correctionHints.push(`${field}.afterEvidence：所引证据未定位到关键行动发生时或之后。actionEvidence=${JSON.stringify(check.actionEvidence.map(item => item.quote))}；afterEvidence=${JSON.stringify(state.afterEvidence.map(item => item.quote))}。行动前的判断可作为beforeEvidence或必要过渡，不能单独证明after；请重新核对所选行动的边界，并引用正文中该行动发生时或之后的状态表现。无需正文重复解释知识，但须引用其在行动中的实际运用；原文不足则如实标未知，不编写新句子。`);
         }
@@ -146,7 +157,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
         if (state.enablingTransitionRequired && state.transitionEvidence.length
           && state.transitionEvidence.every(isFact) && actionEnd !== undefined
           && state.transitionEvidence.every((item) => item.source === "current_prose"
-            && positions(input.content, item.quote).every((position) => position >= actionEnd))) {
+            && evidencePositions(input.content, item).every((position) => position >= actionEnd))) {
           contradiction = true;
           // Unlike an invalid citation, this is a witnessed but too-late enabling event.
         }

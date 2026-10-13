@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
 const fixture = require('./fixtures/secondChapterReview.json');
-const { chapterAcceptanceAssessmentPrompt: asset, generatedChapterAcceptanceAssessmentSchema } = require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts');
+const { asset, productionAsset, generatedChapterAcceptanceAssessmentSchema } = require('./resolvedAcceptanceHarness.cjs').createResolvedAcceptanceHarness();
 const { validateActionStateEvidence, ACTION_STATE_AUDIT_RULES } = require('../../dist/prompting/prompts/novel/acceptance/actionStateEvidence');
 const { assertReviewCompleted } = require('../../dist/services/novel/runtime/acceptance/reviewCompletion');
 const { runStructuredPrompt, setPromptRunnerStructuredInvokerForTests } = require('../../dist/prompting/core/promptRunner');
@@ -164,12 +164,13 @@ test('before-state timing cannot exempt a later enabling transition or invalid a
   assert.ok(validated(other.row, other.input).validationIssues.some(issue => issue.startsWith('unverified_source:')));
 });
 
-test('acceptance registry and cache identity use v12 while old schema records remain readable', async () => {
+test('acceptance registry and cache identity use v13 while old schema records remain readable', async () => {
   const { promptAssetLoaderEntries } = require('../../dist/prompting/registry/promptAssetLoaderEntries');
   const { getRegisteredPromptAsset } = require('../../dist/prompting/registry');
-  assert.equal(asset.version, 'v12');
-  assert.ok(promptAssetLoaderEntries.some(entry => entry.key === `${asset.id}@v12`));
-  assert.equal(getRegisteredPromptAsset(asset.id, 'v12'), asset);
+  assert.equal(productionAsset.version, 'v13');
+  assert.ok(promptAssetLoaderEntries.some(entry => entry.key === `${productionAsset.id}@v13`));
+  assert.equal(getRegisteredPromptAsset(productionAsset.id, 'v13'), productionAsset);
+  assert.notEqual(asset, productionAsset);
   assert.equal(generatedChapterAcceptanceAssessmentSchema.safeParse(fixture.outputs[0]).success, true);
   assert.match(ACTION_STATE_AUDIT_RULES.join('\n'), /不替代afterEvidence或必需的transitionEvidence/);
   const { loadRuntimeSource } = require('./sourceHarness.cjs');
@@ -181,10 +182,10 @@ test('acceptance registry and cache identity use v12 while old schema records re
     '../../../../prompting/core/promptRunner': { preparePromptExecution: () => ({ context: {}, messages: [] }) },
     '../../../../prompting/context/promptContextResolution': { resolvePromptContextBlocksForAsset: async () => ({ blocks: [] }) },
     '../../../../prompting/prompts/novel/chapterLayeredContext': { buildChapterReviewContextBlocks: () => [] },
-    '../../../../prompting/prompts/novel/chapterAcceptance.prompts': { chapterAcceptanceAssessmentPrompt: { ...asset, get version() { return version; } } },
+    '../../../../prompting/prompts/novel/chapterAcceptance.prompts': { chapterAcceptanceAssessmentPrompt: { ...productionAsset, get version() { return version; } } },
     '../../../../prompting/slots/PromptSlotOverrideService': { promptSlotOverrideService: {} },
     '../../../../prompting/templates/templateRuntime': { resolveAdvancedPromptMessages: async () => [] },
   });
-  const previous = await buildAcceptanceCacheIdentity({ contextPackage: {} }); version = asset.version;
+  const previous = await buildAcceptanceCacheIdentity({ contextPackage: {} }); version = productionAsset.version;
   assert.notEqual(await buildAcceptanceCacheIdentity({ contextPackage: {} }), previous);
 });

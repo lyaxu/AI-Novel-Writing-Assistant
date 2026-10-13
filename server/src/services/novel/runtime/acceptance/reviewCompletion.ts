@@ -5,7 +5,7 @@ export function assertReviewCompleted(output: ChapterAcceptanceAssessmentOutput)
   const invalid = output.riskTags?.includes("acceptance_source_evidence_unverified")
     || output.riskTags?.includes("acceptance_gate_unavailable")
     || output.blockingIssues?.some(issue => Boolean(issue.sourceValidationIssues?.length) || issue.code === "acceptance_gate_unavailable")
-    || Boolean(output.actionStateAuditIssues?.length || output.progressionAuditIssues?.length)
+    || Boolean(output.actionStateAuditIssues?.length || output.progressionAuditIssues?.length || output.evidenceReferenceIssues?.length)
     || output.actionStateChecks?.some(check => Boolean(check.validationIssues?.length))
     || output.progressionChecks?.some(check => Boolean(check.validationIssues?.length));
   if (invalid) {

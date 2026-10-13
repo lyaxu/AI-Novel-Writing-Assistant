@@ -3,10 +3,22 @@ const assert = require('node:assert/strict');
 const fixture = require('./fixtures/firstChapterReview.json');
 const resumed = require('./fixtures/resumedFirstChapterReview.json');
 const candidateReview = require('./fixtures/firstChapterCandidateReview.json');
-const { chapterAcceptanceAssessmentPrompt: asset } = require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts');
+const { asset } = require('./resolvedAcceptanceHarness.cjs').createResolvedAcceptanceHarness();
+const { buildEvidenceCatalog } = require('../../dist/prompting/prompts/novel/acceptance/evidenceCatalog');
 const { validateProgressionEvidence } = require('../../dist/prompting/prompts/novel/acceptance/progressionEvidence');
 const { assertReviewCompleted } = require('../../dist/services/novel/runtime/acceptance/reviewCompletion');
 const { runStructuredPrompt, setPromptRunnerStructuredInvokerForTests } = require('../../dist/prompting/core/promptRunner');
+
+function assertCompleteCurrentProse(messages, input) {
+  const entries = buildEvidenceCatalog(input).entries
+    .filter(entry => entry.source === 'current_prose').sort((a, b) => a.start - b.start);
+  assert.equal(entries.map(entry => entry.quote).join(''), input.content);
+  for (const entry of entries) {
+    assert.equal(entry.quote, input.content.slice(entry.start, entry.end));
+    assert.ok(messages.some(message => String(message.content).includes(`[${entry.id}] ${entry.quote}`)),
+      `Current prose evidence ${entry.id} must remain complete in the prompt`);
+  }
+}
 
 // A simulated corrected reviewer response, not a real second model run. No prose edits.
 function correctedResponse() {
@@ -60,7 +72,7 @@ test('real prompt runner gives saved invalid review exactly one bounded correcti
     assert.equal(calls[1].disableFallbackModel, true);
     assert.equal(calls[1].transportRetryCount, 0);
     assert.equal(calls[1].disableStrategyFallback, true);
-    assert.ok(calls[1].messages.some(message => String(message.content).includes(fixture.input.content)));
+    assertCompleteCurrentProse(calls[1].messages, fixture.input);
     assert.doesNotThrow(() => assertReviewCompleted(result.output));
     assert.equal(result.output.status, 'accepted');
     assert.equal(fixture.input.content.length, 3013);
@@ -198,6 +210,6 @@ test('candidate evidence correction receives precise before/action boundaries an
     assert.doesNotThrow(() => assertReviewCompleted(result.output));
     assert.equal(result.output.status, 'repairable');
     assert.ok(result.output.blockingIssues.length > 0, 'valid local issues are retained');
-    assert.ok(calls[1].messages.some(message => String(message.content).includes(candidateReview.input.content)));
+    assertCompleteCurrentProse(calls[1].messages, candidateReview.input);
   }, candidateReview.input);
 });

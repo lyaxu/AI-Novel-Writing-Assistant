@@ -6,7 +6,11 @@ const stateText = z.string().trim().min(1).max(180);
 export const actionStateEvidenceSchema = z.object({
   source: z.enum(["current_prose", "established_context", "planned_contract"]),
   sourceId: z.string().trim().min(1).max(240),
-  quote: z.string().trim().min(1).max(180),
+  quote: z.string().min(1).max(180),
+  evidenceId: z.string().optional(),
+  evidenceSnapshotId: z.string().optional(),
+  start: z.number().int().nonnegative().optional(),
+  end: z.number().int().nonnegative().optional(),
 });
 
 export const actionStateDimensionCheckSchema = z.object({

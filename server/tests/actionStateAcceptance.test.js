@@ -25,7 +25,13 @@ const progressionSchema = source("../../shared/types/novel/progression/index.ts"
 const progressionEvidence = source("../src/prompting/prompts/novel/acceptance/progressionEvidence.ts", { "@ai-novel/shared/types/novel/progression/index": progressionSchema });
 const progressionProjection = source("../src/services/novel/runtime/acceptance/progressionProjection.ts");
 const causal = source("../src/services/novel/runtime/acceptance/causalAssessment.ts", { "./actionStateProjection": projection, "./progressionProjection": progressionProjection });
-const prompts = source("../src/prompting/prompts/novel/chapterAcceptance.prompts.ts", {
+const evidenceCatalog = source("../src/prompting/prompts/novel/acceptance/evidenceCatalog.ts", {
+  "node:crypto": require("node:crypto"),
+});
+const referenceAssessment = source("../src/prompting/prompts/novel/acceptance/referenceAssessment.ts", {
+  "./evidenceCatalog": evidenceCatalog,
+});
+const rawPrompts = source("../src/prompting/prompts/novel/chapterAcceptance.prompts.ts", {
   "@ai-novel/shared/types/novel/sceneCausality": shared,
   "@ai-novel/shared/types/chapterProseContract": { CHAPTER_PROSE_QUALITY_AUDIT_RULES: [] },
   "../../core/renderContextBlocks": { renderSelectedContextBlocks: () => "已写正文" },
@@ -36,7 +42,13 @@ const prompts = source("../src/prompting/prompts/novel/chapterAcceptance.prompts
   "./acceptance/actionStateEvidence": evidence,
   "@ai-novel/shared/types/novel/progression/index": progressionSchema,
   "./acceptance/progressionEvidence": progressionEvidence,
+  "./acceptance/evidenceCatalog": evidenceCatalog,
+  "./acceptance/referenceAssessment": referenceAssessment,
 });
+// Quote-based fixtures exercise resolved validation; the production ID-only wire has separate tests.
+const { asset: resolvedAsset, productionAsset } = require("./novelProduction/resolvedAcceptanceHarness.cjs")
+  .createResolvedAcceptanceHarness(rawPrompts);
+const prompts = { ...rawPrompts, chapterAcceptanceAssessmentPrompt: resolvedAsset };
 let modelOutput;
 const service = source("../src/services/novel/runtime/ChapterAcceptanceAssessmentService.ts", {
   "../production/actualState": { actualStateDb: {} },
@@ -277,11 +289,17 @@ test("missing action coverage requests review correction and exhaustion cannot a
 });
 
 test("fresh prompt has a full compact state example, relevant dimensions only, and bounded output allowance", () => {
-  const prompt = prompts.chapterAcceptanceAssessmentPrompt;
-  assert.equal(prompts.generatedChapterAcceptanceAssessmentSchema.safeParse(prompt.structuredOutputHint.example).success, true);
-  const rendered = prompt.render({ chapterId: "c2", chapterOrder: 2, novelTitle: "武侠", chapterTitle: "解穴", content: "正文", expectedSceneKeys: ["s"] }, {});
-  assert.match(String(rendered[0].content), /通常1-2项，不要求每次列齐五类/);
-  assert.match(String(rendered[0].content), /planned_contract只能说明计划/);
+  const prompt = productionAsset;
+  const promptInput = { chapterId: "c2", chapterOrder: 2, novelTitle: "武侠", chapterTitle: "解穴", content: "正文", expectedSceneKeys: ["s"] };
+  const context = { blocks: [] };
+  const rendered = prompt.render(promptInput, context);
+  const { appendStructuredOutputHintMessages } = source("../src/prompting/core/structuredOutputHint.ts");
+  const messages = appendStructuredOutputHintMessages({ asset: prompt, promptInput, context, messages: rendered });
+  const example = JSON.parse(String(messages.at(-1).content).split("示例：\n").at(-1));
+  const parsedExample = prompt.outputSchema.safeParse(example);
+  assert.equal(parsedExample.success, true, JSON.stringify(parsedExample.error?.issues));
+  assert.match(String(rendered[0].content), /一般1—2项/);
+  assert.match(String(rendered[0].content), /计划、摘要、场景卡不属于事实证据目录/);
   assert.equal(causal.acceptanceOutputBudget(3), 10368);
   assert.equal(causal.acceptanceOutputBudget(100), 18048);
 });

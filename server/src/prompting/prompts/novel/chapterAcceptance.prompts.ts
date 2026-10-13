@@ -6,16 +6,22 @@ import { renderSelectedContextBlocks } from "../../core/renderContextBlocks";
 import { NOVEL_PROMPT_BUDGETS } from "./promptBudgetProfiles";
 import { CHAPTER_PROSE_QUALITY_AUDIT_RULES } from "@ai-novel/shared/types/chapterProseContract";
 import { actionStateCheckSchema, sceneCausalityVerdictSchema } from "@ai-novel/shared/types/novel/sceneCausality";
-import { ACTION_STATE_AUDIT_RULES, reconcileSceneActionVerdicts, validateActionStateEvidence } from "./acceptance/actionStateEvidence";
+import { reconcileSceneActionVerdicts, validateActionStateEvidence } from "./acceptance/actionStateEvidence";
 import { chapterProgressionCheckSchema } from "@ai-novel/shared/types/novel/progression/index";
 import { CHAPTER_EMOTION_AUDIT_RULES } from "./context/emotionPresence";
 import { CHAPTER_TYPOGRAPHY_AUDIT_RULES } from "./context/typography";
-import { CHAPTER_PROGRESSION_AUDIT_RULES, validateProgressionEvidence, validateAcceptanceIssueSources } from "./acceptance/progressionEvidence";
+import { validateProgressionEvidence, validateAcceptanceIssueSources } from "./acceptance/progressionEvidence";
+import { buildEvidenceCatalog } from "./acceptance/evidenceCatalog";
+import { resolveAcceptanceReferences, REFERENCE_AUDIT_RULES } from "./acceptance/referenceAssessment";
 
 const acceptanceSourceEvidenceSchema = z.object({
   source: z.enum(["current_prose", "established_context"]),
   sourceId: z.string().trim().min(1),
-  quote: z.string().trim().min(1).max(240),
+  quote: z.string().min(1).max(240),
+  evidenceId: z.string().optional(),
+  evidenceSnapshotId: z.string().optional(),
+  start: z.number().int().nonnegative().optional(),
+  end: z.number().int().nonnegative().optional(),
 });
 
 export const chapterAcceptanceIssueCategorySchema = z.enum([
@@ -216,6 +222,8 @@ export const chapterAcceptanceAssessmentSchema = z.object({
   actionStateAuditIssues: z.array(z.string()).optional(),
   progressionChecks: z.array(chapterProgressionCheckSchema).max(3).optional(),
   progressionAuditIssues: z.array(z.string()).optional(),
+  evidenceCatalogSnapshotId: z.string().optional(),
+  evidenceReferenceIssues: z.array(z.string()).optional(),
   blockingIssues: z.array(z.object({
     severity: z.enum(["low", "medium", "high", "critical"]),
     category: z.preprocess(normalizeAcceptanceCategory, chapterAcceptanceIssueCategorySchema),
@@ -260,6 +268,27 @@ export const generatedChapterAcceptanceAssessmentSchema = chapterAcceptanceAsses
     sourceEvidence: z.array(acceptanceSourceEvidenceSchema).min(1),
   })),
 });
+
+const evidenceReferenceSchema = z.object({ evidenceId: z.string().trim().min(1) }).strict();
+const referenceArray = z.array(evidenceReferenceSchema).max(2);
+/** Only IDs cross the new model boundary; canonical quotations are server-owned. */
+export const referenceChapterAcceptanceAssessmentSchema = generatedChapterAcceptanceAssessmentSchema.omit({
+  evidenceCatalogSnapshotId: true, evidenceReferenceIssues: true,
+}).extend({
+  actionStateChecks: z.array(actionStateCheckSchema.omit({ validationIssues: true }).extend({
+    actionEvidence: referenceArray.min(1),
+    states: z.array(actionStateCheckSchema.shape.states.element.extend({
+      beforeEvidence: referenceArray, afterEvidence: referenceArray, transitionEvidence: referenceArray,
+    })).min(1).max(5),
+  })).min(1).max(8),
+  progressionChecks: z.array(generatedChapterAcceptanceAssessmentSchema.shape.progressionChecks.element.extend({
+    previousEvidence: referenceArray, currentEvidence: referenceArray,
+  })).length(3),
+  blockingIssues: z.array(generatedChapterAcceptanceAssessmentSchema.shape.blockingIssues.element.extend({
+    sourceEvidence: z.array(evidenceReferenceSchema).min(1),
+  })),
+});
+export type ReferenceChapterAcceptanceOutput = z.infer<typeof referenceChapterAcceptanceAssessmentSchema>;
 
 export interface ChapterAcceptancePromptInput {
   chapterId?: string;
@@ -358,50 +387,7 @@ const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
   continuePolicy: "repair_once",
 };
 
-export const chapterAcceptanceAssessmentPrompt: PromptAsset<
-  ChapterAcceptancePromptInput,
-  ChapterAcceptanceAssessmentOutput
-> = {
-  id: "novel.chapter.acceptance_assessment",
-  version: "v12",
-  taskType: "review",
-  mode: "structured",
-  language: "zh",
-  contextPolicy: {
-    maxTokensBudget: NOVEL_PROMPT_BUDGETS.chapterAcceptance,
-    preferredGroups: [
-      "chapter_mission",
-      "reader_experience",
-      "scene_causality",
-      "obligation_contract",
-      "structure_obligations",
-      "local_state",
-      "style_contract",
-      "open_conflicts",
-    ],
-    dropOrder: [
-      "recent_chapters",
-      "participant_subset",
-      "world_rules",
-      "historical_issues",
-    ],
-  },
-  contextRequirements: [
-    { group: "chapter_mission", required: true, priority: 100 },
-    { group: "reader_experience", required: true, priority: 100 },
-    { group: "scene_causality", required: true, priority: 100 },
-    { group: "obligation_contract", required: true, priority: 98 },
-    { group: "structure_obligations", priority: 94 },
-    { group: "local_state", priority: 89 },
-    { group: "style_contract", priority: 74 },
-    { group: "open_conflicts", priority: 70 },
-  ],
-  structuredOutputHint: {
-    example: CHAPTER_ACCEPTANCE_EXAMPLE,
-    note: "一次性判断章节是否可接收、是否需要局部修文、是否需要暂停确认，以及后续资产同步优先级。",
-  },
-  outputSchema: generatedChapterAcceptanceAssessmentSchema,
-  semanticRetryPolicy: { maxAttempts: 1 },
+export const resolvedAcceptanceValidation: Pick<PromptAsset<ChapterAcceptancePromptInput, ChapterAcceptanceAssessmentOutput>, "postValidate" | "postValidateFailureRecovery"> = {
   postValidateFailureRecovery: ({ rawOutput, promptInput, validationError }) => {
     validateAcceptanceSceneCoverage(rawOutput, promptInput);
     const blockingIssues = rawOutput.blockingIssues.map((issue) => {
@@ -452,13 +438,13 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
     const progression = validateProgressionEvidence(output.progressionChecks ?? [], input);
     const problems = reviewEvidenceProblems(audit, progression);
     if (problems.length) {
-      throw new Error([
+      throw Object.assign(new Error([
         "审查回答的证据校验未通过；只纠正审查 JSON，不改正文、不补造剧情。",
         ...problems,
         ...audit.correctionHints,
         "从声明来源逐字复制连续准确原文，保留标点；补齐覆盖、状态变化证据，区分行动前提与行动结果。",
         "没有比较职责时使用 not_applicable；无法核实则如实标记未知，不用高分或 earned 掩盖缺证据。",
-      ].join("\n"));
+      ].join("\n")), { evidenceProblems: problems });
     }
     return {
       ...output,
@@ -470,6 +456,88 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
         row.verdict === "earned" && audit.coverageIssues.some((issue) => issue.endsWith(`:${row.sceneKey}`))
           ? { ...row, verdict: "insufficient_evidence" as const, explanation: "关键行动状态核验缺失或重复，不能认证因果已成立。" }
           : row),
+    };
+  },
+};
+
+/** Schema illustration only; placeholder IDs must be replaced by selections from the real catalog. */
+function referenceExample(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(referenceExample);
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string, unknown>;
+  if (typeof record.quote === "string" && typeof record.sourceId === "string") return { evidenceId: "从本次目录选择编号" };
+  return Object.fromEntries(Object.entries(record).map(([key, item]) => [key, referenceExample(item)]));
+}
+
+export const chapterAcceptanceAssessmentPrompt: PromptAsset<
+  ChapterAcceptancePromptInput,
+  ChapterAcceptanceAssessmentOutput,
+  ReferenceChapterAcceptanceOutput
+> = {
+  id: "novel.chapter.acceptance_assessment",
+  version: "v13",
+  taskType: "review",
+  mode: "structured",
+  language: "zh",
+  contextPolicy: {
+    maxTokensBudget: NOVEL_PROMPT_BUDGETS.chapterAcceptance,
+    preferredGroups: [
+      "chapter_mission",
+      "reader_experience",
+      "scene_causality",
+      "obligation_contract",
+      "structure_obligations",
+      "local_state",
+      "style_contract",
+      "open_conflicts",
+    ],
+    dropOrder: [
+      "recent_chapters",
+      "participant_subset",
+      "world_rules",
+      "historical_issues",
+    ],
+  },
+  contextRequirements: [
+    { group: "chapter_mission", required: true, priority: 100 },
+    { group: "reader_experience", required: true, priority: 100 },
+    { group: "scene_causality", required: true, priority: 100 },
+    { group: "obligation_contract", required: true, priority: 98 },
+    { group: "structure_obligations", priority: 94 },
+    { group: "local_state", priority: 89 },
+    { group: "style_contract", priority: 74 },
+    { group: "open_conflicts", priority: 70 },
+  ],
+  structuredOutputHint: {
+    example: referenceExample(CHAPTER_ACCEPTANCE_EXAMPLE),
+    note: "示例只说明结构，不是当前书的事实或判断；其中占位编号必须替换为本次目录真实编号。一次判断章节接收、修文、继续策略和资产同步优先级。",
+  },
+  outputSchema: referenceChapterAcceptanceAssessmentSchema,
+  semanticRetryPolicy: { maxAttempts: 1 },
+  postValidate: (raw, input, context) => {
+    const resolved = resolveAcceptanceReferences(raw, input);
+    if (resolved.issues.length) throw new Error(resolved.issues.join("\n"));
+    try {
+      return resolvedAcceptanceValidation.postValidate!(resolved.output, input, context);
+    } catch (error) {
+      const problems = (error as { evidenceProblems?: string[] }).evidenceProblems;
+      throw new Error(`${problems?.join("\n") ?? (error instanceof Error ? error.message : String(error))}\n证据原文由程序按编号还原。只纠正审查结论或选择目录中支持该结论的evidenceId，不生成quote/source/sourceId、位置或正文。检查来源用途、before/after相对action的位置、必要过渡与状态布尔值、unknown和earned是否相容；后叙已有条件可给beforeEvidenceTiming语义理由，不能换行动或删证据来躲避核验。`);
+    }
+  },
+  postValidateFailureRecovery: ({ rawOutput, promptInput, context, validationError, semanticRetryAttempts }) => {
+    const resolved = resolveAcceptanceReferences(rawOutput, promptInput);
+    if (!resolved.issues.length) return resolvedAcceptanceValidation.postValidateFailureRecovery!({
+      rawOutput: resolved.output, promptInput, context, validationError, semanticRetryAttempts,
+    });
+    // Unknown IDs remain inspectable review failure, including in candidate review.
+    return {
+      ...resolved.output, status: "needs_manual_review", continuePolicy: "pause", repairability: "none",
+      evidenceReferenceIssues: resolved.issues,
+      decisionReason: "审查引用了不属于本次正文的证据编号，保留回答和正文，等待完成审查。",
+      riskTags: [...new Set([...resolved.output.riskTags, "acceptance_source_evidence_unverified"])],
+      deferredRepairDirectives: resolved.output.repairDirectives,
+      deferredMissingObligations: resolved.output.missingObligations,
+      repairDirectives: [], missingObligations: [],
     };
   },
   render: (input, context) => [
@@ -484,7 +552,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       "2. 只有严重越过章节任务、关键连续性断裂、角色行为严重失真、受保护信息提前泄露、正文无法阅读时，才使用 needs_manual_review。",
       "3. 可通过局部补丁解决的问题使用 repairable，并给出 repairDirectives。",
       "4. 章节可以继续但存在后续风险时使用 continue_with_risk，并用 riskTags 说明风险。",
-      "5. blockingIssues 保留所有已确认且独立的问题，每条必须有明确证据和可执行修复建议；repairDirectives逐问题覆盖，不因一次补丁容量限制而省略问题。每条blockingIssue必须含sourceEvidence数组，格式{source,sourceId,quote}，至少一条current_prose本章准确引文。跨章冲突同时给established_context前章引文；不可将前章发生的事当作本章发生的事。证据不足应记riskTags，不把推测写成确定缺陷。",
+      "5. blockingIssues保留所有已确认且独立的问题，每条sourceEvidence至少含一个本章证据编号；跨章冲突另附前章编号。repairDirectives逐问题覆盖，不因一次补丁容量限制省略问题。证据不足记riskTags，不把推测写成确定缺陷。",
       "6. obligation contract 是本章硬合同。must hit now 与 forbidden crossing 缺口必须写入 missingObligations；可后续承接的 payoff、角色露面或目标变化缺口，只有会影响下一章入口时才写入 missingObligations，否则放入 riskTags。",
       "7. repairability 只能用 none、patchable_obligation_gap、rewrite_needed、plan_misalignment。局部漏写但不阻断下一章时优先 continue_with_risk；只有需要当前章节立刻补齐时才用 patchable_obligation_gap。",
       "8. style_contract 或反 AI 要求属于强约束；发现明显来源实体泄露、模板腔、总结腔时归入 voice。",
@@ -498,15 +566,14 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       "16. reader_experience 是本章读者体验合同。检查 promisedReward 是否在正文中可见、主角是否围绕 protagonistWant 主动行动并遭遇 primaryResistance、keyTurn 与 netChange 是否成立、inheritedHookResponsibilities 是否得到回应，以及 endingHook 是否产生追读力。",
       "17. 普通读者体验缺口应输出可执行的 blockingIssues / repairDirectives，并优先使用 repairable 或 continue_with_risk；不得仅因爽点、钩子或情绪强度不足升级为 needs_manual_review 或全局重规划。",
       "18. sceneCausalityVerdicts 必须逐一覆盖 expectedSceneKeys，每个 sceneKey 只出现一次；没有指定场景时返回空数组。每行包含 outcomeObserved（结果是否实际发生）、verdict、prerequisiteEvidence、choiceAndResistanceEvidence、outcomeMechanismEvidence、constraintEvidence、explanation。不能把‘完成必达结果’当成‘结果有合理成因’。",
-      "19. verdict 只能使用 earned（因果有正文/上下文证据支持）、unearned（结果发生但缺关键成因）、contradicted（与已知条件矛盾）、insufficient_evidence（提供的文本不足以判断）。prerequisiteEvidence 和 constraintEvidence 是简短证据数组；其他证据字段和 explanation 是字符串，各不超过240字符。引用实际短句并说明作用，不能抄合同当正文证据；条件不存在时数组可空，但证据不足必须明确说明缺口，不得编造引文。",
+      "19. verdict 只能使用 earned（因果有正文/上下文证据支持）、unearned（结果发生但缺关键成因）、contradicted（与已知条件矛盾）、insufficient_evidence（提供的文本不足以判断）。prerequisiteEvidence 和 constraintEvidence 是简短证据数组；其他证据字段和 explanation 是字符串，各不超过240字符。说明实际片段的作用，不能抄合同当正文证据；条件不存在时数组可空，但证据不足必须明确说明缺口，不得编造引文。",
       "20. 对 scene_causality 的每个前提对照来源核实，检查建立是否早于使用、人物动机是否支持选择、阻力方回应是否符合其能力和利益、outcomeMechanism 是否实际写出、既有及新增代价是否限制后续行动。没有战斗、没有成功、安静的关系变化均可 earned，关键是其机制成立。",
       "21. 先给逐场证据结论，再汇总分数。unearned/contradicted 必须进入 blockingIssues 和可执行的 repairDirectives；insufficient_evidence 必须保留可追踪风险，不能因总分高而消失。局部缺口优先 repairable/continue_with_risk，遵守既有继续策略，不自行升级为全局停止。",
       "22. 审查对象只有末尾的当前章节正文。written_evidence是早于本章的事实，任务表是计划：逐条先定位来源再判断。声称本章没有某动作/人物不知道某事之前，检查本章全部相关段落与句子限定范围；知道任务却不知道物品位置，不等于不知道任务。不能把前章交付方式替换成本章交付方式。重复事件的判定、解释、状态和修复要求须一致，保留当前真正新增的行动与人物情绪。",
       "关键行动状态审查：",
       ...CAPABILITY_AUTHORIZATION_RULES,
-      ...ACTION_STATE_AUDIT_RULES,
+      ...REFERENCE_AUDIT_RULES,
       "前后章实际推进审查：",
-      ...CHAPTER_PROGRESSION_AUDIT_RULES,
       "正文退化检测边界：",
       ...CHAPTER_PROSE_QUALITY_AUDIT_RULES.map((rule, index) => `${index + 1}. ${rule}`),
       "情绪落地审查：",
@@ -523,10 +590,10 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       `established_context可用已写正文来源：${JSON.stringify((input.establishedProse ?? []).map(({ chapterId, order }) => ({ chapterId, order })))}`,
       "",
       "分层上下文：",
-      renderSelectedContextBlocks(context),
+      renderSelectedContextBlocks({ ...context, blocks: context.blocks.filter(block => block.group !== "written_evidence") }),
       "",
-      "以下才是本次审查的当前章节正文（current_prose）；前述已写章节只作对照：",
-      input.content,
+      "以下为完整正文证据目录，current_prose是本次审查对象，established_context是已写前章对照。每个编号后均为原文，不能把编号当作小说文字：",
+      buildEvidenceCatalog(input).rendered,
     ].join("\n")),
   ],
 };

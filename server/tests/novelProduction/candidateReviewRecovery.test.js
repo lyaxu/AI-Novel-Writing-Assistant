@@ -121,7 +121,7 @@ test('completed invalid candidate review retains valid original and original deb
 test('recorded valid original and two invalid candidate reviews retain the 3013-character original through the real review gate', async () => {
   const fixture = require('./fixtures/firstChapterCandidateReview.json');
   const originalFixture = require('./fixtures/firstChapterReview.json');
-  const { chapterAcceptanceAssessmentPrompt: asset } = require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts');
+  const { asset } = require('./resolvedAcceptanceHarness.cjs').createResolvedAcceptanceHarness();
   const { assertReviewCompleted } = require('../../dist/services/novel/runtime/acceptance/reviewCompletion');
   const { runStructuredPrompt, setPromptRunnerStructuredInvokerForTests } = require('../../dist/prompting/core/promptRunner');
   const originalAssessment = asset.postValidate(structuredClone(fixture.originalOutput), originalFixture.input);

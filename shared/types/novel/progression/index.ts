@@ -7,7 +7,11 @@ export const CHAPTER_PROGRESSION_DIMENSIONS = [
 const evidenceSchema = z.object({
   source: z.enum(["current_prose", "established_context"]),
   sourceId: z.string().trim().min(1),
-  quote: z.string().trim().min(1).max(180),
+  quote: z.string().min(1).max(180),
+  evidenceId: z.string().optional(),
+  evidenceSnapshotId: z.string().optional(),
+  start: z.number().int().nonnegative().optional(),
+  end: z.number().int().nonnegative().optional(),
 });
 
 export const chapterProgressionCheckSchema = z.object({

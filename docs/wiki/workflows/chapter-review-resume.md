@@ -73,3 +73,14 @@ SQLite维护写入必须与应用的Prisma适配器采用相同时间序列化�
 账本目标章号、节奏板章跨度和场景卡对未来的设想，都不是已拆出的具体章纲。空未来窗口不能捏造第三章；如确需后续承接，应走已有规划工作流生成和复核实际章纲。兑现按候选承诺范围判断，获得报酬可以完成一次服务闭环，仍有世界观谜团不自动扩大该候选义务。该语义决定由 AI 在结构化合同内作出，程序不能硬改成 touch 或 payoff 以绕过停点。
 
 相关模块：`production/recovery`、`production/reliability`、`director/commands`、`director/automation`、`runtime/acceptance`、`prompting/prompts/novel/acceptance`、`prompting/prompts/planner`、`services/planner/payoff`。
+
+
+## 正文证据编号与快照边界
+
+让模型重新抄写原文会引入引号、标点和同句不同位置等非语义错误，重复纠正不能消除这条故障路径。新验收由 acceptance/evidenceCatalog 创建快照绑定的正文片段目录，模型证据对象只允许 evidenceId；referenceAssessment 负责还原 quote/source/sourceId/start/end/evidenceSnapshotId，再交给既有来源、时序和状态检查。分句与长度限制只是定位机制，剧情判断仍由 AI 完成。
+
+本章和已写前章共同决定快照身份；候选稿或前章变化会使旧编号失效。相同句子多次出现也保留各自位置，不能用首次 indexOf 代替。首轮审查和候选复审共用服务，实际渲染消息与资产版本进入缓存身份。历史报告仍可读，但不能复用为新版本已通过的审查。
+
+未知编号保留字段路径、原编号与快照，沿用一次有上下文纠正；耗尽后作为 CHAPTER_REVIEW_INCOMPLETE 保留稿件和失败结果，不剥引号、不模糊匹配、不增加预算，也不把未核实意见喂给修文。恢复仍从原审查步骤，候选失败沿用保留已审原稿的既有策略。
+
+编号证明文本存在，不证明它支持判断；必须继续核对来源用途、前后状态、必要过渡和场景解释。自由场景说明的语义可靠性及任意倒叙 after/transition 仍是独立边界。封网模拟不等于真实模型或文学验收。
