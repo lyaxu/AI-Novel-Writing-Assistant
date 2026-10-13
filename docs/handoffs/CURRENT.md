@@ -1,8 +1,8 @@
 # 最新交接入口
 
-更新：2026-10-13 08:37 UTC（用户时区03:37 UTC-5）。
+更新：2026-10-13 08:50 UTC（用户时区03:50 UTC-5）。
 
-**最新停点：第二章3652字已保存，用户继续v13后因漏填故事时序再次暂停；v14已冷启动并核验，可从原审查继续。** 主线仍为旧版可靠保存、失败恢复和连续生产，保留认可文笔、创作能力、质量检查与防丢稿，最后固定版本十章验收。当前仅首章完成、第二章保存；真实v14审查、后续章纲和固定版本十章仍未通过。
+**最新停点：第二章3652字已保存，用户继续v14后因审查内部状态结论矛盾再次暂停；本轮只读诊断与主线复核，尚未新增产品修复。** 主线仍为旧版可靠保存、失败恢复和连续生产，保留认可文笔、创作能力、质量检查与防丢稿，最后固定版本十章验收。当前仅首章完成、第二章保存；真实v14审查、后续章纲和固定版本十章仍未通过。
 
 ## 当前证据
 
@@ -12,17 +12,19 @@
 - 书cmv3wyvw40015gow0780pycx9，导演cmv3wvaqm000sgow0l5or2pke；当前job cmv5h9a64000j20w0uw4cxeo0，failed/manual=1，job范围2—2、导演原范围1—3保留。
 - 首章cmv3x2mt600jsgow0e6kb0852为approved/completed，3013字/hash d4fb3b8f6b9230632a4bafe29740ae8744950ab105bc1e5e08562e7f883dcda6。原首章job succeeded，旧账本提案committed，历史候选与质量证据保留。
 - 第二章cmv3x2mt800jtgow0la32yn38为drafted，3652字/hash 461051846359919e84f43627c317c07ed07eff7da652caa434303bcc37489b91。prepare/合同/章计划/draft/save_draft保持done，review:0和evaluation失败、journal paused；章节行generating不代表任务活跃。
-- 用户08:03触发v13审查、格式修复和语义纠正三次，均正常stop，没有规划/正文重生成。模型记录累计27，代理0；08:37原job prepareDirector只读预检通过，active任务/命令/副作用全部0。
+- 08:48用户继续v14，两次正常stop（21.258s/14.983s），没有格式修复、规划或正文重写；证据编号均有效，第二答已正确填写拳术回叙时序，但多个stateChanged=true与transitionStatus=not_needed矛盾，符纸enablingTransitionRequired=true/transitionStatus=missing却维持earned，导致earned_without_required_transition，原review再次暂停。两章hash不变，调用累计29、代理0。当前不能宣称审查稳定或固定版本十章就绪。
 
-## 根因与修复
+## 最新诊断与主线
 
-08:03用户继续v13后，证据编号均可定位；首答把场景说明写成编号对象，格式修复后漏行动状态证据，语义纠正补了证据却仍漏拳术的回叙时序声明，原review再次暂停。v14显式列明编号/说明字段边界，每个状态强制故事时间判断及完整示例；缺字段与其他证据错误一次性汇总，沿用一次完整上下文纠正，缺失时序不交给无正文的JSON修复猜测。115项封网及shared/server编译通过，正确时序是人工模拟，真实模型仍待验。两章hash、原任务/预算/范围保留，模型记录27均用户触发、代理0。v14已于08:37核验加载成功。[本轮完整证据](../evals/2026-10-13-review-timing-contract.md)。证据编号机制保留，不能用去标点、自动补语义或放宽门禁处理漏项；先前[编号修复](../evals/2026-10-13-review-evidence-references.md)记录保留。
+08:48用户继续v14，两次正常stop（21.258s/14.983s），没有格式修复、规划或正文重写；证据编号均有效，第二答已正确填写拳术回叙时序，但多个stateChanged=true与transitionStatus=not_needed矛盾，符纸enablingTransitionRequired=true/transitionStatus=missing却维持earned，导致earned_without_required_transition，原review再次暂停。两章hash不变，调用累计29、代理0。当前不能宣称审查稳定或固定版本十章就绪。[本轮诊断与主线回顾](../evals/2026-10-13-mainline-checkpoint-and-v14-stop.md)。v13证据编号及v14时序补齐在本次对应环节生效，但不能据此把整条审查链判为可靠；前序记录保留。
+
+阶段2保存/恢复已有离线及本书局部现场证据；阶段3仍处于真实运行暴露缺陷后的收敛修复；阶段4只是边修边测，固定版本十章未通过。两章已保存不等于两章均完成，当前仅首章完整完成。
 
 ## 下一步
 
-本轮目录.codex-run/review-timing-contract-20261013/。原restart脚本依赖历史前端PID，电脑重启后提前退出，未动进程；start-old-after-reboot.ps1经空端口/33项源码/任务预检后只启动旧版，两端启动身份见cold-start-processes.json，运行核验见verified-loaded-health.json和live-preflight.json。无需再次运行脚本。
+下一步限于阶段3审查契约整体核对：把证据定位、故事时序、行动前提、行动结果变化及总裁决的重复表达和全部纠正反馈一起检查，用历次真实回答做统一离线回归；不能只给最新错误再叠一句提示、增加重试或关门禁。先提出和实施有证据支持的最小完整调整，再核验原任务恢复。当前不要求用户继续点击或重启。
 
-用户从[第二章源工作区](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt800jtgow0la32yn38)F5，点一次继续自动导演，恢复原审查；不重写正文、不重做首章或账本确认。
+服务18844/8500保持运行，原job cmv5h9a64000j20w0uw4cxeo0和人工暂停保持。前轮维护脚本的27调用条件已过期，不再使用。待修复加载后仍回第二章源页原review，不重写正文，不恢复旧书，不重做账本。
 
 ## 未完成与记录链
 
