@@ -36,8 +36,14 @@
 
 ## 最终验证与加载
 
-17:00 UTC最终server编译通过，55个测试文件565/565封网通过，fail/cancelled/skipped均0，约6.63秒。除生产/恢复全组外，补跑structuredInvoke、structuredNormalization、structuredOutputHint共享路径；网络与未注入DB由offlineBootstrap阻断。shared本轮无修改，复用v16编译与文件hash。日志为本轮维护目录tsc-final.log和offline-final.log。中途仅修正类型标注、版本断言及源码loader依赖后通过最终全组，不以中间失败算验收。待受控加载核验；工程回归不等于真实模型理解或文学质量验收，阶段3真实稳定性和阶段4固定版本十章尚未完成。
+17:00 UTC最终server编译通过，55个测试文件565/565封网通过，fail/cancelled/skipped均0，约6.63秒。除生产/恢复全组外，补跑structuredInvoke、structuredNormalization、structuredOutputHint共享路径；网络与未注入DB由offlineBootstrap阻断。shared本轮无修改，复用v16编译与文件hash。日志为本轮维护目录tsc-final.log和offline-final.log。中途仅修正类型标注、版本断言及源码loader依赖后通过最终全组，不以中间失败算验收。加载核验见下段；工程回归不等于真实模型理解或文学质量验收，阶段3真实稳定性和阶段4固定版本十章尚未完成。
 
 通过加载核验后，从[第二章原工作区](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt800jtgow0la32yn38)刷新，再点一次“继续自动导演”，从原审查恢复。不能新开任务、重写原稿或在运行记录页执行恢复。
 
 同步CURRENT、WORK_LEDGER、批准方案、恢复wiki、模块说明和同日发布说明。预存三个Structured客户端改动与台账历史964行保持独立；不push/合并/发布，不动新版，不恢复历史导演。断线续作与书内agent仍按原文档保留为待设计事项。
+
+## 已加载并核验
+
+2026-10-13 17:02 UTC（用户时区12:02）受控加载完成：旧后端3000/PID5000，应用启动17:02:25.538Z，源码提交41ea6981b3e4/v17，5190代理health通过、stale=false。47项源码/共享产物hash通过；旧前端41368/5190身份未变，新版5173/8787保持关闭。加载后只读prepareDirector通过，原review人工暂停、两章hash/范围/预算/账本不变，调用35、代理0、活跃0。可从第二章原源页刷新后一次继续自动导演，无需运行脚本。
+
+证据为本轮维护目录source-manifest.json、health-loaded.json、paused-preflight.json、protected-services.json和启动日志。代码提交41ea6981；本段仅同步运行证据，复用上文565项与编译，不重复构建或重启。UI与真实模型审查仍由用户验收，不代表阶段3真实稳定性和固定版本十章已完成。
