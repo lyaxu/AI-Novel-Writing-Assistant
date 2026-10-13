@@ -1,25 +1,21 @@
 # 最新交接入口
 
-更新：2026-10-13 16:29 UTC。
+更新：2026-10-13，阶段3 v17审查传输与失败留证整体收敛中。
 
-**最新冷启动核验**：2026-10-13 16:29 UTC（用户时区11:29）：电脑13:15 UTC重启，3000/5190/5173/8787均退出。目录start-local.bat仅执行通用pnpm dev，不指定验收隔离DB，未运行。按原隔离配置冷启动旧后端40152/3000与前端41368/5190；经5190代理health确认99429396f941、v16源码、stale=false，应用启动16:29:19.805Z。初始化约44秒，期间短暂代理ECONNREFUSED，随后健康正常。44项源码manifest预检通过；加载后原review暂停、两章hash、范围、预算、账本不变，调用31、本轮0、活跃0。新版5173/8787保持关闭。用户可回原第二章源页F5后一次继续自动导演，无需运行根目录启动脚本。
+**最新事实**：用户16:31 UTC继续原第二章审查后再次暂停。v16四次正常返回；合法长JSON被格式修复截去中段，丢失付款场景，后续重写又改变状态维度。完整枚举/数组示例未送到初审也是契约缺口。不是用户刷新操作错误，旧的“v16已可继续”记录仅为历史加载证据。
 
-**阶段3 v16整体修复、编译与491项封网回归通过，已加载并核验；真实模型与固定版本十章仍待用户验收。**
+**最新完整快照**：[v17诊断、实施与最终核验](../evals/2026-10-13-review-wire-v17.md)。前序[v16](../evals/2026-10-13-review-semantic-v16.md)和[v15诊断](../evals/2026-10-13-v15-review-semantic-gap.md)保留，不代替本轮状态。
 
-v16整体收敛工程通过：四角色事实独立核对主体/维度/故事时间，字符位置仅定位来源；每场单行动，场景前提与结果来自同组事实；每条修文及义务绑定已核实问题，已有解释撤回、未知或none范围记债务，旧投影不再另造未绑定补文。47文件491项封网全部通过，shared/server编译通过；17份真实原答原样历史回放，新契约以人工语义模拟验证。两章hash/原review暂停/31调用保留，加载后只读核验通过。真实模型及固定版本十章仍待验，阶段3不能据离线结果宣称全面完成。
+本轮统一处理合法回答无损、详细契约与传输分层、一次全文纠正、格式与独立语义问题同轮反馈、完整失败留证及恢复缓存边界；保留时序/主体/维度/来源/修文依据检查。最终server编译和55文件565项封网回归通过；21份真实回答原样回放。待受控加载核验，不让用户逐点重试。
 
-## 最新完整快照
+仓库D:/novel/AI-Novel-Writing-Assistant，分支codex/production-core-refactor，接续b57ba37a。预存三个Structured客户端改动与台账历史964行独立保留。
 
-[本轮实施与证据](../evals/2026-10-13-review-semantic-v16.md)。前序[v15真实再停诊断](../evals/2026-10-13-v15-review-semantic-gap.md)保留历史；不能把时序标签反事实通过当成审查正确。
+16:54 UTC只读核验：隔离DB D:/novel/.comparison/2026-10-10/old-test.db；书cmv3wyvw40015gow0780pycx9，导演cmv3wvaqm000sgow0l5or2pke，原job cmv5h9a64000j20w0uw4cxeo0。首章3013字、第二章3652字hash不变，原review人工暂停、prepareDirector通过，范围/预算/账本不变。调用35均用户触发，本轮代理0，活跃工作0。旧3000/PID40152仍v16，5190/PID41368；新版5173/8787关闭。之后加载结果以v17快照为准，旧PID及31调用脚本不可复用。
 
-仓库D:/novel/AI-Novel-Writing-Assistant，分支codex/production-core-refactor，生产提交c10bff9c4bed；预存三个Structured客户端改动与台账历史964行保留。2026-10-13 12:59 UTC受控加载及核验完成：旧后端3000/PID14544，应用启动2026-10-13T12:58:13.698Z，加载c10bff9c4bed/v16，health stale=false；44项源码/共享产物hash通过。旧前端5190/PID8500身份未变，新版5173/8787保持关闭。加载后原review只读prepareDirector通过，首章3013字与第二章3652字hash、原任务/范围/预算/账本不变，调用仍31、本轮0、活跃0。无需手动重启，从第二章源页F5后一次继续自动导演。
+## 主线和恢复边界
 
-隔离DB D:/novel/.comparison/2026-10-10/old-test.db；书cmv3wyvw40015gow0780pycx9，导演cmv3wvaqm000sgow0l5or2pke，原job cmv5h9a64000j20w0uw4cxeo0。第二章3652字原稿已保存、原review人工暂停，首章3013字completed；hash/范围/预算/账本不变，调用31、本轮0、活跃0。
+阶段2可靠保存与原步恢复已有实现和离线证据；阶段3审查真实稳定性尚未通过；阶段4固定版本十章仍未通过。保留文笔、写法、质量检查、防丢稿。新版不动、不恢复历史书、不新增GUI、不自动调用模型、不push/发布。
 
-## 恢复与未完成
+最终核验后才从第二章原源页刷新并点一次“继续自动导演”，沿用原job的审查步骤。链接见v17快照。不得新建任务、重写原稿或从运行记录页执行恢复。
 
-回第二章源页F5并点一次继续自动导演，从原审查继续。具体链接见完整快照。不得新开任务、重写原稿、从运行记录恢复，或自动调用模型替用户验收。
-
-工程通过不是模型理解保证。阶段3真实审查、后续章纲、资源面板易懂性、阶段4固定版本十章仍待验；文笔、写法、质量检查和防丢稿保留。新版不动、不恢复历史书、不新增GUI、不push/发布。
-
-长期边界[PROJECT_CONTEXT](PROJECT_CONTEXT.md)，统一[台账](WORK_LEDGER.md)，[批准方案](../plans/2026-10-11-production-core-refactor.md)，[十章验收单](../evals/2026-10-11-ten-chapter-acceptance.md)，[恢复wiki](../wiki/workflows/chapter-review-resume.md)。[断线续作与书内agent](../plans/2026-10-11-resilient-writing-and-book-agent-ideas.md)继续保留为讨论未实施。
+长期边界[PROJECT_CONTEXT](PROJECT_CONTEXT.md)，统一[台账](WORK_LEDGER.md)，[批准方案](../plans/2026-10-11-production-core-refactor.md)，[十章验收单](../evals/2026-10-11-ten-chapter-acceptance.md)，[恢复wiki](../wiki/workflows/chapter-review-resume.md)。[断线续作与书内agent](../plans/2026-10-11-resilient-writing-and-book-agent-ideas.md)仍为已记录、未实施设计。

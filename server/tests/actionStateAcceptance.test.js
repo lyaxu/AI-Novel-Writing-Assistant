@@ -58,6 +58,11 @@ const semanticReview = source("../src/prompting/prompts/novel/acceptance/semanti
   "../reviewDiagnostics": reviewDiagnostics, "./actionFacts": semanticActions,
   "./sceneFindings": semanticScenes, "./repairFindings": repairFindings,
 });
+const wireReview = source("../src/prompting/prompts/novel/acceptance/semantic/wireReview.ts", {
+  "../../chapterAcceptance.prompts": { get semanticChapterAcceptanceSchema() { return rawPrompts.semanticChapterAcceptanceSchema; } },
+  "./reviewContract": semanticReview,
+  "./actionFacts": semanticActions, "../evidenceCatalog": evidenceCatalog,
+});
 const rawPrompts = source("../src/prompting/prompts/novel/chapterAcceptance.prompts.ts", {
   "@ai-novel/shared/types/novel/sceneCausality": shared,
   "@ai-novel/shared/types/chapterProseContract": { CHAPTER_PROSE_QUALITY_AUDIT_RULES: [] },
@@ -74,7 +79,7 @@ const rawPrompts = source("../src/prompting/prompts/novel/chapterAcceptance.prom
   "./acceptance/stateAssessment": stateAssessment,
   "./acceptance/reviewDiagnostics": reviewDiagnostics,
   "./acceptance/reviewContract": reviewContract,
-  "./acceptance/semantic": { ...semanticActions, ...semanticScenes, ...repairFindings, ...semanticReview },
+  "./acceptance/semantic": { ...semanticActions, ...semanticScenes, ...repairFindings, ...semanticReview, ...wireReview },
 });
 // Quote-based fixtures exercise resolved validation; the production ID-only wire has separate tests.
 const { asset: resolvedAsset, productionAsset } = require("./novelProduction/resolvedAcceptanceHarness.cjs")
@@ -328,7 +333,7 @@ test("fresh prompt has a full compact state example, relevant dimensions only, a
   const { appendStructuredOutputHintMessages } = source("../src/prompting/core/structuredOutputHint.ts");
   const messages = appendStructuredOutputHintMessages({ asset: prompt, promptInput, context, messages: rendered });
   const example = JSON.parse(String(messages.at(-1).content).split("示例：\n").at(-1));
-  const parsedExample = prompt.outputSchema.safeParse(example);
+  const parsedExample = rawPrompts.semanticChapterAcceptanceSchema.safeParse(example);
   assert.equal(parsedExample.success, true, JSON.stringify(parsedExample.error?.issues));
   assert.match(String(rendered[0].content), /before\/after及两个basis都使用同一事实结构/);
   assert.match(String(rendered[0].content), /编号只证明引用来源，不自动证明主体、维度、事实或时间正确/);

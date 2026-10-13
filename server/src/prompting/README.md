@@ -76,6 +76,10 @@
 - `repairPolicy` 负责 JSON 解析 / schema 校验失败后的 repair
 - `semanticRetryPolicy` 负责 JSON 已合法但 `postValidate` 未通过时的再生成
 
+依赖完整正文语义的审查字段不能交给只有Schema的整份JSON修复。章节接收资产使用原值传输信封，在postValidate统一核对详细结构与语义，repairPolicy为0、semanticRetryPolicy仍为1。合法JSON原文不能因长度被截掉中段；通用parser先解析完整值，再按原流程提取围栏等内容。
+
+语义纠正调用自身抛错时，runner在原Error私有字段completedBeforeCorrectionFailure保存此前完整回答、版本、验证错误和已尝试次数。它只证明首答存在，不证明纠正调用完成；原错误类型、unknown/output_limit策略及调用预算不得因此改变。接收者可将它持久化为失败证据，不能作为成功输出或缓存。
+
 ## Migration Default
 
 - 如果一个 prompt 还没有资产化，不要在原 service 里继续加分支。

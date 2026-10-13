@@ -61,19 +61,27 @@ export function recoverSemanticAcceptance(raw: SemanticChapterAcceptanceOutput, 
 }
 
 /** Illustration only. Never translate recorded model answers into verified semantic facts. */
-export function semanticExample() {
+export function semanticExample(input?: { expectedSceneKeys?: string[] }) {
+  // One generic scene demonstrates the wire shape. Coverage belongs to the real input,
+  // never to copies of this illustrative story for every expected key.
+  const sceneKey = input?.expectedSceneKeys?.[0] ?? "example_scene";
   const evidence = [{ evidenceId: "从本次目录选择编号" }];
-  const fact = (claim: string, storyTime: "before_or_at_action" | "during_or_after_action") => ({
-    entity: "她", dimension: "knowledge", claim, evidence, storyTime, support: "supported", reason: claim,
+  const fact = (claim: string, storyTime: "before_or_at_action" | "during_or_after_action", reason: string) => ({
+    entity: "她对合同欠款条款的知情", dimension: "knowledge", claim, evidence, storyTime, support: "supported", reason,
   });
   return {
     score: { coherence: 82, pacing: 80, repetition: 85, engagement: 81, voice: 83, overall: 82 },
-    summary: "知情后拒绝签字，选择及后果有依据。", sceneCausalityVerdicts: [],
-    actionStateChecks: [{ sceneKey: "chapter", actor: "她", action: "拒绝签字", actionEvidence: evidence,
-      states: [{ entity: "她", dimension: "knowledge", requiredForAction: "了解欠款条款",
-        before: fact("读完欠款条款", "before_or_at_action"), after: fact("知情并运用信息拒绝签字", "during_or_after_action"),
-        prerequisite: { status: "satisfied", basis: fact("读完欠款条款", "before_or_at_action"), reason: "拒签前已有信息。" },
-        resultChange: { status: "unchanged", basis: fact("拒签不使已知信息改变", "during_or_after_action"), reason: "她改变选择，不是又获得同一条知识。" },
+    summary: "知情后拒绝签字，选择及后果有依据。",
+    sceneCausalityVerdicts: [{ sceneKey, outcomeObserved: true,
+      choiceAndResistance: { claim: "她不接受欠款责任，面对签字要求作出拒绝。", evidence, support: "supported", reason: "引用须同时支持她的选择与面对的要求。" },
+      constraints: [{ claim: "双方没有签约，合作仍未成立。", evidence, support: "supported", reason: "引用须支持拒签后合作未成立这一持续结果。" }],
+    }],
+    actionStateChecks: [{ sceneKey, actor: "她", action: "拒绝签字", actionEvidence: evidence,
+      states: [{ entity: "她对合同欠款条款的知情", dimension: "knowledge", requiredForAction: "了解所拒绝的欠款条款",
+        before: fact("知道合同要求承担欠款", "before_or_at_action", "引用阅读并理解条款的依据，知识在拒签前已有。"),
+        after: fact("仍知道合同要求承担欠款", "during_or_after_action", "拒签时运用这条信息，未因拒绝而获得另一条知识。"),
+        prerequisite: { status: "satisfied", basis: fact("知道合同要求承担欠款", "before_or_at_action", "同一条款已被理解。"), reason: "拒签前已知所拒绝的条款。" },
+        resultChange: { status: "unchanged", basis: fact("仍知道合同要求承担欠款", "during_or_after_action", "行动中继续运用同一信息。"), reason: "她作出拒绝决定，这条知识仍然存在；不是知识内容改变。" },
       }], explanation: "读完条款后作出拒绝决定。" }],
     progressionChecks: ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"].map(dimension => ({
       dimension, status: "not_applicable", repeatsEstablishedBeat: null, addsNewConsequence: null,

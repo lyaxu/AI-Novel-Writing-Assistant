@@ -1,0 +1,2220 @@
+{
+  "provenance": {
+    "source": "Four user-initiated v16 reviewer replies, extracted without model calls or production writes. Outputs and responseContents are preserved verbatim/structurally unchanged.",
+    "snapshot": ".codex-run/review-semantic-v16-20261013/private-v16-stop.json",
+    "snapshotSha256": "60f7e9331237b1b5208d0a82d2a5b4d5291c9b8722b38b5854959642426aa4d5",
+    "input": "Reuse secondChapterReview.json input and restore chapter IDs below.",
+    "chapterId": "cmv3x2mt800jtgow0la32yn38",
+    "previousChapterId": "cmv3x2mt600jsgow0e6kb0852",
+    "currentContentSha256": "461051846359919e84f43627c317c07ed07eff7da652caa434303bcc37489b91",
+    "previousContentSha256": "d4fb3b8f6b9230632a4bafe29740ae8744950ab105bc1e5e08562e7f883dcda6",
+    "currentContentLength": 3652,
+    "previousContentLength": 3013
+  },
+  "responses": [
+    {
+      "timestamp": "2026-10-13T16:32:22.236Z",
+      "requestId": "stream-1791909115939-1",
+      "promptId": "novel.chapter.acceptance_assessment",
+      "promptVersion": "v16",
+      "repairAttempts": 0,
+      "semanticRetryAttempts": 0,
+      "finishReason": "stop",
+      "outputLimitReached": false,
+      "rawContentLength": 16022,
+      "rawContentSha256": "a57a5988d5b5dc417e712c21fc222c4a2d29b90ecf9d9aa90c5894792de215f4",
+      "responseObjectSha256": "bd72874fcb8ca286ca0f34042c905444a7286dcac90c73af959e35e9d1d22e5e"
+    },
+    {
+      "timestamp": "2026-10-13T16:32:38.025Z",
+      "requestId": "stream-1791909142268-2",
+      "promptId": "novel.chapter.acceptance_assessment",
+      "promptVersion": "v16",
+      "repairAttempts": 1,
+      "semanticRetryAttempts": 0,
+      "finishReason": "stop",
+      "outputLimitReached": false,
+      "rawContentLength": 13568,
+      "rawContentSha256": "a5411e68ab064b7bcb02373729866d065e086ae4cba36d76ac78080e75201745",
+      "responseObjectSha256": "4393f2a4dde215463974937b49aa803fad00123e06bc4d0d77b8007ee00b0d87"
+    },
+    {
+      "timestamp": "2026-10-13T16:32:56.283Z",
+      "requestId": "stream-1791909158051-3",
+      "promptId": "novel.chapter.acceptance_assessment",
+      "promptVersion": "v16",
+      "repairAttempts": 1,
+      "semanticRetryAttempts": 1,
+      "finishReason": "stop",
+      "outputLimitReached": false,
+      "rawContentLength": 15970,
+      "rawContentSha256": "713d6441f5ada926e02928a689a3e5d5ab9e42df1ceac54e41dff71c77428316",
+      "responseObjectSha256": "15e594cb9261a4e3ea93d51f2aab7027b3a6918512d2d599138bdfab774612d3"
+    },
+    {
+      "timestamp": "2026-10-13T16:33:13.048Z",
+      "requestId": "stream-1791909176296-4",
+      "promptId": "novel.chapter.acceptance_assessment",
+      "promptVersion": "v16",
+      "repairAttempts": 1,
+      "semanticRetryAttempts": 1,
+      "finishReason": "stop",
+      "outputLimitReached": false,
+      "rawContentLength": 15932,
+      "rawContentSha256": "c79ac4f39733c39f8a9d290248467b6992a62e84f17daf6e953f1d42a4c9c85f",
+      "responseObjectSha256": "6a62f903556fcc88e19da0676eaf7a44d39a4b33d6b55c8c57baca9ba38aa4fe"
+    }
+  ],
+  "responseContents": [
+    "{\n  \"score\": {\n    \"coherence\": 88,\n    \"pacing\": 86,\n    \"repetition\": 84,\n    \"engagement\": 87,\n    \"voice\": 85,\n    \"overall\": 86\n  },\n  \"summary\": \"劳梓凡夜访柳巷街三十七号，在楼道闻到阴冷找到郑小满家。郑小满否认差评但承认旧物致噩梦，旧物来自二手市场。劳梓凡贴符封阴气，旧物裂开阴气更猛，他以八极拳近身配合符咒暂时打散阴气团。账本自动翻页浮现“毁物不毁根，债还在”。郑小满付三百元，劳梓凡拍照留证并承诺追查来源后离开。章末账本再次震动，留下新钩子。\",\n  \"sceneCausalityVerdicts\": [\n    {\n      \"sceneKey\": \"arrive_and_meet\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"劳梓凡报出郑小满名字和账本地址要求进门，郑小满因家中怪事恐惧而犹豫后开门。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_31\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_42\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"劳梓凡出示账本照片，郑小满脸色变化后摘链子让他进门，双方动机与回应均有呈现。\"\n      },\n      \"constraints\": {\n        \"claim\": \"劳梓凡进入陌生女性独居房间保持距离，郑小满戒备未消。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_49\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_53\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"郑小满站在沙发边没请他坐，劳梓凡站着等她开口，距离感保持。\"\n      }\n    },\n    {\n      \"sceneKey\": \"identify_source\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"郑小满不愿多谈差评，但在旧木匣震动后主动说出旧物来自城西二手市场并承认丢过手机。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_68\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_162\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"郑小满先否认差评，后因木匣异动说出旧物来源和丢手机事实，动机与阻力均有呈现。\"\n      },\n      \"constraints\": {\n        \"claim\": \"旧木匣不能直接打开或毁掉，阴气外泄后郑小满退到墙边。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_75\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_125\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"郑小满退到墙边，劳梓凡事后叮嘱别扔别烧别碰，约束持续。\"\n      }\n    },\n    {\n      \"sceneKey\": \"suppress_with_fist\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"劳梓凡在符咒单用无效后改用八极拳贴身配合符咒击打阴气团核心，暂时打散但未消灭。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_97\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_105\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"符纸贴住后阴气更猛，劳梓凡冲上去用八极拳连续击打，阴气团被打散后重聚但缩小。\"\n      },\n      \"constraints\": {\n        \"claim\": \"劳梓凡右臂被阴气扫过暂时使不上力，符咒消耗大半。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_99\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_106\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"右臂麻了半截，打到第五拳符纸用完，代价与消耗均有呈现。\"\n      }\n    },\n    {\n      \"sceneKey\": \"pay_and_depart\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"劳梓凡收下三百元并主动承诺追查旧物来源，郑小满犹豫后给钱并要求下次提前打电话。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_137\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_152\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"郑小满数出三百元，劳梓凡承诺追查来源并拍照留证，郑小满同意他下次再来。\"\n      },\n      \"constraints\": {\n        \"claim\": \"旧木匣留在郑小满家中，阴气只是暂时压制，随时可能复发。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_107\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_185\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"阴气缩回木匣但裂缝仍在渗气，离开后账本再次震动，暗示未完结。\"\n      }\n    }\n  ],\n  \"actionStateChecks\": [\n    {\n      \"sceneKey\": \"arrive_and_meet\",\n      \"actor\": \"劳梓凡\",\n      \"action\": \"报出郑小满名字和账本地址要求进门\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_31\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"劳梓凡\",\n          \"dimension\": \"knowledge\",\n          \"requiredForAction\": \"知道账本上郑小满的名字和地址\",\n          \"before\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道账本上郑小满的名字和地址\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_31\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡掏出手机展示账本照片，证明他已知名字和地址。\"\n          },\n          \"after\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道郑小满对账本名字有反应\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_32\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"郑小满看到名字后脸色变了，劳梓凡观察到这一反应。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道账本上郑小满的名字和地址\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_31\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"第1章已建立账本显示名字和地址，本章他出示照片证明已知。\"\n            },\n            \"reason\": \"进门前提是知道名字和地址，已满足。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道郑小满对账本名字有反应\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_32\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"郑小满脸色变化是劳梓凡新获得的信息。\"\n            },\n            \"reason\": \"劳梓凡从郑小满反应中获得新信息。\"\n          }\n        }\n      ],\n      \"explanation\": \"劳梓凡已知名字地址，出示照片后郑小满反应促使她开门。\"\n    },\n    {\n      \"sceneKey\": \"identify_source\",\n      \"actor\": \"郑小满\",\n      \"action\": \"说出旧物来自城西二手市场并承认丢过手机\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_68\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"郑小满\",\n          \"dimension\": \"knowledge\",\n          \"requiredForAction\": \"知道旧物来源和丢手机事实\",\n          \"before\": {\n            \"entity\": \"郑小满\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道旧物来自二手市场且自己丢过手机\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_68\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_162\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"郑小满主动说出旧物来源和丢手机事实，证明她此前已知。\"\n          },\n          \"after\": {\n            \"entity\": \"郑小满\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道劳梓凡在追查旧物来源\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_145\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡追问哪个摊，郑小满回答具体位置，表明她理解对方在追查。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"郑小满\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道旧物来自二手市场且自己丢过手机\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_68\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"她主动说出这些信息，证明前提已满足。\"\n            },\n            \"reason\": \"说出旧物来源的前提是她知道这些信息。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"郑小满\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道劳梓凡在追查旧物来源\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_145\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"劳梓凡追问摊主信息，郑小满回答，表明她理解对方意图。\"\n            },\n            \"reason\": \"郑小满从劳梓凡追问中确认他在追查来源。\"\n          }\n        }\n      ],\n      \"explanation\": \"郑小满已知旧物来源和丢手机事实，在木匣震动后主动说出。\"\n    },\n    {\n      \"sceneKey\": \"suppress_with_fist\",\n      \"actor\": \"劳梓凡\",\n      \"action\": \"用八极拳贴身配合符咒击打阴气团核心\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_97\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"劳梓凡\",\n          \"dimension\": \"ability\",\n          \"requiredForAction\": \"会八极拳且随身携带符咒\",\n          \"before\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"ability\",\n            \"claim\": \"练过八极拳且随身携带黄纸符和朱砂\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_80\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_98\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡从外卖箱摸出符纸朱砂，且文中明确他练了十几年八极拳。\"\n          },\n          \"after\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"ability\",\n            \"claim\": \"右臂被阴气侵蚀暂时使不上力，符咒耗尽\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_99\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_106\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"右臂麻了半截，打到第五拳符纸用完，能力状态改变。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"ability\",\n              \"claim\": \"练过八极拳且随身携带黄纸符和朱砂\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_80\"\n                },\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_98\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"八极拳和符咒均为已建立条件。\"\n            },\n            \"reason\": \"八极拳和符咒前提已满足。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"ability\",\n              \"claim\": \"右臂被阴气侵蚀暂时使不上力，符咒耗尽\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_99\"\n                },\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_106\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"战斗导致右臂受伤和符咒耗尽，能力状态改变。\"\n            },\n            \"reason\": \"战斗造成能力状态改变。\"\n          }\n        }\n      ],\n      \"explanation\": \"劳梓凡具备八极拳和符咒前提，战斗后右臂受伤符咒耗尽。\"\n    },\n    {\n      \"sceneKey\": \"pay_and_depart\",\n      \"actor\": \"劳梓凡\",\n      \"action\": \"收下三百元并承诺追查旧物来源\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_141\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"劳梓凡\",\n          \"dimension\": \"knowledge\",\n          \"requiredForAction\": \"确认自己暂时压制了阴气\",\n          \"before\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"确认阴气被暂时压制但根源未除\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_114\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_117\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"账本显示“毁物不毁根，债还在”，劳梓凡理解木匣裂了阴气压住但根没断。\"\n          },\n          \"after\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"决定追查二手市场摊主\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_178\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡明确根在二手市场，那个摊主。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"确认阴气被暂时压制但根源未除\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_114\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"账本提示和实际压制结果已建立。\"\n            },\n            \"reason\": \"收钱和承诺的前提是确认自己暂时压制了阴气。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"决定追查二手市场摊主\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_178\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"劳梓凡从收钱离开到决定追查来源，目标状态改变。\"\n            },\n            \"reason\": \"劳梓凡从收钱离开到决定追查来源，目标状态改变。\"\n          }\n        }\n      ],\n      \"explanation\": \"劳梓凡确认阴气暂时压制，收钱后决定追查来源。\"\n    }\n  ],\n  \"progressionChecks\": [\n    {\n      \"dimension\": \"event_repetition\",\n      \"status\": \"progressed\",\n      \"repeatsEstablishedBeat\": false,\n      \"addsNewConsequence\": true,\n      \"priorState\": \"第1章账本显名和地址，劳梓凡出门前往柳巷街。\",\n      \"actualChange\": \"劳梓凡抵达郑小满家，确认旧物附灵，用符咒加八极拳暂时压制阴气，收三百元报酬，账本提示“毁物不毁根，债还在”。\",\n      \"newConsequence\": \"第一轮驱邪循环完成，劳梓凡获得报酬并确认账本有用，但旧物未毁、债未清，决定追查二手市场。\",\n      \"previousEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_344\"\n        }\n      ],\n      \"currentEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_114\"\n        },\n        {\n          \"evidenceId\": \"ev_65723ef4510a_141\"\n        }\n      ],\n      \"explanation\": \"第1章只启动账本显名和出门，本章完成首轮驱邪、报酬和账本新提示，事件推进明显。\",\n      \"repairSuggestion\": \"\"\n    },\n    {\n      \"dimension\": \"knowledge_repetition\",\n      \"status\": \"progressed\",\n      \"repeatsEstablishedBeat\": false,\n      \"addsNewConsequence\": true,\n      \"priorState\": \"第1章劳梓凡知道账本显示郑小满名字和地址，但不知道郑小满是谁、去了会发生什么。\",\n      \"actualChange\": \"劳梓凡见到郑小满，确认旧物来自二手市场，账本提示“毁物不毁根，债还在”，知道根源不在物件本身。\",\n      \"newConsequence\": \"劳梓凡获得新线索：旧物来自城西二手市场，根在摊主，决定追查来源。\",\n      \"previousEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_346\"\n        }\n      ],\n      \"currentEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_68\"\n        },\n        {\n          \"evidenceId\": \"ev_65723ef4510a_114\"\n        }\n      ],\n      \"explanation\": \"第1章劳梓凡只知道名字地址，本章获得旧物来源和“毁物不毁根”的新知识，知识推进。\",\n      \"repairSuggestion\": \"\"\n    },\n    {\n      \"dimension\": \"prior_goal_followthrough\",\n      \"status\": \"progressed\",\n      \"repeatsEstablishedBeat\": false,\n      \"addsNewConsequence\": true,\n      \"priorState\": \"第1章劳梓凡决定前往柳巷街三十七号弄清账本与“债转你身”的含义，同时设法凑齐房租。\",\n      \"actualChange\": \"劳梓凡抵达郑小满家，压制阴气，收下三百元报酬，承诺追查旧物来源。\",\n      \"newConsequence\": \"劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但房租仍差得远，旧物根源未除。\",\n      \"previousEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_344\"\n        }\n      ],\n      \"currentEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_141\"\n        },\n        {\n          \"evidenceId\": \"ev_65723ef4510a_178\"\n        }\n      ],\n      \"explanation\": \"第1章劳梓凡决定前往柳巷街并凑房租，本章完成前往、驱邪、收钱，目标部分兑现并产生新目标。\",\n      \"repairSuggestion\": \"\"\n    }\n  ],\n  \"blockingIssues\": [],\n  \"issueChecks\": [],\n  \"repairDirectives\": [],\n  \"missingObligations\": [],\n  \"riskTags\": [\n    \"郑小满否认差评的疑点已埋下，但差评来源尚未推进，需在第3章承接\",\n    \"旧物根源和阴司规则未揭示，属于计划内延后\",\n    \"账本再次震动作为章末钩子，但未展开新信息，需后续章节承接\"\n  ],\n  \"decisionReason\": \"本章完整命中所有must hit now义务：抵达楼道闻阴冷、郑小满否认差评并承认旧物来自二手市场、贴符封阴气、八极拳配合符咒打散阴气团、账本浮现“毁物不毁根，债还在”、郑小满付三百元、拍照留证并承诺追查来源。未越过禁止边界，未提前揭示旧物根源或阴司规则。角色行为符合硬事实，八极拳必须配合符咒生效的设定得到遵守。章末钩子有效。无已核实缺陷，可继续推进。\",\n  \"continuePolicy\": \"continue\",\n  \"assetSyncRecommendation\": {\n    \"priority\": \"normal\",\n    \"reason\": \"本章完成第一轮驱邪循环，新增旧物来源线索、三百元报酬、右臂受伤和符咒耗尽状态，需同步资源账本和伏笔状态，但无需全量对账。\",\n    \"requiresFullPayoffReconcile\": false\n  }\n}",
+    "{\n  \"score\": {\n    \"coherence\": 88,\n    \"pacing\": 86,\n    \"repetition\": 84,\n    \"engagement\": 87,\n    \"voice\": 85,\n    \"overall\": 86\n  },\n  \"summary\": \"劳梓凡夜访柳巷街三十七号，在楼道闻到阴冷找到郑小满家。郑小满否认差评但承认旧物致噩梦，旧物来自二手市场。劳梓凡贴符封阴气，旧物裂开阴气更猛，他以八极拳近身配合符咒暂时打散阴气团。账本自动翻页浮现“毁物不毁根，债还在”。郑小满付三百元，劳梓凡拍照留证并承诺追查来源后离开。章末账本再次震动，留下新钩子。\",\n  \"sceneCausalityVerdicts\": [\n    {\n      \"sceneKey\": \"arrive_and_meet\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"劳梓凡报出郑小满名字和账本地址要求进门，郑小满因家中怪事恐惧而犹豫后开门。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_31\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_42\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"劳梓凡出示账本照片，郑小满脸色变化后摘链子让他进门，双方动机与回应均有呈现。\"\n      },\n      \"constraints\": [\n        {\n          \"claim\": \"劳梓凡进入陌生女性独居房间保持距离，郑小满戒备未消。\",\n          \"evidence\": [\n            {\n              \"evidenceId\": \"ev_65723ef4510a_49\"\n            },\n            {\n              \"evidenceId\": \"ev_65723ef4510a_53\"\n            }\n          ],\n          \"support\": \"supported\",\n          \"reason\": \"郑小满站在沙发边没请他坐，劳梓凡站着等她开口，距离感保持。\"\n        }\n      ]\n    },\n    {\n      \"sceneKey\": \"identify_source\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"郑小满不愿多谈差评，但在旧木匣震动后主动说出旧物来自城西二手市场并承认丢过手机。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_68\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_162\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"郑小满先否认差评，后因木匣异动说出旧物来源和丢手机事实，动机与阻力均有呈现。\"\n      },\n      \"constraints\": [\n        {\n          \"claim\": \"旧木匣不能直接打开或毁掉，阴气外泄后郑小满退到墙边。\",\n          \"evidence\": [\n            {\n              \"evidenceId\": \"ev_65723ef4510a_75\"\n            },\n            {\n              \"evidenceId\": \"ev_65723ef4510a_125\"\n            }\n          ],\n          \"support\": \"supported\",\n          \"reason\": \"郑小满退到墙边，劳梓凡事后叮嘱别扔别烧别碰，约束持续。\"\n        }\n      ]\n    },\n    {\n      \"sceneKey\": \"suppress_with_fist\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"劳梓凡在符咒单用无效后改用八极拳贴身配合符咒击打阴气团核心，暂时打散但未消灭。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_97\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_105\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"符纸贴住后阴气更猛，劳梓凡冲上去用八极拳连续击打，阴气团被打散后重聚但缩小。\"\n      },\n      \"constraints\": [\n        {\n          \"claim\": \"劳梓凡右臂被阴气扫过暂时使不上力，符咒消耗大半。\",\n          \"evidence\": [\n            {\n              \"evidenceId\": \"ev_65723ef4510a_99\"\n            },\n            {\n              \"evidenceId\": \"ev_65723ef4510a_106\"\n            }\n          ],\n          \"support\": \"supported\",\n          \"reason\": \"右臂麻了半截，打到第五拳符纸用完，代价与消耗均有呈现。\"\n        }\n      ]\n    },\n    {\n      \"sceneKey\": \"pay_and_depart\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"劳梓凡收下三百元并主动承诺追查旧物来源，郑小满犹豫后给钱并要求下次提前打电话。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_137\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_152\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"郑小满数出三百元，劳梓凡承诺追查来源并拍照留证，郑小满同意他下次再来。\"\n      },\n      \"constraints\": [\n        {\n          \"claim\": \"旧木匣留在郑小满家中，阴气只是暂时压制，随时可能复发。\",\n          \"evidence\": [\n            {\n              \"evidenceId\": \"ev_65723ef4510a_107\"\n            },\n            {\n              \"evidenceId\": \"ev_65723ef4510a_185\"\n            }\n          ],\n          \"support\": \"supported\",\n          \"reason\": \"阴气缩回木匣但裂缝仍在渗气，离开后账本再次震动，暗示未完结。\"\n        }\n      ]\n    }\n  ],\n  \"actionStateChecks\": [\n    {\n      \"sceneKey\": \"arrive_and_meet\",\n      \"actor\": \"劳梓凡\",\n      \"action\": \"报出郑小满名字和账本地址要求进门\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_31\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"劳梓凡\",\n          \"dimension\": \"knowledge\",\n          \"requiredForAction\": \"知道账本上郑小满的名字和地址\",\n          \"before\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道账本上郑小满的名字和地址\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_31\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡掏出手机展示账本照片，证明他已知名字和地址。\"\n          },\n          \"after\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道郑小满对账本名字有反应\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_32\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"郑小满看到名字后脸色变了，劳梓凡观察到这一反应。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道账本上郑小满的名字和地址\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_31\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"第1章已建立账本显示名字和地址，本章他出示照片证明已知。\"\n            },\n            \"reason\": \"进门前提是知道名字和地址，已满足。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道郑小满对账本名字有反应\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_32\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"郑小满脸色变化是劳梓凡新获得的信息。\"\n            },\n            \"reason\": \"劳梓凡从郑小满反应中获得新信息。\"\n          }\n        }\n      ],\n      \"explanation\": \"劳梓凡已知名字地址，出示照片后郑小满反应促使她开门。\"\n    },\n    {\n      \"sceneKey\": \"identify_source\",\n      \"actor\": \"郑小满\",\n      \"action\": \"说出旧物来自城西二手市场并承认丢过手机\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_68\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"郑小满\",\n          \"dimension\": \"knowledge\",\n          \"requiredForAction\": \"知道旧物来源和丢手机事实\",\n          \"before\": {\n            \"entity\": \"郑小满\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道旧物来自二手市场且自己丢过手机\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_68\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_162\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"郑小满主动说出旧物来源和丢手机事实，证明她此前已知。\"\n          },\n          \"after\": {\n            \"entity\": \"郑小满\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道劳梓凡在追查旧物来源\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_145\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡追问哪个摊，郑小满回答具体位置，表明她理解对方在追查。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"郑小满\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道旧物来自二手市场且自己丢过手机\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_68\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"她主动说出这些信息，证明前提已满足。\"\n            },\n            \"reason\": \"说出旧物来源的前提是她知道这些信息。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"郑小满\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道劳梓凡在追查旧物来源\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_145\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"劳梓凡追问摊主信息，郑小满回答，表明她理解对方意图。\"\n            },\n            \"reason\": \"郑小满从劳梓凡追问中确认他在追查来源。\"\n          }\n        }\n      ],\n      \"explanation\": \"郑小满已知旧物来源和丢手机事实，在木匣震动后主动说出。\"\n    },\n    {\n      \"sceneKey\": \"suppress_with_fist\",\n      \"actor\": \"劳梓凡\",\n      \"action\": \"用八极拳贴身配合符咒击打阴气团核心\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_97\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"劳梓凡\",\n          \"dimension\": \"ability\",\n          \"requiredForAction\": \"会八极拳且随身携带符咒\",\n          \"before\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"ability\",\n            \"claim\": \"练过八极拳且随身携带黄纸符和朱砂\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_80\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_98\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡从外卖箱摸出符纸朱砂，且文中明确他练了十几年八极拳。\"\n          },\n          \"after\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"ability\",\n            \"claim\": \"右臂暂时使不上力，符咒消耗大半\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_99\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_106\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"右臂麻了半截，打到第五拳符纸用完。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"ability\",\n              \"claim\": \"会八极拳且随身携带符咒\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_80\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"他练过八极拳并随身携带符咒，前提满足。\"\n            },\n            \"reason\": \"使用八极拳配合符咒的前提是会拳且带符。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"ability\",\n              \"claim\": \"右臂暂时使不上力，符咒消耗大半\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_99\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"右臂麻了半截，符纸用完，状态改变。\"\n            },\n            \"reason\": \"战斗导致右臂受伤和符咒消耗。\"\n          }\n        }\n      ],\n      \"explanation\": \"劳梓凡会八极拳且带符，战斗中右臂受伤、符咒耗尽。\"\n    }\n  ],\n  \"progressionChecks\": [\n    {\n      \"dimension\": \"event_repetition\",\n      \"status\": \"progressed\",\n      \"priorState\": \"第1章劳梓凡在出租屋发现账本显示郑小满名字和地址，决定前往。\",\n      \"actualChange\": \"劳梓凡抵达柳巷街三十七号，进入郑小满家，压制阴气，收下三百元报酬。\",\n      \"newConsequence\": \"劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但旧物根源未除。\",\n      \"repeatsEstablishedBeat\": false,\n      \"addsNewConsequence\": true,\n      \"previousEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_344\"\n        }\n      ],\n      \"currentEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_141\"\n        },\n        {\n          \"evidenceId\": \"ev_65723ef4510a_178\"\n        }\n      ],\n      \"explanation\": \"第1章决定前往，本章完成前往、驱邪、收钱，事件推进。\",\n      \"repairSuggestion\": \"\"\n    },\n    {\n      \"dimension\": \"knowledge_repetition\",\n      \"status\": \"progressed\",\n      \"priorState\": \"第1章劳梓凡知道账本显示郑小满名字和地址，但不知道郑小满是谁、去了会发生什么。\",\n      \"actualChange\": \"劳梓凡见到郑小满，确认旧物来自二手市场，账本提示“毁物不毁根，债还在”，知道根源不在物件本身。\",\n      \"newConsequence\": \"劳梓凡获得新线索：旧物来自城西二手市场，根在摊主，决定追查来源。\",\n      \"repeatsEstablishedBeat\": false,\n      \"addsNewConsequence\": true,\n      \"previousEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_346\"\n        }\n      ],\n      \"currentEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_68\"\n        },\n        {\n          \"evidenceId\": \"ev_65723ef4510a_114\"\n        }\n      ],\n      \"explanation\": \"第1章劳梓凡只知道名字地址，本章获得旧物来源和“毁物不毁根”的新知识，知识推进。\",\n      \"repairSuggestion\": \"\"\n    },\n    {\n      \"dimension\": \"prior_goal_followthrough\",\n      \"status\": \"progressed\",\n      \"priorState\": \"第1章劳梓凡决定前往柳巷街三十七号弄清账本与“债转你身”的含义，同时设法凑齐房租。\",\n      \"actualChange\": \"劳梓凡抵达郑小满家，压制阴气，收下三百元报酬，承诺追查旧物来源。\",\n      \"newConsequence\": \"劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但房租仍差得远，旧物根源未除。\",\n      \"repeatsEstablishedBeat\": false,\n      \"addsNewConsequence\": true,\n      \"previousEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_344\"\n        }\n      ],\n      \"currentEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_141\"\n        },\n        {\n          \"evidenceId\": \"ev_65723ef4510a_178\"\n        }\n      ],\n      \"explanation\": \"第1章劳梓凡决定前往柳巷街并凑房租，本章完成前往、驱邪、收钱，目标部分兑现并产生新目标。\",\n      \"repairSuggestion\": \"\"\n    }\n  ],\n  \"blockingIssues\": [],\n  \"repairDirectives\": [],\n  \"missingObligations\": [],\n  \"decisionReason\": \"本章完整命中所有must hit now义务：抵达楼道闻阴冷、郑小满否认差评并承认旧物来自二手市场、贴符封阴气、八极拳配合符咒打散阴气团、账本浮现“毁物不毁根，债还在”、郑小满付三百元、拍照留证并承诺追查来源。未越过禁止边界，未提前揭示旧物根源或阴司规则。角色行为符合硬事实，八极拳必须配合符咒生效的设定得到遵守。章末钩子有效。无已核实缺陷，可继续推进。\",\n  \"riskTags\": [\n    \"郑小满否认差评的疑点已埋下，但差评来源尚未推进，需在第3章承接\",\n    \"旧物根源和阴司规则未揭示，属于计划内延后\",\n    \"账本再次震动作为章末钩子，但未展开新信息，需后续章节承接\"\n  ],\n  \"assetSyncRecommendation\": {\n    \"priority\": \"normal\",\n    \"reason\": \"本章完成第一轮驱邪循环，新增旧物来源线索、三百元报酬、右臂受伤和符咒耗尽状态，需同步资源账本和伏笔状态，但无需全量对账。\",\n    \"requiresFullPayoffReconcile\": false\n  },\n  \"continuePolicy\": \"continue\"\n}",
+    "{\n  \"score\": {\n    \"coherence\": 88,\n    \"pacing\": 86,\n    \"repetition\": 84,\n    \"engagement\": 87,\n    \"voice\": 85,\n    \"overall\": 86\n  },\n  \"summary\": \"劳梓凡夜访柳巷街三十七号，在楼道闻到阴冷找到郑小满家。郑小满否认差评但承认旧物致噩梦，旧物来自二手市场。劳梓凡贴符封阴气，旧物裂开阴气更猛，他以八极拳近身配合符咒暂时打散阴气团。账本自动翻页浮现“毁物不毁根，债还在”。郑小满付三百元，劳梓凡拍照留证并承诺追查来源后离开。章末账本再次震动，留下新钩子。\",\n  \"sceneCausalityVerdicts\": [\n    {\n      \"sceneKey\": \"arrive_and_meet\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"劳梓凡报出郑小满名字和账本地址要求进门，郑小满因家中怪事恐惧而犹豫后开门。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_31\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_42\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"劳梓凡出示账本照片，郑小满脸色变化后摘链子让他进门，双方动机与回应均有呈现。\"\n      },\n      \"constraints\": [\n        {\n          \"claim\": \"劳梓凡进入陌生女性独居房间保持距离，郑小满戒备未消。\",\n          \"evidence\": [\n            {\n              \"evidenceId\": \"ev_65723ef4510a_49\"\n            },\n            {\n              \"evidenceId\": \"ev_65723ef4510a_53\"\n            }\n          ],\n          \"support\": \"supported\",\n          \"reason\": \"郑小满站在沙发边没请他坐，劳梓凡站着等她开口，距离感保持。\"\n        }\n      ]\n    },\n    {\n      \"sceneKey\": \"identify_source\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"郑小满不愿多谈差评，但在旧木匣震动后主动说出旧物来自城西二手市场并承认丢过手机。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_68\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_162\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"郑小满先否认差评，后因木匣异动说出旧物来源和丢手机事实，动机与阻力均有呈现。\"\n      },\n      \"constraints\": [\n        {\n          \"claim\": \"旧木匣不能直接打开或毁掉，阴气外泄后郑小满退到墙边。\",\n          \"evidence\": [\n            {\n              \"evidenceId\": \"ev_65723ef4510a_75\"\n            },\n            {\n              \"evidenceId\": \"ev_65723ef4510a_125\"\n            }\n          ],\n          \"support\": \"supported\",\n          \"reason\": \"郑小满退到墙边，劳梓凡事后叮嘱别扔别烧别碰，约束持续。\"\n        }\n      ]\n    },\n    {\n      \"sceneKey\": \"suppress_with_fist\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"劳梓凡在符咒单用无效后改用八极拳贴身配合符咒击打阴气团核心，暂时打散但未消灭。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_97\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_105\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"符纸贴住后阴气更猛，劳梓凡冲上去用八极拳连续击打，阴气团被打散后重聚但缩小。\"\n      },\n      \"constraints\": [\n        {\n          \"claim\": \"劳梓凡右臂被阴气扫过暂时使不上力，符咒消耗大半。\",\n          \"evidence\": [\n            {\n              \"evidenceId\": \"ev_65723ef4510a_99\"\n            },\n            {\n              \"evidenceId\": \"ev_65723ef4510a_106\"\n            }\n          ],\n          \"support\": \"supported\",\n          \"reason\": \"右臂麻了半截，打到第五拳符纸用完，代价与消耗均有呈现。\"\n        }\n      ]\n    },\n    {\n      \"sceneKey\": \"pay_and_depart\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"劳梓凡收下三百元并主动承诺追查旧物来源，郑小满犹豫后给钱并要求下次提前打电话。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_137\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_152\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"郑小满数出三百元，劳梓凡承诺追查来源并拍照留证，郑小满同意他下次再来。\"\n      },\n      \"constraints\": [\n        {\n          \"claim\": \"旧木匣留在郑小满家中，阴气只是暂时压制，随时可能复发。\",\n          \"evidence\": [\n            {\n              \"evidenceId\": \"ev_65723ef4510a_107\"\n            },\n            {\n              \"evidenceId\": \"ev_65723ef4510a_185\"\n            }\n          ],\n          \"support\": \"supported\",\n          \"reason\": \"阴气缩回木匣但裂缝仍在渗气，离开后账本再次震动，暗示未完结。\"\n        }\n      ]\n    }\n  ],\n  \"actionStateChecks\": [\n    {\n      \"sceneKey\": \"arrive_and_meet\",\n      \"actor\": \"劳梓凡\",\n      \"action\": \"报出郑小满名字和账本地址要求进门\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_31\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"劳梓凡\",\n          \"dimension\": \"knowledge\",\n          \"requiredForAction\": \"知道账本上郑小满的名字和地址\",\n          \"before\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道账本上郑小满的名字和地址\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_31\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡掏出手机展示账本照片，证明他已知名字和地址。\"\n          },\n          \"after\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道郑小满对账本名字有反应\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_32\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"郑小满看到名字后脸色变了，劳梓凡观察到这一反应。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道账本上郑小满的名字和地址\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_31\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"第1章已建立账本显示名字和地址，本章他出示照片证明已知。\"\n            },\n            \"reason\": \"进门前提是知道名字和地址，已满足。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道郑小满对账本名字有反应\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_32\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"郑小满脸色变化是劳梓凡新获得的信息。\"\n            },\n            \"reason\": \"劳梓凡从郑小满反应中获得新信息。\"\n          }\n        }\n      ],\n      \"explanation\": \"劳梓凡已知名字地址，出示照片后郑小满反应促使她开门。\"\n    },\n    {\n      \"sceneKey\": \"identify_source\",\n      \"actor\": \"郑小满\",\n      \"action\": \"说出旧物来自城西二手市场并承认丢过手机\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_68\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"郑小满\",\n          \"dimension\": \"knowledge\",\n          \"requiredForAction\": \"知道旧物来源和丢手机事实\",\n          \"before\": {\n            \"entity\": \"郑小满\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道旧物来自二手市场且自己丢过手机\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_68\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_162\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"郑小满主动说出旧物来源和丢手机事实，证明她此前已知。\"\n          },\n          \"after\": {\n            \"entity\": \"郑小满\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道劳梓凡在追查旧物来源\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_145\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡追问哪个摊，郑小满回答具体位置，表明她理解对方在追查。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"郑小满\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道旧物来自二手市场且自己丢过手机\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_68\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"她主动说出这些信息，证明前提已满足。\"\n            },\n            \"reason\": \"说出旧物来源的前提是她知道这些信息。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"郑小满\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道劳梓凡在追查旧物来源\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_145\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"劳梓凡追问摊主信息，郑小满回答，表明她理解对方意图。\"\n            },\n            \"reason\": \"郑小满从劳梓凡追问中确认他在追查来源。\"\n          }\n        }\n      ],\n      \"explanation\": \"郑小满已知旧物来源和丢手机事实，在木匣震动后主动说出。\"\n    },\n    {\n      \"sceneKey\": \"suppress_with_fist\",\n      \"actor\": \"劳梓凡\",\n      \"action\": \"用八极拳贴身配合符咒击打阴气团核心\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_97\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"劳梓凡\",\n          \"dimension\": \"ability\",\n          \"requiredForAction\": \"会八极拳且随身携带符咒\",\n          \"before\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"ability\",\n            \"claim\": \"练过八极拳且随身携带黄纸符和朱砂\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_80\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_98\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡从外卖箱摸出符纸朱砂，且文中明确他练了十几年八极拳。\"\n          },\n          \"after\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"ability\",\n            \"claim\": \"右臂暂时使不上力，符咒消耗大半\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_99\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_106\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"右臂麻了半截，打到第五拳符纸用完。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"ability\",\n              \"claim\": \"会八极拳且随身携带符咒\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_80\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"他练过八极拳并随身携带符咒，前提满足。\"\n            },\n            \"reason\": \"使用八极拳配合符咒的前提是会拳且带符。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"ability\",\n              \"claim\": \"右臂暂时使不上力，符咒消耗大半\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_99\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"右臂麻了半截，符纸用完，状态改变。\"\n            },\n            \"reason\": \"战斗导致右臂受伤和符咒消耗。\"\n          }\n        }\n      ],\n      \"explanation\": \"劳梓凡会八极拳且带符，战斗中右臂受伤、符咒耗尽。\"\n    },\n    {\n      \"sceneKey\": \"pay_and_depart\",\n      \"actor\": \"劳梓凡\",\n      \"action\": \"收下三百元报酬并承诺追查旧物来源\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_141\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"劳梓凡\",\n          \"dimension\": \"resources\",\n          \"requiredForAction\": \"需要钱且已证明能压制阴气\",\n          \"before\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"resources\",\n            \"claim\": \"身上只剩六十七块三毛，急需现金\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_135\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"文中明确他兜里六十七块三毛连买符纸都不够，赵德柱下礼拜换锁。\"\n          },\n          \"after\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"resources\",\n            \"claim\": \"获得三百元现金报酬\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_137\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_141\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"郑小满数出三张一百递过来，劳梓凡接过折好塞进内兜。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"ability\",\n              \"claim\": \"已用符咒加八极拳暂时压制阴气\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_105\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"上一场景他连续三拳配合符纸打散阴气团，证明有处理能力。\"\n            },\n            \"reason\": \"收报酬的前提是已证明能压制阴气，已满足。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"resources\",\n              \"claim\": \"获得三百元现金报酬\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_141\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"他接过钱折好塞进内兜，资源状态改变。\"\n            },\n            \"reason\": \"收下三百元使劳梓凡现金资源增加。\"\n          }\n        }\n      ],\n      \"explanation\": \"劳梓凡急需钱且已证明能力，收下三百元报酬并承诺追查来源。\"\n    }\n  ],\n  \"progressionChecks\": [\n    {\n      \"dimension\": \"event_repetition\",\n      \"status\": \"progressed\",\n      \"priorState\": \"第1章劳梓凡在出租屋发现账本显示郑小满名字和地址，决定前往。\",\n      \"actualChange\": \"劳梓凡抵达柳巷街三十七号，进入郑小满家，压制阴气，收下三百元报酬。\",\n      \"newConsequence\": \"劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但旧物根源未除。\",\n      \"repeatsEstablishedBeat\": false,\n      \"addsNewConsequence\": true,\n      \"previousEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_344\"\n        }\n      ],\n      \"currentEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_141\"\n        },\n        {\n          \"evidenceId\": \"ev_65723ef4510a_178\"\n        }\n      ],\n      \"explanation\": \"第1章决定前往，本章完成前往、驱邪、收钱，事件推进。\",\n      \"repairSuggestion\": \"\"\n    },\n    {\n      \"dimension\": \"knowledge_repetition\",\n      \"status\": \"progressed\",\n      \"priorState\": \"第1章劳梓凡知道账本显示郑小满名字和地址，但不知道郑小满是谁、去了会发生什么。\",\n      \"actualChange\": \"劳梓凡见到郑小满，确认旧物来自二手市场，账本提示“毁物不毁根，债还在”，知道根源不在物件本身。\",\n      \"newConsequence\": \"劳梓凡获得新线索：旧物来自城西二手市场，根在摊主，决定追查来源。\",\n      \"repeatsEstablishedBeat\": false,\n      \"addsNewConsequence\": true,\n      \"previousEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_346\"\n        }\n      ],\n      \"currentEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_68\"\n        },\n        {\n          \"evidenceId\": \"ev_65723ef4510a_114\"\n        }\n      ],\n      \"explanation\": \"第1章劳梓凡只知道名字地址，本章获得旧物来源和“毁物不毁根”的新知识，知识推进。\",\n      \"repairSuggestion\": \"\"\n    },\n    {\n      \"dimension\": \"prior_goal_followthrough\",\n      \"status\": \"progressed\",\n      \"priorState\": \"第1章劳梓凡决定前往柳巷街三十七号弄清账本与“债转你身”的含义，同时设法凑齐房租。\",\n      \"actualChange\": \"劳梓凡抵达郑小满家，压制阴气，收下三百元报酬，承诺追查旧物来源。\",\n      \"newConsequence\": \"劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但房租仍差得远，旧物根源未除。\",\n      \"repeatsEstablishedBeat\": false,\n      \"addsNewConsequence\": true,\n      \"previousEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_344\"\n        }\n      ],\n      \"currentEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_141\"\n        },\n        {\n          \"evidenceId\": \"ev_65723ef4510a_178\"\n        }\n      ],\n      \"explanation\": \"第1章劳梓凡决定前往柳巷街并凑房租，本章完成前往、驱邪、收钱，目标部分兑现并产生新目标。\",\n      \"repairSuggestion\": \"\"\n    }\n  ],\n  \"blockingIssues\": [],\n  \"issueChecks\": [],\n  \"repairDirectives\": [],\n  \"missingObligations\": [],\n  \"riskTags\": [\n    \"郑小满否认差评的疑点已埋下，但差评来源尚未推进，需在第3章承接\",\n    \"旧物根源和阴司规则未揭示，属于计划内延后\",\n    \"账本再次震动作为章末钩子，但未展开新信息，需后续章节承接\"\n  ],\n  \"decisionReason\": \"本章完整命中所有must hit now义务：抵达楼道闻阴冷、郑小满否认差评并承认旧物来自二手市场、贴符封阴气、八极拳配合符咒打散阴气团、账本浮现“毁物不毁根，债还在”、郑小满付三百元、拍照留证并承诺追查来源。未越过禁止边界，未提前揭示旧物根源或阴司规则。角色行为符合硬事实，八极拳必须配合符咒生效的设定得到遵守。章末钩子有效。无已核实缺陷，可继续推进。\",\n  \"continuePolicy\": \"continue\",\n  \"assetSyncRecommendation\": {\n    \"priority\": \"normal\",\n    \"reason\": \"本章完成第一轮驱邪循环，新增旧物来源线索、三百元报酬、右臂受伤和符咒耗尽状态，需同步资源账本和伏笔状态，但无需全量对账。\",\n    \"requiresFullPayoffReconcile\": false\n  }\n}",
+    "{\n  \"score\": {\n    \"coherence\": 88,\n    \"pacing\": 86,\n    \"repetition\": 84,\n    \"engagement\": 87,\n    \"voice\": 85,\n    \"overall\": 86\n  },\n  \"summary\": \"劳梓凡夜访柳巷街三十七号，在楼道闻到阴冷找到郑小满家。郑小满否认差评但承认旧物致噩梦，旧物来自二手市场。劳梓凡贴符封阴气，旧物裂开阴气更猛，他以八极拳近身配合符咒暂时打散阴气团。账本自动翻页浮现“毁物不毁根，债还在”。郑小满付三百元，劳梓凡拍照留证并承诺追查来源后离开。章末账本再次震动，留下新钩子。\",\n  \"sceneCausalityVerdicts\": [\n    {\n      \"sceneKey\": \"arrive_and_meet\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"劳梓凡报出郑小满名字和账本地址要求进门，郑小满因家中怪事恐惧而犹豫后开门。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_31\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_42\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"劳梓凡出示账本照片，郑小满脸色变化后摘链子让他进门，双方动机与回应均有呈现。\"\n      },\n      \"constraints\": [\n        {\n          \"claim\": \"劳梓凡进入陌生女性独居房间保持距离，郑小满戒备未消。\",\n          \"evidence\": [\n            {\n              \"evidenceId\": \"ev_65723ef4510a_49\"\n            },\n            {\n              \"evidenceId\": \"ev_65723ef4510a_53\"\n            }\n          ],\n          \"support\": \"supported\",\n          \"reason\": \"郑小满站在沙发边没请他坐，劳梓凡站着等她开口，距离感保持。\"\n        }\n      ]\n    },\n    {\n      \"sceneKey\": \"identify_source\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"郑小满不愿多谈差评，但在旧木匣震动后主动说出旧物来自城西二手市场并承认丢过手机。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_68\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_162\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"郑小满先否认差评，后因木匣异动说出旧物来源和丢手机事实，动机与阻力均有呈现。\"\n      },\n      \"constraints\": [\n        {\n          \"claim\": \"旧木匣不能直接打开或毁掉，阴气外泄后郑小满退到墙边。\",\n          \"evidence\": [\n            {\n              \"evidenceId\": \"ev_65723ef4510a_75\"\n            },\n            {\n              \"evidenceId\": \"ev_65723ef4510a_125\"\n            }\n          ],\n          \"support\": \"supported\",\n          \"reason\": \"郑小满退到墙边，劳梓凡事后叮嘱别扔别烧别碰，约束持续。\"\n        }\n      ]\n    },\n    {\n      \"sceneKey\": \"suppress_with_fist\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"劳梓凡在符咒单用无效后改用八极拳贴身配合符咒击打阴气团核心，暂时打散但未消灭。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_97\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_105\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"符纸贴住后阴气更猛，劳梓凡冲上去用八极拳连续击打，阴气团被打散后重聚但缩小。\"\n      },\n      \"constraints\": [\n        {\n          \"claim\": \"劳梓凡右臂被阴气扫过暂时使不上力，符咒消耗大半。\",\n          \"evidence\": [\n            {\n              \"evidenceId\": \"ev_65723ef4510a_99\"\n            },\n            {\n              \"evidenceId\": \"ev_65723ef4510a_106\"\n            }\n          ],\n          \"support\": \"supported\",\n          \"reason\": \"右臂麻了半截，打到第五拳符纸用完，代价与消耗均有呈现。\"\n        }\n      ]\n    },\n    {\n      \"sceneKey\": \"pay_and_depart\",\n      \"outcomeObserved\": true,\n      \"choiceAndResistance\": {\n        \"claim\": \"劳梓凡收下三百元并主动承诺追查旧物来源，郑小满犹豫后给钱并要求下次提前打电话。\",\n        \"evidence\": [\n          {\n            \"evidenceId\": \"ev_65723ef4510a_137\"\n          },\n          {\n            \"evidenceId\": \"ev_65723ef4510a_152\"\n          }\n        ],\n        \"support\": \"supported\",\n        \"reason\": \"郑小满数出三百元，劳梓凡承诺追查来源并拍照留证，郑小满同意他下次再来。\"\n      },\n      \"constraints\": [\n        {\n          \"claim\": \"旧木匣留在郑小满家中，阴气只是暂时压制，随时可能复发。\",\n          \"evidence\": [\n            {\n              \"evidenceId\": \"ev_65723ef4510a_107\"\n            },\n            {\n              \"evidenceId\": \"ev_65723ef4510a_185\"\n            }\n          ],\n          \"support\": \"supported\",\n          \"reason\": \"阴气缩回木匣但裂缝仍在渗气，离开后账本再次震动，暗示未完结。\"\n        }\n      ]\n    }\n  ],\n  \"actionStateChecks\": [\n    {\n      \"sceneKey\": \"arrive_and_meet\",\n      \"actor\": \"劳梓凡\",\n      \"action\": \"报出郑小满名字和账本地址要求进门\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_31\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"劳梓凡\",\n          \"dimension\": \"knowledge\",\n          \"requiredForAction\": \"知道账本上郑小满的名字和地址\",\n          \"before\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道账本上郑小满的名字和地址\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_31\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡掏出手机展示账本照片，证明他已知名字和地址。\"\n          },\n          \"after\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道郑小满对账本名字有反应\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_32\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"郑小满看到名字后脸色变了，劳梓凡观察到这一反应。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道账本上郑小满的名字和地址\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_31\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"第1章已建立账本显示名字和地址，本章他出示照片证明已知。\"\n            },\n            \"reason\": \"进门前提是知道名字和地址，已满足。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道郑小满对账本名字有反应\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_32\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"郑小满脸色变化是劳梓凡新获得的信息。\"\n            },\n            \"reason\": \"劳梓凡从郑小满反应中获得新信息。\"\n          }\n        }\n      ],\n      \"explanation\": \"劳梓凡已知名字地址，出示照片后郑小满反应促使她开门。\"\n    },\n    {\n      \"sceneKey\": \"identify_source\",\n      \"actor\": \"郑小满\",\n      \"action\": \"说出旧物来自城西二手市场并承认丢过手机\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_68\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"郑小满\",\n          \"dimension\": \"knowledge\",\n          \"requiredForAction\": \"知道旧物来源和丢手机事实\",\n          \"before\": {\n            \"entity\": \"郑小满\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道旧物来自二手市场且自己丢过手机\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_68\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_162\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"郑小满主动说出旧物来源和丢手机事实，证明她此前已知。\"\n          },\n          \"after\": {\n            \"entity\": \"郑小满\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道劳梓凡在追查旧物来源\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_145\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡追问哪个摊，郑小满回答具体位置，表明她理解对方在追查。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"郑小满\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道旧物来自二手市场且自己丢过手机\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_68\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"她主动说出这些信息，证明前提已满足。\"\n            },\n            \"reason\": \"说出旧物来源的前提是她知道这些信息。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"郑小满\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道劳梓凡在追查旧物来源\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_145\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"劳梓凡追问摊主信息，郑小满回答，表明她理解对方意图。\"\n            },\n            \"reason\": \"郑小满从劳梓凡追问中确认他在追查来源。\"\n          }\n        }\n      ],\n      \"explanation\": \"郑小满已知旧物来源和丢手机事实，在木匣震动后主动说出。\"\n    },\n    {\n      \"sceneKey\": \"suppress_with_fist\",\n      \"actor\": \"劳梓凡\",\n      \"action\": \"用八极拳贴身配合符咒击打阴气团核心\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_97\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"劳梓凡\",\n          \"dimension\": \"ability\",\n          \"requiredForAction\": \"会八极拳且随身携带符咒\",\n          \"before\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"ability\",\n            \"claim\": \"练过八极拳且随身携带黄纸符和朱砂\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_80\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_97\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡此前已展示八极拳功底并携带符咒，具备行动能力。\"\n          },\n          \"after\": {\n            \"entity\": \"劳梓凡\",\n            \"dimension\": \"body\",\n            \"claim\": \"右臂被阴气扫过暂时使不上力，符咒消耗大半\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_99\"\n              },\n              {\n                \"evidenceId\": \"ev_65723ef4510a_106\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"右臂麻了半截，打到第五拳符纸用完，身体与资源状态改变。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"ability\",\n              \"claim\": \"会八极拳且随身携带符咒\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_80\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"八极拳与符咒能力此前已建立，满足行动前提。\"\n            },\n            \"reason\": \"击打阴气团需要八极拳与符咒，均已具备。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"劳梓凡\",\n              \"dimension\": \"body\",\n              \"claim\": \"右臂受伤且符咒耗尽\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_99\"\n                },\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_106\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"右臂麻木与符纸用尽是行动后的直接结果。\"\n            },\n            \"reason\": \"行动导致劳梓凡身体与资源状态变化。\"\n          }\n        }\n      ],\n      \"explanation\": \"劳梓凡具备八极拳与符咒能力，行动后右臂受伤且符咒耗尽。\"\n    },\n    {\n      \"sceneKey\": \"pay_and_depart\",\n      \"actor\": \"郑小满\",\n      \"action\": \"支付三百元并同意劳梓凡下次再来\",\n      \"actionEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_137\"\n        }\n      ],\n      \"states\": [\n        {\n          \"entity\": \"郑小满\",\n          \"dimension\": \"item\",\n          \"requiredForAction\": \"有现金三百元\",\n          \"before\": {\n            \"entity\": \"郑小满\",\n            \"dimension\": \"item\",\n            \"claim\": \"家中有现金可支付\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_137\"\n              }\n            ],\n            \"storyTime\": \"before_or_at_action\",\n            \"support\": \"supported\",\n            \"reason\": \"郑小满数出三百元，证明她持有现金。\"\n          },\n          \"after\": {\n            \"entity\": \"郑小满\",\n            \"dimension\": \"knowledge\",\n            \"claim\": \"知道劳梓凡会追查旧物来源\",\n            \"evidence\": [\n              {\n                \"evidenceId\": \"ev_65723ef4510a_152\"\n              }\n            ],\n            \"storyTime\": \"during_or_after_action\",\n            \"support\": \"supported\",\n            \"reason\": \"劳梓凡承诺追查来源，郑小满同意他下次再来。\"\n          },\n          \"prerequisite\": {\n            \"status\": \"satisfied\",\n            \"basis\": {\n              \"entity\": \"郑小满\",\n              \"dimension\": \"item\",\n              \"claim\": \"有现金三百元\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_137\"\n                }\n              ],\n              \"storyTime\": \"before_or_at_action\",\n              \"support\": \"supported\",\n              \"reason\": \"她当场数出三百元，支付前提满足。\"\n            },\n            \"reason\": \"支付报酬需要现金，已具备。\"\n          },\n          \"resultChange\": {\n            \"status\": \"changed\",\n            \"basis\": {\n              \"entity\": \"郑小满\",\n              \"dimension\": \"knowledge\",\n              \"claim\": \"知道劳梓凡会追查旧物来源\",\n              \"evidence\": [\n                {\n                  \"evidenceId\": \"ev_65723ef4510a_152\"\n                }\n              ],\n              \"storyTime\": \"during_or_after_action\",\n              \"support\": \"supported\",\n              \"reason\": \"劳梓凡承诺追查来源，郑小满获得后续预期。\"\n            },\n            \"reason\": \"支付后郑小满获得劳梓凡追查来源的承诺。\"\n          }\n        }\n      ],\n      \"explanation\": \"郑小满有现金支付，支付后获得劳梓凡追查来源的承诺。\"\n    }\n  ],\n  \"progressionChecks\": [\n    {\n      \"dimension\": \"event_repetition\",\n      \"status\": \"progressed\",\n      \"priorState\": \"第1章劳梓凡首次接触账本，得知郑小满名字和地址，决定前往。\",\n      \"actualChange\": \"劳梓凡抵达郑小满家，压制阴气，收下三百元报酬，承诺追查旧物来源。\",\n      \"newConsequence\": \"劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但旧物根源未除。\",\n      \"repeatsEstablishedBeat\": false,\n      \"addsNewConsequence\": true,\n      \"previousEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_344\"\n        }\n      ],\n      \"currentEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_141\"\n        },\n        {\n          \"evidenceId\": \"ev_65723ef4510a_178\"\n        }\n      ],\n      \"explanation\": \"第1章劳梓凡决定前往柳巷街并凑房租，本章完成前往、驱邪、收钱，事件推进。\",\n      \"repairSuggestion\": \"\"\n    },\n    {\n      \"dimension\": \"knowledge_repetition\",\n      \"status\": \"progressed\",\n      \"priorState\": \"第1章劳梓凡知道账本显示郑小满名字和地址，但不知道郑小满是谁、去了会发生什么。\",\n      \"actualChange\": \"劳梓凡见到郑小满，确认旧物来自二手市场，账本提示“毁物不毁根，债还在”，知道根源不在物件本身。\",\n      \"newConsequence\": \"劳梓凡获得新线索：旧物来自城西二手市场，根在摊主，决定追查来源。\",\n      \"repeatsEstablishedBeat\": false,\n      \"addsNewConsequence\": true,\n      \"previousEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_346\"\n        }\n      ],\n      \"currentEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_68\"\n        },\n        {\n          \"evidenceId\": \"ev_65723ef4510a_114\"\n        }\n      ],\n      \"explanation\": \"第1章劳梓凡只知道名字地址，本章获得旧物来源和“毁物不毁根”的新知识，知识推进。\",\n      \"repairSuggestion\": \"\"\n    },\n    {\n      \"dimension\": \"prior_goal_followthrough\",\n      \"status\": \"progressed\",\n      \"priorState\": \"第1章劳梓凡决定前往柳巷街三十七号弄清账本与“债转你身”的含义，同时设法凑齐房租。\",\n      \"actualChange\": \"劳梓凡抵达郑小满家，压制阴气，收下三百元报酬，承诺追查旧物来源。\",\n      \"newConsequence\": \"劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但房租仍差得远，旧物根源未除。\",\n      \"repeatsEstablishedBeat\": false,\n      \"addsNewConsequence\": true,\n      \"previousEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_344\"\n        }\n      ],\n      \"currentEvidence\": [\n        {\n          \"evidenceId\": \"ev_65723ef4510a_141\"\n        },\n        {\n          \"evidenceId\": \"ev_65723ef4510a_178\"\n        }\n      ],\n      \"explanation\": \"第1章劳梓凡决定前往柳巷街并凑房租，本章完成前往、驱邪、收钱，目标部分兑现并产生新目标。\",\n      \"repairSuggestion\": \"\"\n    }\n  ],\n  \"blockingIssues\": [],\n  \"repairDirectives\": [],\n  \"missingObligations\": [],\n  \"decisionReason\": \"本章完整命中所有must hit now义务：抵达楼道闻阴冷、郑小满否认差评并承认旧物来自二手市场、贴符封阴气、八极拳配合符咒打散阴气团、账本浮现“毁物不毁根，债还在”、郑小满付三百元、拍照留证并承诺追查来源。未越过禁止边界，未提前揭示旧物根源或阴司规则。角色行为符合硬事实，八极拳必须配合符咒生效的设定得到遵守。章末钩子有效。无已核实缺陷，可继续推进。\",\n  \"riskTags\": [\n    \"郑小满否认差评的疑点已埋下，但差评来源尚未推进，需在第3章承接\",\n    \"旧物根源和阴司规则未揭示，属于计划内延后\",\n    \"账本再次震动作为章末钩子，但未展开新信息，需后续章节承接\"\n  ],\n  \"assetSyncRecommendation\": {\n    \"priority\": \"normal\",\n    \"reason\": \"本章完成第一轮驱邪循环，新增旧物来源线索、三百元报酬、右臂受伤和符咒耗尽状态，需同步资源账本和伏笔状态，但无需全量对账。\",\n    \"requiresFullPayoffReconcile\": false\n  },\n  \"continuePolicy\": \"continue\",\n  \"issueChecks\": []\n}"
+  ],
+  "outputs": [
+    {
+      "score": {
+        "coherence": 88,
+        "pacing": 86,
+        "repetition": 84,
+        "engagement": 87,
+        "voice": 85,
+        "overall": 86
+      },
+      "summary": "劳梓凡夜访柳巷街三十七号，在楼道闻到阴冷找到郑小满家。郑小满否认差评但承认旧物致噩梦，旧物来自二手市场。劳梓凡贴符封阴气，旧物裂开阴气更猛，他以八极拳近身配合符咒暂时打散阴气团。账本自动翻页浮现“毁物不毁根，债还在”。郑小满付三百元，劳梓凡拍照留证并承诺追查来源后离开。章末账本再次震动，留下新钩子。",
+      "sceneCausalityVerdicts": [
+        {
+          "sceneKey": "arrive_and_meet",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "劳梓凡报出郑小满名字和账本地址要求进门，郑小满因家中怪事恐惧而犹豫后开门。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_31"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_42"
+              }
+            ],
+            "support": "supported",
+            "reason": "劳梓凡出示账本照片，郑小满脸色变化后摘链子让他进门，双方动机与回应均有呈现。"
+          },
+          "constraints": {
+            "claim": "劳梓凡进入陌生女性独居房间保持距离，郑小满戒备未消。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_49"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_53"
+              }
+            ],
+            "support": "supported",
+            "reason": "郑小满站在沙发边没请他坐，劳梓凡站着等她开口，距离感保持。"
+          }
+        },
+        {
+          "sceneKey": "identify_source",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "郑小满不愿多谈差评，但在旧木匣震动后主动说出旧物来自城西二手市场并承认丢过手机。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_68"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_162"
+              }
+            ],
+            "support": "supported",
+            "reason": "郑小满先否认差评，后因木匣异动说出旧物来源和丢手机事实，动机与阻力均有呈现。"
+          },
+          "constraints": {
+            "claim": "旧木匣不能直接打开或毁掉，阴气外泄后郑小满退到墙边。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_75"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_125"
+              }
+            ],
+            "support": "supported",
+            "reason": "郑小满退到墙边，劳梓凡事后叮嘱别扔别烧别碰，约束持续。"
+          }
+        },
+        {
+          "sceneKey": "suppress_with_fist",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "劳梓凡在符咒单用无效后改用八极拳贴身配合符咒击打阴气团核心，暂时打散但未消灭。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_97"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_105"
+              }
+            ],
+            "support": "supported",
+            "reason": "符纸贴住后阴气更猛，劳梓凡冲上去用八极拳连续击打，阴气团被打散后重聚但缩小。"
+          },
+          "constraints": {
+            "claim": "劳梓凡右臂被阴气扫过暂时使不上力，符咒消耗大半。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_99"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_106"
+              }
+            ],
+            "support": "supported",
+            "reason": "右臂麻了半截，打到第五拳符纸用完，代价与消耗均有呈现。"
+          }
+        },
+        {
+          "sceneKey": "pay_and_depart",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "劳梓凡收下三百元并主动承诺追查旧物来源，郑小满犹豫后给钱并要求下次提前打电话。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_137"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_152"
+              }
+            ],
+            "support": "supported",
+            "reason": "郑小满数出三百元，劳梓凡承诺追查来源并拍照留证，郑小满同意他下次再来。"
+          },
+          "constraints": {
+            "claim": "旧木匣留在郑小满家中，阴气只是暂时压制，随时可能复发。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_107"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_185"
+              }
+            ],
+            "support": "supported",
+            "reason": "阴气缩回木匣但裂缝仍在渗气，离开后账本再次震动，暗示未完结。"
+          }
+        }
+      ],
+      "actionStateChecks": [
+        {
+          "sceneKey": "arrive_and_meet",
+          "actor": "劳梓凡",
+          "action": "报出郑小满名字和账本地址要求进门",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_31"
+            }
+          ],
+          "states": [
+            {
+              "entity": "劳梓凡",
+              "dimension": "knowledge",
+              "requiredForAction": "知道账本上郑小满的名字和地址",
+              "before": {
+                "entity": "劳梓凡",
+                "dimension": "knowledge",
+                "claim": "知道账本上郑小满的名字和地址",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_31"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "劳梓凡掏出手机展示账本照片，证明他已知名字和地址。"
+              },
+              "after": {
+                "entity": "劳梓凡",
+                "dimension": "knowledge",
+                "claim": "知道郑小满对账本名字有反应",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_32"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "郑小满看到名字后脸色变了，劳梓凡观察到这一反应。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "knowledge",
+                  "claim": "知道账本上郑小满的名字和地址",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_31"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "第1章已建立账本显示名字和地址，本章他出示照片证明已知。"
+                },
+                "reason": "进门前提是知道名字和地址，已满足。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "knowledge",
+                  "claim": "知道郑小满对账本名字有反应",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_32"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "郑小满脸色变化是劳梓凡新获得的信息。"
+                },
+                "reason": "劳梓凡从郑小满反应中获得新信息。"
+              }
+            }
+          ],
+          "explanation": "劳梓凡已知名字地址，出示照片后郑小满反应促使她开门。"
+        },
+        {
+          "sceneKey": "identify_source",
+          "actor": "郑小满",
+          "action": "说出旧物来自城西二手市场并承认丢过手机",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_68"
+            }
+          ],
+          "states": [
+            {
+              "entity": "郑小满",
+              "dimension": "knowledge",
+              "requiredForAction": "知道旧物来源和丢手机事实",
+              "before": {
+                "entity": "郑小满",
+                "dimension": "knowledge",
+                "claim": "知道旧物来自二手市场且自己丢过手机",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_68"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_162"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "郑小满主动说出旧物来源和丢手机事实，证明她此前已知。"
+              },
+              "after": {
+                "entity": "郑小满",
+                "dimension": "knowledge",
+                "claim": "知道劳梓凡在追查旧物来源",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_145"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "劳梓凡追问哪个摊，郑小满回答具体位置，表明她理解对方在追查。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "郑小满",
+                  "dimension": "knowledge",
+                  "claim": "知道旧物来自二手市场且自己丢过手机",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_68"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "她主动说出这些信息，证明前提已满足。"
+                },
+                "reason": "说出旧物来源的前提是她知道这些信息。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "郑小满",
+                  "dimension": "knowledge",
+                  "claim": "知道劳梓凡在追查旧物来源",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_145"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "劳梓凡追问摊主信息，郑小满回答，表明她理解对方意图。"
+                },
+                "reason": "郑小满从劳梓凡追问中确认他在追查来源。"
+              }
+            }
+          ],
+          "explanation": "郑小满已知旧物来源和丢手机事实，在木匣震动后主动说出。"
+        },
+        {
+          "sceneKey": "suppress_with_fist",
+          "actor": "劳梓凡",
+          "action": "用八极拳贴身配合符咒击打阴气团核心",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_97"
+            }
+          ],
+          "states": [
+            {
+              "entity": "劳梓凡",
+              "dimension": "ability",
+              "requiredForAction": "会八极拳且随身携带符咒",
+              "before": {
+                "entity": "劳梓凡",
+                "dimension": "ability",
+                "claim": "练过八极拳且随身携带黄纸符和朱砂",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_80"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_98"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "劳梓凡从外卖箱摸出符纸朱砂，且文中明确他练了十几年八极拳。"
+              },
+              "after": {
+                "entity": "劳梓凡",
+                "dimension": "ability",
+                "claim": "右臂被阴气侵蚀暂时使不上力，符咒耗尽",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_99"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_106"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "右臂麻了半截，打到第五拳符纸用完，能力状态改变。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "ability",
+                  "claim": "练过八极拳且随身携带黄纸符和朱砂",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_80"
+                    },
+                    {
+                      "evidenceId": "ev_65723ef4510a_98"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "八极拳和符咒均为已建立条件。"
+                },
+                "reason": "八极拳和符咒前提已满足。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "ability",
+                  "claim": "右臂被阴气侵蚀暂时使不上力，符咒耗尽",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_99"
+                    },
+                    {
+                      "evidenceId": "ev_65723ef4510a_106"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "战斗导致右臂受伤和符咒耗尽，能力状态改变。"
+                },
+                "reason": "战斗造成能力状态改变。"
+              }
+            }
+          ],
+          "explanation": "劳梓凡具备八极拳和符咒前提，战斗后右臂受伤符咒耗尽。"
+        },
+        {
+          "sceneKey": "pay_and_depart",
+          "actor": "劳梓凡",
+          "action": "收下三百元并承诺追查旧物来源",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_141"
+            }
+          ],
+          "states": [
+            {
+              "entity": "劳梓凡",
+              "dimension": "knowledge",
+              "requiredForAction": "确认自己暂时压制了阴气",
+              "before": {
+                "entity": "劳梓凡",
+                "dimension": "knowledge",
+                "claim": "确认阴气被暂时压制但根源未除",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_114"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_117"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "账本显示“毁物不毁根，债还在”，劳梓凡理解木匣裂了阴气压住但根没断。"
+              },
+              "after": {
+                "entity": "劳梓凡",
+                "dimension": "knowledge",
+                "claim": "决定追查二手市场摊主",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_178"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "劳梓凡明确根在二手市场，那个摊主。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "knowledge",
+                  "claim": "确认阴气被暂时压制但根源未除",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_114"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "账本提示和实际压制结果已建立。"
+                },
+                "reason": "收钱和承诺的前提是确认自己暂时压制了阴气。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "knowledge",
+                  "claim": "决定追查二手市场摊主",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_178"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "劳梓凡从收钱离开到决定追查来源，目标状态改变。"
+                },
+                "reason": "劳梓凡从收钱离开到决定追查来源，目标状态改变。"
+              }
+            }
+          ],
+          "explanation": "劳梓凡确认阴气暂时压制，收钱后决定追查来源。"
+        }
+      ],
+      "progressionChecks": [
+        {
+          "dimension": "event_repetition",
+          "status": "progressed",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "priorState": "第1章账本显名和地址，劳梓凡出门前往柳巷街。",
+          "actualChange": "劳梓凡抵达郑小满家，确认旧物附灵，用符咒加八极拳暂时压制阴气，收三百元报酬，账本提示“毁物不毁根，债还在”。",
+          "newConsequence": "第一轮驱邪循环完成，劳梓凡获得报酬并确认账本有用，但旧物未毁、债未清，决定追查二手市场。",
+          "previousEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_344"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_114"
+            },
+            {
+              "evidenceId": "ev_65723ef4510a_141"
+            }
+          ],
+          "explanation": "第1章只启动账本显名和出门，本章完成首轮驱邪、报酬和账本新提示，事件推进明显。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "knowledge_repetition",
+          "status": "progressed",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "priorState": "第1章劳梓凡知道账本显示郑小满名字和地址，但不知道郑小满是谁、去了会发生什么。",
+          "actualChange": "劳梓凡见到郑小满，确认旧物来自二手市场，账本提示“毁物不毁根，债还在”，知道根源不在物件本身。",
+          "newConsequence": "劳梓凡获得新线索：旧物来自城西二手市场，根在摊主，决定追查来源。",
+          "previousEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_346"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_68"
+            },
+            {
+              "evidenceId": "ev_65723ef4510a_114"
+            }
+          ],
+          "explanation": "第1章劳梓凡只知道名字地址，本章获得旧物来源和“毁物不毁根”的新知识，知识推进。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "prior_goal_followthrough",
+          "status": "progressed",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "priorState": "第1章劳梓凡决定前往柳巷街三十七号弄清账本与“债转你身”的含义，同时设法凑齐房租。",
+          "actualChange": "劳梓凡抵达郑小满家，压制阴气，收下三百元报酬，承诺追查旧物来源。",
+          "newConsequence": "劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但房租仍差得远，旧物根源未除。",
+          "previousEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_344"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_141"
+            },
+            {
+              "evidenceId": "ev_65723ef4510a_178"
+            }
+          ],
+          "explanation": "第1章劳梓凡决定前往柳巷街并凑房租，本章完成前往、驱邪、收钱，目标部分兑现并产生新目标。",
+          "repairSuggestion": ""
+        }
+      ],
+      "blockingIssues": [],
+      "issueChecks": [],
+      "repairDirectives": [],
+      "missingObligations": [],
+      "riskTags": [
+        "郑小满否认差评的疑点已埋下，但差评来源尚未推进，需在第3章承接",
+        "旧物根源和阴司规则未揭示，属于计划内延后",
+        "账本再次震动作为章末钩子，但未展开新信息，需后续章节承接"
+      ],
+      "decisionReason": "本章完整命中所有must hit now义务：抵达楼道闻阴冷、郑小满否认差评并承认旧物来自二手市场、贴符封阴气、八极拳配合符咒打散阴气团、账本浮现“毁物不毁根，债还在”、郑小满付三百元、拍照留证并承诺追查来源。未越过禁止边界，未提前揭示旧物根源或阴司规则。角色行为符合硬事实，八极拳必须配合符咒生效的设定得到遵守。章末钩子有效。无已核实缺陷，可继续推进。",
+      "continuePolicy": "continue",
+      "assetSyncRecommendation": {
+        "priority": "normal",
+        "reason": "本章完成第一轮驱邪循环，新增旧物来源线索、三百元报酬、右臂受伤和符咒耗尽状态，需同步资源账本和伏笔状态，但无需全量对账。",
+        "requiresFullPayoffReconcile": false
+      }
+    },
+    {
+      "score": {
+        "coherence": 88,
+        "pacing": 86,
+        "repetition": 84,
+        "engagement": 87,
+        "voice": 85,
+        "overall": 86
+      },
+      "summary": "劳梓凡夜访柳巷街三十七号，在楼道闻到阴冷找到郑小满家。郑小满否认差评但承认旧物致噩梦，旧物来自二手市场。劳梓凡贴符封阴气，旧物裂开阴气更猛，他以八极拳近身配合符咒暂时打散阴气团。账本自动翻页浮现“毁物不毁根，债还在”。郑小满付三百元，劳梓凡拍照留证并承诺追查来源后离开。章末账本再次震动，留下新钩子。",
+      "sceneCausalityVerdicts": [
+        {
+          "sceneKey": "arrive_and_meet",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "劳梓凡报出郑小满名字和账本地址要求进门，郑小满因家中怪事恐惧而犹豫后开门。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_31"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_42"
+              }
+            ],
+            "support": "supported",
+            "reason": "劳梓凡出示账本照片，郑小满脸色变化后摘链子让他进门，双方动机与回应均有呈现。"
+          },
+          "constraints": [
+            {
+              "claim": "劳梓凡进入陌生女性独居房间保持距离，郑小满戒备未消。",
+              "evidence": [
+                {
+                  "evidenceId": "ev_65723ef4510a_49"
+                },
+                {
+                  "evidenceId": "ev_65723ef4510a_53"
+                }
+              ],
+              "support": "supported",
+              "reason": "郑小满站在沙发边没请他坐，劳梓凡站着等她开口，距离感保持。"
+            }
+          ]
+        },
+        {
+          "sceneKey": "identify_source",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "郑小满不愿多谈差评，但在旧木匣震动后主动说出旧物来自城西二手市场并承认丢过手机。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_68"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_162"
+              }
+            ],
+            "support": "supported",
+            "reason": "郑小满先否认差评，后因木匣异动说出旧物来源和丢手机事实，动机与阻力均有呈现。"
+          },
+          "constraints": [
+            {
+              "claim": "旧木匣不能直接打开或毁掉，阴气外泄后郑小满退到墙边。",
+              "evidence": [
+                {
+                  "evidenceId": "ev_65723ef4510a_75"
+                },
+                {
+                  "evidenceId": "ev_65723ef4510a_125"
+                }
+              ],
+              "support": "supported",
+              "reason": "郑小满退到墙边，劳梓凡事后叮嘱别扔别烧别碰，约束持续。"
+            }
+          ]
+        },
+        {
+          "sceneKey": "suppress_with_fist",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "劳梓凡在符咒单用无效后改用八极拳贴身配合符咒击打阴气团核心，暂时打散但未消灭。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_97"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_105"
+              }
+            ],
+            "support": "supported",
+            "reason": "符纸贴住后阴气更猛，劳梓凡冲上去用八极拳连续击打，阴气团被打散后重聚但缩小。"
+          },
+          "constraints": [
+            {
+              "claim": "劳梓凡右臂被阴气扫过暂时使不上力，符咒消耗大半。",
+              "evidence": [
+                {
+                  "evidenceId": "ev_65723ef4510a_99"
+                },
+                {
+                  "evidenceId": "ev_65723ef4510a_106"
+                }
+              ],
+              "support": "supported",
+              "reason": "右臂麻了半截，打到第五拳符纸用完，代价与消耗均有呈现。"
+            }
+          ]
+        },
+        {
+          "sceneKey": "pay_and_depart",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "劳梓凡收下三百元并主动承诺追查旧物来源，郑小满犹豫后给钱并要求下次提前打电话。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_137"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_152"
+              }
+            ],
+            "support": "supported",
+            "reason": "郑小满数出三百元，劳梓凡承诺追查来源并拍照留证，郑小满同意他下次再来。"
+          },
+          "constraints": [
+            {
+              "claim": "旧木匣留在郑小满家中，阴气只是暂时压制，随时可能复发。",
+              "evidence": [
+                {
+                  "evidenceId": "ev_65723ef4510a_107"
+                },
+                {
+                  "evidenceId": "ev_65723ef4510a_185"
+                }
+              ],
+              "support": "supported",
+              "reason": "阴气缩回木匣但裂缝仍在渗气，离开后账本再次震动，暗示未完结。"
+            }
+          ]
+        }
+      ],
+      "actionStateChecks": [
+        {
+          "sceneKey": "arrive_and_meet",
+          "actor": "劳梓凡",
+          "action": "报出郑小满名字和账本地址要求进门",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_31"
+            }
+          ],
+          "states": [
+            {
+              "entity": "劳梓凡",
+              "dimension": "knowledge",
+              "requiredForAction": "知道账本上郑小满的名字和地址",
+              "before": {
+                "entity": "劳梓凡",
+                "dimension": "knowledge",
+                "claim": "知道账本上郑小满的名字和地址",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_31"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "劳梓凡掏出手机展示账本照片，证明他已知名字和地址。"
+              },
+              "after": {
+                "entity": "劳梓凡",
+                "dimension": "knowledge",
+                "claim": "知道郑小满对账本名字有反应",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_32"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "郑小满看到名字后脸色变了，劳梓凡观察到这一反应。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "knowledge",
+                  "claim": "知道账本上郑小满的名字和地址",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_31"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "第1章已建立账本显示名字和地址，本章他出示照片证明已知。"
+                },
+                "reason": "进门前提是知道名字和地址，已满足。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "knowledge",
+                  "claim": "知道郑小满对账本名字有反应",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_32"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "郑小满脸色变化是劳梓凡新获得的信息。"
+                },
+                "reason": "劳梓凡从郑小满反应中获得新信息。"
+              }
+            }
+          ],
+          "explanation": "劳梓凡已知名字地址，出示照片后郑小满反应促使她开门。"
+        },
+        {
+          "sceneKey": "identify_source",
+          "actor": "郑小满",
+          "action": "说出旧物来自城西二手市场并承认丢过手机",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_68"
+            }
+          ],
+          "states": [
+            {
+              "entity": "郑小满",
+              "dimension": "knowledge",
+              "requiredForAction": "知道旧物来源和丢手机事实",
+              "before": {
+                "entity": "郑小满",
+                "dimension": "knowledge",
+                "claim": "知道旧物来自二手市场且自己丢过手机",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_68"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_162"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "郑小满主动说出旧物来源和丢手机事实，证明她此前已知。"
+              },
+              "after": {
+                "entity": "郑小满",
+                "dimension": "knowledge",
+                "claim": "知道劳梓凡在追查旧物来源",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_145"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "劳梓凡追问哪个摊，郑小满回答具体位置，表明她理解对方在追查。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "郑小满",
+                  "dimension": "knowledge",
+                  "claim": "知道旧物来自二手市场且自己丢过手机",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_68"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "她主动说出这些信息，证明前提已满足。"
+                },
+                "reason": "说出旧物来源的前提是她知道这些信息。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "郑小满",
+                  "dimension": "knowledge",
+                  "claim": "知道劳梓凡在追查旧物来源",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_145"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "劳梓凡追问摊主信息，郑小满回答，表明她理解对方意图。"
+                },
+                "reason": "郑小满从劳梓凡追问中确认他在追查来源。"
+              }
+            }
+          ],
+          "explanation": "郑小满已知旧物来源和丢手机事实，在木匣震动后主动说出。"
+        },
+        {
+          "sceneKey": "suppress_with_fist",
+          "actor": "劳梓凡",
+          "action": "用八极拳贴身配合符咒击打阴气团核心",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_97"
+            }
+          ],
+          "states": [
+            {
+              "entity": "劳梓凡",
+              "dimension": "ability",
+              "requiredForAction": "会八极拳且随身携带符咒",
+              "before": {
+                "entity": "劳梓凡",
+                "dimension": "ability",
+                "claim": "练过八极拳且随身携带黄纸符和朱砂",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_80"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_98"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "劳梓凡从外卖箱摸出符纸朱砂，且文中明确他练了十几年八极拳。"
+              },
+              "after": {
+                "entity": "劳梓凡",
+                "dimension": "ability",
+                "claim": "右臂暂时使不上力，符咒消耗大半",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_99"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_106"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "右臂麻了半截，打到第五拳符纸用完。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "ability",
+                  "claim": "会八极拳且随身携带符咒",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_80"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "他练过八极拳并随身携带符咒，前提满足。"
+                },
+                "reason": "使用八极拳配合符咒的前提是会拳且带符。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "ability",
+                  "claim": "右臂暂时使不上力，符咒消耗大半",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_99"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "右臂麻了半截，符纸用完，状态改变。"
+                },
+                "reason": "战斗导致右臂受伤和符咒消耗。"
+              }
+            }
+          ],
+          "explanation": "劳梓凡会八极拳且带符，战斗中右臂受伤、符咒耗尽。"
+        }
+      ],
+      "progressionChecks": [
+        {
+          "dimension": "event_repetition",
+          "status": "progressed",
+          "priorState": "第1章劳梓凡在出租屋发现账本显示郑小满名字和地址，决定前往。",
+          "actualChange": "劳梓凡抵达柳巷街三十七号，进入郑小满家，压制阴气，收下三百元报酬。",
+          "newConsequence": "劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但旧物根源未除。",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "previousEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_344"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_141"
+            },
+            {
+              "evidenceId": "ev_65723ef4510a_178"
+            }
+          ],
+          "explanation": "第1章决定前往，本章完成前往、驱邪、收钱，事件推进。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "knowledge_repetition",
+          "status": "progressed",
+          "priorState": "第1章劳梓凡知道账本显示郑小满名字和地址，但不知道郑小满是谁、去了会发生什么。",
+          "actualChange": "劳梓凡见到郑小满，确认旧物来自二手市场，账本提示“毁物不毁根，债还在”，知道根源不在物件本身。",
+          "newConsequence": "劳梓凡获得新线索：旧物来自城西二手市场，根在摊主，决定追查来源。",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "previousEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_346"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_68"
+            },
+            {
+              "evidenceId": "ev_65723ef4510a_114"
+            }
+          ],
+          "explanation": "第1章劳梓凡只知道名字地址，本章获得旧物来源和“毁物不毁根”的新知识，知识推进。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "prior_goal_followthrough",
+          "status": "progressed",
+          "priorState": "第1章劳梓凡决定前往柳巷街三十七号弄清账本与“债转你身”的含义，同时设法凑齐房租。",
+          "actualChange": "劳梓凡抵达郑小满家，压制阴气，收下三百元报酬，承诺追查旧物来源。",
+          "newConsequence": "劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但房租仍差得远，旧物根源未除。",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "previousEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_344"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_141"
+            },
+            {
+              "evidenceId": "ev_65723ef4510a_178"
+            }
+          ],
+          "explanation": "第1章劳梓凡决定前往柳巷街并凑房租，本章完成前往、驱邪、收钱，目标部分兑现并产生新目标。",
+          "repairSuggestion": ""
+        }
+      ],
+      "blockingIssues": [],
+      "repairDirectives": [],
+      "missingObligations": [],
+      "decisionReason": "本章完整命中所有must hit now义务：抵达楼道闻阴冷、郑小满否认差评并承认旧物来自二手市场、贴符封阴气、八极拳配合符咒打散阴气团、账本浮现“毁物不毁根，债还在”、郑小满付三百元、拍照留证并承诺追查来源。未越过禁止边界，未提前揭示旧物根源或阴司规则。角色行为符合硬事实，八极拳必须配合符咒生效的设定得到遵守。章末钩子有效。无已核实缺陷，可继续推进。",
+      "riskTags": [
+        "郑小满否认差评的疑点已埋下，但差评来源尚未推进，需在第3章承接",
+        "旧物根源和阴司规则未揭示，属于计划内延后",
+        "账本再次震动作为章末钩子，但未展开新信息，需后续章节承接"
+      ],
+      "assetSyncRecommendation": {
+        "priority": "normal",
+        "reason": "本章完成第一轮驱邪循环，新增旧物来源线索、三百元报酬、右臂受伤和符咒耗尽状态，需同步资源账本和伏笔状态，但无需全量对账。",
+        "requiresFullPayoffReconcile": false
+      },
+      "continuePolicy": "continue"
+    },
+    {
+      "score": {
+        "coherence": 88,
+        "pacing": 86,
+        "repetition": 84,
+        "engagement": 87,
+        "voice": 85,
+        "overall": 86
+      },
+      "summary": "劳梓凡夜访柳巷街三十七号，在楼道闻到阴冷找到郑小满家。郑小满否认差评但承认旧物致噩梦，旧物来自二手市场。劳梓凡贴符封阴气，旧物裂开阴气更猛，他以八极拳近身配合符咒暂时打散阴气团。账本自动翻页浮现“毁物不毁根，债还在”。郑小满付三百元，劳梓凡拍照留证并承诺追查来源后离开。章末账本再次震动，留下新钩子。",
+      "sceneCausalityVerdicts": [
+        {
+          "sceneKey": "arrive_and_meet",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "劳梓凡报出郑小满名字和账本地址要求进门，郑小满因家中怪事恐惧而犹豫后开门。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_31"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_42"
+              }
+            ],
+            "support": "supported",
+            "reason": "劳梓凡出示账本照片，郑小满脸色变化后摘链子让他进门，双方动机与回应均有呈现。"
+          },
+          "constraints": [
+            {
+              "claim": "劳梓凡进入陌生女性独居房间保持距离，郑小满戒备未消。",
+              "evidence": [
+                {
+                  "evidenceId": "ev_65723ef4510a_49"
+                },
+                {
+                  "evidenceId": "ev_65723ef4510a_53"
+                }
+              ],
+              "support": "supported",
+              "reason": "郑小满站在沙发边没请他坐，劳梓凡站着等她开口，距离感保持。"
+            }
+          ]
+        },
+        {
+          "sceneKey": "identify_source",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "郑小满不愿多谈差评，但在旧木匣震动后主动说出旧物来自城西二手市场并承认丢过手机。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_68"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_162"
+              }
+            ],
+            "support": "supported",
+            "reason": "郑小满先否认差评，后因木匣异动说出旧物来源和丢手机事实，动机与阻力均有呈现。"
+          },
+          "constraints": [
+            {
+              "claim": "旧木匣不能直接打开或毁掉，阴气外泄后郑小满退到墙边。",
+              "evidence": [
+                {
+                  "evidenceId": "ev_65723ef4510a_75"
+                },
+                {
+                  "evidenceId": "ev_65723ef4510a_125"
+                }
+              ],
+              "support": "supported",
+              "reason": "郑小满退到墙边，劳梓凡事后叮嘱别扔别烧别碰，约束持续。"
+            }
+          ]
+        },
+        {
+          "sceneKey": "suppress_with_fist",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "劳梓凡在符咒单用无效后改用八极拳贴身配合符咒击打阴气团核心，暂时打散但未消灭。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_97"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_105"
+              }
+            ],
+            "support": "supported",
+            "reason": "符纸贴住后阴气更猛，劳梓凡冲上去用八极拳连续击打，阴气团被打散后重聚但缩小。"
+          },
+          "constraints": [
+            {
+              "claim": "劳梓凡右臂被阴气扫过暂时使不上力，符咒消耗大半。",
+              "evidence": [
+                {
+                  "evidenceId": "ev_65723ef4510a_99"
+                },
+                {
+                  "evidenceId": "ev_65723ef4510a_106"
+                }
+              ],
+              "support": "supported",
+              "reason": "右臂麻了半截，打到第五拳符纸用完，代价与消耗均有呈现。"
+            }
+          ]
+        },
+        {
+          "sceneKey": "pay_and_depart",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "劳梓凡收下三百元并主动承诺追查旧物来源，郑小满犹豫后给钱并要求下次提前打电话。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_137"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_152"
+              }
+            ],
+            "support": "supported",
+            "reason": "郑小满数出三百元，劳梓凡承诺追查来源并拍照留证，郑小满同意他下次再来。"
+          },
+          "constraints": [
+            {
+              "claim": "旧木匣留在郑小满家中，阴气只是暂时压制，随时可能复发。",
+              "evidence": [
+                {
+                  "evidenceId": "ev_65723ef4510a_107"
+                },
+                {
+                  "evidenceId": "ev_65723ef4510a_185"
+                }
+              ],
+              "support": "supported",
+              "reason": "阴气缩回木匣但裂缝仍在渗气，离开后账本再次震动，暗示未完结。"
+            }
+          ]
+        }
+      ],
+      "actionStateChecks": [
+        {
+          "sceneKey": "arrive_and_meet",
+          "actor": "劳梓凡",
+          "action": "报出郑小满名字和账本地址要求进门",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_31"
+            }
+          ],
+          "states": [
+            {
+              "entity": "劳梓凡",
+              "dimension": "knowledge",
+              "requiredForAction": "知道账本上郑小满的名字和地址",
+              "before": {
+                "entity": "劳梓凡",
+                "dimension": "knowledge",
+                "claim": "知道账本上郑小满的名字和地址",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_31"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "劳梓凡掏出手机展示账本照片，证明他已知名字和地址。"
+              },
+              "after": {
+                "entity": "劳梓凡",
+                "dimension": "knowledge",
+                "claim": "知道郑小满对账本名字有反应",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_32"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "郑小满看到名字后脸色变了，劳梓凡观察到这一反应。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "knowledge",
+                  "claim": "知道账本上郑小满的名字和地址",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_31"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "第1章已建立账本显示名字和地址，本章他出示照片证明已知。"
+                },
+                "reason": "进门前提是知道名字和地址，已满足。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "knowledge",
+                  "claim": "知道郑小满对账本名字有反应",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_32"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "郑小满脸色变化是劳梓凡新获得的信息。"
+                },
+                "reason": "劳梓凡从郑小满反应中获得新信息。"
+              }
+            }
+          ],
+          "explanation": "劳梓凡已知名字地址，出示照片后郑小满反应促使她开门。"
+        },
+        {
+          "sceneKey": "identify_source",
+          "actor": "郑小满",
+          "action": "说出旧物来自城西二手市场并承认丢过手机",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_68"
+            }
+          ],
+          "states": [
+            {
+              "entity": "郑小满",
+              "dimension": "knowledge",
+              "requiredForAction": "知道旧物来源和丢手机事实",
+              "before": {
+                "entity": "郑小满",
+                "dimension": "knowledge",
+                "claim": "知道旧物来自二手市场且自己丢过手机",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_68"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_162"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "郑小满主动说出旧物来源和丢手机事实，证明她此前已知。"
+              },
+              "after": {
+                "entity": "郑小满",
+                "dimension": "knowledge",
+                "claim": "知道劳梓凡在追查旧物来源",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_145"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "劳梓凡追问哪个摊，郑小满回答具体位置，表明她理解对方在追查。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "郑小满",
+                  "dimension": "knowledge",
+                  "claim": "知道旧物来自二手市场且自己丢过手机",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_68"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "她主动说出这些信息，证明前提已满足。"
+                },
+                "reason": "说出旧物来源的前提是她知道这些信息。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "郑小满",
+                  "dimension": "knowledge",
+                  "claim": "知道劳梓凡在追查旧物来源",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_145"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "劳梓凡追问摊主信息，郑小满回答，表明她理解对方意图。"
+                },
+                "reason": "郑小满从劳梓凡追问中确认他在追查来源。"
+              }
+            }
+          ],
+          "explanation": "郑小满已知旧物来源和丢手机事实，在木匣震动后主动说出。"
+        },
+        {
+          "sceneKey": "suppress_with_fist",
+          "actor": "劳梓凡",
+          "action": "用八极拳贴身配合符咒击打阴气团核心",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_97"
+            }
+          ],
+          "states": [
+            {
+              "entity": "劳梓凡",
+              "dimension": "ability",
+              "requiredForAction": "会八极拳且随身携带符咒",
+              "before": {
+                "entity": "劳梓凡",
+                "dimension": "ability",
+                "claim": "练过八极拳且随身携带黄纸符和朱砂",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_80"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_98"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "劳梓凡从外卖箱摸出符纸朱砂，且文中明确他练了十几年八极拳。"
+              },
+              "after": {
+                "entity": "劳梓凡",
+                "dimension": "ability",
+                "claim": "右臂暂时使不上力，符咒消耗大半",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_99"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_106"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "右臂麻了半截，打到第五拳符纸用完。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "ability",
+                  "claim": "会八极拳且随身携带符咒",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_80"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "他练过八极拳并随身携带符咒，前提满足。"
+                },
+                "reason": "使用八极拳配合符咒的前提是会拳且带符。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "ability",
+                  "claim": "右臂暂时使不上力，符咒消耗大半",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_99"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "右臂麻了半截，符纸用完，状态改变。"
+                },
+                "reason": "战斗导致右臂受伤和符咒消耗。"
+              }
+            }
+          ],
+          "explanation": "劳梓凡会八极拳且带符，战斗中右臂受伤、符咒耗尽。"
+        },
+        {
+          "sceneKey": "pay_and_depart",
+          "actor": "劳梓凡",
+          "action": "收下三百元报酬并承诺追查旧物来源",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_141"
+            }
+          ],
+          "states": [
+            {
+              "entity": "劳梓凡",
+              "dimension": "resources",
+              "requiredForAction": "需要钱且已证明能压制阴气",
+              "before": {
+                "entity": "劳梓凡",
+                "dimension": "resources",
+                "claim": "身上只剩六十七块三毛，急需现金",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_135"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "文中明确他兜里六十七块三毛连买符纸都不够，赵德柱下礼拜换锁。"
+              },
+              "after": {
+                "entity": "劳梓凡",
+                "dimension": "resources",
+                "claim": "获得三百元现金报酬",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_137"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_141"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "郑小满数出三张一百递过来，劳梓凡接过折好塞进内兜。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "ability",
+                  "claim": "已用符咒加八极拳暂时压制阴气",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_105"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "上一场景他连续三拳配合符纸打散阴气团，证明有处理能力。"
+                },
+                "reason": "收报酬的前提是已证明能压制阴气，已满足。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "resources",
+                  "claim": "获得三百元现金报酬",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_141"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "他接过钱折好塞进内兜，资源状态改变。"
+                },
+                "reason": "收下三百元使劳梓凡现金资源增加。"
+              }
+            }
+          ],
+          "explanation": "劳梓凡急需钱且已证明能力，收下三百元报酬并承诺追查来源。"
+        }
+      ],
+      "progressionChecks": [
+        {
+          "dimension": "event_repetition",
+          "status": "progressed",
+          "priorState": "第1章劳梓凡在出租屋发现账本显示郑小满名字和地址，决定前往。",
+          "actualChange": "劳梓凡抵达柳巷街三十七号，进入郑小满家，压制阴气，收下三百元报酬。",
+          "newConsequence": "劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但旧物根源未除。",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "previousEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_344"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_141"
+            },
+            {
+              "evidenceId": "ev_65723ef4510a_178"
+            }
+          ],
+          "explanation": "第1章决定前往，本章完成前往、驱邪、收钱，事件推进。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "knowledge_repetition",
+          "status": "progressed",
+          "priorState": "第1章劳梓凡知道账本显示郑小满名字和地址，但不知道郑小满是谁、去了会发生什么。",
+          "actualChange": "劳梓凡见到郑小满，确认旧物来自二手市场，账本提示“毁物不毁根，债还在”，知道根源不在物件本身。",
+          "newConsequence": "劳梓凡获得新线索：旧物来自城西二手市场，根在摊主，决定追查来源。",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "previousEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_346"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_68"
+            },
+            {
+              "evidenceId": "ev_65723ef4510a_114"
+            }
+          ],
+          "explanation": "第1章劳梓凡只知道名字地址，本章获得旧物来源和“毁物不毁根”的新知识，知识推进。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "prior_goal_followthrough",
+          "status": "progressed",
+          "priorState": "第1章劳梓凡决定前往柳巷街三十七号弄清账本与“债转你身”的含义，同时设法凑齐房租。",
+          "actualChange": "劳梓凡抵达郑小满家，压制阴气，收下三百元报酬，承诺追查旧物来源。",
+          "newConsequence": "劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但房租仍差得远，旧物根源未除。",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "previousEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_344"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_141"
+            },
+            {
+              "evidenceId": "ev_65723ef4510a_178"
+            }
+          ],
+          "explanation": "第1章劳梓凡决定前往柳巷街并凑房租，本章完成前往、驱邪、收钱，目标部分兑现并产生新目标。",
+          "repairSuggestion": ""
+        }
+      ],
+      "blockingIssues": [],
+      "issueChecks": [],
+      "repairDirectives": [],
+      "missingObligations": [],
+      "riskTags": [
+        "郑小满否认差评的疑点已埋下，但差评来源尚未推进，需在第3章承接",
+        "旧物根源和阴司规则未揭示，属于计划内延后",
+        "账本再次震动作为章末钩子，但未展开新信息，需后续章节承接"
+      ],
+      "decisionReason": "本章完整命中所有must hit now义务：抵达楼道闻阴冷、郑小满否认差评并承认旧物来自二手市场、贴符封阴气、八极拳配合符咒打散阴气团、账本浮现“毁物不毁根，债还在”、郑小满付三百元、拍照留证并承诺追查来源。未越过禁止边界，未提前揭示旧物根源或阴司规则。角色行为符合硬事实，八极拳必须配合符咒生效的设定得到遵守。章末钩子有效。无已核实缺陷，可继续推进。",
+      "continuePolicy": "continue",
+      "assetSyncRecommendation": {
+        "priority": "normal",
+        "reason": "本章完成第一轮驱邪循环，新增旧物来源线索、三百元报酬、右臂受伤和符咒耗尽状态，需同步资源账本和伏笔状态，但无需全量对账。",
+        "requiresFullPayoffReconcile": false
+      }
+    },
+    {
+      "score": {
+        "coherence": 88,
+        "pacing": 86,
+        "repetition": 84,
+        "engagement": 87,
+        "voice": 85,
+        "overall": 86
+      },
+      "summary": "劳梓凡夜访柳巷街三十七号，在楼道闻到阴冷找到郑小满家。郑小满否认差评但承认旧物致噩梦，旧物来自二手市场。劳梓凡贴符封阴气，旧物裂开阴气更猛，他以八极拳近身配合符咒暂时打散阴气团。账本自动翻页浮现“毁物不毁根，债还在”。郑小满付三百元，劳梓凡拍照留证并承诺追查来源后离开。章末账本再次震动，留下新钩子。",
+      "sceneCausalityVerdicts": [
+        {
+          "sceneKey": "arrive_and_meet",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "劳梓凡报出郑小满名字和账本地址要求进门，郑小满因家中怪事恐惧而犹豫后开门。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_31"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_42"
+              }
+            ],
+            "support": "supported",
+            "reason": "劳梓凡出示账本照片，郑小满脸色变化后摘链子让他进门，双方动机与回应均有呈现。"
+          },
+          "constraints": [
+            {
+              "claim": "劳梓凡进入陌生女性独居房间保持距离，郑小满戒备未消。",
+              "evidence": [
+                {
+                  "evidenceId": "ev_65723ef4510a_49"
+                },
+                {
+                  "evidenceId": "ev_65723ef4510a_53"
+                }
+              ],
+              "support": "supported",
+              "reason": "郑小满站在沙发边没请他坐，劳梓凡站着等她开口，距离感保持。"
+            }
+          ]
+        },
+        {
+          "sceneKey": "identify_source",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "郑小满不愿多谈差评，但在旧木匣震动后主动说出旧物来自城西二手市场并承认丢过手机。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_68"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_162"
+              }
+            ],
+            "support": "supported",
+            "reason": "郑小满先否认差评，后因木匣异动说出旧物来源和丢手机事实，动机与阻力均有呈现。"
+          },
+          "constraints": [
+            {
+              "claim": "旧木匣不能直接打开或毁掉，阴气外泄后郑小满退到墙边。",
+              "evidence": [
+                {
+                  "evidenceId": "ev_65723ef4510a_75"
+                },
+                {
+                  "evidenceId": "ev_65723ef4510a_125"
+                }
+              ],
+              "support": "supported",
+              "reason": "郑小满退到墙边，劳梓凡事后叮嘱别扔别烧别碰，约束持续。"
+            }
+          ]
+        },
+        {
+          "sceneKey": "suppress_with_fist",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "劳梓凡在符咒单用无效后改用八极拳贴身配合符咒击打阴气团核心，暂时打散但未消灭。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_97"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_105"
+              }
+            ],
+            "support": "supported",
+            "reason": "符纸贴住后阴气更猛，劳梓凡冲上去用八极拳连续击打，阴气团被打散后重聚但缩小。"
+          },
+          "constraints": [
+            {
+              "claim": "劳梓凡右臂被阴气扫过暂时使不上力，符咒消耗大半。",
+              "evidence": [
+                {
+                  "evidenceId": "ev_65723ef4510a_99"
+                },
+                {
+                  "evidenceId": "ev_65723ef4510a_106"
+                }
+              ],
+              "support": "supported",
+              "reason": "右臂麻了半截，打到第五拳符纸用完，代价与消耗均有呈现。"
+            }
+          ]
+        },
+        {
+          "sceneKey": "pay_and_depart",
+          "outcomeObserved": true,
+          "choiceAndResistance": {
+            "claim": "劳梓凡收下三百元并主动承诺追查旧物来源，郑小满犹豫后给钱并要求下次提前打电话。",
+            "evidence": [
+              {
+                "evidenceId": "ev_65723ef4510a_137"
+              },
+              {
+                "evidenceId": "ev_65723ef4510a_152"
+              }
+            ],
+            "support": "supported",
+            "reason": "郑小满数出三百元，劳梓凡承诺追查来源并拍照留证，郑小满同意他下次再来。"
+          },
+          "constraints": [
+            {
+              "claim": "旧木匣留在郑小满家中，阴气只是暂时压制，随时可能复发。",
+              "evidence": [
+                {
+                  "evidenceId": "ev_65723ef4510a_107"
+                },
+                {
+                  "evidenceId": "ev_65723ef4510a_185"
+                }
+              ],
+              "support": "supported",
+              "reason": "阴气缩回木匣但裂缝仍在渗气，离开后账本再次震动，暗示未完结。"
+            }
+          ]
+        }
+      ],
+      "actionStateChecks": [
+        {
+          "sceneKey": "arrive_and_meet",
+          "actor": "劳梓凡",
+          "action": "报出郑小满名字和账本地址要求进门",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_31"
+            }
+          ],
+          "states": [
+            {
+              "entity": "劳梓凡",
+              "dimension": "knowledge",
+              "requiredForAction": "知道账本上郑小满的名字和地址",
+              "before": {
+                "entity": "劳梓凡",
+                "dimension": "knowledge",
+                "claim": "知道账本上郑小满的名字和地址",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_31"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "劳梓凡掏出手机展示账本照片，证明他已知名字和地址。"
+              },
+              "after": {
+                "entity": "劳梓凡",
+                "dimension": "knowledge",
+                "claim": "知道郑小满对账本名字有反应",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_32"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "郑小满看到名字后脸色变了，劳梓凡观察到这一反应。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "knowledge",
+                  "claim": "知道账本上郑小满的名字和地址",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_31"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "第1章已建立账本显示名字和地址，本章他出示照片证明已知。"
+                },
+                "reason": "进门前提是知道名字和地址，已满足。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "knowledge",
+                  "claim": "知道郑小满对账本名字有反应",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_32"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "郑小满脸色变化是劳梓凡新获得的信息。"
+                },
+                "reason": "劳梓凡从郑小满反应中获得新信息。"
+              }
+            }
+          ],
+          "explanation": "劳梓凡已知名字地址，出示照片后郑小满反应促使她开门。"
+        },
+        {
+          "sceneKey": "identify_source",
+          "actor": "郑小满",
+          "action": "说出旧物来自城西二手市场并承认丢过手机",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_68"
+            }
+          ],
+          "states": [
+            {
+              "entity": "郑小满",
+              "dimension": "knowledge",
+              "requiredForAction": "知道旧物来源和丢手机事实",
+              "before": {
+                "entity": "郑小满",
+                "dimension": "knowledge",
+                "claim": "知道旧物来自二手市场且自己丢过手机",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_68"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_162"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "郑小满主动说出旧物来源和丢手机事实，证明她此前已知。"
+              },
+              "after": {
+                "entity": "郑小满",
+                "dimension": "knowledge",
+                "claim": "知道劳梓凡在追查旧物来源",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_145"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "劳梓凡追问哪个摊，郑小满回答具体位置，表明她理解对方在追查。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "郑小满",
+                  "dimension": "knowledge",
+                  "claim": "知道旧物来自二手市场且自己丢过手机",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_68"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "她主动说出这些信息，证明前提已满足。"
+                },
+                "reason": "说出旧物来源的前提是她知道这些信息。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "郑小满",
+                  "dimension": "knowledge",
+                  "claim": "知道劳梓凡在追查旧物来源",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_145"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "劳梓凡追问摊主信息，郑小满回答，表明她理解对方意图。"
+                },
+                "reason": "郑小满从劳梓凡追问中确认他在追查来源。"
+              }
+            }
+          ],
+          "explanation": "郑小满已知旧物来源和丢手机事实，在木匣震动后主动说出。"
+        },
+        {
+          "sceneKey": "suppress_with_fist",
+          "actor": "劳梓凡",
+          "action": "用八极拳贴身配合符咒击打阴气团核心",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_97"
+            }
+          ],
+          "states": [
+            {
+              "entity": "劳梓凡",
+              "dimension": "ability",
+              "requiredForAction": "会八极拳且随身携带符咒",
+              "before": {
+                "entity": "劳梓凡",
+                "dimension": "ability",
+                "claim": "练过八极拳且随身携带黄纸符和朱砂",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_80"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_97"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "劳梓凡此前已展示八极拳功底并携带符咒，具备行动能力。"
+              },
+              "after": {
+                "entity": "劳梓凡",
+                "dimension": "body",
+                "claim": "右臂被阴气扫过暂时使不上力，符咒消耗大半",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_99"
+                  },
+                  {
+                    "evidenceId": "ev_65723ef4510a_106"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "右臂麻了半截，打到第五拳符纸用完，身体与资源状态改变。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "ability",
+                  "claim": "会八极拳且随身携带符咒",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_80"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "八极拳与符咒能力此前已建立，满足行动前提。"
+                },
+                "reason": "击打阴气团需要八极拳与符咒，均已具备。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "劳梓凡",
+                  "dimension": "body",
+                  "claim": "右臂受伤且符咒耗尽",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_99"
+                    },
+                    {
+                      "evidenceId": "ev_65723ef4510a_106"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "右臂麻木与符纸用尽是行动后的直接结果。"
+                },
+                "reason": "行动导致劳梓凡身体与资源状态变化。"
+              }
+            }
+          ],
+          "explanation": "劳梓凡具备八极拳与符咒能力，行动后右臂受伤且符咒耗尽。"
+        },
+        {
+          "sceneKey": "pay_and_depart",
+          "actor": "郑小满",
+          "action": "支付三百元并同意劳梓凡下次再来",
+          "actionEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_137"
+            }
+          ],
+          "states": [
+            {
+              "entity": "郑小满",
+              "dimension": "item",
+              "requiredForAction": "有现金三百元",
+              "before": {
+                "entity": "郑小满",
+                "dimension": "item",
+                "claim": "家中有现金可支付",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_137"
+                  }
+                ],
+                "storyTime": "before_or_at_action",
+                "support": "supported",
+                "reason": "郑小满数出三百元，证明她持有现金。"
+              },
+              "after": {
+                "entity": "郑小满",
+                "dimension": "knowledge",
+                "claim": "知道劳梓凡会追查旧物来源",
+                "evidence": [
+                  {
+                    "evidenceId": "ev_65723ef4510a_152"
+                  }
+                ],
+                "storyTime": "during_or_after_action",
+                "support": "supported",
+                "reason": "劳梓凡承诺追查来源，郑小满同意他下次再来。"
+              },
+              "prerequisite": {
+                "status": "satisfied",
+                "basis": {
+                  "entity": "郑小满",
+                  "dimension": "item",
+                  "claim": "有现金三百元",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_137"
+                    }
+                  ],
+                  "storyTime": "before_or_at_action",
+                  "support": "supported",
+                  "reason": "她当场数出三百元，支付前提满足。"
+                },
+                "reason": "支付报酬需要现金，已具备。"
+              },
+              "resultChange": {
+                "status": "changed",
+                "basis": {
+                  "entity": "郑小满",
+                  "dimension": "knowledge",
+                  "claim": "知道劳梓凡会追查旧物来源",
+                  "evidence": [
+                    {
+                      "evidenceId": "ev_65723ef4510a_152"
+                    }
+                  ],
+                  "storyTime": "during_or_after_action",
+                  "support": "supported",
+                  "reason": "劳梓凡承诺追查来源，郑小满获得后续预期。"
+                },
+                "reason": "支付后郑小满获得劳梓凡追查来源的承诺。"
+              }
+            }
+          ],
+          "explanation": "郑小满有现金支付，支付后获得劳梓凡追查来源的承诺。"
+        }
+      ],
+      "progressionChecks": [
+        {
+          "dimension": "event_repetition",
+          "status": "progressed",
+          "priorState": "第1章劳梓凡首次接触账本，得知郑小满名字和地址，决定前往。",
+          "actualChange": "劳梓凡抵达郑小满家，压制阴气，收下三百元报酬，承诺追查旧物来源。",
+          "newConsequence": "劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但旧物根源未除。",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "previousEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_344"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_141"
+            },
+            {
+              "evidenceId": "ev_65723ef4510a_178"
+            }
+          ],
+          "explanation": "第1章劳梓凡决定前往柳巷街并凑房租，本章完成前往、驱邪、收钱，事件推进。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "knowledge_repetition",
+          "status": "progressed",
+          "priorState": "第1章劳梓凡知道账本显示郑小满名字和地址，但不知道郑小满是谁、去了会发生什么。",
+          "actualChange": "劳梓凡见到郑小满，确认旧物来自二手市场，账本提示“毁物不毁根，债还在”，知道根源不在物件本身。",
+          "newConsequence": "劳梓凡获得新线索：旧物来自城西二手市场，根在摊主，决定追查来源。",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "previousEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_346"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_68"
+            },
+            {
+              "evidenceId": "ev_65723ef4510a_114"
+            }
+          ],
+          "explanation": "第1章劳梓凡只知道名字地址，本章获得旧物来源和“毁物不毁根”的新知识，知识推进。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "prior_goal_followthrough",
+          "status": "progressed",
+          "priorState": "第1章劳梓凡决定前往柳巷街三十七号弄清账本与“债转你身”的含义，同时设法凑齐房租。",
+          "actualChange": "劳梓凡抵达郑小满家，压制阴气，收下三百元报酬，承诺追查旧物来源。",
+          "newConsequence": "劳梓凡获得第一笔驱邪收入三百元，确认账本有用，但房租仍差得远，旧物根源未除。",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "previousEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_344"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "evidenceId": "ev_65723ef4510a_141"
+            },
+            {
+              "evidenceId": "ev_65723ef4510a_178"
+            }
+          ],
+          "explanation": "第1章劳梓凡决定前往柳巷街并凑房租，本章完成前往、驱邪、收钱，目标部分兑现并产生新目标。",
+          "repairSuggestion": ""
+        }
+      ],
+      "blockingIssues": [],
+      "repairDirectives": [],
+      "missingObligations": [],
+      "decisionReason": "本章完整命中所有must hit now义务：抵达楼道闻阴冷、郑小满否认差评并承认旧物来自二手市场、贴符封阴气、八极拳配合符咒打散阴气团、账本浮现“毁物不毁根，债还在”、郑小满付三百元、拍照留证并承诺追查来源。未越过禁止边界，未提前揭示旧物根源或阴司规则。角色行为符合硬事实，八极拳必须配合符咒生效的设定得到遵守。章末钩子有效。无已核实缺陷，可继续推进。",
+      "riskTags": [
+        "郑小满否认差评的疑点已埋下，但差评来源尚未推进，需在第3章承接",
+        "旧物根源和阴司规则未揭示，属于计划内延后",
+        "账本再次震动作为章末钩子，但未展开新信息，需后续章节承接"
+      ],
+      "assetSyncRecommendation": {
+        "priority": "normal",
+        "reason": "本章完成第一轮驱邪循环，新增旧物来源线索、三百元报酬、右臂受伤和符咒耗尽状态，需同步资源账本和伏笔状态，但无需全量对账。",
+        "requiresFullPayoffReconcile": false
+      },
+      "continuePolicy": "continue",
+      "issueChecks": []
+    }
+  ]
+}

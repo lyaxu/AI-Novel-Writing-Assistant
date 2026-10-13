@@ -623,31 +623,44 @@ async function resolveStructuredOutput<I, O, R = O>(input: {
         validationError: stringifyPromptError(error),
         attempt: semanticRetryAttempts,
       });
-      currentResult = await promptRunnerStructuredInvoker<R>({
-        label: `${input.asset.id}@${input.asset.version}#semantic-retry-${semanticRetryAttempts}`,
-        provider: input.options?.provider,
-        model: input.options?.model,
-        temperature: input.options?.temperature,
-        maxTokens: input.options?.maxTokens,
-        timeoutMs: input.options?.timeoutMs,
-        signal: input.options?.signal,
-        disableFallbackModel: input.options?.disableFallbackModel,
-        transportRetryCount: input.options?.transportRetryCount,
-        disableStrategyFallback: input.options?.disableStrategyFallback,
-        taskType: input.asset.taskType,
-        messages: currentMessages,
-        schema: input.outputSchema,
-        maxRepairAttempts: resolveStructuredRepairAttempts(asset),
-        promptMeta: buildPromptInvocationMeta(
-          asset,
-          input.context,
-          repairUsed,
-          totalRepairAttempts,
-          true,
-          semanticRetryAttempts,
-          input.options,
-        ),
-      });
+      try {
+        currentResult = await promptRunnerStructuredInvoker<R>({
+          label: `${input.asset.id}@${input.asset.version}#semantic-retry-${semanticRetryAttempts}`,
+          provider: input.options?.provider,
+          model: input.options?.model,
+          temperature: input.options?.temperature,
+          maxTokens: input.options?.maxTokens,
+          timeoutMs: input.options?.timeoutMs,
+          signal: input.options?.signal,
+          disableFallbackModel: input.options?.disableFallbackModel,
+          transportRetryCount: input.options?.transportRetryCount,
+          disableStrategyFallback: input.options?.disableStrategyFallback,
+          taskType: input.asset.taskType,
+          messages: currentMessages,
+          schema: input.outputSchema,
+          maxRepairAttempts: resolveStructuredRepairAttempts(asset),
+          promptMeta: buildPromptInvocationMeta(
+            asset,
+            input.context,
+            repairUsed,
+            totalRepairAttempts,
+            true,
+            semanticRetryAttempts,
+            input.options,
+          ),
+        });
+      } catch (correctionError) {
+        // Preserve only the last completed answer; this says nothing about the failed call's outcome.
+        if (correctionError instanceof Error && Object.isExtensible(correctionError)) {
+          Object.defineProperty(correctionError, "completedBeforeCorrectionFailure", {
+            enumerable: false, configurable: true,
+            value: { promptId: asset.id, promptVersion: asset.version, output: currentResult.data,
+              validationError: stringifyPromptError(error), semanticRetryAttempts,
+              maxSemanticRetryAttempts, repairAttempts: totalRepairAttempts },
+          });
+        }
+        throw correctionError;
+      }
       logPromptEvent({
         event: "semantic_retry_done",
         asset: asset as PromptAsset<unknown, unknown, unknown>,

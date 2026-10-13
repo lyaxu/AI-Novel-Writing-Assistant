@@ -33,12 +33,21 @@ export interface CompletedPromptResponse {
   maxSemanticRetryAttempts: number;
   repairAttempts: number;
 }
+/** A completed but invalid review is evidence, not a reusable successful step output. */
+export interface IncompleteReviewResponse {
+  code: "CHAPTER_REVIEW_INCOMPLETE";
+  output: Record<string, unknown>;
+  validationError: string;
+}
 export interface JournalStep {
   status: "running" | "done" | "failed" | "unknown";
   external: boolean;
   output?: unknown;
   error?: string;
   rejectedResponses?: CompletedPromptResponse[];
+  rejectedReviews?: IncompleteReviewResponse[];
+  /** Earlier complete answers when the subsequent correction failed; never a success receipt. */
+  completedBeforeCorrectionFailures?: CompletedPromptResponse[];
 }
 export interface ChapterProductionJournalRecord {
   version: 1;
@@ -110,6 +119,26 @@ export function completedPromptResponseFromError(error: unknown): CompletedPromp
     && response.semanticRetryAttempts >= response.maxSemanticRetryAttempts
     && Number.isInteger(response.repairAttempts) && response.repairAttempts >= 0
     ? response : undefined;
+}
+
+/** This receipt preserves the earlier answer without classifying the later call as definitive. */
+export function completedBeforeCorrectionFailureFromError(error: unknown): CompletedPromptResponse | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const response = (error as Error & { completedBeforeCorrectionFailure?: CompletedPromptResponse }).completedBeforeCorrectionFailure;
+  return response && typeof response.promptId === "string" && typeof response.promptVersion === "string"
+    && Object.prototype.hasOwnProperty.call(response, "output") && typeof response.validationError === "string"
+    && Number.isInteger(response.semanticRetryAttempts) && response.semanticRetryAttempts > 0
+    && Number.isInteger(response.maxSemanticRetryAttempts) && response.maxSemanticRetryAttempts >= response.semanticRetryAttempts
+    && Number.isInteger(response.repairAttempts) && response.repairAttempts >= 0 ? response : undefined;
+}
+
+/** Keep the full private review including raw answer, deferred edits and all diagnostics. */
+export function incompleteReviewResponseFromError(error: unknown): IncompleteReviewResponse | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const typed = error as Error & { code?: unknown; reviewOutput?: unknown };
+  const output = typed.reviewOutput;
+  if (typed.code !== "CHAPTER_REVIEW_INCOMPLETE" || !output || typeof output !== "object" || Array.isArray(output)) return undefined;
+  return { code: "CHAPTER_REVIEW_INCOMPLETE", output: output as Record<string, unknown>, validationError: error.message };
 }
 
 /** Structural error protocols avoid importing prompt execution/DB into the journal boundary. */

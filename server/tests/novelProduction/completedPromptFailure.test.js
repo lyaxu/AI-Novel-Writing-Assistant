@@ -33,7 +33,7 @@ function realPromptRunner() {
   });
 }
 
-function harness({ failureAt, failure, reject = true, journalFailure = false } = {}) {
+function harness({ failureAt, failure, reject = true, journalFailure = false, firstOutput } = {}) {
   const runner = realPromptRunner();
   const calls = [];
   let record = null;
@@ -46,7 +46,8 @@ function harness({ failureAt, failure, reject = true, journalFailure = false } =
       readChapter: async () => structuredClone(chapter), readJournal: async () => record && { metadataJson: record },
       writeJournal: async (_n, _c, expected, next) => {
         assert.equal(record, expected);
-        if (failRecord && JSON.parse(next).steps['prepare.chapter_plan']?.rejectedResponses?.length) {
+        const step = JSON.parse(next).steps['prepare.chapter_plan'];
+        if (failRecord && (step?.rejectedResponses?.length || step?.completedBeforeCorrectionFailures?.length)) {
           failRecord = false; throw new Error('disk rejected saved response');
         }
         record = next;
@@ -57,7 +58,7 @@ function harness({ failureAt, failure, reject = true, journalFailure = false } =
   runner.setPromptRunnerStructuredInvokerForTests(async request => {
     calls.push(request);
     if (calls.length === failureAt) throw failure;
-    return { data: { plan: 'complete response', attempt: calls.length }, repairUsed: false, repairAttempts: 0 };
+    return { data: calls.length === 1 && firstOutput ? firstOutput : { plan: 'complete response', attempt: calls.length }, repairUsed: false, repairAttempts: 0 };
   });
   const asset = { id: 'offline.chapter.plan', version: 'v1', mode: 'structured', taskType: 'planner',
     outputSchema: {}, contextPolicy: {}, semanticRetryPolicy: { maxAttempts: 1 }, render: () => [],
@@ -136,10 +137,71 @@ for (const [name, error, expectedCode] of [
   await assert.rejects(f.run(session), value => expectedCode ? value.code === expectedCode : value === error);
   assert.equal(f.record().steps['prepare.chapter_plan'].status, 'unknown');
   assert.equal(f.record().steps['prepare.chapter_plan'].rejectedResponses, undefined);
+  assert.equal(f.record().steps['prepare.chapter_plan'].completedBeforeCorrectionFailures?.length, attempt === 2 ? 1 : undefined);
   assert.equal(f.record().steps['prepare.contract'].external, false);
   await session.close(); session = await f.open();
   await assert.rejects(f.run(session), { code: 'CHAPTER_PRODUCTION_UNCERTAIN' });
   assert.equal(f.calls.length, attempt);
+  await session.close();
+});
+
+// These are injected runtime failures, not additional model responses or literary judgments.
+for (const [name, fields, expectedStatus] of [
+  ['malformed JSON', { name: 'StructuredOutputError', category: 'malformed_json' }, 'failed'],
+  ['output limit', { name: 'StructuredOutputError', category: 'output_limit' }, 'unknown'],
+  ['transport', { code: 'ECONNRESET' }, 'unknown'],
+]) test(`correction ${name} retains only the complete first answer and cannot resend in the same execution`, async () => {
+  const failure = Object.assign(new Error(`correction ${name}`), fields);
+  const firstOutput = { rawReview: { text: '完整首答。'.repeat(2500) }, deferredRepairDirectives: ['must remain private'], diagnostics: ['invalid role'] };
+  const f = harness({ failureAt: 2, failure, firstOutput }); const session = await f.open();
+  await assert.rejects(f.run(session), error => {
+    assert.equal(error === failure || error.cause === failure, true, 'preserve original typed failure and transport cause');
+    if (name === 'transport') assert.equal(error.code, 'CHAPTER_PRODUCTION_UNCERTAIN');
+    else assert.equal(error, failure);
+    return true;
+  });
+  assert.equal(Object.keys(failure).includes('completedBeforeCorrectionFailure'), false);
+  assert.equal(failure.completedPromptResponse, undefined, 'failed correction is not a completed response');
+  assert.equal(contracts.isDefinitiveProductionFailure(failure), expectedStatus === 'failed');
+  const step = f.record().steps['prepare.chapter_plan'];
+  assert.equal(step.status, expectedStatus);
+  assert.equal(step.output, undefined);
+  assert.equal(step.rejectedResponses, undefined);
+  assert.deepEqual(step.completedBeforeCorrectionFailures, [{
+    promptId: 'offline.chapter.plan', promptVersion: 'v1', output: firstOutput,
+    validationError: 'contract quote not present', semanticRetryAttempts: 1, maxSemanticRetryAttempts: 1, repairAttempts: 0,
+  }]);
+  assert.equal(f.calls[1].promptMeta.semanticRetryAttempts, 1);
+  await assert.rejects(session.runStep('prepare.chapter_plan', async () => assert.fail('must not resend'), { external: true }));
+  assert.equal(f.calls.length, 2, 'no extra generation or schema repair after the failed correction');
+  await session.close();
+  const projection = await f.journal.inspect({ novelId: 'novel', chapterId: 'chapter-2' });
+  assert.equal(JSON.stringify(projection).includes(firstOutput.rawReview.text), false);
+  assert.equal(projection.canAcknowledge, expectedStatus === 'unknown');
+});
+
+test('explicit recovery preserves correction-failure evidence while saving only a newly successful output', async () => {
+  const failure = Object.assign(new Error('malformed correction'), { name: 'StructuredOutputError', category: 'malformed_json' });
+  const f = harness({ failureAt: 2, failure }); let session = await f.open();
+  await assert.rejects(f.run(session), error => error === failure);
+  await session.close(); f.acceptNext(); session = await f.open();
+  await f.run(session);
+  const step = f.record().steps['prepare.chapter_plan'];
+  assert.equal(step.status, 'done');
+  assert.equal(step.output.output.attempt, 3);
+  assert.equal(step.completedBeforeCorrectionFailures[0].output.attempt, 1);
+  assert.equal(step.completedBeforeCorrectionFailures[0].semanticRetryAttempts, 1);
+  await session.close({ completed: true });
+});
+
+test('a receipt storage failure after correction failure leaves an unknown external outcome on recovery', async () => {
+  const failure = Object.assign(new Error('malformed correction'), { name: 'StructuredOutputError', category: 'malformed_json' });
+  const f = harness({ failureAt: 2, failure, journalFailure: true }); let session = await f.open();
+  await assert.rejects(f.run(session), { code: 'CHAPTER_PRODUCTION_STORAGE' });
+  assert.equal(f.record().steps['prepare.chapter_plan'].status, 'running');
+  await session.close(); session = await f.open();
+  await assert.rejects(f.run(session), { code: 'CHAPTER_PRODUCTION_UNCERTAIN' });
+  assert.equal(f.calls.length, 2);
   await session.close();
 });
 

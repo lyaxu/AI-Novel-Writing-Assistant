@@ -3,8 +3,8 @@
   "scope": "Historical real review failure corpus for the approved phase-3 acceptance-contract convergence. Paths are relative to this fixtures directory; testFile paths are relative to server/tests/novelProduction. Dates and metadata are UTC.",
   "evidenceBoundary": "Raw recorded outputs remain immutable. Historical rejection codes describe the observed contract, not a literary verdict. A current migration may change error wording; do not silently invent a reviewer correction to make a sample pass. Canonical legacy tests are distinct from fresh ID-only wire tests.",
   "counts": {
-    "recordedOutputs": 17,
-    "recordedFailures": 16,
+    "recordedOutputs": 21,
+    "recordedFailures": 20,
     "recordedValidOriginalControls": 1
   },
   "entries": [
@@ -553,6 +553,142 @@
       ],
       "responseObjectSha256": "77ba3caa2cf6d6246f44da4d748bd55bf4940ea3f4f5f47898d61ba91b037b58",
       "diagnosticTest": "v15ReviewDiagnosis.test.js"
+    },
+    {
+      "id": "second-v16-0",
+      "fixture": "secondChapterReviewV16.json",
+      "outputPath": "outputs.0",
+      "promptVersion": "v16",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": true
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "structural_schema"
+      ],
+      "observedValidationCodes": [
+        "constraints_expected_array"
+      ],
+      "responseObjectSha256": "bd72874fcb8ca286ca0f34042c905444a7286dcac90c73af959e35e9d1d22e5e",
+      "responseMetadataPath": "responses.0",
+      "responseContentPath": "responseContents.0",
+      "schemaFailurePaths": [
+        "sceneCausalityVerdicts.0.constraints",
+        "sceneCausalityVerdicts.1.constraints",
+        "sceneCausalityVerdicts.2.constraints",
+        "sceneCausalityVerdicts.3.constraints"
+      ],
+      "coverage": [
+        {
+          "testFile": "unifiedReviewFailureCorpus.test.js",
+          "testName": "historical review corpus second-v16-0 preserves its recorded acceptance boundary",
+          "mode": "v16_historical_strict_schema_or_semantic_replay"
+        }
+      ],
+      "stage": "initial_response"
+    },
+    {
+      "id": "second-v16-1",
+      "fixture": "secondChapterReviewV16.json",
+      "outputPath": "outputs.1",
+      "promptVersion": "v16",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": true
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "missing_scene_coverage_after_context_free_repair"
+      ],
+      "observedValidationCodes": [
+        "action_state_coverage_missing:pay_and_depart"
+      ],
+      "responseObjectSha256": "4393f2a4dde215463974937b49aa803fad00123e06bc4d0d77b8007ee00b0d87",
+      "responseMetadataPath": "responses.1",
+      "responseContentPath": "responseContents.1",
+      "coverage": [
+        {
+          "testFile": "unifiedReviewFailureCorpus.test.js",
+          "testName": "historical review corpus second-v16-1 preserves its recorded acceptance boundary",
+          "mode": "v16_historical_strict_schema_or_semantic_replay"
+        }
+      ],
+      "stage": "schema_repair"
+    },
+    {
+      "id": "second-v16-2",
+      "fixture": "secondChapterReviewV16.json",
+      "outputPath": "outputs.2",
+      "promptVersion": "v16",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": true
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "structural_schema"
+      ],
+      "observedValidationCodes": [
+        "invalid_dimension_enum"
+      ],
+      "responseObjectSha256": "15e594cb9261a4e3ea93d51f2aab7027b3a6918512d2d599138bdfab774612d3",
+      "responseMetadataPath": "responses.2",
+      "responseContentPath": "responseContents.2",
+      "schemaFailurePaths": [
+        "actionStateChecks.3.states.0.dimension",
+        "actionStateChecks.3.states.0.before.dimension",
+        "actionStateChecks.3.states.0.after.dimension",
+        "actionStateChecks.3.states.0.resultChange.basis.dimension"
+      ],
+      "coverage": [
+        {
+          "testFile": "unifiedReviewFailureCorpus.test.js",
+          "testName": "historical review corpus second-v16-2 preserves its recorded acceptance boundary",
+          "mode": "v16_historical_strict_schema_or_semantic_replay"
+        }
+      ],
+      "stage": "semantic_retry"
+    },
+    {
+      "id": "second-v16-3",
+      "fixture": "secondChapterReviewV16.json",
+      "outputPath": "outputs.3",
+      "promptVersion": "v16",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": true
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "cross_role_dimension_mismatch"
+      ],
+      "observedValidationCodes": [
+        "semantic_dimension_mismatch"
+      ],
+      "responseObjectSha256": "6a62f903556fcc88e19da0676eaf7a44d39a4b33d6b55c8c57baca9ba38aa4fe",
+      "responseMetadataPath": "responses.3",
+      "responseContentPath": "responseContents.3",
+      "coverage": [
+        {
+          "testFile": "unifiedReviewFailureCorpus.test.js",
+          "testName": "historical review corpus second-v16-3 preserves its recorded acceptance boundary",
+          "mode": "v16_historical_strict_schema_or_semantic_replay"
+        }
+      ],
+      "stage": "schema_repair_after_semantic_retry"
     }
   ],
   "manualSimulations": [
@@ -659,6 +795,17 @@
       "id": "version-boundary",
       "status": "needs_unified_regression",
       "detail": "Legacy canonical evidence remains readable and testable; fresh generation must use the current ID-only wire contract. Ensure corpus replay distinguishes historical fixtures from fresh wire validation instead of treating canonical quote payloads as new output."
+    },
+    {
+      "id": "v16-context-free-repair-loses-complete-scenes",
+      "status": "captured_for_v17_full_context_regression",
+      "entries": [
+        "second-v16-0",
+        "second-v16-1",
+        "second-v16-2",
+        "second-v16-3"
+      ],
+      "detail": "All four replies are complete JSON with stop. Initial and semantic-retry replies have local shape errors; standalone JSON repair follows each. The first repair removes the payment scene, and the final repair changes state dimensions inconsistently. Preserve all original strings and use full manuscript context for one bounded correction."
     }
   ],
   "excludedRelatedFixtures": [

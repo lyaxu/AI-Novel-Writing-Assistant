@@ -72,6 +72,16 @@ function compactRepairSource(rawContent: string): string {
   if (rawContent.length <= MAX_REPAIR_SOURCE_CHARS) {
     return rawContent;
   }
+  // A schema mismatch does not make a complete JSON response damaged. Removing
+  // its middle can erase unrelated records that the repair must preserve.
+  const trimmed = rawContent.trim();
+  const fenced = /^```(?:json)?\s*\r?\n([\s\S]*?)\r?\n```$/i.exec(trimmed);
+  try {
+    JSON.parse(fenced ? fenced[1]! : rawContent);
+    return rawContent;
+  } catch {
+    // Only malformed/degraded output uses the bounded reconstruction source.
+  }
   const head = rawContent.slice(0, 9_000);
   const tail = rawContent.slice(-2_000);
   return [

@@ -9,19 +9,21 @@ const {
   legacyReferenceAcceptanceValidation,
 } = require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts');
 const { asset: legacyUnifiedAsset, productionAsset } = require('./legacyUnifiedHarness.cjs');
+const { asset: legacySemanticAsset } = require('./legacySemanticHarness.cjs');
 const { assertReviewCompleted } = require('../../dist/services/novel/runtime/acceptance/reviewCompletion');
 
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const atPath = (value, path) => path.split('.').reduce((node, key) => node[key], value);
 
-test('v15 historical replay has its own schema and cannot masquerade as fresh v16 output', () => {
+test('v15 historical replay has its own schema and cannot masquerade as a completed current review', () => {
   assert.notEqual(legacyUnifiedAsset, productionAsset);
   assert.equal(legacyUnifiedAsset.version, productionAsset.version);
   assert.notEqual(legacyUnifiedAsset.outputSchema, productionAsset.outputSchema);
   for (const entry of corpus.entries.filter(row => row.promptVersion === 'v15')) {
-    const { recorded } = fixtureFor(entry);
+    const { recorded, input } = fixtureFor(entry);
     assert.equal(legacyUnifiedAsset.outputSchema.safeParse(recorded).success, true);
-    assert.equal(productionAsset.outputSchema.safeParse(recorded).success, false);
+    assert.equal(legacySemanticAsset.outputSchema.safeParse(recorded).success, false);
+    assert.throws(() => productionAsset.postValidate(productionAsset.outputSchema.parse(recorded), input, { blocks: [] }));
     assert.equal(hash(recorded), entry.responseObjectSha256);
   }
 });
@@ -40,11 +42,11 @@ function fixtureFor(entry) {
   return { input, recorded: atPath(document, entry.outputPath) };
 }
 
-test('failure corpus enumerates seventeen immutable real responses and separates authored simulations', () => {
-  assert.equal(corpus.entries.length, 17);
-  assert.equal(corpus.counts.recordedFailures, 16);
+test('failure corpus enumerates twenty-one immutable real responses and separates authored simulations', () => {
+  assert.equal(corpus.entries.length, 21);
+  assert.equal(corpus.counts.recordedFailures, 20);
   assert.equal(corpus.counts.recordedValidOriginalControls, 1);
-  assert.equal(new Set(corpus.entries.map(entry => entry.id)).size, 17);
+  assert.equal(new Set(corpus.entries.map(entry => entry.id)).size, 21);
   for (const entry of corpus.entries) {
     assert.equal(entry.origin, 'recorded_model_response');
     assert.equal(entry.manualSimulation, false);
@@ -63,12 +65,22 @@ for (const entry of corpus.entries) {
     const { input, recorded } = fixtureFor(entry);
     const inputBefore = structuredClone(input);
     const referenceWire = entry.promptVersion === 'v13' || entry.promptVersion === 'v14';
-    const schema = entry.promptVersion === 'v15' ? legacyUnifiedAsset.outputSchema : referenceWire ? referenceChapterAcceptanceAssessmentSchema : generatedChapterAcceptanceAssessmentSchema;
-    const validation = entry.promptVersion === 'v15' ? legacyUnifiedAsset : referenceWire ? legacyReferenceAcceptanceValidation : resolvedAcceptanceValidation;
+    const historical = entry.promptVersion === 'v16' ? legacySemanticAsset : entry.promptVersion === 'v15' ? legacyUnifiedAsset : undefined;
+    const schema = historical?.outputSchema ?? (referenceWire ? referenceChapterAcceptanceAssessmentSchema : generatedChapterAcceptanceAssessmentSchema);
+    const validation = historical ?? (referenceWire ? legacyReferenceAcceptanceValidation : resolvedAcceptanceValidation);
     assert.equal(typeof validation?.postValidate, 'function', 'Historical validation must have an explicit entrypoint');
     assert.equal(typeof validation?.postValidateFailureRecovery, 'function');
     const parsed = schema.safeParse(structuredClone(recorded));
 
+    if (entry.schemaFailurePaths?.length) {
+      assert.equal(parsed.success, false, 'Keep original invalid shape; do not repair archived responses');
+      for (const path of entry.schemaFailurePaths) {
+        assert.ok(parsed.error.issues.some(issue => issue.path.join('.') === path), `Missing historical schema diagnostic: ${path}`);
+      }
+      assert.equal(hash(recorded), entry.responseObjectSha256);
+      assert.deepEqual(input, inputBefore);
+      return;
+    }
     if (entry.id === 'second-v13-initial') {
       // This real answer is structurally malformed. It must never reach business
       // recovery with invented string explanations or fabricated review fields.

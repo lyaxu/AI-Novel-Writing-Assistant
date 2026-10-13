@@ -75,6 +75,13 @@ function tryFixTruncatedJson(raw: string): string {
 }
 
 function tryParseStructuredJsonValue(source: string): { parsed: unknown } | { error: string } {
+  // A complete JSON value can be a primitive, or a string containing braces.
+  // Parse it before looking for an object/array embedded in surrounding text.
+  try {
+    return { parsed: JSON.parse(source) as unknown };
+  } catch {
+    // Preserve the existing extraction and malformed-output handling below.
+  }
   try {
     return {
       parsed: JSON.parse(extractJSONValue(source)) as unknown,

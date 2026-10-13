@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
 const recorded = require('./fixtures/secondChapterReviewV15.json');
 const corpus = require('./fixtures/reviewFailureCorpus.json');
-const { chapterAcceptanceAssessmentPrompt: asset } = require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts');
+const { asset, productionAsset, semanticChapterAcceptanceSchema } = require('./legacySemanticHarness.cjs');
 const { buildEvidenceCatalog } = require('../../dist/prompting/prompts/novel/acceptance/evidenceCatalog');
 const { assertReviewCompleted } = require('../../dist/services/novel/runtime/acceptance/reviewCompletion');
 const { runStructuredPrompt, setPromptRunnerStructuredInvokerForTests } = require('../../dist/prompting/core/promptRunner');
@@ -104,6 +104,14 @@ function humanAnnotatedResponse() {
 }
 
 const validate = raw => asset.postValidate(asset.outputSchema.parse(raw), input, { blocks: [] });
+test('current v17 envelope accepts the complete human-annotated review through strict semantics', () => {
+  const raw = humanAnnotatedResponse();
+  const output = productionAsset.postValidate(productionAsset.outputSchema.parse(raw), input, { blocks: [] });
+  assert.doesNotThrow(() => assertReviewCompleted(output));
+  assert.deepEqual(output.reviewSemanticResponse, raw);
+  assert.deepEqual(output.actionStateChecks.map(check => check.sceneKey), input.expectedSceneKeys);
+  assert.deepEqual(output.repairDirectives, []);
+});
 function unchanged() {
   assert.equal(JSON.stringify(input), originalInput);
   assert.equal(JSON.stringify(recorded.outputs), originalAnswers);
@@ -115,7 +123,8 @@ function unchanged() {
 }
 
 test('hand-annotated v16 simulation covers the complete archived manuscripts without accepting v15 as new wire output', () => {
-  assert.equal(asset.version, 'v16');
+  assert.equal(asset.version, productionAsset.version, 'Historical v16 hooks retain registered runner identity');
+  assert.equal(asset.outputSchema, semanticChapterAcceptanceSchema);
   assert.equal(input.content.length, 3652);
   assert.equal(input.establishedProse[0].content.length, 3013);
   for (const answer of recorded.outputs) assert.equal(asset.outputSchema.safeParse(answer).success, false);

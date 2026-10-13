@@ -2,6 +2,8 @@
 
 ## 职责与真源
 
+未完成审查的完整返回属于私有失败证据：rejectedReviews保存CHAPTER_REVIEW_INCOMPLETE的原答、诊断和deferred意见，不能充当步骤output或成功缓存。语义纠正调用本身失败时，保留此前完整回答，但原外部错误仍决定failed/unknown；已有首答不能证明第二次调用的结果已知。显式恢复与后续成功保留历史失败证据和预算，持久化失败保持结果未知保护。
+
 本模块是 `ChapterRuntimeCoordinator` 的执行适配层，不是另一套导演、任务队列或 GUI。`GenerationJob` 继续拥有范围、取消、人工暂停与父级执行租约；`Chapter` 继续拥有用户正文。现有 `ChapterArtifactSyncCheckpoint` 记录本章步骤输出及章节互斥所有权。
 
 - `types.ts`：正文/合同指纹、存储协议、已结构化错误分类。

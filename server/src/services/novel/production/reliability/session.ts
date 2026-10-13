@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
-import { ChapterProductionError, chapterFingerprint, productionFingerprint, isDefinitiveProductionFailure, completedPromptResponseFromError, type ChapterProductionInspection, type ChapterProductionJournalRecord, type ChapterProductionJournalRepository, type JournalChapter, type JournalContentWrite, type JournalStateWrite, type JournalTransaction } from "./types";
+import { ChapterProductionError, chapterFingerprint, productionFingerprint, isDefinitiveProductionFailure, completedPromptResponseFromError, completedBeforeCorrectionFailureFromError, incompleteReviewResponseFromError, type ChapterProductionInspection, type ChapterProductionJournalRecord, type ChapterProductionJournalRepository, type JournalChapter, type JournalContentWrite, type JournalStateWrite, type JournalTransaction } from "./types";
 
 export interface ChapterProductionSession {
   readonly novelId: string;
@@ -220,7 +220,9 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
             if (previous?.status === "running") throw new ChapterProductionError("CHAPTER_PRODUCTION_BUSY", "本章的这一步已在执行。");
             if (previous?.status === "done") return { reused: true as const, output: previous.output as T };
             current.steps[key] = { status: "running", external: stepOptions.external ?? false,
-              ...(previous?.rejectedResponses ? { rejectedResponses: previous.rejectedResponses } : {}) };
+              ...(previous?.rejectedResponses ? { rejectedResponses: previous.rejectedResponses } : {}),
+              ...(previous?.completedBeforeCorrectionFailures ? { completedBeforeCorrectionFailures: previous.completedBeforeCorrectionFailures } : {}),
+              ...(previous?.rejectedReviews ? { rejectedReviews: previous.rejectedReviews } : {}) };
             return { reused: false as const };
           });
           if (state.reused) return state.output;
@@ -229,13 +231,19 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
           catch (error) {
             const definitive = isDefinitiveProductionFailure(error);
             const rejectedResponse = completedPromptResponseFromError(error);
+            const rejectedReview = incompleteReviewResponseFromError(error);
+            const beforeCorrectionFailure = completedBeforeCorrectionFailureFromError(error);
             await mutate((current) => {
               const rejectedResponses = [...(current.steps[key]?.rejectedResponses ?? []), ...(rejectedResponse ? [rejectedResponse] : [])];
+              const rejectedReviews = [...(current.steps[key]?.rejectedReviews ?? []), ...(rejectedReview ? [rejectedReview] : [])];
+              const completedBeforeCorrectionFailures = [...(current.steps[key]?.completedBeforeCorrectionFailures ?? []), ...(beforeCorrectionFailure ? [beforeCorrectionFailure] : [])];
               current.steps[key] = { status: stepOptions.external && !definitive ? "unknown" : "failed", external: stepOptions.external ?? false, error: message(error),
-                ...(rejectedResponses.length ? { rejectedResponses } : {}) };
+                ...(rejectedResponses.length ? { rejectedResponses } : {}),
+                ...(completedBeforeCorrectionFailures.length ? { completedBeforeCorrectionFailures } : {}),
+                ...(rejectedReviews.length ? { rejectedReviews } : {}) };
               current.error = message(error);
             }, false);
-            if (rejectedResponse) completedFailures.set(key, error);
+            if (rejectedResponse || rejectedReview || (beforeCorrectionFailure && definitive)) completedFailures.set(key, error);
             // Preserve typed safety/limit codes for the caller while the journal blocks resending.
             const typed = error as { code?: unknown; name?: string; category?: string } | null;
             const terminalCode = typeof typed?.code === "string" && (
@@ -250,7 +258,9 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
           }
           // Persist failure here is NOT a callback failure: keep running/unknown, never allow resending.
           await mutate((current) => { current.steps[key] = { status: "done", external: stepOptions.external ?? false, output,
-            ...(current.steps[key]?.rejectedResponses ? { rejectedResponses: current.steps[key].rejectedResponses } : {}) }; });
+            ...(current.steps[key]?.rejectedResponses ? { rejectedResponses: current.steps[key].rejectedResponses } : {}),
+            ...(current.steps[key]?.completedBeforeCorrectionFailures ? { completedBeforeCorrectionFailures: current.steps[key].completedBeforeCorrectionFailures } : {}),
+            ...(current.steps[key]?.rejectedReviews ? { rejectedReviews: current.steps[key].rejectedReviews } : {}) }; });
           return output;
         },
         async close(closeOptions = {}) {

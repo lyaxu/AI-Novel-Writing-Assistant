@@ -168,13 +168,16 @@ export function normalizeSemanticActions(rawChecks: RawAction[], catalog: Eviden
 }
 
 export const SEMANTIC_ACTION_RULES = [
-  "每个expectedSceneKey只选择一个实际发生的原子行动，actionEvidence只选1条本章目录证据。不要把隔开的见面、交谈、战斗等合成一个行动；判断始终相对此行动，不能换锚点躲开缺陷。",
+  `dimension的合法枚举由当前Schema生成，只能是：${actionStateDimensionCheckSchema.shape.dimension.options.join("|")}。不要创造resources、money等别名。body=身体部位的健康和可活动状态；item=物品、现金等资源的持有、数量和可用状态；ability=技能、能力的掌握与授权；knowledge=对一个具体命题的知情；location=位置与可达范围。`,
+  "每个expectedSceneKey只选择一个实际发生的原子行动，actionEvidence只选1条本章目录证据，该句必须支持action所述全部行动。不要把隔开的告知、承诺、收款等并列事件合成一个行动，也不要只引用准备动作来定位后面的关键动作。判断始终相对此行动，不能换锚点躲开缺陷。",
   "每项state填写entity、dimension、requiredForAction、before、after、prerequisite、resultChange。before/after及两个basis都使用同一事实结构：{entity,dimension,claim,evidence:[{evidenceId}],storyTime,support,reason}。所有字段必须提供；解析允许缺项只为收集审查错误，不代表可省略。",
-  "每个事实的entity/dimension须与所属state一致，claim和理由必须核对证据实际主体和维度。人物把已知消息说给别人，不等于说话人新获得知识；移动、结识人物、材料变少、身体受伤分别审查相关主体维度，不能互相替代。",
+  "先确定每项state要核验的同一主体、同一维度、同一具体属性，再填写四角色事实。只选择与该原子行动的requiredForAction有关的状态，不要求五维齐全。before/after是该属性的前后状态；prerequisite只核对此属性如何满足本项requiredForAction；resultChange只判断此属性是否改变。场景发生了变化，不意味着每个state都必须changed。",
+  "每个事实的entity/dimension须与所属state一致，claim和理由还须核对证据实际主体与属性。混入另一维度时，拆成各自闭合的state或把纯后果移到scene.constraints；不能仅统一dimension标签来遮盖错误，也不能删除真实限制。掌握技能属于ability，能否抬臂属于body，携带或消耗工具属于item，身体受伤和工具耗尽不能作为掌握技能这一属性的after。",
+  "现金按item审查同一主体对同笔现金的持有或数量变化；获得承诺、改变决定或得知信息不是现金的after。knowledge前后必须比较同一命题，例如是否知道某条规定；知道姓名与知道对方反应是不同命题，不能仅因都标knowledge就冒充同一属性的前后变化。将已有消息告诉别人不等于说话者新获得该知识；知识在行动中继续运用可以unchanged。",
   "storyTime只用before_or_at_action（前提使用前或使用时已成立，可在同一行动内建立）、during_or_after_action（行动中或之后的状态）、unknown（不能确认）。判断故事发生时间，不按文本字符先后判断；本章后叙的既有能力和前章确证事实均可before_or_at_action，实际使用后才取得的条件不能这样标注。reason解释相对行动及前提使用的语义依据。",
   "support只用supported（证据支持claim）、contradicted（证据反驳claim）、insufficient（不能确认）。supported须有目录证据，未知允许evidence=[]并解释不足；每类证据最多2条。编号只证明引用来源，不自动证明主体、维度、事实或时间正确。",
   "prerequisite={status,basis,reason}，status为satisfied|established|missing|contradicted|unknown。satisfied表示已有条件；established表示本章在前提被使用前或使用时建立前提，basis须全为本章证据。同一行动中授权觉醒、授予、施法恢复可以合法建立条件，无需额外训练或准备场景。两者均须before和basis受证据支持且故事时间为before_or_at_action；before可描述起初未觉醒/空手，由established的basis证明使用时已建立，无需前状态已满足条件。实际使用后才取得条件不能证明成立。",
   "resultChange={status,basis,reason}，status为unchanged|changed|unsupported|contradicted|unknown。unchanged/changed均须after和basis受本章证据支持，故事时间为during_or_after_action；知识在行动中被运用可证明延续，不要求正文重复交代。",
   "确证missing/contradicted/unsupported时，basis应是被证据支持的负面事实，例如仍被绑住而要求自由行动；support仍为supported。不能只因没有搜到引文就认证缺陷，无法确定则unknown。真实局部问题保留负面判断，交给既有修复或质量债，不为通过审查篡改正文。",
-  "before/after是同一主体同一维度的两个事实；prerequisite判断是否满足requiredForAction；resultChange判断该状态的结果变化是否有依据，不能把他人的反应当该主体状态改变。不要输出旧布尔、transitionStatus、beforeEvidenceTiming或动作verdict，程序从四角色事实汇总。",
+  "引文编号必须支持整个claim，不能用一条只证明物品的证据同时宣称技能已掌握，或只证明一件已知事实就附带另一件事。不要输出旧布尔、transitionStatus、beforeEvidenceTiming或动作verdict，程序从四角色事实汇总。审查字段错绑应纠正审查回答，不能据此建议修改正文。",
 ];

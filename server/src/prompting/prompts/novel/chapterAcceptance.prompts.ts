@@ -20,6 +20,7 @@ import {
   semanticActionAssessmentSchema, SEMANTIC_ACTION_RULES, semanticSceneSchema, SEMANTIC_SCENE_RULES,
   reviewFindingSchema, reviewFindingRecordSchema, reviewQualityDebtSchema, REPAIR_FINDING_RULES,
   validateSemanticAcceptance, recoverSemanticAcceptance, semanticExample,
+  reviewEnvelopeSchema, validateReviewEnvelope, recoverReviewEnvelope, type ReviewEnvelope,
 } from "./acceptance/semantic";
 
 const acceptanceSourceEvidenceSchema = z.object({
@@ -523,10 +524,10 @@ export const legacyReferenceAcceptanceValidation: Pick<PromptAsset<ChapterAccept
 export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ChapterAcceptancePromptInput,
   ChapterAcceptanceAssessmentOutput,
-  SemanticChapterAcceptanceOutput
+  ReviewEnvelope
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v16",
+  version: "v17",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -560,13 +561,14 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
     { group: "open_conflicts", priority: 70 },
   ],
   structuredOutputHint: {
-    example: semanticExample(),
+    example: (input: ChapterAcceptancePromptInput) => semanticExample(input),
     note: "示例只说明结构，不是当前书的事实或判断；其中占位编号必须替换为本次目录真实编号。一次判断章节接收、修文、继续策略和资产同步优先级。",
   },
-  outputSchema: semanticChapterAcceptanceSchema,
+  outputSchema: reviewEnvelopeSchema,
+  repairPolicy: { maxAttempts: 0 },
   semanticRetryPolicy: { maxAttempts: 1 },
-  postValidate: (raw, input) => validateSemanticAcceptance(raw, input),
-  postValidateFailureRecovery: ({ rawOutput, promptInput, validationError }) => recoverSemanticAcceptance(rawOutput, promptInput, validationError),
+  postValidate: (raw, input) => validateReviewEnvelope(raw, input),
+  postValidateFailureRecovery: ({ rawOutput, promptInput, validationError }) => recoverReviewEnvelope(rawOutput, promptInput, validationError),
   render: (input, context) => [
     new SystemMessage([
       "你是中文长篇小说正文接收闸门。",
@@ -576,7 +578,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       "",
       "判断原则：",
       "1. 默认支持继续推进；普通可优化问题不要升级为暂停。",
-      "2. 只有严重越过章节任务、关键连续性断裂、角色行为严重失真、受保护信息提前泄露、正文无法阅读时，才使用 needs_manual_review。",
+      "2. 严重越过章节任务、关键连续性断裂、角色行为严重失真、受保护信息提前泄露或正文无法阅读，需要先核实问题，再由issueChecks说明修复范围；只有确实需要调整邻章计划时使用repairScope=replan。",
       "3. 先核实事实和上下文，再记录问题。每个修文指令与missingObligations绑定issueId；issueChecks检查已有正文支持，只有unresolved问题可执行修改。",
       "4. status和repairability由issueChecks的repairScope汇总，不输出这两个字段；普通局部问题不应全局暂停。continuePolicy只用continue、repair_once、pause；没有已核实缺陷时继续并保留风险。",
       "5. obligation contract是本章硬合同。must hit now与forbidden crossing的确证缺口写入missingObligations；可后续承接的缺口只有影响下一章入口才当本章缺陷，否则记riskTags。",
