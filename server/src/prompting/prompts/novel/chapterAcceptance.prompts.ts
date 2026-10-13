@@ -12,7 +12,7 @@ import { CHAPTER_EMOTION_AUDIT_RULES } from "./context/emotionPresence";
 import { CHAPTER_TYPOGRAPHY_AUDIT_RULES } from "./context/typography";
 import { validateProgressionEvidence, validateAcceptanceIssueSources } from "./acceptance/progressionEvidence";
 import { buildEvidenceCatalog } from "./acceptance/evidenceCatalog";
-import { resolveAcceptanceReferences, REFERENCE_AUDIT_RULES } from "./acceptance/referenceAssessment";
+import { resolveAcceptanceReferences, REFERENCE_AUDIT_RULES, BEFORE_TIMING_CONTRACT, missingReferenceTiming } from "./acceptance/referenceAssessment";
 
 const acceptanceSourceEvidenceSchema = z.object({
   source: z.enum(["current_prose", "established_context"]),
@@ -279,6 +279,8 @@ export const referenceChapterAcceptanceAssessmentSchema = generatedChapterAccept
     actionEvidence: referenceArray.min(1),
     states: z.array(actionStateCheckSchema.shape.states.element.extend({
       beforeEvidence: referenceArray, afterEvidence: referenceArray, transitionEvidence: referenceArray,
+      // Required by postValidate: missing semantic findings need the full prose, not JSON-only repair.
+      beforeEvidenceTiming: actionStateCheckSchema.shape.states.element.shape.beforeEvidenceTiming,
     })).min(1).max(5),
   })).min(1).max(8),
   progressionChecks: z.array(generatedChapterAcceptanceAssessmentSchema.shape.progressionChecks.element.extend({
@@ -343,6 +345,7 @@ const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
     sceneKey: "chapter", actor: "她", action: "拒绝签字", actionEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她把笔放下，没有签字。" }],
     states: [{ dimension: "knowledge", entity: "她对欠款的知情", before: "已经读到欠款条款", requiredForAction: "了解合同条款", after: "知情但拒绝承担欠款",
       beforeEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她读完了欠款条款。" }],
+      beforeEvidenceTiming: { relation: "before_or_at_action", reason: "读完条款发生在拒绝签字之前，叙述也按这一顺序展开。" },
       afterEvidence: [{ source: "current_prose", sourceId: "本章chapterId", quote: "她把笔放下，没有签字。" }],
       transitionEvidence: [], enablingTransitionRequired: false, stateChanged: false, transitionStatus: "not_needed" }],
     verdict: "earned", explanation: "知情后拒绝签字，未发生无来源的知识变化。",
@@ -475,7 +478,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ReferenceChapterAcceptanceOutput
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v13",
+  version: "v14",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -516,24 +519,30 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   semanticRetryPolicy: { maxAttempts: 1 },
   postValidate: (raw, input, context) => {
     const resolved = resolveAcceptanceReferences(raw, input);
-    if (resolved.issues.length) throw new Error(resolved.issues.join("\n"));
+    const timingProblems = missingReferenceTiming(raw);
+    if (resolved.issues.length) throw new Error([...resolved.issues, ...timingProblems, BEFORE_TIMING_CONTRACT].join("\n"));
     try {
-      return resolvedAcceptanceValidation.postValidate!(resolved.output, input, context);
+      const validated = resolvedAcceptanceValidation.postValidate!(resolved.output, input, context);
+      if (timingProblems.length) throw Object.assign(new Error(timingProblems.join("\n")), { evidenceProblems: [] });
+      return validated;
     } catch (error) {
       const problems = (error as { evidenceProblems?: string[] }).evidenceProblems;
-      throw new Error(`${problems?.join("\n") ?? (error instanceof Error ? error.message : String(error))}\n证据原文由程序按编号还原。只纠正审查结论或选择目录中支持该结论的evidenceId，不生成quote/source/sourceId、位置或正文。检查来源用途、before/after相对action的位置、必要过渡与状态布尔值、unknown和earned是否相容；后叙已有条件可给beforeEvidenceTiming语义理由，不能换行动或删证据来躲避核验。`);
+      const allProblems = [...timingProblems, ...(problems ?? [error instanceof Error ? error.message : String(error)])];
+      throw new Error(`${allProblems.join("\n")}\n${BEFORE_TIMING_CONTRACT}\n证据原文由程序按编号还原，只选evidenceId，不生成quote/source/sourceId或改正文。保留关键行动与真实依据，不换行动或删证据躲避核验。缺失前后状态证据须补正确编号或如实标未知并同步动作和场景，不可无证据仍为earned。`);
     }
   },
   postValidateFailureRecovery: ({ rawOutput, promptInput, context, validationError, semanticRetryAttempts }) => {
     const resolved = resolveAcceptanceReferences(rawOutput, promptInput);
-    if (!resolved.issues.length) return resolvedAcceptanceValidation.postValidateFailureRecovery!({
+    const timingProblems = missingReferenceTiming(rawOutput);
+    if (!resolved.issues.length && !timingProblems.length) return resolvedAcceptanceValidation.postValidateFailureRecovery!({
       rawOutput: resolved.output, promptInput, context, validationError, semanticRetryAttempts,
     });
     // Unknown IDs remain inspectable review failure, including in candidate review.
     return {
       ...resolved.output, status: "needs_manual_review", continuePolicy: "pause", repairability: "none",
       evidenceReferenceIssues: resolved.issues,
-      decisionReason: "审查引用了不属于本次正文的证据编号，保留回答和正文，等待完成审查。",
+      actionStateAuditIssues: [...(resolved.output.actionStateAuditIssues ?? []), ...timingProblems],
+      decisionReason: "审查的证据编号或故事时间判断尚未核实，保留回答和正文，等待完成审查。",
       riskTags: [...new Set([...resolved.output.riskTags, "acceptance_source_evidence_unverified"])],
       deferredRepairDirectives: resolved.output.repairDirectives,
       deferredMissingObligations: resolved.output.missingObligations,

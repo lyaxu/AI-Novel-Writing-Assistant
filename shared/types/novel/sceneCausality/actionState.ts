@@ -22,7 +22,7 @@ export const actionStateDimensionCheckSchema = z.object({
   beforeEvidence: z.array(actionStateEvidenceSchema).max(2),
   // Optional for historical records. Narrative position alone cannot establish story time.
   beforeEvidenceTiming: z.object({
-    relation: z.enum(["retrospective_prior_state", "not_before_action", "unknown"]),
+    relation: z.enum(["before_or_at_action", "retrospective_prior_state", "not_before_action", "unknown"]),
     reason: stateText,
   }).optional(),
   afterEvidence: z.array(actionStateEvidenceSchema).max(2),

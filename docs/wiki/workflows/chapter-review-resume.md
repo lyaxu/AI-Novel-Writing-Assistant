@@ -84,3 +84,12 @@ SQLite维护写入必须与应用的Prisma适配器采用相同时间序列化�
 未知编号保留字段路径、原编号与快照，沿用一次有上下文纠正；耗尽后作为 CHAPTER_REVIEW_INCOMPLETE 保留稿件和失败结果，不剥引号、不模糊匹配、不增加预算，也不把未核实意见喂给修文。恢复仍从原审查步骤，候选失败沿用保留已审原稿的既有策略。
 
 编号证明文本存在，不证明它支持判断；必须继续核对来源用途、前后状态、必要过渡和场景解释。自由场景说明的语义可靠性及任意倒叙 after/transition 仍是独立边界。封网模拟不等于真实模型或文学验收。
+
+
+## 故事时间字段的强制语义契约
+
+新编号审查的每个states项都必须给beforeEvidenceTiming对象（relation与reason）。before_or_at_action表示按顺序写出的前提，不能豁免后置引文；retrospective_prior_state表示后文回述已有条件；not_before_action、unknown分别保持矛盾与不确定约束。模型示例和纠正提示必须包含完整对象，不能只提字段名。
+
+字段在历史/原始解析层仍可缺失，以便保存残缺回答并进入有完整正文的语义纠正；postValidate强制必填。不得把缺失的故事时间判断送入无正文的通用JSON修复让其猜测。单次纠正需同时汇总缺时序及其他来源/状态错误，不能因首个错误提前返回，逐轮浪费预算。耗尽后保留actionStateAuditIssues与原稿，不自动补理由或认定通过。
+
+编号对象只属于明确列出的action/state、progression和blockingIssue证据数组；场景的prerequisiteEvidence/constraintEvidence为说明字符串数组，其余场景说明为字符串。跨字段的“所有证据均用编号”指令会制造不必要的格式修复，提示词必须列清边界。

@@ -30,6 +30,7 @@ function response(promptInput = input) {
     actionStateChecks: [{ sceneKey: 'chapter', actor: '她', action: '用钥匙开门', actionEvidence: [action],
       states: [{ dimension: 'item', entity: '钥匙', before: '她持有钥匙', requiredForAction: '持有钥匙', after: '她用持有的钥匙开门',
         beforeEvidence: [ref(catalog, '她拿着钥匙。')], afterEvidence: [action], transitionEvidence: [],
+        beforeEvidenceTiming: { relation: 'before_or_at_action', reason: '拿着钥匙在开门前已写出。' },
         stateChanged: false, enablingTransitionRequired: false, transitionStatus: 'not_needed' }],
       verdict: 'earned', explanation: '本次行动使用既有钥匙。' }],
     progressionChecks: ['event_repetition', 'knowledge_repetition', 'prior_goal_followthrough'].map(dimension => ({
@@ -73,8 +74,8 @@ async function replay(outputs, promptInput, assertion) {
   } finally { setPromptRunnerStructuredInvokerForTests(); }
 }
 
-test('v13 accepts IDs and resolves exact source, quote and snapshot positions before existing review gates', () => {
-  assert.equal(asset.version, 'v13');
+test('v14 accepts IDs and resolves exact source, quote and snapshot positions before existing review gates', () => {
+  assert.equal(asset.version, 'v14');
   const raw = response();
   const original = structuredClone(raw);
   const output = validate(raw);
@@ -245,6 +246,10 @@ test('hand-authored ID reviewer simulation for the recorded Maoshan v11 reply re
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, mapReply(item, `${location}.${key}`)]));
   };
   const manuallySelected = mapReply(recorded);
+  // This historical reviewer simulation explicitly supplies the new timing contract.
+  for (const check of manuallySelected.actionStateChecks) for (const state of check.states) {
+    state.beforeEvidenceTiming ??= { relation: 'before_or_at_action', reason: '此人工模拟选择的状态证据在关键行动前或开始时已写出。' };
+  }
   assert.equal(explicitPhoneSelectionCount, 1);
   assert.doesNotMatch(JSON.stringify(manuallySelected), /"quote":|"sourceId":/);
   const output = validate(manuallySelected, scene);
