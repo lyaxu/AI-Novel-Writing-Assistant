@@ -1,0 +1,761 @@
+{
+  "provenance": {
+    "source": "User initiated chapter 2 acceptance v11 on 2026-10-13; two complete recorded model replies. No model call during extraction.",
+    "input": "Reuses secondChapterReview.json input: identical current and previous manuscripts and expected scenes.",
+    "claim": "Reproduces citation validation failure. Hand-edited corrected output in tests is a contract simulation, not model or literary acceptance."
+  },
+  "outputs": [
+    {
+      "status": "accepted",
+      "score": {
+        "coherence": 88,
+        "pacing": 84,
+        "repetition": 90,
+        "engagement": 86,
+        "voice": 85,
+        "overall": 87
+      },
+      "summary": "本章完整兑现首轮驱邪循环：抵达柳巷街、确认旧物附灵、符咒加八极拳暂时压制阴气、账本提示“毁物不毁根，债还在”、收三百元并决定追查二手市场。场景因果链成立，人物行为符合硬事实，未越过任何禁止边界。存在两处轻微可优化点（符咒与朱砂来源的过渡略简、结尾钩子偏静），但不影响继续推进。",
+      "sceneCausalityVerdicts": [
+        {
+          "sceneKey": "arrive_and_meet",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "第1章账本自动翻页和地图查证结果。",
+            "第1章末他检查钥匙和手机后出门，外卖箱底层压着账本。"
+          ],
+          "choiceAndResistanceEvidence": "劳梓凡直接报出郑小满的名字和账本上的地址，要求进门查看；郑小满起初只开一条门缝，听到“账本”二字后犹豫几秒，最终侧身让他进门。",
+          "outcomeMechanismEvidence": "郑小满对家中怪事已恐惧多日，账本名字是她唯一能抓住的解释，戒备被恐惧压过。",
+          "constraintEvidence": [
+            "劳梓凡进入陌生女性独居房间，必须保持距离以免被当成骗子或歹徒。"
+          ],
+          "explanation": "劳梓凡凭账本线索上门，郑小满因恐惧开门，因果链完整。"
+        },
+        {
+          "sceneKey": "identify_source",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "第2章开篇她承认家中有怪事。"
+          ],
+          "choiceAndResistanceEvidence": "在旧木匣震动后，主动说出旧物是从城西二手市场淘来的，并承认丢过手机；郑小满不愿让劳梓凡碰她的私人物品，也不愿多谈差评的事。",
+          "outcomeMechanismEvidence": "旧物对劳梓凡身上的符咒气息产生反应，自行震动证明附灵事实，郑小满无法再否认。",
+          "constraintEvidence": [
+            "旧木匣不能直接打开或毁掉，否则阴气可能失控。"
+          ],
+          "explanation": "木匣震动作为转折点，郑小满被迫交代旧物来源，因果成立。"
+        },
+        {
+          "sceneKey": "suppress_with_fist",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "角色设定中八极拳实战强横。",
+            "第1章末他检查随身物品后出门。"
+          ],
+          "choiceAndResistanceEvidence": "在符咒单用无效后，改用八极拳近身配合符咒击打阴气团核心；阴气团被拳风打散后迅速重聚，旧木匣裂缝中涌出更多阴气，劳梓凡手臂被阴气扫过一阵刺骨冰凉。",
+          "outcomeMechanismEvidence": "八极拳的刚猛劲力配合符咒的镇压效果，暂时打散了阴气团的聚合形态，但根源未除，阴气只是被压制而非消灭。",
+          "constraintEvidence": [
+            "劳梓凡右臂被阴气扫过，暂时使不上全力，影响后续近身动作。",
+            "随身符咒消耗大半，短期内无法再制作新符。"
+          ],
+          "explanation": "符咒无效后改用八极拳近身配合，阴气被打散但未消灭，因果与代价均成立。"
+        },
+        {
+          "sceneKey": "pay_and_depart",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "上一场景八极拳配合符咒打散阴气团。",
+            "她承认连续噩梦，旧物异动时吓得后退。"
+          ],
+          "choiceAndResistanceEvidence": "收下三百元报酬，并主动承诺追查旧物来源，要求郑小满保留旧物不要扔；郑小满犹豫几秒后拿出三百元，要求劳梓凡留下电话号码。",
+          "outcomeMechanismEvidence": "劳梓凡的承诺和拍照留证让郑小满相信他不是骗子，三百元是她能承受的报酬上限，双方建立初步交易信任。",
+          "constraintEvidence": [
+            "劳梓凡承诺追查旧物来源，必须在下一次见郑小满前有所进展。",
+            "旧木匣留在郑小满家中，阴气只是暂时压制，随时可能复发。"
+          ],
+          "explanation": "劳梓凡以拍照和承诺换取报酬，郑小满因信任建立而付款，因果成立。"
+        }
+      ],
+      "progressionChecks": [
+        {
+          "dimension": "event_repetition",
+          "status": "progressed",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "priorState": "第1章末劳梓凡乘末班公交前往柳巷街，尚未见到郑小满。",
+          "actualChange": "劳梓凡抵达柳巷街三十七号，进入郑小满家，确认旧物附灵并暂时压制阴气，收到三百元报酬。",
+          "newConsequence": "首轮驱邪循环完成，账本提示“毁物不毁根，债还在”，劳梓凡决定追查二手市场。",
+          "previousEvidence": [
+            {
+              "source": "established_context",
+              "sourceId": "chapter-1",
+              "quote": "他走到巷口，回头看了一眼自己的窗户。黑着。"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "他顺着导航往巷子里走。老供销社家属楼比街景照片上更旧，外墙皮掉得斑斑驳驳，楼道口那几辆自行车还在，只是锈得更厉害，车座上落着一层灰。"
+            }
+          ],
+          "explanation": "第1章末的出发动作在本章落实为实际抵达和驱邪，非重复。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "knowledge_repetition",
+          "status": "progressed",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "priorState": "第1章末劳梓凡只知账本给出郑小满名字和地址，不知郑小满是谁、去了会发生什么。",
+          "actualChange": "劳梓凡确认郑小满家确有旧物附灵，旧物来自城西二手市场，账本提示“毁物不毁根，债还在”。",
+          "newConsequence": "劳梓凡获得追查旧物来源的新线索，并确认账本会在关键时刻主动提示规则。",
+          "previousEvidence": [
+            {
+              "source": "established_context",
+              "sourceId": "chapter-1",
+              "quote": "“不去，债转你身。”"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "“毁物不毁根，债还在。”"
+            }
+          ],
+          "explanation": "劳梓凡从不知郑小满是谁到确认旧物附灵和来源，知识状态发生实质变化。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "prior_goal_followthrough",
+          "status": "progressed",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "priorState": "第1章末劳梓凡决定乘末班公交前往柳巷街三十七号弄清账本与“债转你身”的含义。",
+          "actualChange": "劳梓凡抵达柳巷街，进入郑小满家，压制阴气，收下三百元，并决定去二手市场追查旧物来源。",
+          "newConsequence": "劳梓凡从被动赴约转为主动追查根源，目标从“弄清账本含义”推进为“追查旧物来源”。",
+          "previousEvidence": [
+            {
+              "source": "established_context",
+              "sourceId": "chapter-1",
+              "quote": "他加快脚步，拐上大路。"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "账本说“毁物不毁根”。根在二手市场。那个摊主。"
+            }
+          ],
+          "explanation": "第1章末的出发决定在本章落实为实际抵达和驱邪，并产生新的追查目标。",
+          "repairSuggestion": ""
+        }
+      ],
+      "actionStateChecks": [
+        {
+          "sceneKey": "arrive_and_meet",
+          "actor": "劳梓凡",
+          "action": "敲门并报出郑小满名字要求进门",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "他抬手敲门。两下，不轻不重。"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "knowledge",
+              "entity": "劳梓凡对郑小满名字和地址的知情",
+              "before": "已知账本浮现郑小满名字和柳巷街三十七号地址",
+              "requiredForAction": "知道要找的人名和地址",
+              "after": "确认地址真实并见到郑小满本人",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "“你这名字，和这地址，是有人让我来的。”"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "门缝里露出一张脸，三十来岁，头发随便扎着，眼下两团青黑，像是很久没睡好。"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": false,
+              "transitionStatus": "not_needed"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "劳梓凡凭第1章账本线索上门，敲门后郑小满开门，因果成立。"
+        },
+        {
+          "sceneKey": "identify_source",
+          "actor": "郑小满",
+          "action": "说出旧物来自城西二手市场并承认丢过手机",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "“上个月在城西二手市场淘的。”"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "knowledge",
+              "entity": "郑小满对旧物来源的知情",
+              "before": "知道旧物是自己从二手市场淘来的",
+              "requiredForAction": "知道旧物来源",
+              "after": "向劳梓凡交代旧物来源和丢手机的事",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "“上个月在城西二手市场淘的。”"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "“我上个月丢过手机，后来补了卡。”"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": false,
+              "transitionStatus": "not_needed"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "郑小满在木匣震动后主动交代旧物来源，动机和时机均成立。"
+        },
+        {
+          "sceneKey": "suppress_with_fist",
+          "actor": "劳梓凡",
+          "action": "以八极拳贴身配合符咒击打阴气团",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "他右脚蹬地，腰胯一拧，整个人像炮弹一样撞进阴气团。"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "body",
+              "entity": "劳梓凡的右臂",
+              "before": "右臂正常可用",
+              "requiredForAction": "右臂能发力出拳",
+              "after": "右臂被阴气扫过，从肩膀到指尖都是麻的",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "他右脚蹬地，腰胯一拧，整个人像炮弹一样撞进阴气团。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "劳梓凡退了两步，右胳膊从肩膀到指尖都是麻的，像在冰水里泡了半小时。"
+                }
+              ],
+              "transitionEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "寒气顺着拳面往胳膊上爬，右手瞬间麻了半截。"
+                }
+              ],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "established"
+            },
+            {
+              "dimension": "item",
+              "entity": "黄纸符",
+              "before": "随身携带数张黄纸符",
+              "requiredForAction": "有符纸可贴在拳面配合击打",
+              "after": "符纸用完",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "里面是他出门前从床底纸箱里翻出来的东西，几张黄纸符，一小瓶朱砂，还有半截用剩的墨条。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "打到第五拳，符纸用完了。"
+                }
+              ],
+              "transitionEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "他连续三拳，每一拳都贴着符纸打进去。"
+                }
+              ],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "established"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "劳梓凡以八极拳配合符咒击打阴气团，右臂受伤、符纸耗尽，代价与机制均成立。"
+        },
+        {
+          "sceneKey": "pay_and_depart",
+          "actor": "郑小满",
+          "action": "从抽屉拿出三百元现金递给劳梓凡",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "郑小满从信封里数出三张一百的，递过来的时候手还在抖。"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "item",
+              "entity": "三百元现金",
+              "before": "郑小满持有现金",
+              "requiredForAction": "有现金可支付报酬",
+              "after": "劳梓凡收下三百元",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "她走到客厅，拉开茶几下面的抽屉，从里面摸出一个信封。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "劳梓凡接过钱，折好塞进内兜。"
+                }
+              ],
+              "transitionEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "郑小满从信封里数出三张一百的，递过来的时候手还在抖。"
+                }
+              ],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "established"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "郑小满因劳梓凡压制阴气并承诺追查而支付报酬，因果成立。"
+        }
+      ],
+      "blockingIssues": [],
+      "repairDirectives": [],
+      "missingObligations": [],
+      "repairability": "none",
+      "decisionReason": "本章完整兑现所有 must hit now 义务，场景因果链成立，人物行为符合硬事实，未越过任何禁止边界。两处轻微可优化点（符咒与朱砂来源的过渡略简、结尾钩子偏静）不影响继续推进，归入 riskTags。",
+      "riskTags": [
+        "符咒与朱砂来源过渡略简：正文仅以“出门前从床底纸箱里翻出来的东西”一句交代，未展示第1章末检查随身物品时是否已装入外卖箱，建议后续章节补一笔来源说明",
+        "结尾钩子偏静：账本震动和窗户灯闪的暗示力度较轻，追读压力主要靠“毁物不毁根”的规则提示支撑，可在第3章开篇快速强化二手市场线索的紧迫性"
+      ],
+      "assetSyncRecommendation": {
+        "priority": "normal",
+        "reason": "本章完成首轮驱邪循环，产生新线索（二手市场摊主、木匣花纹、郑小满丢手机疑点），需记录但无需全量伏笔对账。",
+        "requiresFullPayoffReconcile": false
+      },
+      "continuePolicy": "continue"
+    },
+    {
+      "status": "accepted",
+      "score": {
+        "coherence": 88,
+        "pacing": 84,
+        "repetition": 90,
+        "engagement": 86,
+        "voice": 85,
+        "overall": 87
+      },
+      "summary": "本章完整兑现首轮驱邪循环：抵达柳巷街、确认旧物附灵、符咒加八极拳暂时压制阴气、账本提示“毁物不毁根，债还在”、收三百元并决定追查二手市场。场景因果链成立，人物行为符合硬事实，未越过任何禁止边界。存在两处轻微可优化点（符咒与朱砂来源的过渡略简、结尾钩子偏静），但不影响继续推进。",
+      "sceneCausalityVerdicts": [
+        {
+          "sceneKey": "arrive_and_meet",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "第1章账本自动翻页和地图查证结果。",
+            "第1章末他检查钥匙和手机后出门，外卖箱底层压着账本。"
+          ],
+          "choiceAndResistanceEvidence": "劳梓凡直接报出郑小满的名字和账本上的地址，要求进门查看；郑小满起初只开一条门缝，听到“账本”二字后犹豫几秒，最终侧身让他进门。",
+          "outcomeMechanismEvidence": "郑小满对家中怪事已恐惧多日，账本名字是她唯一能抓住的解释，戒备被恐惧压过。",
+          "constraintEvidence": [
+            "劳梓凡进入陌生女性独居房间，必须保持距离以免被当成骗子或歹徒。"
+          ],
+          "explanation": "劳梓凡凭账本线索上门，郑小满因恐惧开门，因果链完整。"
+        },
+        {
+          "sceneKey": "identify_source",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "第2章开篇她承认家中有怪事。"
+          ],
+          "choiceAndResistanceEvidence": "在旧木匣震动后，主动说出旧物是从城西二手市场淘来的，并承认丢过手机；郑小满不愿让劳梓凡碰她的私人物品，也不愿多谈差评的事。",
+          "outcomeMechanismEvidence": "旧物对劳梓凡身上的符咒气息产生反应，自行震动证明附灵事实，郑小满无法再否认。",
+          "constraintEvidence": [
+            "旧木匣不能直接打开或毁掉，否则阴气可能失控。"
+          ],
+          "explanation": "木匣震动作为转折点，郑小满被迫交代旧物来源，因果成立。"
+        },
+        {
+          "sceneKey": "suppress_with_fist",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "角色设定中八极拳实战强横。",
+            "第1章末他检查随身物品后出门。"
+          ],
+          "choiceAndResistanceEvidence": "在符咒单用无效后，改用八极拳近身配合符咒击打阴气团核心；阴气团被拳风打散后迅速重聚，旧木匣裂缝中涌出更多阴气，劳梓凡手臂被阴气扫过一阵刺骨冰凉。",
+          "outcomeMechanismEvidence": "八极拳的刚猛劲力配合符咒的镇压效果，暂时打散了阴气团的聚合形态，但根源未除，阴气只是被压制而非消灭。",
+          "constraintEvidence": [
+            "劳梓凡右臂被阴气扫过，暂时使不上全力，影响后续近身动作。",
+            "随身符咒消耗大半，短期内无法再制作新符。"
+          ],
+          "explanation": "符咒无效后改用八极拳近身配合，阴气被打散但未消灭，因果与代价均成立。"
+        },
+        {
+          "sceneKey": "pay_and_depart",
+          "outcomeObserved": true,
+          "verdict": "earned",
+          "prerequisiteEvidence": [
+            "上一场景八极拳配合符咒打散阴气团。",
+            "她承认连续噩梦，旧物异动时吓得后退。"
+          ],
+          "choiceAndResistanceEvidence": "收下三百元报酬，并主动承诺追查旧物来源，要求郑小满保留旧物不要扔；郑小满犹豫几秒后拿出三百元，要求劳梓凡留下电话号码。",
+          "outcomeMechanismEvidence": "劳梓凡的承诺和拍照留证让郑小满相信他不是骗子，三百元是她能承受的报酬上限，双方建立初步交易信任。",
+          "constraintEvidence": [
+            "劳梓凡承诺追查旧物来源，必须在下一次见郑小满前有所进展。",
+            "旧木匣留在郑小满家中，阴气只是暂时压制，随时可能复发。"
+          ],
+          "explanation": "劳梓凡以拍照和承诺换取报酬，郑小满因信任建立而付款，因果成立。"
+        }
+      ],
+      "actionStateChecks": [
+        {
+          "sceneKey": "arrive_and_meet",
+          "actor": "劳梓凡",
+          "action": "敲门并报出郑小满名字要求进门",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "他抬手敲门。两下，不轻不重。"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "knowledge",
+              "entity": "劳梓凡对郑小满名字和地址的知情",
+              "before": "已知账本浮现郑小满名字和柳巷街三十七号地址",
+              "requiredForAction": "知道要找的人名和地址",
+              "after": "确认地址真实并见到郑小满本人",
+              "beforeEvidence": [
+                {
+                  "source": "established_context",
+                  "sourceId": "chapter-1",
+                  "quote": "“郑小满。”"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "门缝里露出一张脸，三十来岁，头发随便扎着，眼下两团青黑，像是很久没睡好。"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": false,
+              "transitionStatus": "not_needed"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "劳梓凡凭第1章账本线索上门，敲门后郑小满开门，因果成立。"
+        },
+        {
+          "sceneKey": "identify_source",
+          "actor": "郑小满",
+          "action": "说出旧物来自城西二手市场并承认丢过手机",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "“上个月在城西二手市场淘的。”"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "knowledge",
+              "entity": "郑小满对旧物来源的知情",
+              "before": "知道旧物是自己从二手市场淘来的",
+              "requiredForAction": "知道旧物来源",
+              "after": "向劳梓凡交代旧物来源和丢手机的事",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "“上个月在城西二手市场淘的。”"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "“我上个月丢过手机，后来补了卡。”"
+                }
+              ],
+              "transitionEvidence": [],
+              "enablingTransitionRequired": false,
+              "stateChanged": false,
+              "transitionStatus": "not_needed"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "郑小满在木匣震动后主动交代旧物来源，动机和时机均成立。"
+        },
+        {
+          "sceneKey": "suppress_with_fist",
+          "actor": "劳梓凡",
+          "action": "以八极拳贴身配合符咒击打阴气团",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "他右脚蹬地，腰胯一拧，整个人像炮弹一样撞进阴气团。"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "body",
+              "entity": "劳梓凡的右臂",
+              "before": "右臂正常可用",
+              "requiredForAction": "右臂能发力出拳",
+              "after": "右臂被阴气扫过，从肩膀到指尖都是麻的",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "他右脚蹬地，腰胯一拧，整个人像炮弹一样撞进阴气团。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "劳梓凡退了两步，右胳膊从肩膀到指尖都是麻的，像在冰水里泡了半小时。"
+                }
+              ],
+              "transitionEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "寒气顺着拳面往胳膊上爬，右手瞬间麻了半截。"
+                }
+              ],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "established"
+            },
+            {
+              "dimension": "item",
+              "entity": "黄纸符",
+              "before": "随身携带数张黄纸符",
+              "requiredForAction": "有符纸可贴在拳面配合击打",
+              "after": "符纸用完",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "里面是他出门前从床底纸箱里翻出来的东西，几张黄纸符，一小瓶朱砂，还有半截用剩的墨条。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "打到第五拳，符纸用完了。"
+                }
+              ],
+              "transitionEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "他连续三拳，每一拳都贴着符纸打进去。"
+                }
+              ],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "established"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "劳梓凡以八极拳配合符咒击打阴气团，右臂受伤、符纸耗尽，代价与机制均成立。"
+        },
+        {
+          "sceneKey": "pay_and_depart",
+          "actor": "郑小满",
+          "action": "从抽屉拿出三百元现金递给劳梓凡",
+          "actionEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "郑小满从信封里数出三张一百的，递过来的时候手还在抖。"
+            }
+          ],
+          "states": [
+            {
+              "dimension": "item",
+              "entity": "三百元现金",
+              "before": "郑小满持有现金",
+              "requiredForAction": "有现金可支付报酬",
+              "after": "劳梓凡收下三百元",
+              "beforeEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "她走到客厅，拉开茶几下面的抽屉，从里面摸出一个信封。"
+                }
+              ],
+              "afterEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "劳梓凡接过钱，折好塞进内兜。"
+                }
+              ],
+              "transitionEvidence": [
+                {
+                  "source": "current_prose",
+                  "sourceId": "chapter-2",
+                  "quote": "郑小满从信封里数出三张一百的，递过来的时候手还在抖。"
+                }
+              ],
+              "enablingTransitionRequired": false,
+              "stateChanged": true,
+              "transitionStatus": "established"
+            }
+          ],
+          "verdict": "earned",
+          "explanation": "郑小满因劳梓凡压制阴气并承诺追查而支付报酬，因果成立。"
+        }
+      ],
+      "progressionChecks": [
+        {
+          "dimension": "event_repetition",
+          "status": "progressed",
+          "priorState": "第1章末劳梓凡乘末班公交前往柳巷街，尚未见到郑小满。",
+          "actualChange": "劳梓凡抵达柳巷街三十七号，进入郑小满家，确认旧物附灵并暂时压制阴气，收到三百元报酬。",
+          "newConsequence": "首轮驱邪循环完成，账本提示“毁物不毁根，债还在”，劳梓凡决定追查二手市场。",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "previousEvidence": [
+            {
+              "source": "established_context",
+              "sourceId": "chapter-1",
+              "quote": "他走到巷口，回头看了一眼自己的窗户。黑着。"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "他顺着导航往巷子里走。老供销社家属楼比街景照片上更旧，外墙皮掉得斑斑驳驳，楼道口那几辆自行车还在，只是锈得更厉害，车座上落着一层灰。"
+            }
+          ],
+          "explanation": "第1章末的出发动作在本章落实为实际抵达和驱邪，非重复。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "knowledge_repetition",
+          "status": "progressed",
+          "priorState": "第1章末劳梓凡只知账本给出郑小满名字和地址，不知郑小满是谁、去了会发生什么。",
+          "actualChange": "劳梓凡确认郑小满家确有旧物附灵，旧物来自城西二手市场，账本提示“毁物不毁根，债还在”。",
+          "newConsequence": "劳梓凡获得追查旧物来源的新线索，并确认账本会在关键时刻主动提示规则。",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "previousEvidence": [
+            {
+              "source": "established_context",
+              "sourceId": "chapter-1",
+              "quote": "“不去，债转你身。”"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "“毁物不毁根，债还在。”"
+            }
+          ],
+          "explanation": "劳梓凡从不知郑小满是谁到确认旧物附灵和来源，知识状态发生实质变化。",
+          "repairSuggestion": ""
+        },
+        {
+          "dimension": "prior_goal_followthrough",
+          "status": "progressed",
+          "priorState": "第1章末劳梓凡决定乘末班公交前往柳巷街三十七号弄清账本与“债转你身”的含义。",
+          "actualChange": "劳梓凡抵达柳巷街，进入郑小满家，压制阴气，收下三百元，并决定去二手市场追查旧物来源。",
+          "newConsequence": "劳梓凡从被动赴约转为主动追查根源，目标从“弄清账本含义”推进为“追查旧物来源”。",
+          "repeatsEstablishedBeat": false,
+          "addsNewConsequence": true,
+          "previousEvidence": [
+            {
+              "source": "established_context",
+              "sourceId": "chapter-1",
+              "quote": "他加快脚步，拐上大路。"
+            }
+          ],
+          "currentEvidence": [
+            {
+              "source": "current_prose",
+              "sourceId": "chapter-2",
+              "quote": "账本说“毁物不毁根”。根在二手市场。那个摊主。"
+            }
+          ],
+          "explanation": "第1章末的出发决定在本章落实为实际抵达和驱邪，并产生新的追查目标。",
+          "repairSuggestion": ""
+        }
+      ],
+      "blockingIssues": [],
+      "repairDirectives": [],
+      "missingObligations": [],
+      "repairability": "none",
+      "decisionReason": "本章完整兑现所有 must hit now 义务，场景因果链成立，人物行为符合硬事实，未越过任何禁止边界。两处轻微可优化点（符咒与朱砂来源的过渡略简、结尾钩子偏静）不影响继续推进，归入 riskTags。",
+      "riskTags": [
+        "符咒与朱砂来源过渡略简：正文仅以“出门前从床底纸箱里翻出来的东西”一句交代，未展示第1章末检查随身物品时是否已装入外卖箱，建议后续章节补一笔来源说明",
+        "结尾钩子偏静：账本震动和窗户灯闪的暗示力度较轻，追读压力主要靠“毁物不毁根”的规则提示支撑，可在第3章开篇快速强化二手市场线索的紧迫性"
+      ],
+      "assetSyncRecommendation": {
+        "priority": "normal",
+        "reason": "本章完成首轮驱邪循环，产生新线索（二手市场摊主、木匣花纹、郑小满丢手机疑点），需记录但无需全量伏笔对账。",
+        "requiresFullPayoffReconcile": false
+      },
+      "continuePolicy": "continue"
+    }
+  ]
+}

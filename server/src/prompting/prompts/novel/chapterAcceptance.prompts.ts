@@ -363,7 +363,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ChapterAcceptanceAssessmentOutput
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v11",
+  version: "v12",
   taskType: "review",
   mode: "structured",
   language: "zh",

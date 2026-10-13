@@ -164,12 +164,12 @@ test('before-state timing cannot exempt a later enabling transition or invalid a
   assert.ok(validated(other.row, other.input).validationIssues.some(issue => issue.startsWith('unverified_source:')));
 });
 
-test('acceptance registry and cache identity use v11 while old schema records remain readable', async () => {
+test('acceptance registry and cache identity use v12 while old schema records remain readable', async () => {
   const { promptAssetLoaderEntries } = require('../../dist/prompting/registry/promptAssetLoaderEntries');
   const { getRegisteredPromptAsset } = require('../../dist/prompting/registry');
-  assert.equal(asset.version, 'v11');
-  assert.ok(promptAssetLoaderEntries.some(entry => entry.key === `${asset.id}@v11`));
-  assert.equal(getRegisteredPromptAsset(asset.id, 'v11'), asset);
+  assert.equal(asset.version, 'v12');
+  assert.ok(promptAssetLoaderEntries.some(entry => entry.key === `${asset.id}@v12`));
+  assert.equal(getRegisteredPromptAsset(asset.id, 'v12'), asset);
   assert.equal(generatedChapterAcceptanceAssessmentSchema.safeParse(fixture.outputs[0]).success, true);
   assert.match(ACTION_STATE_AUDIT_RULES.join('\n'), /不替代afterEvidence或必需的transitionEvidence/);
   const { loadRuntimeSource } = require('./sourceHarness.cjs');

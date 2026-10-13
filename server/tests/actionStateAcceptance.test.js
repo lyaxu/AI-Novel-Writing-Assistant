@@ -249,7 +249,11 @@ test("unknown-state allowance does not excuse earned findings, other transition 
     if (variant === "invented") row.states[0].afterEvidence = [quote("正文中不存在的状态。")];
     if (variant === "earlier") row.states[0].afterEvidence = [quote("双手反绑在背后。")];
     const validated = evidence.validateActionStateEvidence([row], input).checks[0];
-    assert.ok(validated.validationIssues.some(issue => issue.startsWith("after_state_not_in_current_action:")), variant);
+    if (variant === "invented") {
+      assert.ok(!validated.validationIssues.some(issue => issue.startsWith("after_state_not_in_current_action:")), 'unlocated prose has no temporal position');
+    } else {
+      assert.ok(validated.validationIssues.some(issue => issue.startsWith("after_state_not_in_current_action:")), variant);
+    }
     if (variant === "earned") assert.ok(validated.validationIssues.includes("earned_without_state_evidence"));
     if (variant === "invented") assert.ok(validated.validationIssues.some(issue => issue.startsWith("unverified_source:")));
   }

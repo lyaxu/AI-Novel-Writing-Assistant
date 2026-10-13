@@ -32,33 +32,64 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
     .filter((chapter) => chapter.order < input.chapterOrder && chapter.chapterId !== input.chapterId)
     .map((chapter) => [chapter.chapterId, chapter.content]));
   const currentId = input.chapterId ?? "current";
-  const isFact = (evidence: ActionStateEvidence): boolean => {
-    if (evidence.source === "planned_contract") return false;
+  const sourceProblem = (evidence: ActionStateEvidence): string | undefined => {
+    if (evidence.source === "planned_contract") return "planned_contract_is_not_prose";
     const content = evidence.source === "current_prose"
       ? evidence.sourceId === currentId ? input.content : undefined
       : context.get(evidence.sourceId);
-    return content !== undefined && positions(content, evidence.quote).length > 0;
+    if (content === undefined) return "declared_source_unavailable";
+    if (!positions(content, evidence.quote).length) return "quote_not_found";
+    return undefined;
+  };
+  const isFact = (evidence: ActionStateEvidence): boolean => sourceProblem(evidence) === undefined;
+  const explainSources = (evidence: ActionStateEvidence[], field: string) => {
+    evidence.forEach((item, index) => {
+      const problem = sourceProblem(item);
+      if (!problem) return;
+      const reason = problem === "quote_not_found" ? "在声明来源中未找到连续准确原文"
+        : problem === "declared_source_unavailable" ? "声明的来源ID未提供对应正文"
+          : "计划不是已发生事实的正文来源";
+      correctionHints.push(`${field}[${index}]：${problem}，${reason}。source=${item.source}，sourceId=${JSON.stringify(item.sourceId)}，quote=${JSON.stringify(item.quote)}。这条引用尚未定位，不判断时序。先回到声明来源逐字核对并纠正本字段，不要原样保留已被拒绝的quote；摘取句中片段时不得自行在片段两端添加引号、句号、主语或其他原文没有的字符。JSON字符串的外层双引号只是语法，不属于引文内容。来源不对时核对真实已写章节，不能只换sourceId冒充当前正文。找不到依据则按证据不足同步相关结论，不能删证据后仍保留earned，也不能为匹配引用修改正文。`);
+    });
   };
   const rows = checks.map((check, checkIndex): ActionStateCheck => {
     const invalid: string[] = [];
     let missing = false;
     let contradiction = false;
     let unknown = false;
+    const checkField = `actionStateChecks[${checkIndex}](sceneKey=${check.sceneKey})`;
+    explainSources(check.actionEvidence, `${checkField}.actionEvidence`);
     if (!expected.includes(check.sceneKey)) invalid.push("unexpected_scene");
     if (!check.actionEvidence.length || check.actionEvidence.some((item) => item.source !== "current_prose" || !isFact(item))) {
       invalid.push("action_not_in_current_prose");
+      const wrongRoleFields = check.actionEvidence.length
+        ? check.actionEvidence.flatMap((item, index) => item.source !== "current_prose" ? [`${checkField}.actionEvidence[${index}]`] : [])
+        : [`${checkField}.actionEvidence`];
+      for (const field of wrongRoleFields) correctionHints.push(`${field}：关键行动必须由本章current_prose证明，前章事实不能作为本次行动的定位锚点；从本章引用实际行动，不要只改来源标签。`);
     }
-    const actionPositions = check.actionEvidence[0] ? positions(input.content, check.actionEvidence[0].quote) : [];
+    // No position comparison until every action anchor has a verified current-prose source.
+    const actionLocated = check.actionEvidence.length > 0
+      && check.actionEvidence.every(item => item.source === "current_prose" && isFact(item));
+    const actionPositions = actionLocated ? positions(input.content, check.actionEvidence[0].quote) : [];
     const actionStart = actionPositions[0];
     const actionEnd = actionStart === undefined ? undefined : actionStart + compact(check.actionEvidence[0].quote).length;
     const entities = new Set<string>();
     for (const [stateIndex, state] of check.states.entries()) {
-      const field = `actionStateChecks[${checkIndex}](sceneKey=${check.sceneKey}).states[${stateIndex}]`;
+      const field = `${checkField}.states[${stateIndex}]`;
       const key = `${state.dimension}:${state.entity}`;
       if (entities.has(key)) invalid.push(`duplicate_state:${key}`);
       entities.add(key);
       const cited = [...state.beforeEvidence, ...state.afterEvidence, ...state.transitionEvidence];
       if (cited.some((item) => !isFact(item))) invalid.push(`unverified_source:${key}`);
+      for (const role of ["beforeEvidence", "afterEvidence", "transitionEvidence"] as const) {
+        explainSources(state[role], `${field}.${role}`);
+      }
+      const afterSourcesLocated = state.afterEvidence.length > 0 && state.afterEvidence.every(isFact);
+      const hasCurrentAfter = state.afterEvidence.some(item => item.source === "current_prose");
+      if (afterSourcesLocated && !hasCurrentAfter) {
+        invalid.push(`after_state_requires_current_prose:${key}`);
+        correctionHints.push(`${field}.afterEvidence：已写前章可说明既有前提，但不能独自证明本次行动中或之后的状态。afterEvidence必须包含本章current_prose的准确引文；这是来源角色不符，不判断时序。不要仅替换source/sourceId，须回到本章核对实际表现。`);
+      }
       if (!state.beforeEvidence.length || !state.afterEvidence.length) unknown = true;
       const timing = state.beforeEvidenceTiming;
       const timingReasonPresent = Boolean(timing?.reason?.trim());
@@ -80,7 +111,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
         || timing?.relation === "not_before_action" || timing?.relation === "unknown"
       );
       if (actionStart !== undefined) {
-        if (!explicitTiming && state.beforeEvidence.some((item) => item.source === "current_prose"
+        if (!explicitTiming && state.beforeEvidence.some((item) => item.source === "current_prose" && isFact(item)
           && !positions(input.content, item.quote).some((position) => position <= actionStart))) {
           invalid.push(`before_state_after_action:${key}`);
           correctionHints.push(`${field}.beforeEvidence：引文在文本中的位置晚于actionEvidence起点，尚缺故事时间判断；晚叙述不等于晚发生。actionEvidence=${JSON.stringify(check.actionEvidence.map(item => item.quote))}；beforeEvidence=${JSON.stringify(state.beforeEvidence.map(item => item.quote))}。请结合完整正文判断：若引文回述行动前已有的状态，保留准确引文并填写beforeEvidenceTiming={relation:"retrospective_prior_state",reason:"说明该事实为何早于本次行动且无需临时获得"}；若确实在行动后才成立，填not_before_action并同步给出contradicted/unearned；无法判断填unknown并将动作与场景结论同步为insufficient_evidence。不可换一个行动躲开核验、删除真实依据或改写正文。`);
@@ -88,7 +119,10 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
         // Missing evidence can be an honest audit result; supplied evidence must still match the action boundary.
         const explicitlyUnknownAfter = !state.afterEvidence.length
           && check.verdict === "insufficient_evidence" && state.transitionStatus === "unknown";
-        if (!explicitlyUnknownAfter && !state.afterEvidence.some((item) => item.source === "current_prose"
+        // An unlocated quotation is a provenance failure, not evidence that it happened too early.
+        if (!explicitlyUnknownAfter && state.afterEvidence.every(isFact)
+          && (!state.afterEvidence.length || hasCurrentAfter)
+          && !state.afterEvidence.some((item) => item.source === "current_prose"
           && positions(input.content, item.quote).some((position) => position >= actionStart))) {
           invalid.push(`after_state_not_in_current_action:${key}`);
           correctionHints.push(`${field}.afterEvidence：所引证据未定位到关键行动发生时或之后。actionEvidence=${JSON.stringify(check.actionEvidence.map(item => item.quote))}；afterEvidence=${JSON.stringify(state.afterEvidence.map(item => item.quote))}。行动前的判断可作为beforeEvidence或必要过渡，不能单独证明after；请重新核对所选行动的边界，并引用正文中该行动发生时或之后的状态表现。无需正文重复解释知识，但须引用其在行动中的实际运用；原文不足则如实标未知，不编写新句子。`);
@@ -109,7 +143,8 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
         if (!state.transitionEvidence.length) correctionHints.push(`${field}.transitionEvidence：transitionStatus=established但证据为空；请逐字引用正文中的变化过程，行动本身造成变化时可引用actionEvidence。没有证据时须如实重评transitionStatus和verdict。`);
         // A transition can occur within the same action (e.g. an authorized awakening).
         // Only disjoint evidence after that action is deterministically too late; the AI reviews overlapping causality.
-        if (state.enablingTransitionRequired && state.transitionEvidence.length && actionEnd !== undefined
+        if (state.enablingTransitionRequired && state.transitionEvidence.length
+          && state.transitionEvidence.every(isFact) && actionEnd !== undefined
           && state.transitionEvidence.every((item) => item.source === "current_prose"
             && positions(input.content, item.quote).every((position) => position >= actionEnd))) {
           contradiction = true;
@@ -145,6 +180,7 @@ export function reconcileSceneActionVerdicts(scenes: SceneCausalityVerdict[], ch
 }
 
 export const ACTION_STATE_AUDIT_RULES = [
+  "先核对每条引文确实存在于声明正文，再判断它与行动的时序。quote_not_found是引用抄写或来源错误，不是行动前后关系的结论；纠正时逐项处理明确指出的字段，不要原样复制错引或仅改变时序标签。摘录对白内部片段不额外加中文引号。例如正文‘她说：“我昨天取了钥匙，今天来开门。”’，可引用其中‘我昨天取了钥匙’，quote值本身不包含新增引号；若要引用带引号的对白，应从原文完整复制其实际边界。",
   "文本排列顺序与故事发生时间分开判断。beforeEvidence晚于action被叙述，不等于状态晚于行动才成立；紧随动作补叙的既有技能、早先拿到的物品、此前已知的信息均须按完整正文语义判断，不能凭字符位置判成凭空获得。不要改选行动或删掉真实前状态证据来躲开时序核验。",
   "每项state可填beforeEvidenceTiming={relation,reason}，reason为180字内的非空语义依据。relation=retrospective_prior_state表示准确的本章beforeEvidence是在回述行动前已有状态，不是行动后才取得的条件；这时enablingTransitionRequired=false，其余状态变化字段仍按正文判断。not_before_action表示该条件实际在行动后才成立，即使引文写在前面也不能支持earned；unknown表示无法判断故事时间，动作和场景须为insufficient_evidence。没有特殊叙事时序可省略该字段，不能只给标签不解释原文依据。此字段只说明beforeEvidence，不替代afterEvidence或必需的transitionEvidence。",
   "回叙结构示例（不带入当前故事）：正文‘她用钥匙打开保险柜。那把钥匙是父亲前一天交给她的。’，action=打开保险柜；beforeEvidence引用第二句，beforeEvidenceTiming={relation:\"retrospective_prior_state\",reason:\"叙述明确钥匙在前一天交付，本次开柜之前已持有\"}，持有钥匙这一状态stateChanged=false、enablingTransitionRequired=false、transitionStatus=not_needed；afterEvidence引用开柜动作。不能把先开柜后才拿到钥匙误判成回叙既有状态。",

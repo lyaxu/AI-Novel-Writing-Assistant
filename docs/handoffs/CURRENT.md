@@ -1,39 +1,35 @@
 # 最新交接入口
 
-更新：2026-10-13 05:13 UTC（用户时区00:13 UTC-5）。
+更新：2026-10-13 05:37 UTC（用户时区00:37 UTC-5）。
 
-**最终加载核验成功，无需再次重启。** 用户05:04运行后，新旧版隔离检查通过，旧后端切换为16620，05:05:19.044Z应用就绪，加载976c727b1176/acceptance v11/stale=false。脚本30轮健康等待先超时，但服务约47秒后就绪，不能凭脚本退出就再次停止或重启。05:12—05:13实时health及27项源码hash、真实原job prepareDirector检查全部通过；首章3013/第二章3652字hash、账本committed、原范围1—3及人工暂停保留，活跃工作0、模型记录仍22。新版5173维持关闭、8787/21116和旧前端5190/45328身份与重启前一致，错误日志为空。只新增本轮运行记录，不改产品源码；用户可从下方第二章源页F5后点一次继续自动导演，恢复原审查。以下失败记录为历史，不能据此重复运行重启脚本。
+**最新停点：第二章3652字已保存，用户继续原审查后仍因错引暂停；v12引用反馈修复和85项封网验证完成，待管理员加载。** 主线仍为旧版可靠保存、失败恢复和连续生产，保留认可文笔、创作能力、质量检查与防丢稿，最后固定版本十章验收。当前仅首章完成、第二章保存；真实v12审查、后续章纲和固定版本十章仍未通过。
 
-**最新加载核验：用户运行脚本在停止进程前退出，修复仍未加载。** 05:00日志为`Port 5173 changed. No process stopped.`；05:01实查新版前端5173关闭，新版后端8787/21116与旧前端5190/45328仍在，旧后端3000/58352仍4b4aa6fdd3e3/stale=true。原因是维护脚本错误要求无关新版端口沿用昨日PID。已改为记录本次新版服务实际状态（允许关闭），只核对重启前后不变；目标旧后端PID/启动时间、27项文件hash、原任务和正文检查保留。修正脚本CheckOnly通过；用户需再次管理员运行同一restart-old-review.cmd，再核验，暂勿继续导演。没有停止/启动任何服务或模型调用，两章hash、原审查停点和22条调用记录保持不变。
+## 当前证据
 
-**最新停点：第二章3652字已保存，停在审查；本轮v11修复和72项封网回归通过，尚待管理员加载。** 用户17:33继续后planner v6一次成功、正文一次完成，审查两次正常返回后因证据时序问题暂停。修复区分后文补述和实际事后获得，shared/server编译通过；没有改正文或自动认可旧审查。[本轮证据](../evals/2026-10-12-maoshan-chapter-two-review-timing.md)。
+- 当前仓库D:/novel/AI-Novel-Writing-Assistant，分支codex/production-core-refactor，接续HEAD71e3f9344e0e，本轮提交以Git为准。预存三个Structured客户端改动及台账历史964行保留，未跟踪资料未清理。
+- 旧后端3000/PID16620仍加载976c727b1176/acceptance v11，应用启动2026-10-13T05:05:19.044Z、OS启动05:04:32.6501231Z。05:04管理员启动时脚本健康等待先超时，服务47秒后就绪；05:13已核验成功，此次是用户后续继续审查又暂停。
+- 旧前端5190/PID45328；新版前端5173关闭、新后端8787/PID21116。新版未动。数据库仅D:/novel/.comparison/2026-10-10/old-test.db，本轮只读，无真实协调或模型调用。
+- 书cmv3wyvw40015gow0780pycx9，导演cmv3wvaqm000sgow0l5or2pke；当前job cmv5h9a64000j20w0uw4cxeo0，failed/manual=1，job范围2—2、导演原范围1—3保留。
+- 首章cmv3x2mt600jsgow0e6kb0852为approved/completed，3013字/hash d4fb3b8f6b9230632a4bafe29740ae8744950ab105bc1e5e08562e7f883dcda6。原首章job succeeded，旧账本提案committed，历史候选与质量证据保留。
+- 第二章cmv3x2mt800jtgow0la32yn38为drafted，3652字/hash 461051846359919e84f43627c317c07ed07eff7da652caa434303bcc37489b91。prepare/合同/章计划/draft/save_draft保持done，review:0和evaluation失败、journal paused；章节行generating不代表任务活跃。
+- 用户05:22触发v11审查两次，18.837秒和14.759秒，均正常stop，无规划/写作调用。模型记录累计24，增加2条均用户触发，代理0。05:35原job prepareDirector只读预检通过，active任务/命令/副作用全部0。
 
-**主线：旧版可靠保存、失败恢复和连续生产，保留认可文笔/创作能力/质量检查，最后固定版本十章验收。** 用户最不满意反复停顿。首章完成、第二章保存均已有实证，第二章审查、后续章纲和固定版本十章仍未完成。资源面板难懂仍为独立体验问题，不能靠展示更多字段宣称解决。
+## 根因与修复
 
-## 仓库、服务与数据
+AI把对白内部“我上个月丢过手机，后来补了卡。”摘成带额外引号的独立句，正文没有该完整引文；两答均原样保留。拒绝错引正确，但程序将未定位引文再次报为after时序失败，纠正提示误导。第一答另一项敲门前知情已在第二答用前章真引修正；旧练拳检查本次改选身体/物品维度，不能声称所有回叙已实证通过。
 
-- 仓库D:/novel/AI-Novel-Writing-Assistant，分支codex/production-core-refactor，接续HEAD420d742fa66e；本轮提交以git为准。预存三份Structured客户端改动与台账历史964行仍未提交，未跟踪材料未清理。
-- 旧后端3000/PID58352加载4b4aa6fdd3e3、acceptance v10，应用启动17:19:50.720Z、OS启动17:19:40.5630667Z；旧前端5190/PID45328。新版5173/PID3960和8787/PID21116未动。
-- 仅用隔离库D:/novel/.comparison/2026-10-10/old-test.db。本轮只读，无数据库协调/正文写入/任务恢复/模型调用。
-- 书cmv3wyvw40015gow0780pycx9，导演cmv3wvaqm000sgow0l5or2pke；当前job cmv5h9a64000j20w0uw4cxeo0，failed/manual=1，范围2—2；导演原范围仍1—3。
-- 首章cmv3x2mt600jsgow0e6kb0852为approved/completed，3013字/hash d4fb3b8f6b9230632a4bafe29740ae8744950ab105bc1e5e08562e7f883dcda6。旧账本提案committed；原首章job succeeded，候选与历史质量证据保留。
-- 第二章cmv3x2mt800jtgow0la32yn38为drafted，3652字/hash 461051846359919e84f43627c317c07ed07eff7da652caa434303bcc37489b91。prepare/执行合同/章计划/draft/save_draft全部done，review:0及evaluation failed，journal paused。章节行chapterStatus仍generating，不代表job仍活跃。
-- 17:43原job prepareDirector只读预检通过，active工作0，模型记录累计22（本次用户增加4，代理0）。本次4调用为规划12.8秒、写作160秒、审查16.3秒、纠正12.5秒，均stop。
-
-## 根因与修复边界
-
-正文行动后补述“他练了十几年”，validator按引文字符位置误认能力晚于行动才有，反馈使AI删掉真实前提证据改unknown却仍earned。完整前章已进入written_evidence，无上下文缺失。首轮另外两项空transitionEvidence已在第二答补齐。
-
-修复增加AI结构化beforeEvidenceTiming，显式区分回叙既有状态、实际事后条件和未知，并保留准确来源/字段相容/必要前置过渡检查；不是关键词豁免，不改小说或写作Prompt，不自动把旧审查变通过。after/必要transition尚有线性位置边界，不能宣称任意倒叙完整支持。
+v12精确指出来源、数组索引和错引；引文存在、来源用途正确后才比较时序。错误action锚点、前章充当after、计划来源分别拒绝；不自动改引文、不去标点放行、不改正文、不加重试预算。85/85封网及server编译通过，共享契约未变复用既有shared编译。两真实错答仍拒绝，准确引用通过是手工模拟，不代表真实模型已通过。[完整证据及残余问题](../evals/2026-10-13-maoshan-review-citation-feedback.md)。
 
 ## 下一步
 
-本轮文件在.codex-run/maoshan-chapter-two-review-20261012/，新加载入口restart-old-review.cmd。72项封网及双包编译完成，源码/进程/原任务CheckOnly用于最后加载预检；用户管理员运行，仅重启旧后端，不恢复任务或调用模型。不要复用前轮planning脚本，其0字/18调用预检已过期。
+本轮目录.codex-run/maoshan-review-v11-stop-20261013/，加载入口restart-old-review.cmd。源码manifest、原任务和正文只读预检保护24条调用和原review；仅用户管理员重启旧后端，不恢复任务或调用模型。脚本允许新版前端关闭，核对新版及旧前端实际状态前后一致；健康等待180轮，超时先实查是否仍在启动，不能盲目重复重启。旧目录脚本的PID/22调用条件已过期，不使用。
 
-加载后先核验restart-last.log、loaded-health.json及原任务预检，再从[本书第二章源工作区](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt800jtgow0la32yn38)F5，点一次“继续自动导演”，从原审查步骤继续。不要重写第二章，不重跑已完成规划，不重做首章或账本确认。
+加载后核验restart-last.log、loaded-health.json、protected-services-after.json及原job预检，再由用户从[第二章源工作区](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt800jtgow0la32yn38)F5、点一次“继续自动导演”，恢复原审查。不要重写第二章、重跑已完成规划、重做首章或账本确认。
 
-## 记录链
+## 未完成与记录链
 
-长期约束[PROJECT_CONTEXT](PROJECT_CONTEXT.md)，统一[台账](WORK_LEDGER.md)，[批准方案](../plans/2026-10-11-production-core-refactor.md)，[十章验收单](../evals/2026-10-11-ten-chapter-acceptance.md)。前序[第二章规划恢复](../evals/2026-10-12-maoshan-chapter-two-planning-recovery.md)、[资源状态暂停](../evals/2026-10-12-maoshan-resource-state-pause.md)、[候选复审](../evals/2026-10-12-maoshan-candidate-review-recovery.md)保留历史，不把旧停点当当前入口。
-
-稳定规则见[wiki](../wiki/workflows/chapter-review-resume.md)与acceptance模块README。[断线续作与书内agent](../plans/2026-10-11-resilient-writing-and-book-agent-ideas.md)仍讨论未实施。未来只拆前两章，节奏板跨度不是后续具体章纲；规划漂移和连续十章待验。新版不动、不自动模型或恢复历史书、不另建GUI、不push/合并发布。前轮备份全部保留。
+- 两次审查的场景自由文本仍把“交代来源/木匣震动”“收钱/拍照”的顺序写反。不是本次停点，属于后续语义审查风险，不能以精准引用检查证明整个审查结论可靠。
+- 实际只拆前两章，后续章纲、资源面板可理解性、任意倒叙after/transition证据、固定版本十章均待验；此前边修边测不等于固定版本通过。
+- 长期约束[PROJECT_CONTEXT](PROJECT_CONTEXT.md)，统一[台账](WORK_LEDGER.md)，[批准方案](../plans/2026-10-11-production-core-refactor.md)，[十章验收单](../evals/2026-10-11-ten-chapter-acceptance.md)。
+- 前序[审查时序与加载](../evals/2026-10-12-maoshan-chapter-two-review-timing.md)、[第二章规划](../evals/2026-10-12-maoshan-chapter-two-planning-recovery.md)、[资源状态](../evals/2026-10-12-maoshan-resource-state-pause.md)、[候选复审](../evals/2026-10-12-maoshan-candidate-review-recovery.md)保留历史，不把旧恢复入口当当前步骤。
+- 稳定规则见[wiki](../wiki/workflows/chapter-review-resume.md)与acceptance模块README；[断线续作与书内agent](../plans/2026-10-11-resilient-writing-and-book-agent-ideas.md)仍讨论未实施。新版不动、不自动模型或恢复历史书、不另建GUI、不push/合并发布，前轮备份全部保留。
