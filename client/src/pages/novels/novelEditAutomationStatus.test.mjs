@@ -19,6 +19,25 @@ function buildTask(overrides = {}) {
   };
 }
 
+test("incomplete completed range uses original task continuation and cannot be archived", () => {
+  const task = buildTask({ id: "original", progress: 1, finishedAt: "historical" });
+  const projection = { status: "waiting_recovery", requiresUserAction: true, detail: "第 3 章待规划和执行",
+    latestTask: { id: "original", status: "waiting_approval", pendingManualRecovery: true,
+      checkpointType: "chapter_batch_ready", currentItemKey: "chapter_range_incomplete", progress: 2 / 3 } };
+  const shown = buildDisplayAutoDirectorTask(task, projection);
+  assert.equal(shown.id, "original"); assert.equal(shown.status, "waiting_approval");
+  assert.equal(shown.progress, 2 / 3); assert.equal(shown.finishedAt, null);
+  assert.equal(shown.checkpointType, "chapter_batch_ready"); assert.equal(canArchiveCompletedAutoDirectorTask(shown), false);
+  assert.equal(resolveTakeoverModeFromAutomation({ task: shown, projection }), "waiting");
+  assert.equal(buildDisplayAutoDirectorTask(shown, projection).status, "waiting_approval");
+  assert.equal(shouldAutofocusProjectedDirectorTask(projection), true);
+  assert.equal(shouldShowPinnedBookAutomationProjection({ projection, directorTaskId: "original" }), true);
+  assert.equal(task.status, "succeeded"); assert.equal(task.progress, 1);
+  assert.equal(buildDisplayAutoDirectorTask(task, { ...projection, latestTask: { ...projection.latestTask, id: "other" } }), task);
+  assert.equal(buildDisplayAutoDirectorTask(task, { ...projection, latestTask: { ...projection.latestTask, currentItemKey: null } }), task);
+  assert.equal(buildDisplayAutoDirectorTask({ ...task, status: "cancelled" }, projection).status, "cancelled");
+});
+
 test("completed workflow auto director tasks can be archived from the editor", () => {
   assert.equal(canArchiveCompletedAutoDirectorTask(buildTask()), true);
 });

@@ -133,6 +133,19 @@ export function countDirectorAutoExecutionChapterRange(range: DirectorAutoExecut
   return Math.max(1, range.endOrder - range.startOrder + 1);
 }
 
+export function isDirectorAutoExecutionRangeComplete(
+  range: DirectorAutoExecutionRange,
+  state: DirectorAutoExecutionState,
+): boolean {
+  const total = range.endOrder - range.startOrder + 1;
+  return Number.isInteger(range.startOrder) && Number.isInteger(range.endOrder)
+    && range.startOrder >= 1 && total > 0
+    && state.startOrder === range.startOrder && state.endOrder === range.endOrder
+    && state.totalChapterCount === total && state.completedChapterCount === total
+    && state.remainingChapterCount === 0 && state.remainingChapterOrders?.length === 0
+    && state.remainingChapterIds?.length === 0 && state.nextChapterOrder == null && state.nextChapterId == null;
+}
+
 export function buildDirectorAutoExecutionScopeLabel(
   plan: DirectorAutoExecutionPlan | null | undefined,
   fallbackTotalChapterCount?: number | null,
@@ -372,6 +385,10 @@ export function buildDirectorAutoExecutionState(input: {
   pipelineJobId?: string | null;
   pipelineStatus?: PipelineJobStatus | null;
 }): DirectorAutoExecutionState {
+  if (!Number.isInteger(input.range.startOrder) || !Number.isInteger(input.range.endOrder)
+    || input.range.startOrder < 1 || input.range.endOrder < input.range.startOrder) {
+    throw new Error("自动执行范围无效，请核对已授权的起止章节。");
+  }
   const plan = normalizeDirectorAutoExecutionPlan(input.plan);
   const skippedChapterIds = new Set((input.plan as DirectorAutoExecutionState | null | undefined)?.skippedChapterIds ?? []);
   const skippedChapterOrders = new Set((input.plan as DirectorAutoExecutionState | null | undefined)?.skippedChapterOrders ?? []);
@@ -393,9 +410,15 @@ export function buildDirectorAutoExecutionState(input: {
     !preservedSkippedChapterIds.has(chapter.id)
     && !preservedSkippedChapterOrders.has(chapter.order)
   ));
-  const completed = actionable.filter((chapter) => isDirectorAutoExecutionChapterProcessed(chapter));
   const remaining = actionable.filter((chapter) => !isDirectorAutoExecutionChapterProcessed(chapter));
-  const totalChapterCount = Math.max(input.range.totalChapterCount, selected.length);
+  const chapterByOrder = new Map(selected.map(chapter => [chapter.order, chapter]));
+  const processedOrders = new Set(selected.filter(chapter => isDirectorAutoExecutionChapterProcessed(chapter)
+    || preservedSkippedChapterOrders.has(chapter.order)).map(chapter => chapter.order));
+  const remainingChapterOrders: number[] = [];
+  for (let order = input.range.startOrder; order <= input.range.endOrder; order++) {
+    if (!processedOrders.has(order)) remainingChapterOrders.push(order);
+  }
+  const totalChapterCount = input.range.endOrder - input.range.startOrder + 1;
   const preservedQualityDebt = skipped.filter((chapter) => (
     qualityDebtChapterIds.has(chapter.id) || qualityDebtChapterOrders.has(chapter.order)
   ));
@@ -436,12 +459,12 @@ export function buildDirectorAutoExecutionState(input: {
     startOrder: input.range.startOrder,
     endOrder: input.range.endOrder,
     totalChapterCount,
-    completedChapterCount: completed.length + skipped.length,
-    remainingChapterCount: remaining.length,
+    completedChapterCount: totalChapterCount - remainingChapterOrders.length,
+    remainingChapterCount: remainingChapterOrders.length,
     remainingChapterIds: remaining.map((chapter) => chapter.id),
-    remainingChapterOrders: remaining.map((chapter) => chapter.order),
-    nextChapterId: remaining[0]?.id ?? null,
-    nextChapterOrder: remaining[0]?.order ?? null,
+    remainingChapterOrders,
+    nextChapterId: chapterByOrder.get(remainingChapterOrders[0]!)?.id ?? null,
+    nextChapterOrder: remainingChapterOrders[0] ?? null,
     pipelineJobId: input.pipelineJobId ?? null,
     pipelineStatus: input.pipelineStatus ?? null,
   };

@@ -5,7 +5,6 @@ import { prisma } from "../../../db/prisma";
 import { NovelVolumeService, createVolumeGenerationWriteGuard } from "../volume/NovelVolumeService";
 import {
   getBeatExpectedChapterCount,
-  resolveVolumeChapterBeatKey,
 } from "../volume/volumeGenerationHelpers";
 
 export interface ChapterRouteWindowOptions {
@@ -36,9 +35,10 @@ export class ChapterRouteWindowService {
     fromChapterOrder: number,
     options: ChapterRouteWindowOptions = {},
   ): Promise<ChapterRouteWindowResult> {
-    const active = routeWindowLocks.get(novelId);
-    if (active) {
-      return active;
+    // A concurrent request can have a different chapter/range. Its result does
+    // not satisfy this request; wait for the write owner, then inspect again.
+    while (routeWindowLocks.has(novelId)) {
+      await routeWindowLocks.get(novelId)!.catch(() => undefined);
     }
     const task = this.ensureRouteWindowUnlocked(novelId, fromChapterOrder, options)
       .finally(() => routeWindowLocks.delete(novelId));
@@ -51,6 +51,11 @@ export class ChapterRouteWindowService {
     fromChapterOrder: number,
     options: ChapterRouteWindowOptions,
   ): Promise<ChapterRouteWindowResult> {
+    if (!Number.isInteger(fromChapterOrder) || fromChapterOrder < 1
+      || (options.endOrder !== undefined && (!Number.isInteger(options.endOrder) || options.endOrder < 1))
+      || [options.min, options.target].some(value => value !== undefined && (!Number.isFinite(value) || value <= 0))) {
+      throw new Error("章节路线范围无效，请核对已授权的起止章节。");
+    }
     const endOrder = typeof options.endOrder === "number" && Number.isFinite(options.endOrder)
       ? Math.floor(options.endOrder)
       : undefined;
@@ -58,8 +63,8 @@ export class ChapterRouteWindowService {
       ? Number.POSITIVE_INFINITY
       : Math.max(0, endOrder - fromChapterOrder + 1);
     if (remainingInRange === 0) return { availableRouteCount: 0, extended: false };
-    const minimum = Math.min(remainingInRange, Math.max(1, options.min ?? 3));
-    const target = Math.min(remainingInRange, Math.max(minimum, options.target ?? 5));
+    const minimum = Math.min(remainingInRange, Math.max(1, Math.floor(options.min ?? 3)));
+    const target = Math.min(remainingInRange, Math.max(minimum, Math.floor(options.target ?? 5)));
     const compactTarget = options.completionProfile?.mode === "compact_book"
       ? options.completionProfile.targetChapterCount
       : null;
@@ -78,8 +83,30 @@ export class ChapterRouteWindowService {
 
     let workspace = await this.volumeService.getVolumes(novelId);
     let extended = false;
+    const visited = new Set<string>();
+    const maximumSteps = Math.max(8, target * 4 + workspace.volumes.length);
     while (availableRouteCount < target) {
-      const next = this.findNextRouteTarget(workspace);
+      const missingOrder = fromChapterOrder + availableRouteCount;
+      if (endOrder !== undefined && missingOrder > endOrder) break;
+      const signature = JSON.stringify([missingOrder, workspace.volumes.map(volume => [volume.id,
+        volume.chapters.map(chapter => [chapter.id, chapter.chapterOrder])]), workspace.beatSheets]);
+      if (visited.has(signature) || visited.size >= maximumSteps) {
+        throw new Error(`第 ${missingOrder} 章路线规划未取得进展，已停止重复生成并保留已有章节。`);
+      }
+      visited.add(signature);
+      if (workspace.volumes.some(volume => volume.chapters.some(chapter => chapter.chapterOrder === missingOrder))) {
+        // An approved/planned workspace row may simply not have a Chapter row.
+        // Sync that exact route without regenerating its beat or touching others.
+        await this.syncRoute(novelId, workspace, missingOrder, writeGuard);
+        const refreshedCount = await this.countAvailableRoute(novelId, fromChapterOrder, endOrder);
+        if (refreshedCount <= availableRouteCount) {
+          throw new Error(`第 ${missingOrder} 章已有路线尚未同步到章节执行区，已停止重复规划。`);
+        }
+        availableRouteCount = refreshedCount;
+        extended = true;
+        continue;
+      }
+      const next = this.findNextRouteTarget(workspace, missingOrder);
       if (!next) {
         const expandedWorkspace = await this.extendFutureVolumeSkeleton(
           novelId,
@@ -122,6 +149,7 @@ export class ChapterRouteWindowService {
         targetVolumeId: next.volumeId,
         generationMode: "single_beat",
         targetBeatKey: next.beatKey,
+        chapterOrderRange: { startOrder: missingOrder, endOrder: missingOrder },
         draftWorkspace: workspace,
         provider: options.provider,
         model: options.model,
@@ -130,16 +158,7 @@ export class ChapterRouteWindowService {
         guidance: closingGuidance,
         entrypoint: "jit_route_window",
       });
-      await this.volumeService.syncVolumeChaptersWithOptions(novelId, {
-        volumes: workspace.volumes,
-        preserveContent: true,
-        applyDeletes: false,
-        allowIncompleteExecutionContracts: true,
-      }, {
-        writeGuard,
-        emitEvent: false,
-        syncPayoffLedger: false,
-      });
+      await this.syncRoute(novelId, workspace, missingOrder, writeGuard);
       extended = true;
       availableRouteCount = await this.countAvailableRoute(novelId, fromChapterOrder, endOrder);
     }
@@ -198,28 +217,43 @@ export class ChapterRouteWindowService {
   }
 
   private async countAvailableRoute(novelId: string, fromChapterOrder: number, endOrder?: number): Promise<number> {
-    return prisma.chapter.count({
+    const rows = await prisma.chapter.findMany({
       where: {
         novelId,
         order: { gte: fromChapterOrder, ...(endOrder !== undefined ? { lte: endOrder } : {}) },
       },
+      select: { order: true },
+      orderBy: { order: "asc" },
+    });
+    const orders = new Set(rows.map(row => row.order));
+    let nextOrder = fromChapterOrder;
+    while ((endOrder === undefined || nextOrder <= endOrder) && orders.has(nextOrder)) nextOrder++;
+    return nextOrder - fromChapterOrder;
+  }
+
+  private async syncRoute(novelId: string, workspace: VolumePlanDocument, order: number,
+    writeGuard: Awaited<ReturnType<typeof createVolumeGenerationWriteGuard>>): Promise<void> {
+    await this.volumeService.syncVolumeChaptersWithOptions(novelId, {
+      volumes: workspace.volumes, preserveContent: true, applyDeletes: false, allowIncompleteExecutionContracts: true,
+    }, { writeGuard, emitEvent: false, syncPayoffLedger: false,
+      materializationRange: { startOrder: order, endOrder: order },
     });
   }
 
-  private findNextRouteTarget(workspace: VolumePlanDocument): { volumeId: string; beatKey: string | null } | null {
+  private findNextRouteTarget(workspace: VolumePlanDocument, missingOrder: number): { volumeId: string; beatKey: string | null } | null {
     const volumes = workspace.volumes.slice().sort((left, right) => left.sortOrder - right.sortOrder);
+    let nextOrder = 1;
     for (const volume of volumes) {
       const beatSheet = workspace.beatSheets.find((sheet) => sheet.volumeId === volume.id);
       if (!beatSheet || beatSheet.beats.length === 0) {
         return { volumeId: volume.id, beatKey: null };
       }
       for (const beat of beatSheet.beats) {
-        const generatedCount = volume.chapters.filter((chapter) => (
-          resolveVolumeChapterBeatKey({ chapter, volume, beatSheet }) === beat.key
-        )).length;
-        if (generatedCount < Math.max(1, getBeatExpectedChapterCount(beat))) {
+        const endOrder = nextOrder + Math.max(1, getBeatExpectedChapterCount(beat)) - 1;
+        if (missingOrder >= nextOrder && missingOrder <= endOrder) {
           return { volumeId: volume.id, beatKey: beat.key };
         }
+        nextOrder = endOrder + 1;
       }
     }
     return null;

@@ -41,6 +41,8 @@ function fixture() {
     },
   }, generationJob: { findUnique: async () => job }, novelWorkflowTask: { updateMany: async () => {} } };
   const { DirectorCommandService } = source("../src/services/novel/director/commands/DirectorCommandService.ts", {
+    "../recovery/rangeCompletion": {},
+    "../../production/recovery": {},
     "@ai-novel/shared/types/novelFraming": {}, "../../../../db/prisma": { prisma },
     "../../../../db/sqliteRetry": { withSqliteRetry: fn => fn() }, "../../../../middleware/errorHandler": { AppError },
     "../../workflow/NovelWorkflowService": {}, "../runtime/novelDirectorHelpers": {},

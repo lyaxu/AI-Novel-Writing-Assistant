@@ -94,6 +94,8 @@ export interface VolumeGenerationNovel {
 }
 
 export interface VolumeGenerateOptions {
+  /** Internal JIT boundary: append missing global chapter orders without replacing a beat. */
+  chapterOrderRange?: { startOrder: number; endOrder: number };
   /** Internal transaction fence shared by a rolling generation and its materialization. */
   writeGuard?: VolumeGenerationWriteGuard;
   provider?: LLMProvider;

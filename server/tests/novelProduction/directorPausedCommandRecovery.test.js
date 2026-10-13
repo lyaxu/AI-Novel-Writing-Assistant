@@ -29,6 +29,7 @@ function fixture({ preflightFails = false, taskCasFails = false, jobCasFails = f
     "../../../../workers/TaskDispatcher": { taskDispatcher: { notify: () => calls.push(["notify"]) } },
     "./leases/DirectorCommandLeaseService": {},
     "../recovery/planningRepair/planningRepairRecovery": { assertPlanningRepairResumeAllowed: () => {} },
+    "../recovery/rangeCompletion": {},
     "@ai-novel/shared/types/planningRepair/recovery": {},
     "../../production/recovery": { assertUnchangedPipelineRecoveryScope: scope.assertUnchangedPipelineRecoveryScope, createChapterPipelineRecoveryService: () => ({ prepareDirector: async (...args) => {
       calls.push(["preflight", ...args]); if (preflightFails) throw new AppError("unknown or changed manuscript", 409); return expected;
@@ -75,7 +76,7 @@ test("paused task scope is frozen even when its pipeline status projection says 
   assert.equal(f.calls.length, 0);
 });
 
-test("source workflow resume HTTP action injects explicit authorization through approve-gate adapter", async () => {
+for (const continuationMode of ["resume", "auto_execute_range"]) test(`source workflow ${continuationMode} HTTP action injects explicit authorization`, async () => {
   const f = fixture();
   const routes = [];
   loadRuntimeSource("../director/http/novelWorkflows.ts", {
@@ -89,10 +90,10 @@ test("source workflow resume HTTP action injects explicit authorization through 
   });
   const route = routes.find(r => r[0] === "/:id/continue");
   let response, error, status;
-  await route.at(-1)({ params: { id: "director" }, body: { continuationMode: "resume" } },
+  await route.at(-1)({ params: { id: "director" }, body: { continuationMode } },
     { status: value => { status = value; return { json: value => { response = value; } }; } }, value => { error = value; });
   assert.equal(error, undefined); assert.equal(status, 202); assert.equal(response.success, true);
   const acceptedPayload = JSON.parse(f.calls.find(c => c[0] === "create")[1].data.payloadJson);
   assert.equal(acceptedPayload.forceResume, true);
-  assert.equal(acceptedPayload.continuationMode, "resume");
+  assert.equal(acceptedPayload.continuationMode, continuationMode);
 });

@@ -105,7 +105,11 @@ test("full-book autopilot keeps a bounded target while future chapters are still
     totalChapterCount: 5,
     firstChapterId: null,
   });
-  assert.deepEqual(result.autoExecution.remainingChapterOrders, [4, 5, 6]);
+  assert.deepEqual(result.autoExecution.remainingChapterOrders, [4, 5, 6, 7, 8]);
+  assert.deepEqual(result.autoExecution.remainingChapterIds, ["chapter-4", "chapter-5", "chapter-6"]);
+  assert.equal(result.autoExecution.totalChapterCount, 5);
+  assert.equal(result.autoExecution.remainingChapterCount, 5);
+  assert.equal(result.autoExecution.completedChapterCount, 0);
 });
 
 test("circuit-breaker governance continues, pauses, or fails the real workflow state", async () => {
@@ -462,7 +466,7 @@ for (const orphanedBinding of [false, true]) test("completed chapters " + (orpha
   assert.equal(calls[1][4], 0);
 });
 
-test("runFromReady keeps partial structured outline windows resumable after the current beat completes", async () => {
+test("runFromReady finishes the approved chapter range even when later volume planning is incomplete", async () => {
   const calls = [];
   const runtime = new NovelDirectorAutoExecutionRuntime({
     novelContextService: {
@@ -520,7 +524,7 @@ test("runFromReady keeps partial structured outline windows resumable after the 
     request: buildRequest({ runMode: "full_book_autopilot" }),
     existingState: {
       enabled: true,
-      mode: "book",
+      mode: "chapter_range",
       firstChapterId: "chapter-1",
       startOrder: 1,
       endOrder: 2,
@@ -531,7 +535,7 @@ test("runFromReady keeps partial structured outline windows resumable after the 
 
   assert.deepEqual(calls, [
     ["bootstrapTask", false],
-    ["recordCheckpoint", "task-partial-auto-exec", "chapter_batch_ready", "structured_outline", 0, false],
+    ["recordCheckpoint", "task-partial-auto-exec", "workflow_completed", "chapter_execution", 0, false],
   ]);
 });
 

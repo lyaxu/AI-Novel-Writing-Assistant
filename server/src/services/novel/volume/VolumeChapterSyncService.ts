@@ -39,6 +39,8 @@ export interface VolumeChapterSyncServiceDeps {
 }
 
 export interface VolumeChapterSyncOptions {
+  /** Restrict materialization while retaining the complete planning workspace. */
+  materializationRange?: { startOrder: number; endOrder: number };
   preparedWorkspace?: { current: VolumePlanDocument; merged: VolumePlanDocument };
   writeGuard?: VolumeGenerationWriteGuard;
   emitEvent?: boolean;
@@ -98,9 +100,15 @@ export class VolumeChapterSyncService {
         sceneCards: true,
       },
     });
+    const range = options.materializationRange;
+    if (range && (!Number.isSafeInteger(range.startOrder) || !Number.isSafeInteger(range.endOrder)
+      || range.startOrder < 1 || range.endOrder < range.startOrder || input.applyDeletes)) {
+      throw new Error("滚动章节同步范围无效，或请求包含删除操作。");
+    }
+    const inRange = (order: number) => !range || (order >= range.startOrder && order <= range.endOrder);
     const plan = buildVolumeSyncPlan(
-      mergedDocument.volumes,
-      existingChapters as ExistingChapterRecord[],
+      mergedDocument.volumes.map((volume) => ({ ...volume, chapters: volume.chapters.filter((chapter) => inRange(chapter.chapterOrder)) })),
+      existingChapters.filter((chapter) => inRange(chapter.order)) as ExistingChapterRecord[],
       {
         preserveContent: input.preserveContent !== false,
         applyDeletes: input.applyDeletes === true,

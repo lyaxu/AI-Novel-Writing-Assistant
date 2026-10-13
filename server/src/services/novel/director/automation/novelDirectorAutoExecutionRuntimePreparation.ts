@@ -106,6 +106,47 @@ export async function prepareRequestedAutoExecution(
   };
 }
 
+/** Materialize only the next missing route before a single-chapter pipeline needs its ID. */
+export async function prepareNextAutoExecutionChapter(
+  deps: NovelDirectorAutoExecutionRuntimeDeps,
+  input: {
+    taskId: string;
+    novelId: string;
+    request: DirectorConfirmRequest;
+    range: DirectorAutoExecutionRange;
+    autoExecution: DirectorAutoExecutionState;
+  },
+): Promise<{ range: DirectorAutoExecutionRange; autoExecution: DirectorAutoExecutionState }> {
+  const order = input.autoExecution.nextChapterOrder;
+  if (!Number.isInteger(order) || order! < input.range.startOrder || order! > input.range.endOrder) {
+    throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "下一章不在已授权的自动执行范围内，无法准备章节规划。");
+  }
+  if (input.autoExecution.nextChapterId) return { range: input.range, autoExecution: input.autoExecution };
+  if (!isFullBookAutopilotRunMode(input.request.runMode)) {
+    throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "下一章不在已授权的自动执行范围内，无法准备章节规划。");
+  }
+  const ensureRouteWindow: NonNullable<NovelDirectorAutoExecutionRuntimeDeps["ensureRouteWindow"]> = deps.ensureRouteWindow ?? (async (...args) => {
+    const { ChapterRouteWindowService } = await import("../../planning/ChapterRouteWindowService");
+    return new ChapterRouteWindowService().ensureRouteWindow(...args);
+  });
+  await ensureRouteWindow(input.novelId, order!, {
+    taskId: input.taskId, endOrder: order!, min: 1, target: 1,
+    provider: input.request.provider, model: input.request.model, temperature: input.request.temperature,
+    completionProfile: input.autoExecution.completionProfile,
+  });
+  const refreshed = await resolveAutoExecutionRuntimeRangeAndState(deps, {
+    novelId: input.novelId, existingState: { ...input.autoExecution, pipelineJobId: null, pipelineStatus: null },
+    allowLazyChapterPlanning: true,
+  });
+  if (refreshed.range.startOrder !== input.range.startOrder || refreshed.range.endOrder !== input.range.endOrder) {
+    throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "章节规划后原执行范围发生变化，请核对原任务后继续。");
+  }
+  if (refreshed.autoExecution.nextChapterOrder === order && !refreshed.autoExecution.nextChapterId) {
+    throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", `第 ${order} 章规划尚未同步到章节执行区，已保留完成章节，请从原任务继续。`);
+  }
+  return refreshed;
+}
+
 export async function shouldStopAutoExecution(
   deps: NovelDirectorAutoExecutionRuntimeDeps,
   taskId: string,

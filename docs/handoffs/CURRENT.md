@@ -1,23 +1,21 @@
 # 最新交接入口
 
-更新：2026-10-13 17:24 UTC，第二章完成，但导演误报三章全完成。
+更新：2026-10-13，阶段3授权范围完整性修复，待最终旧版加载核验。
 
-**当前真实停点**：2026-10-13 17:24 UTC只读核验：用户继续v17后第二章正文/审查/资源入账完成，原job17:13 succeeded。首章3013字hash不变，第二章已接收3680字（hash 4704d2b0170166b28e798971db8c2b6aa295a04db03c9141bf16686330da309a）。导演原范围1—3，但数据库只有1、2章，任务却succeeded/workflow_completed/100%，快照total=3/completed=2/remaining=0。纯函数复现同样漏掉第3章；主因是允许逐章补规划时，剩余量只统计已实体化Chapter行，缺号不计待办，成功分支遂提前完成。后台jobs/commands/sideEffects均0，继续等待不会推进。累计调用按原统计窗口42（上轮35，本轮用户触发7，代理0）。下一步应整体修复范围缺号计数、第三章规划衔接、成功判定、已误完成原任务的安全恢复与UI投影；不能只改100%标签或重建任务。当前仅诊断留证，不改产品代码/DB、不重启、不调用模型。
+**最新完整快照**：[任意第N章、跨卷缺章及原任务恢复](../evals/2026-10-13-director-range-completion.md)。前序[v17审查修复](../evals/2026-10-13-review-wire-v17.md)保留为历史；第二章审查已成功，旧“从原审查继续”的指引失效。
 
-**历史审查故障**：用户16:31 UTC继续原第二章审查后再次暂停。v16四次正常返回；合法长JSON被格式修复截去中段，丢失付款场景，后续重写又改变状态维度。完整枚举/数组示例未送到初审也是契约缺口。不是用户刷新操作错误，旧的“v16已可继续”记录仅为历史加载证据。
+本次整体收敛：逐号统计原授权范围，缺实体也计待办；有界追加与物化当前缺章，保留既有正文/计划；按已接受节奏预算跨卷定位，避免实体数量重新分配预算；上一成功job解除运行关联后才能规划下一缺章；历史误完成原任务仅在源页明确继续时CAS恢复；工作区、导演快照与运行记录只读投影一致，真正完成须有当前事实支持。
 
-**最新完整快照**：[v17诊断、实施与最终核验](../evals/2026-10-13-review-wire-v17.md)。前序[v16](../evals/2026-10-13-review-semantic-v16.md)和[v15诊断](../evals/2026-10-13-v15-review-semantic-gap.md)保留，不代替本轮状态。
+组合回归服务端794通过、0失败、2项既有拆书测试skip；客户端12通过。server编译及运行加载最新证据见完整快照。无真实模型或UI自动验收，不能宣称固定版本十章通过。
 
-本轮统一处理合法回答无损、详细契约与传输分层、一次全文纠正、格式与独立语义问题同轮反馈、完整失败留证及恢复缓存边界；保留时序/主体/维度/来源/修文依据检查。最终server编译和55文件565项封网回归通过；21份真实回答原样回放。2026-10-13 17:02 UTC（用户时区12:02）受控加载完成：旧后端3000/PID5000，应用启动17:02:25.538Z，源码提交41ea6981b3e4/v17，5190代理health通过、stale=false。47项源码/共享产物hash通过；旧前端41368/5190身份未变，新版5173/8787保持关闭。加载后只读prepareDirector通过，原review人工暂停、两章hash/范围/预算/账本不变，调用35、代理0、活跃0。可从第二章原源页刷新后一次继续自动导演，无需运行脚本。
+17:32 UTC基线及本轮只读复核：隔离DB D:/novel/.comparison/2026-10-10/old-test.db；书 cmv3wyvw40015gow0780pycx9，原导演 cmv3wvaqm000sgow0l5or2pke，原第二章job cmv5h9a64000j20w0uw4cxeo0 succeeded。数据库仍保留误完成原始状态供显式恢复，GET与重启不得修库或发模型请求。首章3013字、第二章3680字hash不变，6项资源committed，调用42，本轮代理0，活跃工作0。真实只读规划预检确认第3章处于原卷3—5章节奏段首槽位，不是段末收束；必须保留写前语义门禁，防止重复第二章已完成事件。
 
-仓库D:/novel/AI-Novel-Writing-Assistant，分支codex/production-core-refactor，接续b57ba37a。预存三个Structured客户端改动与台账历史964行独立保留。
+仓库 D:/novel/AI-Novel-Writing-Assistant，分支 codex/production-core-refactor，接续 b2d345c3。预存三个 Structured 客户端改动与台账历史964行独立保留。本轮代码、台账、wiki、方案、发布说明同步提交；不push、合并或发布。
 
-16:54 UTC只读核验：隔离DB D:/novel/.comparison/2026-10-10/old-test.db；书cmv3wyvw40015gow0780pycx9，导演cmv3wvaqm000sgow0l5or2pke，原job cmv5h9a64000j20w0uw4cxeo0。首章3013字、第二章3652字hash不变，原review人工暂停、prepareDirector通过，范围/预算/账本不变。调用35均用户触发，本轮代理0，活跃工作0。该段为加载前基线；最新加载身份见上文v17记录，旧PID及31调用脚本不可复用。
+## 主线和操作边界
 
-## 主线和恢复边界
+阶段2可靠保存与原步恢复有实现和离线证据；阶段3真实稳定性仍待验，阶段4固定版本十章未通过。保留文笔、认可写法、质量检查、防丢稿；新版不动、不恢复历史书、不新增GUI、不自动调用模型。
 
-阶段2可靠保存与原步恢复已有实现和离线证据；阶段3审查真实稳定性尚未通过；阶段4固定版本十章仍未通过。保留文笔、写法、质量检查、防丢稿。新版不动、不恢复历史书、不新增GUI、不自动调用模型、不push/发布。
+加载核验通过后从[原书章节工作区](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt800jtgow0la32yn38)刷新，核对2/3章与待继续状态，再一次“继续自动导演”。保持原任务推进缺章，不重新审查第二章，不新开任务，不从运行记录恢复。
 
-原第二章审查已完成，旧的“从审查继续”指引已失效。当前不要新建任务、重复点击或重写稿件；第三章原任务恢复需先修复误完成边界，链接与现场见v17快照末节。
-
-长期边界[PROJECT_CONTEXT](PROJECT_CONTEXT.md)，统一[台账](WORK_LEDGER.md)，[批准方案](../plans/2026-10-11-production-core-refactor.md)，[十章验收单](../evals/2026-10-11-ten-chapter-acceptance.md)，[恢复wiki](../wiki/workflows/chapter-review-resume.md)。[断线续作与书内agent](../plans/2026-10-11-resilient-writing-and-book-agent-ideas.md)仍为已记录、未实施设计。
+长期边界[PROJECT_CONTEXT](PROJECT_CONTEXT.md)，统一[台账](WORK_LEDGER.md)，[批准方案](../plans/2026-10-11-production-core-refactor.md)，[十章验收单](../evals/2026-10-11-ten-chapter-acceptance.md)，[恢复wiki](../wiki/workflows/chapter-review-resume.md)。[断线续作与书内agent](../plans/2026-10-11-resilient-writing-and-book-agent-ideas.md)仍为待设计事项。

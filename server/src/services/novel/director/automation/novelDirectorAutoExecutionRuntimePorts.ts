@@ -9,6 +9,7 @@ import type { NovelWorkflowCheckpoint } from "@ai-novel/shared/types/novelWorkfl
 import type { DirectorStateProposalResolutionRunResult } from "../runtime/DirectorStateProposalResolutionService";
 import { directorAutomationLedgerEventService } from "../runtime/DirectorAutomationLedgerEventService";
 import type { DirectorAutoExecutionChapterRef } from "./novelDirectorAutoExecution";
+import type { ChapterRouteWindowOptions, ChapterRouteWindowResult } from "../../planning/ChapterRouteWindowService";
 
 export type AutomationLedgerEventPort = Pick<
   typeof directorAutomationLedgerEventService,
@@ -123,6 +124,7 @@ export interface NovelDirectorAutoExecutionVolumeWorkspacePort {
 }
 
 export interface NovelDirectorAutoExecutionRuntimeDeps {
+  ensureRouteWindow?: (novelId: string, fromChapterOrder: number, options: ChapterRouteWindowOptions) => Promise<ChapterRouteWindowResult>;
   pausePlanningRepairIfNeeded?: (taskId: string) => Promise<boolean>;
   novelContextService: Pick<NovelDirectorAutoExecutionNovelPort, "listChapters">;
   novelService: Pick<

@@ -42,6 +42,7 @@ import { DirectorCommandLeaseService } from "./leases/DirectorCommandLeaseServic
 import { assertPlanningRepairResumeAllowed, readPlanningRepairSeed } from "../recovery/planningRepair/planningRepairRecovery";
 import { isPlanningRepairTaskPaused } from "@ai-novel/shared/types/planningRepair/recovery";
 import { createChapterPipelineRecoveryService, assertUnchangedPipelineRecoveryScope } from "../../production/recovery";
+import { acceptIncompleteCompletedRangeCommand } from "../recovery/rangeCompletion";
 
 const ACTIVE_COMMAND_STATUSES: DirectorRunCommandStatus[] = ["queued", "leased", "running"];
 const EXECUTION_COMMAND_TYPES: DirectorRunCommandType[] = [
@@ -787,7 +788,11 @@ export class DirectorCommandService {
         status: "queued" as const,
         payloadJson,
     };
-    const createCommand = () => pausedRecovery ? prisma.$transaction(async tx => {
+    const completedRangeRecovery = row.status === "succeeded"
+      && ["continue", "resume_from_checkpoint", "approve_gate"].includes(input.commandType);
+    const createCommand = () => completedRangeRecovery ? prisma.$transaction(tx => acceptIncompleteCompletedRangeCommand({
+      tx, task: row, forceResume: input.payload.forceResume, commandData,
+    })) : pausedRecovery ? prisma.$transaction(async tx => {
       const stillPaused = await tx.generationJob.findFirst({ where: {
         id: pausedJobId, novelId: pausedRecovery.novelId, currentItemKey: pausedRecovery.chapterId,
         updatedAt: pausedRecovery.updatedAt, payload: pausedRecovery.payload,
@@ -807,7 +812,7 @@ export class DirectorCommandService {
 
     try {
       const command = await withSqliteRetry(createCommand, { label: "director.command.create" });
-      if (!pausedRecovery) await this.markCommandAcceptedOnTask(input.taskId, input.commandType, {
+      if (!pausedRecovery && !completedRangeRecovery) await this.markCommandAcceptedOnTask(input.taskId, input.commandType, {
         preserveLastError: input.preserveLastError,
       });
       taskDispatcher.notify({ commandType: input.commandType, taskId: input.taskId });

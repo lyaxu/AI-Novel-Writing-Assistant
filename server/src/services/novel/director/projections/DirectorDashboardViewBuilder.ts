@@ -21,6 +21,7 @@ type DashboardTaskLike = {
   checkpointSummary?: string | null;
   lastError?: string | null;
   pendingManualRecovery?: boolean | null;
+  rangeCompletionVerified?: boolean;
 };
 
 type DashboardStepLike = {
@@ -97,6 +98,11 @@ function buildMode(input: {
   if (input.task.status === "failed" || input.task.status === "cancelled") {
     return "failed";
   }
+  if (input.task.status === "succeeded" && input.task.checkpointType === "workflow_completed"
+    && !input.task.pendingManualRecovery && (input.task.rangeCompletionVerified || input.factSummary?.allStepsCompleted)) {
+    return "completed";
+  }
+  if (input.task.status === "succeeded" && input.factSummary && !input.factSummary.allStepsCompleted) return "idle";
   if (workerState === "queued_waiting_worker") {
     return "queued";
   }

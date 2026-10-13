@@ -65,3 +65,6 @@ import {
 新代码不应新增 `DirectorRuntimeCommand` / `DirectorRuntimeExecution` 写入路径。需要展示旧任务历史时，可以通过 runtime projection 读取这些历史行；需要排队执行时，必须通过 `DirectorCommandService` 创建 `DirectorRunCommand`。
 
 问题治理动作必须由真实执行边界确认后再登记 `issue_action_applied`。命令租约恢复负责重新排队、人工恢复或失败终态，流水线和熔断器分别负责自己的控制流；这些模块不能只记录策略决定后继续使用旧分支。
+## 范围完成边界
+
+automation 以授权起止章号逐号计算待办，缺失 Chapter 交给 ChapterRouteWindowService 有界补规划；不得把剩余实体数为零当全部完成。recovery/rangeCompletion 负责旧误完成记录的只读资格检查及源页显式命令 CAS；projections/rangeCompletion 统一状态展示，不写库或启动任务。旧成功 job 保留历史，但进入下一缺章规划前解除运行绑定。已存稿、质量政策、预算和原范围不得因恢复扩大或重置。详见 docs/wiki/workflows/chapter-review-resume.md。

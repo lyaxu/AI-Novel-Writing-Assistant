@@ -35,6 +35,7 @@ type SnapshotTaskLike = {
   checkpointSummary?: string | null;
   lastError?: string | null;
   pendingManualRecovery?: boolean | null;
+  rangeCompletionVerified?: boolean;
 };
 
 const DISPLAY_STAGES: Array<{ key: DirectorDisplayStageKey; label: string }> = WORKFLOW_DISPLAY_STAGES.map((stage) => ({
@@ -82,6 +83,11 @@ function buildMode(input: {
   if (input.showPendingManualRecovery) {
     return "needs_recovery";
   }
+  if (input.task.status === "succeeded" && input.task.checkpointType === "workflow_completed"
+    && (input.task.rangeCompletionVerified || input.factSummary?.allStepsCompleted)) {
+    return "completed";
+  }
+  if (input.task.status === "succeeded" && input.factSummary && !input.factSummary.allStepsCompleted) return "idle";
   if (
     input.projection?.status === "failed"
     || input.task.status === "failed"
@@ -243,7 +249,7 @@ function buildProgressPercent(input: {
     return clampPercent(input.projection.progressBreakdown.totalPercent);
   }
   if (typeof input.task.progress === "number") {
-    return clampPercent(input.task.progress);
+    return clampPercent(input.task.progress <= 1 ? input.task.progress * 100 : input.task.progress);
   }
   if (typeof input.chapterProgress?.ratio === "number") {
     return clampPercent(input.chapterProgress.ratio * 100);

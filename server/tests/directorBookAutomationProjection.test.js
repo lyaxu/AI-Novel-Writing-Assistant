@@ -121,6 +121,8 @@ function createHarness(overrides = {}) {
   const originals = {
     novelFindUnique: prisma.novel.findUnique,
     taskFindFirst: prisma.novelWorkflowTask.findFirst,
+    taskFindMany: prisma.novelWorkflowTask.findMany,
+    chapterFindMany: prisma.chapter.findMany,
     runFindFirst: prisma.directorRun.findFirst,
     commandFindMany: prisma.directorRunCommand.findMany,
     commandFindFirst: prisma.directorRunCommand.findFirst,
@@ -143,6 +145,16 @@ function createHarness(overrides = {}) {
     assert.equal(where.novelId, "novel-1");
     assert.equal(where.lane, "auto_director");
     return latestTask;
+  };
+  prisma.novelWorkflowTask.findMany = async ({ where }) => {
+    assert.equal(where.novelId, "novel-1");
+    assert.equal(where.lane, "auto_director");
+    assert.equal(where.id.not, "task-1");
+    return overrides.otherLiveTasks ?? [];
+  };
+  prisma.chapter.findMany = async ({ where }) => {
+    assert.equal(where.novelId, "novel-1");
+    return overrides.chapters ?? [];
   };
   prisma.directorRun.findFirst = async ({ where }) => {
     assert.equal(where.novelId, "novel-1");
@@ -205,6 +217,8 @@ function createHarness(overrides = {}) {
     restore() {
       prisma.novel.findUnique = originals.novelFindUnique;
       prisma.novelWorkflowTask.findFirst = originals.taskFindFirst;
+      prisma.novelWorkflowTask.findMany = originals.taskFindMany;
+      prisma.chapter.findMany = originals.chapterFindMany;
       prisma.directorRun.findFirst = originals.runFindFirst;
       prisma.directorRunCommand.findMany = originals.commandFindMany;
       prisma.directorRunCommand.findFirst = originals.commandFindFirst;
@@ -217,6 +231,26 @@ function createHarness(overrides = {}) {
     },
   };
 }
+
+test("completed range source projection derives completion or pending recovery from actual chapter rows", async () => {
+  for (const count of [2, 3]) {
+    const harness = createHarness({ latestTask: { status: "succeeded", checkpointType: "workflow_completed", progress: 1,
+      seedPayloadJson: JSON.stringify({ autoExecution: { enabled: true, mode: "chapter_range", startOrder: 1, endOrder: 3,
+        totalChapterCount: 3, completedChapterCount: 2, remainingChapterCount: 0 } }) }, commands: [], steps: [],
+      chapters: Array.from({ length: count }, (_, index) => ({ id: `chapter-${index + 1}`, order: index + 1,
+        content: "saved prose", generationState: "approved", chapterStatus: "completed" })) });
+    try {
+      const view = await harness.service.getProjection("novel-1");
+      assert.equal(view.status, count === 2 ? "waiting_recovery" : "completed");
+      assert.equal(view.latestTask.progress, count === 2 ? 2 / 3 : 1);
+      assert.doesNotMatch(view.headline, /推进任务/);
+      if (count === 2) {
+        assert.equal(view.latestTask.id, "task-1"); assert.equal(view.latestTask.checkpointType, "chapter_batch_ready");
+        assert.equal(view.primaryAction.commandPayload.taskId, "task-1");
+      }
+    } finally { harness.restore(); }
+  }
+});
 
 test("book-level cockpit exposes the owned manual pause and source repair route despite stale running steps", async () => {
   const seed = {

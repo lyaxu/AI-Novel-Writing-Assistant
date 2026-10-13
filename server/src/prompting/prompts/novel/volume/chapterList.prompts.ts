@@ -62,6 +62,8 @@ function resolvePromptConfig(
       targetBeatKey?: string;
       targetBeatLabel?: string | null;
       isBookFinale?: boolean;
+      appendOnly?: boolean;
+      completesBeat?: boolean;
       reservedChapterTitles?: string[];
       },
 ): {
@@ -69,6 +71,8 @@ function resolvePromptConfig(
   targetBeatKey: string;
   targetBeatLabel: string;
   isBookFinale: boolean;
+  appendOnly: boolean;
+  completesBeat: boolean;
   reservedChapterTitles: string[];
 } {
   if (typeof input === "number") {
@@ -77,6 +81,8 @@ function resolvePromptConfig(
       targetBeatKey: "target_beat",
       targetBeatLabel: "目标节奏段",
       isBookFinale: false,
+      appendOnly: false,
+      completesBeat: true,
       reservedChapterTitles: [],
     };
   }
@@ -86,6 +92,8 @@ function resolvePromptConfig(
     targetBeatKey: input.targetBeatKey?.trim() || "target_beat",
     targetBeatLabel: input.targetBeatLabel?.trim() || "目标节奏段",
     isBookFinale: input.isBookFinale === true,
+    appendOnly: input.appendOnly === true,
+    completesBeat: input.completesBeat !== false,
     reservedChapterTitles: input.reservedChapterTitles ?? [],
   };
 }
@@ -195,18 +203,20 @@ export function createVolumeChapterListPrompt(
         targetBeatKey?: string;
         targetBeatLabel?: string | null;
         isBookFinale?: boolean;
+        appendOnly?: boolean;
+        completesBeat?: boolean;
         reservedChapterTitles?: string[];
       },
 ): PromptAsset<
   VolumeChapterListPromptInput,
   ReturnType<typeof createVolumeChapterBeatBlockSchema>["_output"]
 > {
-  const { targetChapterCount, targetBeatKey, targetBeatLabel, isBookFinale = false, reservedChapterTitles } =
+  const { targetChapterCount, targetBeatKey, targetBeatLabel, isBookFinale = false, reservedChapterTitles, appendOnly, completesBeat } =
     resolvePromptConfig(input);
 
   return {
     id: "novel.volume.chapter_list",
-    version: "v14",
+    version: "v15",
     taskType: "planner",
     mode: "structured",
     language: "zh",
@@ -261,7 +271,9 @@ export function createVolumeChapterListPrompt(
               "10. 标题必须是客观章名，不用第一人称，不写成完整剧情句，核心字数不超过 16 个。",
               "11. 每章 beatKey 必须保持为当前目标 beatKey。",
               "12. 摘要必须体现本章造成的局面变化，不得空泛复述标题。",
-              isBookFinale
+              !completesBeat
+                ? "13. 本次只补节奏段中的指定缺章；按章节槽位推进，不得为填一章提前完成整段 mustDeliver 或全书结局。"
+                : isBookFinale
                 ? "13. 全书终章必须完成结局合同，不得创建必须续写的新主线或下一 beat 钩子。"
                 : "13. 最后一章必须完成当前 beat 的 mustDeliver，同时留下阅读牵引，但不得提前兑现下一 beat 的核心事件。",
               "",
@@ -289,6 +301,7 @@ export function createVolumeChapterListPrompt(
           "你必须同时满足：结构化输出正确、章节功能清晰、标题像章节名、摘要有真实推进。",
           "",
           "一、任务边界",
+          appendOnly ? "本次为有界缺章追加：只生成上下文指定的章节槽位。所有已存在章节及其动作、结果和顺序为固定承接事实，不得重写、重新编号或重复演出。" : "",
           `1. 你当前只能为「${targetBeatLabel}」生成 ${targetChapterCount} 章，数量不得多也不得少。`,
           "2. 只允许覆盖当前目标 beat，不得越界生成相邻 beat 的章节。",
           "3. 不得把两个章节合并成一章摘要，也不得用空泛占位章来凑数。",
@@ -326,7 +339,9 @@ export function createVolumeChapterListPrompt(
           "3. 连续章节不能承担完全相同的功能，尤其不能连续多章只做调查、讨论、铺垫、等待、意识到或发现。",
           "4. 若目标章数大于等于 5，至少应包含一次局面加压、一次关键发现或判断反转、一次阶段性兑现或明确转向。",
           "5. 关键推进可以占更多章节，过渡章要短促有力，不要为了凑数制造低信息密度章节。",
-          isBookFinale
+          !completesBeat
+            ? "6. 指定缺章尚未抵达节奏段末尾；只推进该槽位应承担的行动与后果，保留后续章节兑现空间，不得把节奏段结尾提前挤入本章。"
+            : isBookFinale
             ? "6. 全书终章必须完成结局合同中的主冲突、关系变化、核心回报与主题落点，不得留下必须续写的新主线。"
             : "6. 最后一章必须完成当前 beat 的 mustDeliver，同时留下进入下一 beat 的阅读牵引，但不得提前兑现下一 beat 的核心事件。",
           "",
@@ -365,7 +380,9 @@ export function createVolumeChapterListPrompt(
           "1. 本次只覆盖当前目标 beat，不得为相邻 beats 生成章节。",
           "2. 开头章节要承接前序已生成章节状态，不能把已经发生的推进重新起一遍。",
           "3. 中段章节要围绕当前 beat 的核心矛盾持续加压、试探、转折或兑现。",
-          isBookFinale
+          !completesBeat
+            ? "4. 本次结束只代表授权的章节槽位结束；按照整段所处位置承接前后章，不要求在本章提前兑现完整 mustDeliver。"
+            : isBookFinale
             ? "4. 全书终章必须完成结局合同，不再要求下一阶段牵引。"
             : "4. 结尾章节要把当前 beat 的 mustDeliver 落到位，但不要提前偷跑下一 beat 的核心兑现。",
           "",
@@ -389,7 +406,7 @@ export function createVolumeChapterListPrompt(
           `- beatKey 必须严格等于 ${targetBeatKey}`,
           `- beatLabel 必须严格等于 ${targetBeatLabel}`,
           `- chapterCount 与 chapters.length 必须严格等于 ${targetChapterCount}`,
-          "- 每章只能包含 title、summary、beatKey",
+          "- 每章只能包含 title、summary、beatKey、protagonistAction、chapterPayoff",
           "- 不得生成任何相邻 beat 的章节",
           "- 先在脑内规划章节功能分配与标题骨架配比，再输出完整章节块",
           "- 优先保证章节推进感、节奏承接、标题结构分散、摘要中的角色主动性与结尾牵引",

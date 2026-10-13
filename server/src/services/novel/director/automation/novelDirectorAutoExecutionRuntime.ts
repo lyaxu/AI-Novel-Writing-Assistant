@@ -10,6 +10,7 @@ import {
   buildDirectorAutoExecutionStageLabel,
   buildDirectorAutoExecutionPipelineOptions,
   resolveDirectorAutoExecutionWorkflowState,
+  isDirectorAutoExecutionRangeComplete,
   type DirectorAutoExecutionChapterRef,
   type DirectorAutoExecutionRange,
 } from "./novelDirectorAutoExecution";
@@ -33,7 +34,7 @@ import {
   resolveSingleChapterExecutionRange,
   shouldClearAutoExecutionCheckpoint,
 } from "./novelDirectorAutoExecutionRuntimeUtils";
-import { prepareRequestedAutoExecution as prepareRequestedAutoExecutionState, readAutoExecutionIdentity, resolveAutoExecutionRuntimeRangeAndState, shouldStopAutoExecution } from "./novelDirectorAutoExecutionRuntimePreparation";
+import { prepareNextAutoExecutionChapter, prepareRequestedAutoExecution as prepareRequestedAutoExecutionState, readAutoExecutionIdentity, resolveAutoExecutionRuntimeRangeAndState, shouldStopAutoExecution } from "./novelDirectorAutoExecutionRuntimePreparation";
 import type { NovelDirectorAutoExecutionRuntimeDeps, PipelineJobSnapshot } from "./novelDirectorAutoExecutionRuntimePorts";
 import { prisma } from "../../../../db/prisma";
 import { ChapterProductionError } from "../../production/reliability";
@@ -179,13 +180,13 @@ export class NovelDirectorAutoExecutionRuntime {
       if (!pipelineJobId) {
         ({ range, autoExecution } = await resolveAutoExecutionRuntimeRangeAndState(this.deps, {
           novelId: input.novelId,
-          existingState: autoExecution,
+          existingState: { ...autoExecution, pipelineJobId: null, pipelineStatus: null },
           pipelineJobId: null,
           pipelineStatus: "queued",
           allowLazyChapterPlanning,
         }));
         if (await shouldStopAutoExecution(this.deps, input.taskId, null, executionIdentity)) return;
-        if ((autoExecution.remainingChapterCount ?? 0) === 0) {
+        if (isDirectorAutoExecutionRangeComplete(range, autoExecution)) {
           await recordCompletedCheckpoint(this.deps, {
             taskId: input.taskId,
             novelId: input.novelId,
@@ -196,6 +197,27 @@ export class NovelDirectorAutoExecutionRuntime {
           });
           return;
         }
+
+        if (!autoExecution.nextChapterId) {
+          // Route planning belongs to the director. A prior succeeded chapter job
+          // must not remain its write-guard owner while preparing the next route.
+          await syncAutoExecutionTaskState(this.deps, {
+            taskId: input.taskId, novelId: input.novelId, request: input.request,
+            range, autoExecution, isBackgroundRunning: true, resumeStage: "pipeline",
+          });
+          if (await shouldStopAutoExecution(this.deps, input.taskId, null, executionIdentity)) return;
+        }
+        try {
+          ({ range, autoExecution } = await prepareNextAutoExecutionChapter(this.deps, {
+            taskId: input.taskId, novelId: input.novelId, request: input.request, range, autoExecution,
+          }));
+        } catch (error) {
+          if (await this.deps.pausePlanningRepairIfNeeded?.(input.taskId)) return;
+          throw error;
+        }
+        if (await shouldStopAutoExecution(this.deps, input.taskId, null, executionIdentity)) return;
+        // Planning can race with another completed chapter; recalculate before starting prose.
+        if (isDirectorAutoExecutionRangeComplete(range, autoExecution) || !autoExecution.nextChapterId) continue autoExecutionLoop;
 
         await this.deps.workflowService.markTaskRunning(input.taskId, {
           stage: "chapter_execution",
@@ -239,7 +261,7 @@ export class NovelDirectorAutoExecutionRuntime {
             pipelineStatus: "succeeded",
             allowLazyChapterPlanning,
           }));
-          if ((autoExecution.remainingChapterCount ?? 0) === 0) {
+          if (isDirectorAutoExecutionRangeComplete(range, autoExecution)) {
             await recordCompletedCheckpoint(this.deps, {
               taskId: input.taskId,
               novelId: input.novelId,
@@ -336,7 +358,7 @@ export class NovelDirectorAutoExecutionRuntime {
           pipelineStatus: job.status,
           allowLazyChapterPlanning,
         }));
-        const usageCircuitBreaker = job.status === "succeeded" && (autoExecution.remainingChapterCount ?? 0) === 0
+        const usageCircuitBreaker = job.status === "succeeded" && isDirectorAutoExecutionRangeComplete(range, autoExecution)
           ? null
           : await resolveUsageCircuitBreaker({
             taskId: input.taskId,
@@ -435,6 +457,7 @@ export class NovelDirectorAutoExecutionRuntime {
         if (job.status === "succeeded") {
           const completedPipelineJobId = pipelineJobId;
           pipelineJobId = "";
+          autoExecution = { ...autoExecution, pipelineJobId: null, pipelineStatus: null };
           const handoffTask = await prisma.novelWorkflowTask.findUnique({
             where: { id: input.taskId },
             select: { currentItemKey: true, checkpointType: true },
@@ -445,7 +468,7 @@ export class NovelDirectorAutoExecutionRuntime {
           ) {
             return;
           }
-          if ((autoExecution.remainingChapterCount ?? 0) > 0) {
+          if (!isDirectorAutoExecutionRangeComplete(range, autoExecution)) {
             if (this.deps.autoConfirmPendingCandidates) {
               await this.deps.autoConfirmPendingCandidates(input.novelId).catch(() => null);
             }
@@ -476,7 +499,7 @@ export class NovelDirectorAutoExecutionRuntime {
           return;
         }
 
-        if ((autoExecution.remainingChapterCount ?? 0) === 0) {
+        if (isDirectorAutoExecutionRangeComplete(range, autoExecution)) {
           await recordCompletedCheckpoint(this.deps, {
             taskId: input.taskId,
             novelId: input.novelId,

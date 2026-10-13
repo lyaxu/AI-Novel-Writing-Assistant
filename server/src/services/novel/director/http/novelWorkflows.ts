@@ -124,6 +124,7 @@ router.post("/:id/continue", validate({ params: continueParamsSchema, body: cont
       })
       : await directorCommandService.enqueueContinueCommand(id, {
         continuationMode: body.continuationMode,
+        forceResume: true,
       });
     res.status(202).json({
       success: true,

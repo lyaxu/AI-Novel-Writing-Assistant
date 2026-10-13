@@ -27,6 +27,8 @@ import {
   setVolumeChapterListPartialStatus,
 } from "./volumeGenerationHelpers";
 import { assertChapterTitleDiversity } from "./chapterTitleDiversity";
+import { resolveBoundedChapterPlans } from "./application/boundedChapterList";
+import { buildVolumeWorkspaceDocument } from "./volumeWorkspaceDocument";
 import type {
   VolumeGenerateOptions,
   VolumeGenerationNovel,
@@ -264,6 +266,9 @@ async function generateBeatChapterBlock(params: {
       targetChapterCount: params.beatPlan.chapterCount,
       targetBeatKey: params.beatPlan.beat.key,
       targetBeatLabel: params.beatPlan.beat.label,
+      appendOnly: Boolean(params.options.chapterOrderRange),
+      completesBeat: !params.options.chapterOrderRange || params.beatPlan.chapterEndOrder >=
+        (buildBeatGenerationPlans(params.targetBeatSheet).find((plan) => plan.beat.key === params.beatPlan.beat.key)?.chapterEndOrder ?? Number.POSITIVE_INFINITY),
       isBookFinale: isCompactBookFinaleBeat({
         completionProfile: params.novel.completionProfile,
         targetVolumeIndex: targetIndex,
@@ -271,7 +276,7 @@ async function generateBeatChapterBlock(params: {
         beatChapterEndOrder: params.beatPlan.chapterEndOrder,
       }),
       reservedChapterTitles: params.targetVolume.chapters
-        .filter((chapter) => chapter.beatKey !== params.beatPlan.beat.key)
+        .filter((chapter) => params.options.chapterOrderRange || chapter.beatKey !== params.beatPlan.beat.key)
         .map((chapter) => chapter.title),
     }),
     promptInput,
@@ -329,7 +334,12 @@ export async function generateBeatChunkedChapterList(params: {
   }
 
   const chapterBudget = deriveChapterBudget({ novel, workspace, options });
-  const chapterBudgets = allocateChapterBudgets({
+  const chapterBudgets = options.chapterOrderRange
+    ? document.volumes.map((volume) => {
+      const sheet = getBeatSheet(document, volume.id);
+      return sheet?.beats.reduce((sum, beat) => sum + Math.max(1, getBeatExpectedChapterCount(beat)), 0) ?? 0;
+    })
+    : allocateChapterBudgets({
     volumeCount: Math.max(document.volumes.length, 1),
     chapterBudget,
     existingVolumes: document.volumes,
@@ -360,6 +370,39 @@ export async function generateBeatChunkedChapterList(params: {
 
   const generationMode = options.generationMode ?? "full_volume";
   const beatPlans = buildBeatGenerationPlans(targetBeatSheet);
+  if (options.chapterOrderRange) {
+    const missingPlans = resolveBoundedChapterPlans(document, targetVolume.id, options.chapterOrderRange, options.targetBeatKey);
+    let mergedDocument = document;
+    for (const plan of missingPlans) {
+      await params.notifyPhase(`正在规划第 ${plan.globalOrder} 章`);
+      const currentVolume = getTargetVolume(mergedDocument, targetVolume.id);
+      const beatIndex = beatPlans.findIndex((item) => item.beat.key === plan.beat.key);
+      const summarize = (before: boolean) => currentVolume.chapters
+        .filter((chapter) => before ? chapter.chapterOrder < plan.globalOrder : chapter.chapterOrder > plan.globalOrder)
+        .map((chapter) => `${chapter.chapterOrder}. ${chapter.title}：${chapter.summary}`).join("\n") || "none";
+      const block = await generateBeatChapterBlock({
+        document: mergedDocument, workspace: { ...workspace, ...mergedDocument }, novel, storyMacroPlan,
+        options, targetVolume: currentVolume, targetBeatSheet, beatPlan: plan,
+        previousBeat: beatPlans[beatIndex - 1]?.beat, nextBeat: beatPlans[beatIndex + 1]?.beat,
+        previousBeatChapterSummary: summarize(true), preservedBeatChapterSummary: summarize(false), chapterBudgets,
+      });
+      if (block.beatKey !== plan.beat.key || block.chapterCount !== 1 || block.chapters.length !== 1) {
+        throw new Error("滚动章节结果超出本次授权范围，未保存章节规划。");
+      }
+      const chapter = block.chapters[0];
+      // Unlike whole-beat regeneration, append preserves every existing plan and its identity.
+      mergedDocument = buildVolumeWorkspaceDocument({ ...mergedDocument, volumes: mergedDocument.volumes.map((volume) =>
+        volume.id !== targetVolume.id ? volume : { ...volume, chapters: [...volume.chapters, {
+          ...chapter, id: undefined, volumeId: volume.id, chapterOrder: plan.globalOrder,
+          beatKey: plan.beat.key, payoffRefs: [], createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString(),
+        } as unknown as VolumePlan["chapters"][number]] }) });
+      const mergedVolume = getTargetVolume(mergedDocument, targetVolume.id);
+      assertChapterTitleDiversity(mergedVolume.chapters.map((item) => item.title));
+      mergedDocument = setVolumeChapterListPartialStatus(mergedDocument, targetVolume.id,
+        !isMergedVolumeChapterListComplete({ volume: mergedVolume, beatSheet: targetBeatSheet }));
+    }
+    return { mergedDocument, mergedWorkspace: { ...workspace, ...mergedDocument } };
+  }
   const existingBeatBlocks = buildExistingBeatBlocks({
     volume: targetVolume,
     beatSheet: targetBeatSheet,

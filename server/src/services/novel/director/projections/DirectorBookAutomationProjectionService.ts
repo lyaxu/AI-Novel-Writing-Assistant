@@ -36,6 +36,7 @@ import {
 import { buildDirectorDashboardView } from "./DirectorDashboardViewBuilder";
 import { buildDirectorDisplayState } from "./DirectorDisplayStateBuilder";
 import { readPipelinePauseProjection } from "../recovery/pipelinePause";
+import { readIncompleteCompletedRangeProjection, overlayIncompleteRangeRuntime } from "./rangeCompletion";
 import { parseResumeTarget, resumeTargetToRoute } from "../../workflow/novelWorkflow.shared";
 
 type RuntimeProjectionLoader = (taskId: string) => Promise<DirectorRuntimeProjection | null>;
@@ -297,7 +298,7 @@ export class DirectorBookAutomationProjectionService {
     const runtimeTaskId = latestTask?.id ?? latestRun?.taskId ?? null;
 
     const [
-      runtimeProjection,
+      storedRuntimeProjection,
       commands,
       events,
       steps,
@@ -382,7 +383,12 @@ export class DirectorBookAutomationProjectionService {
       latestTask = await readPipelinePauseProjection(latestTask,
         commands.find((command) => command.taskId === latestTask?.id
           && ["queued", "leased", "running"].includes(command.status)));
+      latestTask = await readIncompleteCompletedRangeProjection(latestTask,
+        commands.find(command => command.taskId === latestTask?.id
+          && ["queued", "leased", "running"].includes(command.status)));
     }
+    const runtimeProjection = latestTask
+      ? overlayIncompleteRangeRuntime(storedRuntimeProjection, latestTask) : storedRuntimeProjection;
     const usageTelemetry = await directorUsageTelemetryQueryService.getBookUsage({
       novelId,
       taskIds,
@@ -440,7 +446,8 @@ export class DirectorBookAutomationProjectionService {
         ? dashboardModeToBookStatus(dashboardView.mode)
         : taskStatus;
     const staleRuntimeProjection = Boolean(
-      (dashboardView?.mode === "running" || dashboardView?.mode === "queued" || dashboardView?.mode === "waiting_user")
+      (status === "completed" && runtimeProjection?.status !== "completed")
+      || (dashboardView?.mode === "running" || dashboardView?.mode === "queued" || dashboardView?.mode === "waiting_user")
       && (
         runtimeProjection?.requiresUserAction
         || runtimeProjection?.status === "blocked"

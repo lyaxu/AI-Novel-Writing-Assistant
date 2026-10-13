@@ -64,6 +64,8 @@ export function shouldShowPinnedBookAutomationProjection(input: {
     return false;
   }
   return input.projection.status === "failed"
+    || input.projection.status === "waiting_recovery"
+    || input.projection.status === "blocked"
     || input.projection.status === "completed"
     || input.projection.status === "cancelled";
 }
@@ -117,6 +119,20 @@ export function buildDisplayAutoDirectorTask(
   }
   if (!task || !projectionMatchesTask(projection, task)) {
     return task;
+  }
+  const rangeRecovery = (task.status === "succeeded" || task.currentItemKey === "chapter_range_incomplete") && projection.status === "waiting_recovery"
+    && projection.latestTask?.status === "waiting_approval"
+    && projection.latestTask.pendingManualRecovery === true
+    && projection.latestTask.checkpointType === "chapter_batch_ready"
+    && projection.latestTask.currentItemKey === "chapter_range_incomplete";
+  if (rangeRecovery) {
+    const projected = projection.latestTask!;
+    return { ...task, status: "waiting_approval", pendingManualRecovery: true,
+      progress: projected.progress, checkpointType: projected.checkpointType,
+      checkpointSummary: projected.checkpointSummary, currentStage: projected.currentStage,
+      currentItemKey: projected.currentItemKey, currentItemLabel: projected.currentItemLabel,
+      displayStatus: "waiting_recovery", blockingReason: projectionMessage(projection),
+      lastError: null, failureSummary: null, finishedAt: null };
   }
   if (isTerminalWorkflowTaskStatus(task.status) && projection.status !== "failed" && projection.status !== "blocked") {
     return task;

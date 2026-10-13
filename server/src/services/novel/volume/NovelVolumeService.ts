@@ -658,6 +658,7 @@ export class NovelVolumeService {
     novelId: string,
     input: VolumeSyncInput,
     options: {
+      materializationRange?: { startOrder: number; endOrder: number };
       writeGuard?: VolumeGenerationWriteGuard;
       emitEvent?: boolean;
       syncPayoffLedger?: boolean;

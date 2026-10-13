@@ -681,7 +681,7 @@ test("novel main-chain prompt assets declare explicit non-zero context budgets",
     ["novel.volume.strategy.critique@v3", NOVEL_PROMPT_BUDGETS.volumeStrategyCritique],
     ["novel.volume.skeleton@v5", NOVEL_PROMPT_BUDGETS.volumeSkeleton],
     ["novel.volume.beat_sheet@v6", NOVEL_PROMPT_BUDGETS.volumeBeatSheet],
-    ["novel.volume.chapter_list@v14", NOVEL_PROMPT_BUDGETS.volumeChapterList],
+    ["novel.volume.chapter_list@v15", NOVEL_PROMPT_BUDGETS.volumeChapterList],
     ["novel.volume.chapter_purpose@v7", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
     ["novel.volume.chapter_boundary@v6", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
     ["novel.volume.chapter_task_sheet@v11", NOVEL_PROMPT_BUDGETS.volumeChapterDetail],
@@ -1735,7 +1735,8 @@ test("prompt runner records failed executions without swallowing the original er
   }
 });
 
-test("prompt runner injects enabled custom slot blocks for supported prompts", async () => {
+test("prompt runner injects enabled custom slot blocks for supported prompts", async (t) => {
+  t.mock.method(promptTemplateOverrideService, "getActiveCustomTemplate", async () => null);
   const originalResolveForRuntime = promptSlotOverrideService.resolveForRuntime;
   let capturedMessages = [];
   promptSlotOverrideService.resolveForRuntime = async ({ promptId, novelId }) => {
@@ -2053,7 +2054,11 @@ test("advanced prompt template reports unknown tokens", () => {
   assert.ok(compiled.diagnostics.unknownTokens.includes("context.not_registered"));
 });
 
-test("runTextPrompt uses active book-scoped advanced template for chapter writer", async () => {
+test("runTextPrompt uses active book-scoped advanced template for chapter writer", async (t) => {
+  t.mock.method(promptSlotOverrideService, "resolveForRuntime", async () => ({
+    inlineSlots: { text: () => "", choiceCopy: () => "", enabled: () => false, token: () => "", append: () => "" },
+    appendBlocks: [], drift: [],
+  }));
   const originalGetActiveCustomTemplate = promptTemplateOverrideService.getActiveCustomTemplate;
   let capturedMessages = [];
   promptTemplateOverrideService.getActiveCustomTemplate = async ({ promptId, novelId }) => {

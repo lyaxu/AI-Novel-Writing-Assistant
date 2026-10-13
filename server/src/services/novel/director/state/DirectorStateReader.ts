@@ -3,6 +3,7 @@ import { parseSeedPayload } from "../../workflow/novelWorkflow.shared";
 import type { DirectorWorkflowSeedPayload } from "../runtime/novelDirectorHelpers";
 import { ChapterExecutionProgressInspector, type ChapterExecutionProgressSummary } from "../runtime/ChapterExecutionProgressInspector";
 import { readPipelinePauseProjection } from "../recovery/pipelinePause";
+import { readIncompleteCompletedRangeProjection, overlayIncompleteRangeChapterProgress } from "../projections/rangeCompletion";
 
 export interface DirectorCanonicalState {
   task: {
@@ -19,6 +20,8 @@ export interface DirectorCanonicalState {
     lastError?: string | null;
     pendingManualRecovery?: boolean | null;
     cancelRequestedAt?: Date | null;
+    /** Derived from current chapter rows; never persisted as task authority. */
+    rangeCompletionVerified?: boolean;
   };
   run: {
     id: string;
@@ -112,12 +115,14 @@ export class DirectorStateReader {
         select: { idempotencyKey: true, nodeKey: true, label: true, status: true },
       }).catch(() => null),
     ]);
-    const task = await readPipelinePauseProjection(storedTask, latestCommand);
+    const task = await readIncompleteCompletedRangeProjection(
+      await readPipelinePauseProjection(storedTask, latestCommand), latestCommand);
     const suppressActiveStep = shouldSuppressRuntimeActiveStep(task);
     const effectiveActiveStep = suppressActiveStep ? null : activeStep;
-    const chapterProgress = task.novelId
+    const inspectedChapterProgress = task.novelId
       ? await this.chapterProgressInspector.inspectNovel(task.novelId).catch(() => null)
       : null;
+    const chapterProgress = overlayIncompleteRangeChapterProgress(inspectedChapterProgress, task);
     return {
       task: {
         id: task.id,
@@ -128,6 +133,7 @@ export class DirectorStateReader {
         currentItemKey: task.currentItemKey,
         currentItemLabel: task.currentItemLabel,
         progress: task.progress,
+        rangeCompletionVerified: (task as { rangeCompletionVerified?: boolean }).rangeCompletionVerified,
         checkpointType: task.checkpointType,
         checkpointSummary: task.checkpointSummary,
         lastError: task.lastError,

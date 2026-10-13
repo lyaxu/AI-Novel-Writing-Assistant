@@ -45,6 +45,7 @@ import {
 import { buildNovelWorkflowDetailSteps } from "../novelWorkflowDetailSteps";
 import { buildWorkflowExplainability } from "../novelWorkflowExplainability";
 import { buildNovelWorkflowNextActionLabel } from "../novelWorkflowTaskSummary";
+import { readIncompleteCompletedRangeProjection } from "../../novel/director/projections/rangeCompletion";
 
 function buildOwnerLabel(row: {
   novel?: { title: string } | null;
@@ -337,7 +338,8 @@ function mapSummary(row: {
   const recoveryHint = isSkippableReviewBlockedFailure
     ? buildSkippableAutoExecutionReviewRecoveryHint(autoExecution)
     : pendingManualRecovery
-      ? (row.lastError?.trim() || "服务重启后任务已暂停，等待手动恢复。")
+      ? (row.currentItemKey === "chapter_range_incomplete" ? row.checkpointSummary
+        : row.lastError?.trim() || "服务重启后任务已暂停，等待手动恢复。")
       : buildTaskRecoveryHint("novel_workflow", status);
   return {
     id: row.id,
@@ -425,7 +427,7 @@ export class NovelWorkflowTaskAdapter {
           }
           : {}),
         lane: "auto_director",
-        ...(input.status ? { status: input.status } : {}),
+        ...(input.status ? { status: input.status === "waiting_approval" ? { in: ["waiting_approval", "succeeded"] } : input.status } : {}),
         ...(input.keyword
           ? {
             OR: [
@@ -447,7 +449,8 @@ export class NovelWorkflowTaskAdapter {
       take: input.take,
     });
     const healed = await Promise.all(
-      rows.map((row) => this.workflowService.healAutoDirectorTaskState(row.id, row)),
+      rows.map((row) => row.status === "succeeded" ? Promise.resolve(false)
+        : this.workflowService.healAutoDirectorTaskState(row.id, row)),
     );
     const normalizedRows = healed.some(Boolean)
       ? await prisma.novelWorkflowTask.findMany({
@@ -460,7 +463,7 @@ export class NovelWorkflowTaskAdapter {
             }
             : {}),
           lane: "auto_director",
-          ...(input.status ? { status: input.status } : {}),
+          ...(input.status ? { status: input.status === "waiting_approval" ? { in: ["waiting_approval", "succeeded"] } : input.status } : {}),
           ...(input.keyword
             ? {
               OR: [
@@ -495,7 +498,8 @@ export class NovelWorkflowTaskAdapter {
         && candidate.updatedAt >= row.updatedAt);
     });
 
-    return visibleRows.map((row) => mapSummary(row));
+    const projectedRows = await Promise.all(visibleRows.map(row => readIncompleteCompletedRangeProjection(row)));
+    return projectedRows.filter(row => !input.status || row.status === input.status).map(row => mapSummary(row));
   }
 
   async detail(
@@ -508,11 +512,7 @@ export class NovelWorkflowTaskAdapter {
     if (await isTaskArchived("novel_workflow", id)) {
       return null;
     }
-    if (options.heal !== false) {
-      await this.workflowService.healAutoDirectorTaskState(id);
-    }
-
-    const row = await prisma.novelWorkflowTask.findUnique({
+    const query = {
       where: { id },
       include: {
         novel: {
@@ -521,10 +521,17 @@ export class NovelWorkflowTaskAdapter {
           },
         },
       },
-    });
-    if (!row) {
+    } as const;
+    let storedRow = await prisma.novelWorkflowTask.findUnique(query);
+    if (!storedRow) {
       return null;
     }
+    // A completed range is inspected, never reopened or rewritten by a GET.
+    if (options.heal !== false && storedRow.status !== "succeeded") {
+      const healed = await this.workflowService.healAutoDirectorTaskState(id, storedRow);
+      if (healed) storedRow = await prisma.novelWorkflowTask.findUnique(query) ?? storedRow;
+    }
+    const row = await readIncompleteCompletedRangeProjection(storedRow);
 
     const summary = mapSummary(row);
     const resumeTarget = normalizeWorkflowResumeTargetForCandidateSelection({
@@ -565,7 +572,7 @@ export class NovelWorkflowTaskAdapter {
       provider: boundLlm?.provider ?? null,
       model: boundLlm?.model ?? null,
       startedAt: row.startedAt?.toISOString() ?? null,
-      finishedAt: row.finishedAt?.toISOString() ?? null,
+      finishedAt: row.currentItemKey === "chapter_range_incomplete" ? null : row.finishedAt?.toISOString() ?? null,
       retryCountLabel: `${row.attemptCount}/${row.maxAttempts}`,
       meta: {
         lane: row.lane,

@@ -310,6 +310,11 @@ export async function resolveAutoExecutionRangeAndState(input: {
   if (!range) {
     throw new Error("当前还没有可自动执行的章节，请先完成目标范围的拆章同步。");
   }
+  if (!Number.isInteger(range.startOrder) || !Number.isInteger(range.endOrder)
+    || range.startOrder < 1 || range.endOrder < range.startOrder) {
+    throw new Error("自动执行范围无效，请核对已授权的起止章节。");
+  }
+  range = { ...range, totalChapterCount: range.endOrder - range.startOrder + 1 };
   const missingChapterOrders = findMissingChapterOrders(chapters, range);
   if (missingChapterOrders.length > 0 && !input.allowLazyChapterPlanning) {
     const resolvedScopeLabel = scopeLabel ?? buildDirectorAutoExecutionScopeLabelFromState(input.existingState, range.totalChapterCount);

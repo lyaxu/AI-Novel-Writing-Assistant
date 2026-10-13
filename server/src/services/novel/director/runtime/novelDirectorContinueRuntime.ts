@@ -42,7 +42,7 @@ import { prisma } from "../../../../db/prisma";
 import { assertPlanningRepairResumeAllowed, readPlanningRepairSeed, resolvePlanningRepairResumePhase } from "../recovery/planningRepair/planningRepairRecovery";
 import { normalizeDirectorAutoExecutionPlan } from "../automation/novelDirectorAutoExecution";
 import { buildRequestedAutoExecutionState } from "../automation/novelDirectorAutoExecutionScopeRuntime";
-import { createChapterPipelineRecoveryService, type PipelineRecoveryExpectation } from "../../production/recovery";
+import { createChapterPipelineRecoveryService, assertUnchangedPipelineRecoveryScope, type PipelineRecoveryExpectation } from "../../production/recovery";
 import { ChapterProductionError } from "../../production/reliability";
 
 export type DirectorAssetFirstRecovery =
@@ -279,6 +279,12 @@ export class NovelDirectorContinueRuntime {
 
     const seedPayload = parseSeedPayload<DirectorWorkflowSeedPayload>(row.seedPayloadJson) ?? {};
     const directorInput = getDirectorInputFromSeedPayload(seedPayload);
+    const rangeRecovery = seedPayload.rangeCompletionRecovery as { startOrder?: number; endOrder?: number; requestedAt?: string } | undefined;
+    const resumesIncompleteRange = Boolean(rangeRecovery?.requestedAt && input?.forceResume === true
+      && ["queued", "running"].includes(row.status) && seedPayload.autoExecution?.enabled
+      && !seedPayload.autoExecution.pipelineJobId && rangeRecovery.startOrder === seedPayload.autoExecution.startOrder
+      && rangeRecovery.endOrder === seedPayload.autoExecution.endOrder);
+    if (resumesIncompleteRange) assertUnchangedPipelineRecoveryScope(seedPayload);
     const novelId = row.novelId ?? seedPayload.novelId ?? null;
     const fallbackRunMode = typeof seedPayload.runMode === "string"
       && (DIRECTOR_RUN_MODES as readonly string[]).includes(seedPayload.runMode)
@@ -348,6 +354,8 @@ export class NovelDirectorContinueRuntime {
     if (savedPipelineRecovery?.currentStage === "reviewing") requestedReplanRecovery = false;
     const assetFirstRecovery: DirectorAssetFirstRecovery = savedPipelineRecovery
       ? { type: "auto_execution", resumeCheckpointType: requestedReplanRecovery ? "replan_required" : "chapter_batch_ready" }
+      : resumesIncompleteRange
+      ? { type: "auto_execution", resumeCheckpointType: "chapter_batch_ready" }
       : planningRepairRecovery
       ? planningRepairRecovery.resumePhase === "chapter_execution"
         ? { type: "auto_execution", resumeCheckpointType: "chapter_batch_ready" }
@@ -371,7 +379,7 @@ export class NovelDirectorContinueRuntime {
       // Recovery can bypass the structured-outline phase that normally saves this gate.
       // A keyed planning recovery continues an already saved execution scope; legacy tasks
       // may lack the presentation preference, which must not turn recovery into first-run setup.
-      const resumesAuthorizedExecution = Boolean(savedPipelineRecovery) || planningRepairRecovery?.resumePhase === "chapter_execution"
+      const resumesAuthorizedExecution = resumesIncompleteRange || Boolean(savedPipelineRecovery) || planningRepairRecovery?.resumePhase === "chapter_execution"
         && seedPayload.autoExecution?.enabled === true
         && Boolean(input?.planningRepairRecoveryKey)
         && planningRepairSeed.recovery?.idempotencyKey === input?.planningRepairRecoveryKey;

@@ -297,13 +297,9 @@ test("pipeline operation identity follows the job and chapter across explicit re
 
 for (const savedRange of [undefined, { mode: "book", start: 1, end: 80 }]) {
   test(`single-chapter job bounds preparation when saved policy range is ${savedRange ? "broader" : "missing"}`, async () => {
-    const originalCount = prisma.chapter.count;
+    const originalFindMany = prisma.chapter.findMany;
     const originalEnsureRouteWindow = ChapterRouteWindowService.prototype.ensureRouteWindow;
     const routeQueries = [];
-    prisma.chapter.count = async ({ where }) => {
-      routeQueries.push(where);
-      return [2, 3].filter(order => order >= where.order.gte && (where.order.lte == null || order <= where.order.lte)).length;
-    };
     const routeService = new ChapterRouteWindowService({
       getVolumes: async () => { throw new Error("Existing chapter 2 must not cause route generation"); },
     });
@@ -334,6 +330,15 @@ for (const savedRange of [undefined, { mode: "book", start: 1, end: 80 }]) {
         return { reviewExecuted: false, pass: true, score: { overall: 100 }, issues: [], runtimePackage: null, retryCountUsed: 0 };
       },
     });
+    const executorFindMany = prisma.chapter.findMany;
+    prisma.chapter.findMany = async query => {
+      if (query.select?.order && Object.keys(query.select).length === 1) {
+        routeQueries.push(query.where);
+        return [2, 3].filter(order => order >= query.where.order.gte
+          && (query.where.order.lte == null || order <= query.where.order.lte)).map(order => ({ order }));
+      }
+      return executorFindMany(query);
+    };
     try {
       await harness.execute();
       assert.equal(harness.jobState.status, "succeeded");
@@ -342,7 +347,7 @@ for (const savedRange of [undefined, { mode: "book", start: 1, end: 80 }]) {
       assert.deepEqual(harness.routeRequests, []);
     } finally {
       harness.restore();
-      prisma.chapter.count = originalCount;
+      prisma.chapter.findMany = originalFindMany;
     }
   });
 }

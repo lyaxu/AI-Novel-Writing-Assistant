@@ -14,6 +14,7 @@ import {
   buildDirectorAutoExecutionPausedLabel,
   buildDirectorAutoExecutionPausedSummary,
   buildDirectorAutoExecutionScopeLabelFromState,
+  isDirectorAutoExecutionRangeComplete,
   type DirectorAutoExecutionChapterRef,
   type DirectorAutoExecutionRange,
 } from "./novelDirectorAutoExecution";
@@ -108,13 +109,16 @@ export async function recordCompletedCheckpoint(
     pipelineStatus?: PipelineJobStatus | null;
   },
 ): Promise<void> {
+  if (!isDirectorAutoExecutionRangeComplete(input.range, input.autoExecution)) {
+    throw new Error("原自动执行范围仍有未完成章节，不能标记为全部完成。");
+  }
   const completedState = {
     ...input.autoExecution,
     pipelineJobId: input.pipelineJobId ?? input.autoExecution.pipelineJobId ?? null,
     pipelineStatus: input.pipelineStatus ?? input.autoExecution.pipelineStatus ?? null,
   };
   const scopeLabel = buildDirectorAutoExecutionScopeLabelFromState(completedState, input.range.totalChapterCount);
-  if (completedState.volumeChapterListComplete === false) {
+  if (completedState.mode === "volume" && completedState.volumeChapterListComplete === false) {
     await deps.workflowService.recordCheckpoint(input.taskId, {
       stage: "quality_repair",
       checkpointType: "chapter_batch_ready",
