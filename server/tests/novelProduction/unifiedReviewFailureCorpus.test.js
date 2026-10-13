@@ -7,6 +7,7 @@ const {
   referenceChapterAcceptanceAssessmentSchema,
   resolvedAcceptanceValidation,
   legacyReferenceAcceptanceValidation,
+  chapterAcceptanceAssessmentPrompt,
 } = require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts');
 const { assertReviewCompleted } = require('../../dist/services/novel/runtime/acceptance/reviewCompletion');
 
@@ -27,11 +28,11 @@ function fixtureFor(entry) {
   return { input, recorded: atPath(document, entry.outputPath) };
 }
 
-test('failure corpus enumerates fifteen immutable real responses and separates authored simulations', () => {
-  assert.equal(corpus.entries.length, 15);
-  assert.equal(corpus.counts.recordedFailures, 14);
+test('failure corpus enumerates seventeen immutable real responses and separates authored simulations', () => {
+  assert.equal(corpus.entries.length, 17);
+  assert.equal(corpus.counts.recordedFailures, 16);
   assert.equal(corpus.counts.recordedValidOriginalControls, 1);
-  assert.equal(new Set(corpus.entries.map(entry => entry.id)).size, 15);
+  assert.equal(new Set(corpus.entries.map(entry => entry.id)).size, 17);
   for (const entry of corpus.entries) {
     assert.equal(entry.origin, 'recorded_model_response');
     assert.equal(entry.manualSimulation, false);
@@ -50,8 +51,8 @@ for (const entry of corpus.entries) {
     const { input, recorded } = fixtureFor(entry);
     const inputBefore = structuredClone(input);
     const referenceWire = entry.promptVersion === 'v13' || entry.promptVersion === 'v14';
-    const schema = referenceWire ? referenceChapterAcceptanceAssessmentSchema : generatedChapterAcceptanceAssessmentSchema;
-    const validation = referenceWire ? legacyReferenceAcceptanceValidation : resolvedAcceptanceValidation;
+    const schema = entry.promptVersion === 'v15' ? chapterAcceptanceAssessmentPrompt.outputSchema : referenceWire ? referenceChapterAcceptanceAssessmentSchema : generatedChapterAcceptanceAssessmentSchema;
+    const validation = entry.promptVersion === 'v15' ? chapterAcceptanceAssessmentPrompt : referenceWire ? legacyReferenceAcceptanceValidation : resolvedAcceptanceValidation;
     assert.equal(typeof validation?.postValidate, 'function', 'Historical validation must have an explicit entrypoint');
     assert.equal(typeof validation?.postValidateFailureRecovery, 'function');
     const parsed = schema.safeParse(structuredClone(recorded));

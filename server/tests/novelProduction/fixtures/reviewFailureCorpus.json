@@ -3,8 +3,8 @@
   "scope": "Historical real review failure corpus for the approved phase-3 acceptance-contract convergence. Paths are relative to this fixtures directory; testFile paths are relative to server/tests/novelProduction. Dates and metadata are UTC.",
   "evidenceBoundary": "Raw recorded outputs remain immutable. Historical rejection codes describe the observed contract, not a literary verdict. A current migration may change error wording; do not silently invent a reviewer correction to make a sample pass. Canonical legacy tests are distinct from fresh ID-only wire tests.",
   "counts": {
-    "recordedOutputs": 15,
-    "recordedFailures": 14,
+    "recordedOutputs": 17,
+    "recordedFailures": 16,
     "recordedValidOriginalControls": 1
   },
   "entries": [
@@ -513,6 +513,46 @@
       "responseMetadataPath": "responses.1",
       "coverageGap": "Newly extracted real sample. Unified review-contract regression must consume this entry.",
       "note": "The ability row fixes retrospective timing and stateChanged=false, but all four scenes retain another state-transition inconsistency. This is not a recurring quote-copy failure."
+    },
+    {
+      "id": "second-v15-0",
+      "fixture": "secondChapterReviewV15.json",
+      "outputPath": "outputs.0",
+      "promptVersion": "v15",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": true
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "scene_action_coverage",
+        "narration_order_vs_story_time"
+      ],
+      "responseObjectSha256": "c481f36164b6f5c3029ee25c522266dae0f5ca85eb76d16eba4325c7cade07b3",
+      "diagnosticTest": "v15ReviewDiagnosis.test.js"
+    },
+    {
+      "id": "second-v15-1",
+      "fixture": "secondChapterReviewV15.json",
+      "outputPath": "outputs.1",
+      "promptVersion": "v15",
+      "origin": "recorded_model_response",
+      "manualSimulation": false,
+      "input": {
+        "fixture": "secondChapterReview.json",
+        "path": "input",
+        "restoreActualChapterIds": true
+      },
+      "expectedHistoricalDisposition": "review_incomplete",
+      "failureCategories": [
+        "prior_chapter_time_contract",
+        "dialogue_continuation_time_contract"
+      ],
+      "responseObjectSha256": "77ba3caa2cf6d6246f44da4d748bd55bf4940ea3f4f5f47898d61ba91b037b58",
+      "diagnosticTest": "v15ReviewDiagnosis.test.js"
     }
   ],
   "manualSimulations": [
