@@ -27,6 +27,17 @@ export function acceptanceOutputBudget(sceneCount: number): number {
 
 /** Deterministic projection of the AI verdict, never a second semantic classifier. */
 export function projectCausalAssessment(output: ChapterAcceptanceAssessmentOutput): ChapterAcceptanceAssessmentOutput {
+  // v16 already binds every confirmed defect to its reviewed issue and repair scope.
+  // Legacy projections would manufacture a second unbound patch (including for scope=none).
+  if (output.reviewSemanticResponse !== undefined && output.reviewFindings !== undefined) {
+    const risks = [
+      ...(output.actionStateChecks ?? []).filter(row => row.verdict !== "earned").map(row => `action_state_${row.verdict}_${row.sceneKey}`),
+      ...(output.sceneCausalityVerdicts ?? []).filter(row => row.verdict !== "earned").map(row => `scene_causality_${row.verdict}_${row.sceneKey}`),
+      ...(output.progressionChecks ?? []).filter(row => ["stalled", "insufficient_evidence"].includes(row.status)).map(row => `progression_${row.status}_${row.dimension}`),
+    ];
+    return { ...output, riskTags: [...new Set([...output.riskTags, ...risks])],
+      status: output.status === "accepted" && risks.length ? "continue_with_risk" : output.status };
+  }
   output = projectProgressionAssessment(projectActionStateAssessment(output));
   const failures = (output.sceneCausalityVerdicts ?? []).filter((row) => row.verdict !== "earned");
   if (!failures.length) return output;

@@ -18,6 +18,7 @@ export const referenceStateAssessmentSchema = actionStateDimensionCheckSchema.om
   transitionStatus: true,
   transitionEvidence: true,
   assessment: true,
+  semanticFacts: true,
 }).extend({
   beforeEvidence: references,
   afterEvidence: references,

@@ -16,6 +16,11 @@ import { referenceActionAssessmentSchema } from "./acceptance/stateAssessment";
 import { validateUnifiedAcceptance, recoverUnifiedAcceptance, unifiedExample } from "./acceptance/reviewContract";
 import { buildEvidenceCatalog } from "./acceptance/evidenceCatalog";
 import { resolveAcceptanceReferences, REFERENCE_AUDIT_RULES, BEFORE_TIMING_CONTRACT, missingReferenceTiming } from "./acceptance/referenceAssessment";
+import {
+  semanticActionAssessmentSchema, SEMANTIC_ACTION_RULES, semanticSceneSchema, SEMANTIC_SCENE_RULES,
+  reviewFindingSchema, reviewFindingRecordSchema, reviewQualityDebtSchema, REPAIR_FINDING_RULES,
+  validateSemanticAcceptance, recoverSemanticAcceptance, semanticExample,
+} from "./acceptance/semantic";
 
 const acceptanceSourceEvidenceSchema = z.object({
   source: z.enum(["current_prose", "established_context"]),
@@ -188,12 +193,14 @@ function normalizeMissingObligation(value: unknown): unknown {
 }
 
 const acceptanceRepairDirectiveSchema = z.object({
+  issueId: z.string().trim().min(1).optional(),
   mode: z.preprocess(normalizeRepairMode, z.enum(["patch", "rewrite", "manual"])),
   target: z.preprocess(normalizeRepairTarget, z.enum(["continuity", "character", "plot", "ending", "voice"])),
   instruction: z.string().trim().min(1),
 });
 
 const acceptanceMissingObligationSchema = z.preprocess(normalizeMissingObligation, z.object({
+    issueId: z.string().trim().min(1).optional(),
     kind: z.preprocess(normalizeMissingObligationKind, z.enum([
       "must_hit_now",
       "must_preserve",
@@ -227,6 +234,9 @@ export const chapterAcceptanceAssessmentSchema = z.object({
   progressionAuditIssues: z.array(z.string()).optional(),
   reviewContractIssues: z.array(z.string()).optional(),
   reviewRawResponse: z.unknown().optional(),
+  reviewFindings: z.array(reviewFindingRecordSchema).optional(),
+  reviewQualityDebt: z.array(reviewQualityDebtSchema).optional(),
+  reviewSemanticResponse: z.unknown().optional(),
   reviewCorrectionHints: z.array(z.string()).optional(),
   evidenceCatalogSnapshotId: z.string().optional(),
   evidenceReferenceIssues: z.array(z.string()).optional(),
@@ -302,6 +312,19 @@ export const unifiedChapterAcceptanceAssessmentSchema = referenceChapterAcceptan
 });
 export type UnifiedChapterAcceptanceOutput = z.infer<typeof unifiedChapterAcceptanceAssessmentSchema>;
 
+/** One semantic source per fact and repair decision; canonical UI fields are server projections. */
+export const semanticChapterAcceptanceSchema = unifiedChapterAcceptanceAssessmentSchema.omit({
+  status: true, repairability: true, reviewFindings: true, reviewQualityDebt: true, reviewSemanticResponse: true,
+}).extend({
+  actionStateChecks: z.array(semanticActionAssessmentSchema.extend({ findingIssueId: z.string().trim().min(1).optional() })).min(1).max(8),
+  sceneCausalityVerdicts: z.array(semanticSceneSchema).max(8),
+  issueChecks: z.array(reviewFindingSchema).optional(),
+  progressionChecks: z.array(unifiedChapterAcceptanceAssessmentSchema.shape.progressionChecks.element.extend({
+    findingIssueId: z.string().trim().min(1).optional(),
+  })).length(3),
+});
+export type SemanticChapterAcceptanceOutput = z.infer<typeof semanticChapterAcceptanceSchema>;
+
 export interface ChapterAcceptancePromptInput {
   chapterId?: string;
   novelTitle: string;
@@ -313,7 +336,7 @@ export interface ChapterAcceptancePromptInput {
   establishedProse?: Array<{ chapterId: string; order: number; content: string }>;
 }
 
-const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
+export const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
   status: "repairable",
   score: {
     coherence: 82,
@@ -378,6 +401,8 @@ const CHAPTER_ACCEPTANCE_EXAMPLE: ChapterAcceptanceAssessmentOutput = {
   },
   continuePolicy: "repair_once",
 };
+
+export const legacyExample = CHAPTER_ACCEPTANCE_EXAMPLE;
 
 export const resolvedAcceptanceValidation: Pick<PromptAsset<ChapterAcceptancePromptInput, ChapterAcceptanceAssessmentOutput>, "postValidate" | "postValidateFailureRecovery"> = {
   postValidateFailureRecovery: ({ rawOutput, promptInput, validationError }) => {
@@ -452,7 +477,7 @@ export const resolvedAcceptanceValidation: Pick<PromptAsset<ChapterAcceptancePro
 };
 
 /** Schema illustration only; placeholder IDs must be replaced by selections from the real catalog. */
-function referenceExample(value: unknown): unknown {
+export function referenceExample(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(referenceExample);
   if (!value || typeof value !== "object") return value;
   const record = value as Record<string, unknown>;
@@ -498,10 +523,10 @@ export const legacyReferenceAcceptanceValidation: Pick<PromptAsset<ChapterAccept
 export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ChapterAcceptancePromptInput,
   ChapterAcceptanceAssessmentOutput,
-  UnifiedChapterAcceptanceOutput
+  SemanticChapterAcceptanceOutput
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v15",
+  version: "v16",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -535,13 +560,13 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
     { group: "open_conflicts", priority: 70 },
   ],
   structuredOutputHint: {
-    example: unifiedExample(referenceExample(CHAPTER_ACCEPTANCE_EXAMPLE)),
+    example: semanticExample(),
     note: "示例只说明结构，不是当前书的事实或判断；其中占位编号必须替换为本次目录真实编号。一次判断章节接收、修文、继续策略和资产同步优先级。",
   },
-  outputSchema: unifiedChapterAcceptanceAssessmentSchema,
+  outputSchema: semanticChapterAcceptanceSchema,
   semanticRetryPolicy: { maxAttempts: 1 },
-  postValidate: (raw, input) => validateUnifiedAcceptance(raw, input),
-  postValidateFailureRecovery: ({ rawOutput, promptInput, validationError }) => recoverUnifiedAcceptance(rawOutput, promptInput, validationError),
+  postValidate: (raw, input) => validateSemanticAcceptance(raw, input),
+  postValidateFailureRecovery: ({ rawOutput, promptInput, validationError }) => recoverSemanticAcceptance(rawOutput, promptInput, validationError),
   render: (input, context) => [
     new SystemMessage([
       "你是中文长篇小说正文接收闸门。",
@@ -552,29 +577,24 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       "判断原则：",
       "1. 默认支持继续推进；普通可优化问题不要升级为暂停。",
       "2. 只有严重越过章节任务、关键连续性断裂、角色行为严重失真、受保护信息提前泄露、正文无法阅读时，才使用 needs_manual_review。",
-      "3. 可通过局部补丁解决的问题使用 repairable，并给出 repairDirectives。",
-      "4. 章节可以继续但存在后续风险时使用 continue_with_risk，并用 riskTags 说明风险。",
-      "5. blockingIssues保留所有已确认且独立的问题，每条sourceEvidence至少含一个本章证据编号；跨章冲突另附前章编号。repairDirectives逐问题覆盖，不因一次补丁容量限制省略问题。证据不足记riskTags，不把推测写成确定缺陷。",
-      "6. obligation contract 是本章硬合同。must hit now 与 forbidden crossing 缺口必须写入 missingObligations；可后续承接的 payoff、角色露面或目标变化缺口，只有会影响下一章入口时才写入 missingObligations，否则放入 riskTags。",
-      "7. repairability 只能用 none、patchable_obligation_gap、rewrite_needed、plan_misalignment。局部漏写但不阻断下一章时优先 continue_with_risk；只有需要当前章节立刻补齐时才用 patchable_obligation_gap。",
-      "8. style_contract 或反 AI 要求属于强约束；发现明显来源实体泄露、模板腔、总结腔时归入 voice。",
-      "9. assetSyncRecommendation 只判断资产同步优先级和是否需要全量伏笔对账，不要输出落库细节。",
-      "10. blockingIssues.category 只能使用 continuity、character、plot、mode_fit、voice；节奏、重复、中段铺垫、结尾钩子都归入 plot。",
-      "11. repairDirectives.target 只能使用 continuity、character、plot、ending、voice；不要输出 middle、pacing、internal_monologue、ending_tone 等自定义目标。",
-      "12. repairDirectives.mode 只能使用 patch、rewrite、manual；continuePolicy 只能使用 continue、repair_once、pause。",
-      "13. missingObligations 必须是对象数组，每项只能使用 kind、summary、evidence；不得输出字符串数组，也不得输出 obligationType、target、fixSuggestion、type 等别名字段。",
-      "14. missingObligations.kind 只能使用 must_hit_now、must_preserve、payoff_touch、character_appearance、goal_change、forbidden_crossing。",
-      "15. status 只能使用 accepted、repairable、needs_manual_review、continue_with_risk；不得输出 acceptable、pass、passed、ok、approved 等别名。",
-      "16. reader_experience 是本章读者体验合同。检查 promisedReward 是否在正文中可见、主角是否围绕 protagonistWant 主动行动并遭遇 primaryResistance、keyTurn 与 netChange 是否成立、inheritedHookResponsibilities 是否得到回应，以及 endingHook 是否产生追读力。",
-      "17. 普通读者体验缺口应输出可执行的 blockingIssues / repairDirectives，并优先使用 repairable 或 continue_with_risk；不得仅因爽点、钩子或情绪强度不足升级为 needs_manual_review 或全局重规划。",
-      "18. sceneCausalityVerdicts 必须逐一覆盖 expectedSceneKeys，每个 sceneKey 只出现一次；没有指定场景时返回空数组。每行包含 outcomeObserved（结果是否实际发生）、verdict、prerequisiteEvidence、choiceAndResistanceEvidence、outcomeMechanismEvidence、constraintEvidence、explanation。不能把‘完成必达结果’当成‘结果有合理成因’。",
-      "19. verdict 只能使用 earned（因果有正文/上下文证据支持）、unearned（结果发生但缺关键成因）、contradicted（与已知条件矛盾）、insufficient_evidence（提供的文本不足以判断）。prerequisiteEvidence 和 constraintEvidence 是简短证据数组；其他证据字段和 explanation 是字符串，各不超过240字符。说明实际片段的作用，不能抄合同当正文证据；条件不存在时数组可空，但证据不足必须明确说明缺口，不得编造引文。",
-      "20. 对 scene_causality 的每个前提对照来源核实，检查建立是否早于使用、人物动机是否支持选择、阻力方回应是否符合其能力和利益、outcomeMechanism 是否实际写出、既有及新增代价是否限制后续行动。没有战斗、没有成功、安静的关系变化均可 earned，关键是其机制成立。",
-      "21. 先给逐场证据结论，再汇总分数。unearned/contradicted 必须进入 blockingIssues 和可执行的 repairDirectives；insufficient_evidence 必须保留可追踪风险，不能因总分高而消失。局部缺口优先 repairable/continue_with_risk，遵守既有继续策略，不自行升级为全局停止。",
-      "22. 审查对象只有末尾的当前章节正文。written_evidence是早于本章的事实，任务表是计划：逐条先定位来源再判断。声称本章没有某动作/人物不知道某事之前，检查本章全部相关段落与句子限定范围；知道任务却不知道物品位置，不等于不知道任务。不能把前章交付方式替换成本章交付方式。重复事件的判定、解释、状态和修复要求须一致，保留当前真正新增的行动与人物情绪。",
+      "3. 先核实事实和上下文，再记录问题。每个修文指令与missingObligations绑定issueId；issueChecks检查已有正文支持，只有unresolved问题可执行修改。",
+      "4. status和repairability由issueChecks的repairScope汇总，不输出这两个字段；普通局部问题不应全局暂停。continuePolicy只用continue、repair_once、pause；没有已核实缺陷时继续并保留风险。",
+      "5. obligation contract是本章硬合同。must hit now与forbidden crossing的确证缺口写入missingObligations；可后续承接的缺口只有影响下一章入口才当本章缺陷，否则记riskTags。",
+      "6. style_contract及反AI要求保留；明显来源实体泄露、模板腔、总结腔归入voice。不要把措辞偏好当作事实缺陷，也不要削弱已认可的叙述声音。",
+      "7. blockingIssues.category只用continuity、character、plot、mode_fit、voice。repairDirectives.target只用continuity、character、plot、ending、voice；mode只用patch、rewrite、manual。",
+      "8. missingObligations是对象数组，每项含issueId、kind、summary、evidence；kind只用must_hit_now、must_preserve、payoff_touch、character_appearance、goal_change、forbidden_crossing。",
+      "9. reader_experience审查保留：实际回报、主动欲望与阻力、关键转折、净变化、继承悬念职责、结尾追读力。普通情绪或钩子不足只做局部建议，不据此全局重规划。",
+      "10. assetSyncRecommendation只判断优先级及是否需要全量伏笔对账，不输出落库细节。评分不能覆盖有依据的质量问题。",
+      "11. 审查当前完整正文；已写前章是事实来源但叙述位置不等于故事时间，任务表是计划。先检查相关段落是否已解释疑点，再声称人物不知道或缺动作。知道任务但不知道位置不等于完全不知道；保留当前真正新增的行动与情绪。",
       "关键行动状态审查：",
       ...CAPABILITY_AUTHORIZATION_RULES,
-      ...REFERENCE_AUDIT_RULES,
+      ...SEMANTIC_ACTION_RULES,
+      ...SEMANTIC_SCENE_RULES,
+      ...REPAIR_FINDING_RULES,
+      "actionStateChecks或sceneCausalityVerdicts有确证缺前提/矛盾（最终unearned/contradicted）时，同项findingIssueId必须绑定issueChecks中unresolved问题；先核对邻近正文是否已解决，防止重复建议。未知只保留风险。",
+      "progressionChecks的previousEvidence/currentEvidence与blockingIssues.sourceEvidence只用目录{evidenceId}。问题来源至少包含本章，跨章冲突另附前章。",
+      ...REFERENCE_AUDIT_RULES.slice(10),
+      "progressionChecks.status=stalled时findingIssueId必须指向已核实unresolved的问题，先核实已有推进为何不够再建议补文；不能让独立repairSuggestion绕开问题核验。",
       "前后章实际推进审查：",
       "正文退化检测边界：",
       ...CHAPTER_PROSE_QUALITY_AUDIT_RULES.map((rule, index) => `${index + 1}. ${rule}`),

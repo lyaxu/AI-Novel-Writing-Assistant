@@ -13,6 +13,33 @@ export const actionStateEvidenceSchema = z.object({
   end: z.number().int().nonnegative().optional(),
 });
 
+// Partial fields preserve incomplete reviews for full-context semantic correction.
+// Their presence is checked by the review contract, never guessed by JSON repair.
+const semanticFactSchema = z.object({
+  entity: stateText.optional(),
+  dimension: z.enum(["body", "item", "ability", "knowledge", "location"]).optional(),
+  claim: stateText.optional(),
+  evidence: z.array(actionStateEvidenceSchema).max(2).optional(),
+  storyTime: z.enum(["before_or_at_action", "during_or_after_action", "unknown"]).optional(),
+  support: z.enum(["supported", "contradicted", "insufficient"]).optional(),
+  reason: stateText.optional(),
+});
+
+const semanticFactsSchema = z.object({
+  before: semanticFactSchema.optional(),
+  after: semanticFactSchema.optional(),
+  prerequisite: z.object({
+    status: z.enum(["satisfied", "established", "missing", "contradicted", "unknown"]).optional(),
+    basis: semanticFactSchema.optional(),
+    reason: stateText.optional(),
+  }).optional(),
+  resultChange: z.object({
+    status: z.enum(["unchanged", "changed", "unsupported", "contradicted", "unknown"]).optional(),
+    basis: semanticFactSchema.optional(),
+    reason: stateText.optional(),
+  }).optional(),
+});
+
 export const actionStateDimensionCheckSchema = z.object({
   dimension: z.enum(["body", "item", "ability", "knowledge", "location"]),
   entity: stateText,
@@ -44,6 +71,8 @@ export const actionStateDimensionCheckSchema = z.object({
       reason: stateText,
     }),
   }).optional(),
+  // v16: source location proves provenance; these AI findings describe story time.
+  semanticFacts: semanticFactsSchema.optional(),
 });
 
 export const actionStateCheckSchema = z.object({

@@ -19,15 +19,20 @@ function source(relative, mocks = {}) {
 }
 const sharedAction = source("../../shared/types/novel/sceneCausality/actionState.ts");
 const shared = source("../../shared/types/novel/sceneCausality.ts", { "./sceneCausality/actionState.js": sharedAction });
-const evidence = source("../src/prompting/prompts/novel/acceptance/actionStateEvidence.ts");
+const evidenceCatalog = source("../src/prompting/prompts/novel/acceptance/evidenceCatalog.ts", {
+  "node:crypto": require("node:crypto"),
+});
+const semanticActions = source("../src/prompting/prompts/novel/acceptance/semantic/actionFacts.ts", {
+  "@ai-novel/shared/types/novel/sceneCausality": shared, "../evidenceCatalog": evidenceCatalog,
+});
+const evidence = source("../src/prompting/prompts/novel/acceptance/actionStateEvidence.ts", {
+  "./semantic/actionFacts": semanticActions,
+});
 const projection = source("../src/services/novel/runtime/acceptance/actionStateProjection.ts");
 const progressionSchema = source("../../shared/types/novel/progression/index.ts");
 const progressionEvidence = source("../src/prompting/prompts/novel/acceptance/progressionEvidence.ts", { "@ai-novel/shared/types/novel/progression/index": progressionSchema });
 const progressionProjection = source("../src/services/novel/runtime/acceptance/progressionProjection.ts");
 const causal = source("../src/services/novel/runtime/acceptance/causalAssessment.ts", { "./actionStateProjection": projection, "./progressionProjection": progressionProjection });
-const evidenceCatalog = source("../src/prompting/prompts/novel/acceptance/evidenceCatalog.ts", {
-  "node:crypto": require("node:crypto"),
-});
 const referenceAssessment = source("../src/prompting/prompts/novel/acceptance/referenceAssessment.ts", {
   "./evidenceCatalog": evidenceCatalog,
 });
@@ -41,6 +46,17 @@ const reviewContract = source("../src/prompting/prompts/novel/acceptance/reviewC
   "./evidenceCatalog": evidenceCatalog, "./referenceAssessment": referenceAssessment,
   "./stateAssessment": stateAssessment, "./reviewDiagnostics": reviewDiagnostics,
   "./actionStateEvidence": evidence,
+});
+const semanticScenes = source("../src/prompting/prompts/novel/acceptance/semantic/sceneFindings.ts", {
+  "../evidenceCatalog": evidenceCatalog,
+});
+const repairFindings = source("../src/prompting/prompts/novel/acceptance/semantic/repairFindings.ts", {
+  "../evidenceCatalog": evidenceCatalog,
+});
+const semanticReview = source("../src/prompting/prompts/novel/acceptance/semantic/reviewContract.ts", {
+  "../evidenceCatalog": evidenceCatalog, "../referenceAssessment": referenceAssessment,
+  "../reviewDiagnostics": reviewDiagnostics, "./actionFacts": semanticActions,
+  "./sceneFindings": semanticScenes, "./repairFindings": repairFindings,
 });
 const rawPrompts = source("../src/prompting/prompts/novel/chapterAcceptance.prompts.ts", {
   "@ai-novel/shared/types/novel/sceneCausality": shared,
@@ -58,6 +74,7 @@ const rawPrompts = source("../src/prompting/prompts/novel/chapterAcceptance.prom
   "./acceptance/stateAssessment": stateAssessment,
   "./acceptance/reviewDiagnostics": reviewDiagnostics,
   "./acceptance/reviewContract": reviewContract,
+  "./acceptance/semantic": { ...semanticActions, ...semanticScenes, ...repairFindings, ...semanticReview },
 });
 // Quote-based fixtures exercise resolved validation; the production ID-only wire has separate tests.
 const { asset: resolvedAsset, productionAsset } = require("./novelProduction/resolvedAcceptanceHarness.cjs")
@@ -313,8 +330,8 @@ test("fresh prompt has a full compact state example, relevant dimensions only, a
   const example = JSON.parse(String(messages.at(-1).content).split("示例：\n").at(-1));
   const parsedExample = prompt.outputSchema.safeParse(example);
   assert.equal(parsedExample.success, true, JSON.stringify(parsedExample.error?.issues));
-  assert.match(String(rendered[0].content), /一般1—2项/);
-  assert.match(String(rendered[0].content), /计划、摘要、场景卡不属于事实证据目录/);
+  assert.match(String(rendered[0].content), /before\/after及两个basis都使用同一事实结构/);
+  assert.match(String(rendered[0].content), /编号只证明引用来源，不自动证明主体、维度、事实或时间正确/);
   assert.equal(causal.acceptanceOutputBudget(3), 10368);
   assert.equal(causal.acceptanceOutputBudget(100), 18048);
 });

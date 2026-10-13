@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const { chapterAcceptanceAssessmentPrompt: asset } = require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts');
+const { asset, productionAsset, unifiedChapterAcceptanceAssessmentSchema } = require('./legacyUnifiedHarness.cjs');
 const { buildEvidenceCatalog } = require('../../dist/prompting/prompts/novel/acceptance/evidenceCatalog');
 const { assertReviewCompleted } = require('../../dist/services/novel/runtime/acceptance/reviewCompletion');
 const { projectActionStateAssessment } = require('../../dist/services/novel/runtime/acceptance/actionStateProjection');
@@ -39,7 +39,9 @@ function response() {
 function validate(raw, promptInput = input) { return asset.postValidate(asset.outputSchema.parse(raw), promptInput); }
 
 test('v15 completes hand-authored key transfer through separate prerequisite and result findings', () => {
-  assert.equal(asset.version, 'v15');
+  assert.equal(asset.version, productionAsset.version, 'Runner identity remains registered; the test binds historical v15 hooks');
+  assert.equal(asset.outputSchema, unifiedChapterAcceptanceAssessmentSchema);
+  assert.notEqual(asset, productionAsset);
   const output = validate(response()); assert.doesNotThrow(() => assertReviewCompleted(output));
   const check = output.actionStateChecks[0], state = check.states[0];
   assert.equal(check.verdict, 'earned'); assert.equal(state.enablingTransitionRequired, false);

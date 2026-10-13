@@ -7,12 +7,24 @@ const {
   referenceChapterAcceptanceAssessmentSchema,
   resolvedAcceptanceValidation,
   legacyReferenceAcceptanceValidation,
-  chapterAcceptanceAssessmentPrompt,
 } = require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts');
+const { asset: legacyUnifiedAsset, productionAsset } = require('./legacyUnifiedHarness.cjs');
 const { assertReviewCompleted } = require('../../dist/services/novel/runtime/acceptance/reviewCompletion');
 
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const atPath = (value, path) => path.split('.').reduce((node, key) => node[key], value);
+
+test('v15 historical replay has its own schema and cannot masquerade as fresh v16 output', () => {
+  assert.notEqual(legacyUnifiedAsset, productionAsset);
+  assert.equal(legacyUnifiedAsset.version, productionAsset.version);
+  assert.notEqual(legacyUnifiedAsset.outputSchema, productionAsset.outputSchema);
+  for (const entry of corpus.entries.filter(row => row.promptVersion === 'v15')) {
+    const { recorded } = fixtureFor(entry);
+    assert.equal(legacyUnifiedAsset.outputSchema.safeParse(recorded).success, true);
+    assert.equal(productionAsset.outputSchema.safeParse(recorded).success, false);
+    assert.equal(hash(recorded), entry.responseObjectSha256);
+  }
+});
 
 function fixtureFor(entry) {
   const document = require(`./fixtures/${entry.fixture}`);
@@ -51,8 +63,8 @@ for (const entry of corpus.entries) {
     const { input, recorded } = fixtureFor(entry);
     const inputBefore = structuredClone(input);
     const referenceWire = entry.promptVersion === 'v13' || entry.promptVersion === 'v14';
-    const schema = entry.promptVersion === 'v15' ? chapterAcceptanceAssessmentPrompt.outputSchema : referenceWire ? referenceChapterAcceptanceAssessmentSchema : generatedChapterAcceptanceAssessmentSchema;
-    const validation = entry.promptVersion === 'v15' ? chapterAcceptanceAssessmentPrompt : referenceWire ? legacyReferenceAcceptanceValidation : resolvedAcceptanceValidation;
+    const schema = entry.promptVersion === 'v15' ? legacyUnifiedAsset.outputSchema : referenceWire ? referenceChapterAcceptanceAssessmentSchema : generatedChapterAcceptanceAssessmentSchema;
+    const validation = entry.promptVersion === 'v15' ? legacyUnifiedAsset : referenceWire ? legacyReferenceAcceptanceValidation : resolvedAcceptanceValidation;
     assert.equal(typeof validation?.postValidate, 'function', 'Historical validation must have an explicit entrypoint');
     assert.equal(typeof validation?.postValidateFailureRecovery, 'function');
     const parsed = schema.safeParse(structuredClone(recorded));

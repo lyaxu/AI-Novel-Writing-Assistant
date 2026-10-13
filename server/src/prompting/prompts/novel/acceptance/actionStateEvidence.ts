@@ -1,4 +1,5 @@
 import type { ActionStateCheck, ActionStateEvidence, SceneCausalityVerdict } from "@ai-novel/shared/types/novel/sceneCausality";
+import { auditSemanticState } from "./semantic/actionFacts";
 
 export interface ActionStateEvidenceInput {
   chapterId?: string;
@@ -78,6 +79,10 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
         : [`${checkField}.actionEvidence`];
       for (const field of wrongRoleFields) correctionHints.push(`${field}：关键行动必须由本章current_prose证明，前章事实不能作为本次行动的定位锚点；从本章引用实际行动，不要只改来源标签。`);
     }
+    if (check.states.some(state => state.semanticFacts) && check.actionEvidence.length !== 1) {
+      invalid.push("semantic_action_requires_single_anchor");
+      correctionHints.push(`${checkField}.actionEvidence：每场只选一个明确的原子行动及1条本章目录证据；不能拼接多个时刻来放宽前提或结果的时间边界。`);
+    }
     // No position comparison until every action anchor has a verified current-prose source.
     const actionLocated = check.actionEvidence.length > 0
       && check.actionEvidence.every(item => item.source === "current_prose" && isFact(item));
@@ -90,6 +95,34 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
       const key = `${state.dimension}:${state.entity}`;
       if (entities.has(key)) invalid.push(`duplicate_state:${key}`);
       entities.add(key);
+      if (state.semanticFacts) {
+        const facts = state.semanticFacts;
+        const roles = [
+          { name: "before", fact: facts.before, current: false },
+          { name: "after", fact: facts.after, current: true },
+          { name: "prerequisite.basis", fact: facts.prerequisite?.basis,
+            current: facts.prerequisite?.status === "established" },
+          { name: "resultChange.basis", fact: facts.resultChange?.basis, current: true },
+        ];
+        for (const role of roles) {
+          const evidence = role.fact?.evidence ?? [];
+          explainSources(evidence, `${field}.${role.name}.evidence`);
+          if (evidence.some(item => !isFact(item))) invalid.push(`unverified_semantic_source:${key}:${role.name}`);
+          if (role.current && evidence.some(item => item.source !== "current_prose")) {
+            invalid.push(`semantic_role_requires_current_prose:${key}:${role.name}`);
+            correctionHints.push(`${field}.${role.name}.evidence：该角色须由本章正文支持，前章只能证明既有事实，不能独自证明本次行动或本章建立的前提；选择本章对应evidenceId，不改来源标签。`);
+          }
+        }
+        const audit = auditSemanticState(state, field);
+        invalid.push(...audit.problems);
+        correctionHints.push(...audit.problems);
+        contradiction ||= audit.contradiction;
+        missing ||= audit.missing;
+        unknown ||= audit.unknown;
+        // v16 facts are authoritative. Offsets locate exact citations only; none of
+        // the legacy narrative-position rules below may decide their story time.
+        continue;
+      }
       const cited = [...state.beforeEvidence, ...state.afterEvidence, ...state.transitionEvidence];
       if (cited.some((item) => !isFact(item))) invalid.push(`unverified_source:${key}`);
       for (const role of (state.assessment ? ["beforeEvidence", "afterEvidence"] : ["beforeEvidence", "afterEvidence", "transitionEvidence"]) as Array<"beforeEvidence" | "afterEvidence" | "transitionEvidence">) {

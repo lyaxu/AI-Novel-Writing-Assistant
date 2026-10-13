@@ -164,9 +164,12 @@ test('unknown story timing cannot remain earned even when all reference IDs are 
   assert.throws(() => asset.postValidate(asset.outputSchema.parse(raw), input), /earned_without_state_evidence/);
 });
 
-test('v14 model-facing example shows complete timing shape and retains string scene explanations', () => {
+test('historical v14 timing contract and example retain complete timing shape and string scene explanations', () => {
   const prepared = preparePromptExecution({ asset, promptInput: input });
-  const text = prepared.messages.map(message => String(message.content)).join('\n');
+  // The current production render belongs to v16. Audit the preserved historical
+  // rules and explicit legacy example, never reconstruct v14 from v16 output.
+  const { BEFORE_TIMING_CONTRACT, REFERENCE_AUDIT_RULES } = require('../../dist/prompting/prompts/novel/acceptance/referenceAssessment');
+  const text = [BEFORE_TIMING_CONTRACT, ...REFERENCE_AUDIT_RULES].join('\n');
   assert.match(text, /beforeEvidenceTiming/);
   assert.match(text, /before_or_at_action/);
   assert.match(text, /retrospective_prior_state/);

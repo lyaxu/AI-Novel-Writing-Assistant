@@ -1,6 +1,6 @@
 // Captured regression evidence, not a product fix or a successful semantic review.
 const test=require('node:test'),assert=require('node:assert/strict');
-const {chapterAcceptanceAssessmentPrompt:asset}=require('../../dist/prompting/prompts/novel/chapterAcceptance.prompts');
+const {asset}=require('./legacyUnifiedHarness.cjs');
 const {assertReviewCompleted}=require('../../dist/services/novel/runtime/acceptance/reviewCompletion');
 const fixture=require('./fixtures/secondChapterReviewV15.json');
 const input={...require('./fixtures/secondChapterReview.json').input,chapterId:fixture.provenance.chapterId};
