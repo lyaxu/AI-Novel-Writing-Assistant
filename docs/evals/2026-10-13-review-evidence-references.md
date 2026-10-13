@@ -35,3 +35,9 @@
 记录链：[CURRENT](../handoffs/CURRENT.md)、[台账](../handoffs/WORK_LEDGER.md)、[批准方案](../plans/2026-10-11-production-core-refactor.md)、[稳定规则](../wiki/workflows/chapter-review-resume.md)。
 
 加载预检：本轮restart脚本CheckOnly exit0，源码、目标进程身份、原任务/正文及对照服务快照均通过，未停止或启动进程。最终manifest在提交后绑定该提交，旧服务仍待用户管理员加载。
+
+## 07:23 UTC加载核验完成
+
+用户管理员重启成功；07:23 UTC实时核验旧后端50604/f2772d5f9c35/acceptance v13/stale=false，33项源码hash及原job prepareDirector通过。首章3013字、第二章3652字hash不变，原review人工暂停、范围/预算/账本committed保留，模型记录仍24、活跃工作0；新版5173关闭、8787及旧前端身份不变。用户可在第二章源工作区F5后点一次继续自动导演，无需再次重启。真实v13审查及固定版本十章仍待验。
+
+重启日志显示07:13:34.250Z启动，07:13:38重启后原任务预检通过；07:23:44再次只读核验通过。证据位于本轮私有目录的restart-last.log、verified-loaded-health.json、live-preflight.json、protected-services-before/after.json。复用f2772d5f已通过的105项封网及shared/server编译，生产源码33项hash未变；本轮只更新运行记录，不重复测试、更新发布说明或新增wiki规则。后续文档提交与运行代码HEAD不同不代表源码陈旧，以stale及源码hash为准。
