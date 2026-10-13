@@ -32,3 +32,11 @@
 加载核验通过后，在[原书章节工作区](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv3wvaqm000sgow0l5or2pke&stage=chapter&chapterId=cmv3x2mt800jtgow0la32yn38)刷新，核对已完成2/3章与剩余章节，再点一次“继续自动导演”。沿原任务推进剩余章，不重跑第二章审查，不新建导演，不从运行记录操作。
 
 统一记录见 CURRENT、WORK_LEDGER、批准方案和恢复 wiki。断线续作与书内 agent 仍保留在原设计文档，未混入本次实施。
+
+## 已加载并核验
+
+2026-10-13 17:55 UTC（用户时区13:55）最终核验：代码提交103f19c63cad，server编译成功；按原隔离配置仅重载旧后端3000，PID42432，应用启动17:54:25.735Z。5190代理health正常、source模式、stale=false，70项源码/共享产物hash通过；旧前端5190/PID41368身份不变，新版5173/8787保持关闭。
+
+实际书级只读GET返回原导演waiting_recovery、pendingManualRecovery=true、2/3（67%），原范围1—3与原任务入口正确；接口读取前后再次只读SQLite核对原seed/hash、两章、原成功job状态/次数、6项入账及42调用不变，活跃工作0，代理模型调用0。未发送继续命令。真实snapshot GET涉及既有卷工作区hydrate路径，未把它当纯读探针；该快照链由离线替身覆盖，UI留给用户验收。
+
+证据：source-manifest.json、health-loaded.json、book-automation-loaded.json、postload-state.log、final-verification.json及重启日志。无需用户手动重启，可从上文原章节工作区刷新后一次继续；这次接续下一缺章规划/写作，第二章审查保持完成。本段仅同步运行证据，复用794项服务端通过（2既有skip）、12项客户端通过及server编译，不重复构建或重启。
