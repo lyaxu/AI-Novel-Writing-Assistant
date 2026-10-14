@@ -43,3 +43,13 @@
 真实只读规划恢复GET确认原任务waiting_confirmation、pendingManualRecovery=true、2/2且recoveryRequest为空；书级GET也已读取留证。两接口前后只读SQLite核验原seed/候选、已写两章、空第三章、资源、原job及51调用不变，活跃0、代理模型调用0。没有发出恢复命令，不重置次数。无需用户运行启动脚本，从上文原书规划面板明确追加修复即可。
 
 证据在本轮私有目录：source-manifest.json、health-loaded.json、planning-repair-loaded.json、book-automation-loaded.json、baseline.json、verified-state.json、loaded-process.json及新服务日志。此次收尾只同步运行事实，复用1137项组合通过（2既有skip）、最终49项相关检查及编译，不重复构建或重载；其后文档提交不改变已加载代码。
+
+## 10-14用户授权后秒停：执行衔接未通过
+
+用户截图2026-10-14 00:00:16显示2/3轮和“继续已授权修复”，上方报执行约定/所有权变化。UTC04:58:46.131的POST返回202，原请求86b7d1f1-7317-4326-8fa1-ce855243c93d已授权且仍保留，rounds2/maxRounds3。命令成功派发，新job cmv7n3mug000240w0aj5dvutf在04:58:46.504创建、.589失败；修复AI尚未运行，调用51不变。
+
+05:02只读SQLite与代码确认：第三章active production journal仍为pipeline:cmv7le2h30004qow0s4f66mfr:cmv7le2dq0002qow0mxfnhkt8，status=paused。新job以新operation进入runPipelineChapter，replaceCompletedOnly=true，session.open拒绝覆盖未完成journal。旧prepare.execution_contract记录unknown，错误实为“已完成2轮修正，规划仍未通过复核”；恢复设计还须区分这个已确认规划结论与真正不确定的外部调用，不能简单清journal、解锁或置为completed。
+
+原导演queued/pendingManualRecovery=1，checkpoint chapter_batch_ready承载冲突说明；repair仍reviewing/2/3且recoveryAction保留。前两章3013/3680字及hash不变，第三章空。此次不是用户少点一步，也不是新修复提示词再次失败；已通过的原离线组未覆盖“真实旧job规划暂停journal→明确授权→新job接续”组合，应补该链并校验重复点击和未知调用保护。暂不建议用户点“继续已授权修复”，不追加新一轮。
+
+证据：同一私有目录granted-stop-state.json、inspect-granted-stop.cjs、原服务log及用户本地截图。本轮仅诊断与文档同步，未写真实DB、调用模型、重启或修改产品代码；不把本次记录当修复完成。主线仍为阶段3规划、审查、可靠保存与恢复一致性，十章未通过。
