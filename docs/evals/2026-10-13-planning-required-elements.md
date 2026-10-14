@@ -35,3 +35,11 @@
 建议方向：以已写正文为准，修正所有重复已完成事件的必达事项，保留原叙事职责和回报；同步核对必达事项、场景、禁止事项与回收引用，不改已写正文，不扩大章节范围。
 
 只复核旧候选不能改正旧必达事项，普通“继续自动导演”也不能绕过2/2预算。代理不代替用户授权或点击。代码级验证不保证真实模型下一答一定通过；有依据的冲突仍应保留门禁。
+
+## 已加载并核验
+
+2026-10-14 04:52 UTC（用户时区10-13 23:52）完成旧版受控加载：代码25c77110a7bc，旧后端3000/PID39024，应用启动04:51:57.366Z；经5190代理health核对source模式、stale=false、75项源码/共享产物SHA256通过。旧前端41368/5190身份不变，新版5173/8787保持关闭。
+
+真实只读规划恢复GET确认原任务waiting_confirmation、pendingManualRecovery=true、2/2且recoveryRequest为空；书级GET也已读取留证。两接口前后只读SQLite核验原seed/候选、已写两章、空第三章、资源、原job及51调用不变，活跃0、代理模型调用0。没有发出恢复命令，不重置次数。无需用户运行启动脚本，从上文原书规划面板明确追加修复即可。
+
+证据在本轮私有目录：source-manifest.json、health-loaded.json、planning-repair-loaded.json、book-automation-loaded.json、baseline.json、verified-state.json、loaded-process.json及新服务日志。此次收尾只同步运行事实，复用1137项组合通过（2既有skip）、最终49项相关检查及编译，不重复构建或重载；其后文档提交不改变已加载代码。
