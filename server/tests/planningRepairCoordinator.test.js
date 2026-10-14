@@ -9,6 +9,7 @@ const ts = require("typescript");
 // Block every DB/model boundary before loading the coordinator; all execution below is in-memory.
 const coordinatorSource = path.resolve(__dirname, "../src/services/novel/volume/planningRepair/PlanningRepairCoordinator.ts");
 const imports = {
+  "@ai-novel/shared/types/chapterLengthControl": require("@ai-novel/shared/types/chapterLengthControl"),
   "../planningPromises": { projectPlanningHorizon: () => ({ readonlyOpeningRoutes: [], readonlyPlanningHorizon: {} }) },
   "../../../../prompting/core/promptRunner": { runStructuredPrompt: () => { throw new Error("Unexpected live model call"); } },
   "../../../../prompting/prompts/novel/volume/planningRepair.prompts": require("../dist/prompting/prompts/novel/volume/planningRepair.prompts.js"),

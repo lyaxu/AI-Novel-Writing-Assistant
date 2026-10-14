@@ -2,6 +2,29 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const http = require("node:http");
 const express = require("express");
+const { Writable } = require("node:stream");
+const { Socket } = require("node:net");
+
+// Exercise the actual Express middleware/router without binding a port or opening a socket.
+function inMemoryHttp(app) {
+  return async (url, options = {}) => {
+    const req = new http.IncomingMessage(new Socket());
+    req.method = options.method ?? "GET";
+    req.url = new URL(url).pathname;
+    req.headers = Object.fromEntries(Object.entries(options.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v]));
+    if (options.body) req.headers["content-length"] = Buffer.byteLength(options.body).toString();
+    const res = new http.ServerResponse(req);
+    res.assignSocket(new Writable({ write(_chunk, _encoding, done) { done(); } }));
+    const finished = new Promise((resolve, reject) => {
+      res.once("finish", () => resolve({ status: res.statusCode }));
+      res.once("error", reject);
+    });
+    if (options.body) req.push(options.body);
+    req.push(null);
+    app.handle(req, res);
+    return finished;
+  };
+}
 const useSource = process.env.PLANNING_REPAIR_TEST_SOURCE === "1";
 if (useSource) {
   const ts = require("typescript");
@@ -433,9 +456,8 @@ test("HTTP handlers validate guidance and idempotency, GET is read-only, pause n
   };
   const commands = { enqueuePlanningRepairRecoveryCommand: async (...args) => { calls.push(["dispatch", ...args]); return { commandId: "command-1" }; } };
   const app = express(); app.use(express.json()); app.use(createPlanningRepairRouter(recovery, commands)); app.use(errorHandler);
-  const server = http.createServer(app);
-  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-  const url = `http://127.0.0.1:${server.address().port}`;
+  const fetch = inMemoryHttp(app);
+  const url = "http://offline.test";
   const post = body => fetch(`${url}/task-1/planning-repair/actions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   try {
     assert.equal((await fetch(`${url}/task-1/planning-repair`)).status, 200);
@@ -451,7 +473,7 @@ test("HTTP handlers validate guidance and idempotency, GET is read-only, pause n
     assert.equal(calls.filter(c => c[0] === "dispatch").length, 0);
     assert.equal((await post({ action: "retry", repairKey: "repair-1", guidance: "Valid", idempotencyKey: "id" })).status, 202);
     assert.deepEqual(calls.at(-1), ["dispatch", "task-1", "repair-1", "id"]);
-  } finally { await new Promise(resolve => server.close(resolve)); }
+  } finally { /* No listener or network resources to close. */ }
 });
 
 test("advice HTTP separates read, paid request and adoption and dispatches the server-owned recovery key", async () => {
@@ -463,9 +485,8 @@ test("advice HTTP separates read, paid request and adoption and dispatches the s
   };
   const commands = { enqueuePlanningRepairRecoveryCommand: async (...args) => { calls.push(["dispatch", ...args]); return { commandId: "c" }; } };
   const app = express(); app.use(express.json()); app.use(createPlanningRepairRouter({}, commands, advice)); app.use(errorHandler);
-  const server = http.createServer(app);
-  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-  const url = `http://127.0.0.1:${server.address().port}/task-1/planning-repair/advice`;
+  const fetch = inMemoryHttp(app);
+  const url = "http://offline.test/task-1/planning-repair/advice";
   const post = (suffix, body) => fetch(`${url}${suffix}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   try {
     assert.equal((await fetch(url)).status, 200);
@@ -476,5 +497,5 @@ test("advice HTTP separates read, paid request and adoption and dispatches the s
     assert.equal((await post("/select", { ...selection, guidance: "tampered" })).status, 400);
     assert.equal((await post("/select", selection)).status, 202);
     assert.deepEqual(calls.at(-1), ["dispatch", "task-1", "r", "advice:a:option"]);
-  } finally { await new Promise(resolve => server.close(resolve)); }
+  } finally { /* No listener or network resources to close. */ }
 });

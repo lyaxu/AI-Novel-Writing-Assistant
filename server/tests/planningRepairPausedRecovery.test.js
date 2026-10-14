@@ -25,6 +25,10 @@ const seedTools = source("../src/services/novel/director/recovery/planningRepair
   "@ai-novel/shared/types/planningRepair/recovery": policy,
 });
 let readRow;
+const pipelinePause = source("../src/services/novel/director/recovery/pipelinePause/index.ts", {
+  "../../../../../db/prisma": { prisma: new Proxy({}, { get: () => { throw new Error("Unexpected pipeline lookup for a repair without an attached job"); } }) },
+  "../../../workflow/novelWorkflow.shared": { buildNovelEditResumeTarget: input => input },
+});
 const { PlanningRepairRecoveryService } = source("../src/services/novel/director/recovery/planningRepair/PlanningRepairRecoveryService.ts", {
   "../../../../../db/prisma": { prisma: { novelWorkflowTask: { findUnique: async () => readRow } } },
   "../../../../../middleware/errorHandler": { AppError },
@@ -33,6 +37,7 @@ const { PlanningRepairRecoveryService } = source("../src/services/novel/director
   "./planningRepairRecovery": seedTools,
   "../../../volume/planningRepair/PlanningRepairStore": {},
   "@ai-novel/shared/types/planningRepair/recovery": policy,
+  "../pipelinePause": pipelinePause,
 });
 const { assertAdvicePaused } = source("../src/services/novel/director/recovery/planningRepair/advice/AdviceSource.ts", {
   "../../../../../../middleware/errorHandler": { AppError },

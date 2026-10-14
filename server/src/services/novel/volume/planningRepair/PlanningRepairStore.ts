@@ -40,6 +40,8 @@ export interface PlanningRepairState {
   quality?: unknown;
   history: unknown[];
   obligationMoves?: unknown[];
+  /** Only mappings saved atomically with the repaired candidate; proposed output is history only. */
+  requiredElementRevisions?: unknown[];
   guidance?: string;
   recoveryAction?: { requestId: string; mode: "repair_then_review" | "review_existing"; paidRound?: number; affectedChapterIds?: string[] };
   technicalError?: string;
@@ -898,7 +900,7 @@ export class PlanningRepairStore {
           ? [{ kind: "abandoned_previous", abandonedAt: previous.abandonedAt, abandonedRounds: previous.abandonedRounds,
             reason: previous.abandonReason, technicalError: previous.technicalError }]
           : [],
-        quality: null, obligationMoves: [],
+        quality: null, obligationMoves: [], requiredElementRevisions: [],
         ...(stale || !eligible.length ? { summary: "Planning source is stale or the chapter is protected." } : {}),
       };
       const snapshot: StoredSnapshot = {
@@ -959,7 +961,7 @@ export class PlanningRepairStore {
       const state: PlanningRepairState = {
         ...previous, phase: candidate ? "reviewing" : "assessing", pendingOperation: undefined,
         quality: undefined, technicalError: undefined,
-        ...(changed ? { candidateVersionId: undefined, affectedChapterIds: undefined, obligationMoves: [], repairOutputPending: undefined } : {}),
+        ...(changed ? { candidateVersionId: undefined, affectedChapterIds: undefined, obligationMoves: [], requiredElementRevisions: [], repairOutputPending: undefined } : {}),
       };
       const raw = await casSeed(tx, task, { ...seed, planningRepair: state, [SNAPSHOT_KEY]: nextSnapshot });
       return { session: this.session(state, nextSnapshot, candidate), raw, owner: hash(executionIdentity(task)) };

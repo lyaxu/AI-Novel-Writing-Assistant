@@ -428,6 +428,7 @@ test("proven advice source conflict releases only its unspent reservation; unkno
     "../../../../../db/prisma": {}, "../../../../../middleware/errorHandler": { AppError: Error },
     "../../../workflow/NovelWorkflowService": {}, "../../../workflow/novelWorkflow.shared": {},
     "./planningRepairRecovery": reader, "../../../volume/planningRepair/PlanningRepairStore": {},
+    "../pipelinePause": { readPipelinePauseProjection: async () => { throw new Error("Grant must not read a status projection"); } },
   });
   async function attempt(proven) {
     const seed = { planningRepair: { version: 1, key: "r", novelId: "n", volumeId: "v", chapterId: "c1", phase: "waiting_confirmation", rounds: 2, maxRounds: 2, history: [] },

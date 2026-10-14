@@ -1,12 +1,13 @@
 import type { VolumeChapterPlan, VolumePlanDocument } from "@ai-novel/shared/types/novel";
 import type { ChapterTaskSheetQualityGateResult } from "@ai-novel/shared/types/chapterTaskSheetQuality";
+import { parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
 import { runStructuredPrompt } from "../../../../prompting/core/promptRunner";
 import { planningRepairPrompt, planningRepairReviewPrompt } from "../../../../prompting/prompts/novel/volume/planningRepair.prompts";
 import { ChapterTaskSheetQualityGateService } from "../ChapterTaskSheetQualityGateService";
 import { buildVolumeWorkspaceDocument } from "../volumeWorkspaceDocument";
 import type { VolumeGenerateOptions } from "../volumeModels";
 import { PlanningRepairStore, type RepairSession } from "./PlanningRepairStore";
-import { applyPlanningRepairCandidate, mergeAppliedPlanningRepairObligations, planningRepairOutputSchema } from "./planningRepairDomain";
+import { applyPlanningRepairCandidate, mergeAppliedPlanningRepairObligations, mergeAppliedPlanningRepairRequiredElements, planningRepairOutputSchema } from "./planningRepairDomain";
 import { projectPlanningHorizon } from "../planningPromises";
 import { buildReviewIssueHistory } from "./domain/reviewIssueHistory";
 
@@ -262,7 +263,8 @@ export class PlanningRepairCoordinator {
     let candidate: VolumePlanDocument;
     try {
       candidate = applyPlanningRepairCandidate(session.candidate, input.volumeId,
-        session.state.affectedChapterIds ?? [input.chapterId], parsed.data, session.state.obligationMoves ?? []);
+        session.state.affectedChapterIds ?? [input.chapterId], parsed.data, session.state.obligationMoves ?? [],
+        session.state.requiredElementRevisions ?? []);
     } catch (error) {
       return this.rejectRepairOutput(session, error instanceof Error ? error.message : "候选规划未通过边界校验。");
     }
@@ -272,6 +274,7 @@ export class PlanningRepairCoordinator {
     });
     await this.save(session, {
       phase: "reviewing", repairOutputPending: undefined, quality: { chapters: {} }, obligationMoves: mergeAppliedPlanningRepairObligations(session.state.obligationMoves ?? [], parsed.data.obligationMoves),
+      requiredElementRevisions: mergeAppliedPlanningRepairRequiredElements(session.state.requiredElementRevisions ?? [], parsed.data.changes),
       ...(session.state.recoveryAction?.paidRound === session.state.rounds ? { recoveryAction: undefined } : {}),
       summary: `正在复核第${session.state.chapterOrder}章起的规划，第${session.state.rounds}/${session.state.maxRounds}轮`,
     }, refreshDerived(candidate));
@@ -338,6 +341,9 @@ export class PlanningRepairCoordinator {
       currentObligationReferences: chaptersOf(session.candidate!, input.volumeId).filter(c => ids.includes(c.id))
         .map(c => ({ chapterId: c.id, payoffRefs: c.payoffRefs })),
       appliedObligationMoves: session.state.obligationMoves ?? [],
+      currentRequiredElements: chaptersOf(session.candidate!, input.volumeId).filter(c => ids.includes(c.id))
+        .map(c => ({ chapterId: c.id, requiredElements: parseChapterScenePlan(c.sceneCards, { targetWordCount: c.targetWordCount })?.requiredElements ?? [] })),
+      appliedRequiredElementRevisions: session.state.requiredElementRevisions ?? [],
       assessment: { original: firstAssessment?.result ?? review, current: review }, obligationMoves: session.state.obligationMoves ?? [],
       issueHistoryByChapter: Object.fromEntries(ids.map(id => [id,
         buildReviewIssueHistory(currentEvidenceHistory(session), id)])),

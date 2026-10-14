@@ -16,8 +16,10 @@ const prisma = new Proxy({}, {
   },
 });
 const originalLoad = Module._load;
+const offlineExports = { prisma };
 Module._load = function(id, parent, ...rest) {
-  if (Module._resolveFilename(id, parent) === target) return { prisma };
+  // Preserve CommonJS module identity, including explicitly installed in-memory test adapters.
+  if (Module._resolveFilename(id, parent) === target) return require.cache[target]?.exports ?? offlineExports;
   return originalLoad.call(this, id, parent, ...rest);
 };
 global.fetch = blocked('fetch');

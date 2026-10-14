@@ -3,6 +3,8 @@ import { preserveGeneratedContentConstraints } from "../../../../llm/generatedCo
 import type { VolumeChapterPlan, VolumePlanDocument } from "@ai-novel/shared/types/novel";
 import { normalizeChapterScenePlan, parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
 import { createChapterTaskSheetSchema } from "../chapterDetail/chapterDetailSchemas";
+import { requiredElementRevisionSchema, applyRequiredElementRevisions } from "./domain/requiredElementRevisions";
+export { mergeAppliedPlanningRepairRequiredElements } from "./domain/requiredElementRevisions";
 
 const requiredText = z.string().trim().min(1);
 const contractText = requiredText.max(240);
@@ -25,6 +27,7 @@ export const planningRepairChangeSchema = z.object({
   payoffRefs: z.array(requiredText.max(160)).max(8),
   sceneCards: taskSheetShape.sceneCards,
   readerExperience: taskSheetShape.readerExperience,
+  requiredElementRevisions: z.array(requiredElementRevisionSchema).max(8).optional(),
 }).strict();
 
 export const planningRepairOutputSchema = preserveGeneratedContentConstraints(z.object({
@@ -123,6 +126,7 @@ export function applyPlanningRepairCandidate(
   allowedIds: readonly string[],
   output: PlanningRepairOutput,
   previouslyAppliedObligations: readonly unknown[] = [],
+  previouslyAppliedRequiredElements: readonly unknown[] = [],
 ): VolumePlanDocument {
   const parsed = planningRepairOutputSchema.parse(output);
   const priorMoves = appliedMoves(previouslyAppliedObligations);
@@ -193,15 +197,15 @@ export function applyPlanningRepairCandidate(
     if (comparable(change.endingState) === comparable(change.nextChapterEntryState)) {
       throw new Error(`Planning repair chapter ${chapter.id} repeats its ending as the next entry state.`);
     }
-    // A repair patch carries scenes and reader experience only — `planningRepairChangeSchema` has
-    // no field for the chapter's minimum event list. Rebuilding the plan without it silently
-    // erased that list, and the chapter that came out of a repair was exactly the one with nothing
-    // required to happen in it. Carry the existing list forward; the patch may not rewrite it.
+    // Legacy output preserves the complete minimum-event list. Explicit mappings may correct an
+    // obsolete implementation, with mandatory subsequent AI review of the retained narrative duty.
     const existingPlan = parseChapterScenePlan(chapter.sceneCards, { targetWordCount: target });
     const scenePlan = normalizeChapterScenePlan({
       scenes: change.sceneCards,
       readerExperience: change.readerExperience,
-      requiredElements: existingPlan?.requiredElements ?? [],
+      requiredElements: applyRequiredElementRevisions({ chapterId: chapter.id,
+        elements: existingPlan?.requiredElements ?? [], sceneKeys: change.sceneCards.map(scene => scene.key),
+        revisions: change.requiredElementRevisions, previouslyApplied: previouslyAppliedRequiredElements }),
     }, target);
     if (scenePlan.targetWordCount !== target
       || scenePlan.scenes.reduce((sum, scene) => sum + scene.targetWordCount, 0) !== target) {
@@ -210,6 +214,8 @@ export function applyPlanningRepairCandidate(
     // Never spread model output onto a plan: IDs, title, ordering, metadata and target stay untouched.
     return {
       ...chapter,
+      // The scene plan owns duties; keep any legacy top-level projection consistent.
+      ...("requiredElements" in chapter ? { requiredElements: scenePlan.requiredElements } : {}),
       ...(change.title ? { title: change.title } : {}),
       summary: change.summary,
       purpose: change.purpose,
