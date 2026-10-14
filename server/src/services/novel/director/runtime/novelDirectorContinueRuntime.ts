@@ -44,6 +44,7 @@ import { normalizeDirectorAutoExecutionPlan } from "../automation/novelDirectorA
 import { buildRequestedAutoExecutionState } from "../automation/novelDirectorAutoExecutionScopeRuntime";
 import { createChapterPipelineRecoveryService, assertUnchangedPipelineRecoveryScope, type PipelineRecoveryExpectation } from "../../production/recovery";
 import { ChapterProductionError } from "../../production/reliability";
+import { PlanningRepairPipelineRecoveryService, type PlanningPipelineRecoveryInput, type PlanningPipelineRecoveryResult } from "../recovery/planningRepair";
 
 export type DirectorAssetFirstRecovery =
   | {
@@ -162,6 +163,7 @@ export class NovelDirectorContinueRuntime {
     prepareSavedPipelineRecovery?: (input: {
       taskId: string; novelId: string; pipelineJobId: string; forceResume: boolean;
     }) => Promise<SavedPipelineRecovery | null>;
+    preparePlanningPipelineRecovery?: (input: PlanningPipelineRecoveryInput) => Promise<PlanningPipelineRecoveryResult | null>;
     buildDirectorSeedPayload: (
       input: DirectorConfirmRequest,
       novelId: string | null,
@@ -277,7 +279,7 @@ export class NovelDirectorContinueRuntime {
       return;
     }
 
-    const seedPayload = parseSeedPayload<DirectorWorkflowSeedPayload>(row.seedPayloadJson) ?? {};
+    let seedPayload = parseSeedPayload<DirectorWorkflowSeedPayload>(row.seedPayloadJson) ?? {};
     const directorInput = getDirectorInputFromSeedPayload(seedPayload);
     const rangeRecovery = seedPayload.rangeCompletionRecovery as { startOrder?: number; endOrder?: number; requestedAt?: string } | undefined;
     const resumesIncompleteRange = Boolean(rangeRecovery?.requestedAt && input?.forceResume === true
@@ -286,6 +288,17 @@ export class NovelDirectorContinueRuntime {
       && rangeRecovery.endOrder === seedPayload.autoExecution.endOrder);
     if (resumesIncompleteRange) assertUnchangedPipelineRecoveryScope(seedPayload);
     const novelId = row.novelId ?? seedPayload.novelId ?? null;
+    // The explicit planning grant must reconnect its original chapter operation before
+    // starting runtime work; the previous pipeline's journal cannot be replaced by a new job.
+    const planningPipelineRecovery = planningRepairRecovery?.resumePhase === "chapter_execution"
+      && input?.planningRepairRecoveryKey && novelId && seedPayload.autoExecution?.enabled
+      ? await (this.deps.preparePlanningPipelineRecovery
+        ? this.deps.preparePlanningPipelineRecovery({ taskId, novelId, recoveryKey: input.planningRepairRecoveryKey })
+        : new PlanningRepairPipelineRecoveryService().recover({ taskId, novelId, recoveryKey: input.planningRepairRecoveryKey }))
+      : null;
+    if (planningPipelineRecovery) {
+      seedPayload = parseSeedPayload<DirectorWorkflowSeedPayload>(planningPipelineRecovery.seedPayloadJson) ?? {};
+    }
     const fallbackRunMode = typeof seedPayload.runMode === "string"
       && (DIRECTOR_RUN_MODES as readonly string[]).includes(seedPayload.runMode)
       ? seedPayload.runMode as (typeof DIRECTOR_RUN_MODES)[number]
@@ -431,8 +444,11 @@ export class NovelDirectorContinueRuntime {
       if (!planningRepairRecovery && changedExecutionScope && previousState?.pipelineJobId && (savedPipelineRecovery || row.pendingManualRecovery || previousState.pipelineStatus === "failed")) {
         throw new Error("原章节审查尚未完成，请先按原任务范围恢复，再调整后续写作范围。");
       }
-      const existingPipelineJobId = planningRepairRecovery || changedExecutionScope
-        ? null : previousState?.pipelineJobId ?? null;
+      if (planningPipelineRecovery && changedExecutionScope) {
+        throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "请先按原章节范围完成已授权的规划修复。");
+      }
+      const existingPipelineJobId = planningPipelineRecovery?.pipelineJobId ?? (planningRepairRecovery || changedExecutionScope
+        ? null : previousState?.pipelineJobId ?? null);
       const existingExecutionState = changedExecutionScope
         ? {
           ...buildRequestedAutoExecutionState({
@@ -449,7 +465,7 @@ export class NovelDirectorContinueRuntime {
           nextChapterId: null,
           nextChapterOrder: null,
         }
-        : planningRepairRecovery && previousState
+        : planningRepairRecovery && !planningPipelineRecovery && previousState
           ? { ...previousState, pipelineJobId: null, pipelineStatus: null }
           : previousState;
       const checkpointChapterId = (
@@ -528,7 +544,7 @@ export class NovelDirectorContinueRuntime {
             previousFailureMessage: row.lastError ?? null,
             allowSkipReviewBlockedChapter: canSkipReviewBlockedChapter,
             approveAutoExecutionScope: requestedAutoExecutionContinue || isFullBookAutopilot,
-            resumePendingManualRecovery: !planningRepairRecovery && input?.forceResume === true,
+            resumePendingManualRecovery: Boolean(planningPipelineRecovery) || !planningRepairRecovery && input?.forceResume === true,
           });
           return;
         }
@@ -543,7 +559,7 @@ export class NovelDirectorContinueRuntime {
           allowSkipReviewBlockedChapter: canSkipReviewBlockedChapter,
           approveAutoExecutionScope: requestedAutoExecutionContinue || isFullBookAutopilot,
           skipCurrentQualityRepair: !savedPipelineRecovery && (requestedSkipQualityRepair || requestedReplanRecovery),
-          resumePendingManualRecovery: !planningRepairRecovery && input?.forceResume === true,
+          resumePendingManualRecovery: Boolean(planningPipelineRecovery) || !planningRepairRecovery && input?.forceResume === true,
         });
       });
       return;

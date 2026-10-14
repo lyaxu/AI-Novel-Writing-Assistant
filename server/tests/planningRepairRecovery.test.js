@@ -365,11 +365,18 @@ test("authorized recovery resumes original phase and never invokes replan or ass
     const row = { id: "task-1", novelId: "novel-1", lane: "auto_director", status: "waiting_approval",
       pendingManualRecovery: true, checkpointType: "step_review_required", seedPayloadJson: JSON.stringify(seed),
       resumeTargetJson: JSON.stringify(seed.resumeTarget) };
-    let scheduled; let run;
+    let scheduled; let run; let planningPipelineChecks = 0;
     const runtime = new NovelDirectorContinueRuntime({
       workflowService: { getTaskById: async () => row, bootstrapTask: async () => {}, markTaskRunning: async () => {} },
       directorRuntime: { initializeRun: async () => {}, recordRunResumed: async () => {} },
       continueCandidateStageTask: async () => false,
+      // This phase-routing fixture has no production journal. Actual saved-job ownership
+      // is covered through the real adapter in planningGrantedJournalRecovery.test.js.
+      preparePlanningPipelineRecovery: async request => {
+        assert.deepEqual(request, { taskId: "task-1", novelId: "novel-1", recoveryKey: "grant" });
+        planningPipelineChecks++;
+        return null;
+      },
       assertHighMemoryStartAllowed: async () => {},
       resolveAssetFirstRecovery: async () => { throw new Error("Must preserve repair resume phase"); },
       replanNovel: async () => { throw new Error("Planning repair cannot use pipeline replan"); },
@@ -379,6 +386,7 @@ test("authorized recovery resumes original phase and never invokes replan or ass
       autoExecutionRuntime: { runFromReady: async args => { run = args; } },
     });
     await runtime.continueTask("task-1", { planningRepairRecoveryKey: "grant", forceResume: true });
+    assert.equal(planningPipelineChecks, resumePhase === "chapter_execution" ? 1 : 0);
     await scheduled();
     if (resumePhase === "structured_outline") {
       assert.equal(run.startPhase, "structured_outline");
@@ -405,7 +413,7 @@ test("authorized chapter recovery preserves the saved range without a production
     const currentSeed = { ...seed, ...patch };
     const row = { id: "task-1", novelId: "novel-1", lane: "auto_director", status: "waiting_approval",
       pendingManualRecovery: true, checkpointType: "step_review_required", seedPayloadJson: JSON.stringify(currentSeed) };
-    let scheduled; let run; let checkpoint; let saved;
+    let scheduled; let run; let checkpoint; let saved; let planningPipelineChecks = 0;
     const runtime = new NovelDirectorContinueRuntime({
       workflowService: { getTaskById: async () => row, bootstrapTask: async () => {},
         markTaskRunning: async (_id, input) => { saved = input.seedPayload; },
@@ -415,12 +423,20 @@ test("authorized chapter recovery preserves the saved range without a production
       continueCandidateStageTask: async () => false,
       // Non-planning variants below exercise first-run presentation gating, not a paused chapter.
       prepareSavedPipelineRecovery: async () => null,
+      // This test owns presentation gating only; no saved chapter journal exists here.
+      preparePlanningPipelineRecovery: async request => {
+        assert.deepEqual(request, { taskId: "task-1", novelId: "novel-1", recoveryKey: key });
+        planningPipelineChecks++;
+        return null;
+      },
       resolveAssetFirstRecovery: async () => ({ type: "auto_execution", resumeCheckpointType: "chapter_batch_ready" }),
       buildDirectorSeedPayload: (_input, _novel, extra) => extra,
       scheduleBackgroundRun: (_id, fn) => { scheduled = fn; },
       autoExecutionRuntime: { runFromReady: async input => { run = input; } },
     });
     await runtime.continueTask("task-1", { planningRepairRecoveryKey: key, forceResume: true, continuationMode });
+    assert.equal(planningPipelineChecks, currentSeed.planningRepairRecovery?.resumePhase === "chapter_execution"
+      && Boolean(key) && currentSeed.autoExecution?.enabled ? 1 : 0);
     if (scheduled) await scheduled();
     return { run, checkpoint, saved };
   }

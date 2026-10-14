@@ -39,11 +39,20 @@ export interface IncompleteReviewResponse {
   output: Record<string, unknown>;
   validationError: string;
 }
+/** A planning gate is not a transport failure; the owner certifies whether calls were settled. */
+export interface PlanningPauseReceipt {
+  version: 1;
+  repairKey: string;
+  round: number;
+  candidateVersionId?: string;
+  outcome: "settled" | "unknown";
+}
 export interface JournalStep {
   status: "running" | "done" | "failed" | "unknown";
   external: boolean;
   output?: unknown;
   error?: string;
+  planningPause?: PlanningPauseReceipt;
   rejectedResponses?: CompletedPromptResponse[];
   rejectedReviews?: IncompleteReviewResponse[];
   /** Earlier complete answers when the subsequent correction failed; never a success receipt. */
@@ -142,9 +151,22 @@ export function incompleteReviewResponseFromError(error: unknown): IncompleteRev
 }
 
 /** Structural error protocols avoid importing prompt execution/DB into the journal boundary. */
+export function planningPauseFromError(error: unknown): PlanningPauseReceipt | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const typed = error as Error & { code?: unknown; planningPause?: PlanningPauseReceipt };
+  const receipt = typed.planningPause;
+  return typed.code === "PLANNING_REPAIR_CONFIRMATION_REQUIRED" && receipt?.version === 1
+    && typeof receipt.repairKey === "string" && receipt.repairKey.length > 0
+    && Number.isSafeInteger(receipt.round) && receipt.round >= 0
+    && (receipt.outcome === "settled" || receipt.outcome === "unknown")
+    && (receipt.candidateVersionId === undefined || typeof receipt.candidateVersionId === "string")
+    ? receipt : undefined;
+}
+
 export function isDefinitiveProductionFailure(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   if (completedPromptResponseFromError(error)) return true;
+  if (planningPauseFromError(error)?.outcome === "settled") return true;
   if (["CHAPTER_EMPTY_CONTENT", "CHAPTER_REVIEW_INCOMPLETE"].includes(String((error as Error & { code?: unknown }).code))) return true;
   const typed: Partial<StructuredOutputError & ChapterPatchRepairFailedError> = error;
   if (typed.name === "ChapterPatchRepairFailedError") return true;

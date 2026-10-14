@@ -228,7 +228,12 @@ function replayHarness({ explicit = false, windowPass = false } = {}) {
 test('real two-round replay exhausts its saved budget and never syncs an unresolved candidate', async () => {
   const originalEvidence = sha(fixture.writtenEvidence);
   const h = replayHarness();
-  await assert.rejects(h.coordinator.run(h.input), { code: 'PLANNING_REPAIR_CONFIRMATION_REQUIRED' });
+  await assert.rejects(h.coordinator.run(h.input), error => {
+    assert.equal(error.code, 'PLANNING_REPAIR_CONFIRMATION_REQUIRED');
+    assert.deepEqual(error.planningPause, { version: 1, repairKey: 'offline-replay', round: 2,
+      candidateVersionId: undefined, outcome: 'settled' });
+    return true;
+  });
   assert.deepEqual(h.calls, ['chapter:0', 'repair:1', 'chapter:1', 'window', 'repair:2', 'chapter:2']);
   assert.equal(h.session.state.rounds, fixture.savedBoundary.rounds);
   assert.equal(h.session.state.maxRounds, fixture.savedBoundary.maxRounds);
@@ -240,6 +245,22 @@ test('real two-round replay exhausts its saved budget and never syncs an unresol
   await assert.rejects(h.coordinator.run(h.input), { code: 'PLANNING_REPAIR_CONFIRMATION_REQUIRED' });
   assert.deepEqual(h.calls, callsBeforeRetry, 'Passive retry cannot grant another budget');
   assert.equal(sha(fixture.writtenEvidence), originalEvidence);
+});
+
+test('planning owner never certifies an unsettled or unapplied paid call as a settled gate', async () => {
+  for (const patch of [{ phase: 'uncertain' }, { pendingOperation: { kind: 'repair', startedAt: 'saved-call' } },
+    { repairOutputPending: { inputFingerprint: 'readonly-fixture', round: 2 } }]) {
+    const h = replayHarness();
+    Object.assign(h.session.state, { phase: 'waiting_confirmation', rounds: 2, maxRounds: 3 }, patch);
+    await assert.rejects(h.coordinator.run(h.input), error => {
+      assert.equal(error.planningPause.outcome, 'unknown');
+      assert.equal(error.planningPause.round, 2);
+      return true;
+    });
+    assert.deepEqual(h.calls, []);
+    assert.equal(h.commits, 0);
+    assert.equal(h.session.state.maxRounds, 3);
+  }
 });
 
 for (const windowPass of [true, false]) test(`synthetic explicit repair still requires chapter and window acceptance (${windowPass})`, async () => {

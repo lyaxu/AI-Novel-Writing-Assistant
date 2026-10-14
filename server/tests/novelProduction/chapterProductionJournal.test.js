@@ -54,6 +54,34 @@ function fixture() {
     resumeRequest: operationId => journal.readResumeRequest({ novelId: "n", chapterId: "c", operationId }),
   };
 }
+
+test("only a settled planning receipt makes the external preparation failure definite", async () => {
+  for (const outcome of ["settled", "unknown", undefined]) {
+    const f = fixture();
+    const session = await f.open("planning-original");
+    const receipt = outcome && { version: 1, repairKey: "repair:n:c", round: 2, candidateVersionId: "saved-candidate", outcome };
+    const error = Object.assign(new Error("planning gate"), { code: "PLANNING_REPAIR_CONFIRMATION_REQUIRED", ...(receipt ? { planningPause: receipt } : {}) });
+    await assert.rejects(session.runStep("prepare.execution_contract", async () => { throw error; }, { external: true }), value => value === error);
+    await session.close();
+    const step = f.record().steps["prepare.execution_contract"];
+    assert.equal(step.status, outcome === "settled" ? "failed" : "unknown");
+    assert.deepEqual(step.planningPause, receipt || undefined);
+    assert.equal(f.chapter().content, "original");
+    assert.equal((await f.inspect()).canAcknowledge, outcome !== "settled");
+  }
+});
+
+test("malformed planning receipts and plain transport errors remain unknown", async () => {
+  for (const patch of [{ round: -1 }, { repairKey: "" }, { version: 2 }, { outcome: "maybe" }, { candidateVersionId: 1 }]) {
+    const f = fixture(), session = await f.open("planning-original");
+    const error = Object.assign(new Error("not proven settled"), { code: "PLANNING_REPAIR_CONFIRMATION_REQUIRED", planningPause: {
+      version: 1, repairKey: "repair:n:c", round: 2, outcome: "settled", ...patch,
+    } });
+    await assert.rejects(session.runStep("prepare.execution_contract", async () => { throw error; }, { external: true }));
+    assert.equal(f.record().steps["prepare.execution_contract"].status, "unknown");
+    assert.equal(f.record().steps["prepare.execution_contract"].planningPause, undefined);
+  }
+});
 test("review failure resumes saved writer result without writing again", async () => {
   const f = fixture(); let calls = 0;
   let s = await f.open();

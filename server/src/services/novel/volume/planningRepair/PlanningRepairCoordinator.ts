@@ -20,7 +20,17 @@ export function isCommittedPlanningRepairDocument(value: unknown): boolean {
 
 export class PlanningRepairConfirmationRequired extends Error {
   readonly code = "PLANNING_REPAIR_CONFIRMATION_REQUIRED";
-  constructor(message: string) { super(message); this.name = "PlanningRepairConfirmationRequired"; }
+  constructor(message: string, readonly planningPause?: {
+    version: 1; repairKey: string; round: number; candidateVersionId?: string; outcome: "settled" | "unknown";
+  }) { super(message); this.name = "PlanningRepairConfirmationRequired"; }
+}
+
+function planningPauseError(session: RepairSession, summary: string) {
+  const state = session.state;
+  return new PlanningRepairConfirmationRequired(summary, {
+    version: 1, repairKey: state.key, round: state.rounds, candidateVersionId: state.candidateVersionId,
+    outcome: state.phase !== "uncertain" && !state.pendingOperation && !state.repairOutputPending ? "settled" : "unknown",
+  });
 }
 
 interface ReviewSet {
@@ -98,7 +108,7 @@ export class PlanningRepairCoordinator {
       throw new PlanningRepairConfirmationRequired("请先处理本书上一个未完成的规划修正，再推进其他章节。");
     }
     if (["waiting_confirmation", "uncertain"].includes(session.state.phase)) {
-      throw new PlanningRepairConfirmationRequired(session.state.summary ?? "规划修正需要确认。");
+      throw planningPauseError(session, session.state.summary ?? "规划修正需要确认。");
     }
     if (session.state.pendingOperation) {
       return this.pause(session, "上次模型调用的返回状态不确定，请确认后再追加修正，避免重复扣费。", true);
@@ -222,7 +232,7 @@ export class PlanningRepairCoordinator {
           summary: "模型已返回，但规划响应未通过格式或合同校验；已保留响应与轮次，请修复后复核。",
           history: [...session.state.history, { kind: "rejected_response", round: session.state.rounds, ...completed }],
         });
-        throw new PlanningRepairConfirmationRequired(session.state.summary!);
+        throw planningPauseError(session, session.state.summary!);
       }
       // Preserve the pending operation: an interrupted HTTP response is not permission to spend again.
       await this.save(session, {
@@ -365,12 +375,12 @@ export class PlanningRepairCoordinator {
     await this.store.save(session, { ...session.state, ...patch }, candidate);
     if (["waiting_confirmation", "uncertain"].includes(session.state.phase)
       && !["waiting_confirmation", "uncertain"].includes(patch.phase ?? "")) {
-      throw new PlanningRepairConfirmationRequired(session.state.summary ?? "规划源已变化，请确认后继续。");
+      throw planningPauseError(session, session.state.summary ?? "规划源已变化，请确认后继续。");
     }
   }
 
   private async pause(session: RepairSession, summary: string, uncertain = false): Promise<never> {
     await this.save(session, { phase: uncertain ? "uncertain" : "waiting_confirmation", summary });
-    throw new PlanningRepairConfirmationRequired(summary);
+    throw planningPauseError(session, summary);
   }
 }

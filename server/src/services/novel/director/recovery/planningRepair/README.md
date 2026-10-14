@@ -8,7 +8,9 @@
 - rebase 必须在事务读取任务后比较 `expectedSeedPayloadJson`，防止旧请求重置另一请求的授权状态。源内容发生变化时由 store 建立安全的新快照，不能把旧候选直接提交到新源。
 - 普通继续、批准关卡和跳过质量都不能越过 waiting/uncertain/technical_failed、pendingOperation 或尚未完成的预算授权。干净的 assessing/repairing/reviewing/ready 可在原预算内恢复并复用完成结果。授权请求使用固定幂等键；同一次执行的 HTTP 重放合并，不重复授予预算。
 - 执行命令幂等与预算授权幂等分开：原恢复命令已结束但本任务仍真实暂停时，用户显式继续可以沿用原授权派发下一次命令。新命令键由原授权与前一条命令ID构成，重复点击合并；原命令、请求与预算保留。在途命令、活跃批次租约、待核实操作、待完成授权和取消中的任务不能被重新派发。GET、轮询和后台看门狗不使用此入口。
-- seed.planningRepairRecovery 保存原 `structured_outline` 或 `chapter_execution` 锚点。前者恢复指定章规划，后者清掉失败 job 引用并重新走 JIT，不调用 replanNovel，不跳过当前章。
+- seed.planningRepairRecovery 保存原 `structured_outline` 或 `chapter_execution` 锚点。前者恢复指定章规划；后者若存在章节生产日志，必须接回该日志所属的原 job，沿原准备步骤进入 JIT，不清引用另起 job、不调用 replanNovel、不跳过当前章。仅尚未建立章节生产操作的规划恢复可以走首次执行路径。
+- `application/PlanningRepairPipelineRecoveryService` 只在明确授权的继续命令内执行：同一事务核对授权、候选和完整规划源、正文指纹、原范围、任务归属及租约，再 CAS 恢复原关联。误建但零调用、零产物的失败 job 保留为历史。它不追加预算、不生成内容，也不在 GET 中运行。
+- `domain/settledPipelinePause` 仅证明合同准备步骤的确定规划暂停：优先使用结构化暂停回执；历史记录须完整关联已保存修复回答、最终未通过复核、原轮次及同一停点。归类前归档原日志，只有该步骤的 `unknown` 可转为 `failed`；其他未知调用、变更过的正文/规划源、未应用付费输出都拒绝恢复。不能通过放宽生产日志的未完成操作覆盖保护修复关联错误。
 - 已开启自动执行且恢复键严格匹配时，章节规划恢复复用原范围。历史任务缺少 `productionExperience` 显示偏好不能把恢复退回首次开写选择；没有授权键或没有已开启执行范围的任务仍需经过首次生产确认。批准章节节点也必须传递明确的人工恢复标识。
 - pipeline job 丢失异常 code 时，通过 durable planningRepair 的 waiting_confirmation / uncertain / technical_failed 状态补回导演暂停。技术失败保留原阶段及技术原因，不能归入普通质量修复后让源页面失去操作。生产执行器仍必须立即收束该异常，不得降级为成功或继续下一章。
 - 执行器还持有异常发生前的只读身份快照。类型化规划冲突仅在小说、执行次数、启动时间、repairKey、授权幂等键及当前 job 绑定均未变化时暂停；候选、历史、轮次和 pendingOperation 原样保留，原始错误进入 technicalError。新授权、取消、待完成授权或并发 CAS 变化必须拒绝旧写回。

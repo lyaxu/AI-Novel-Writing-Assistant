@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
-import { ChapterProductionError, chapterFingerprint, productionFingerprint, isDefinitiveProductionFailure, completedPromptResponseFromError, completedBeforeCorrectionFailureFromError, incompleteReviewResponseFromError, type ChapterProductionInspection, type ChapterProductionJournalRecord, type ChapterProductionJournalRepository, type JournalChapter, type JournalContentWrite, type JournalStateWrite, type JournalTransaction } from "./types";
+import { ChapterProductionError, chapterFingerprint, productionFingerprint, isDefinitiveProductionFailure, completedPromptResponseFromError, completedBeforeCorrectionFailureFromError, incompleteReviewResponseFromError, planningPauseFromError, type ChapterProductionInspection, type ChapterProductionJournalRecord, type ChapterProductionJournalRepository, type JournalChapter, type JournalContentWrite, type JournalStateWrite, type JournalTransaction } from "./types";
 
 export interface ChapterProductionSession {
   readonly novelId: string;
@@ -233,11 +233,13 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
             const rejectedResponse = completedPromptResponseFromError(error);
             const rejectedReview = incompleteReviewResponseFromError(error);
             const beforeCorrectionFailure = completedBeforeCorrectionFailureFromError(error);
+            const planningPause = planningPauseFromError(error);
             await mutate((current) => {
               const rejectedResponses = [...(current.steps[key]?.rejectedResponses ?? []), ...(rejectedResponse ? [rejectedResponse] : [])];
               const rejectedReviews = [...(current.steps[key]?.rejectedReviews ?? []), ...(rejectedReview ? [rejectedReview] : [])];
               const completedBeforeCorrectionFailures = [...(current.steps[key]?.completedBeforeCorrectionFailures ?? []), ...(beforeCorrectionFailure ? [beforeCorrectionFailure] : [])];
               current.steps[key] = { status: stepOptions.external && !definitive ? "unknown" : "failed", external: stepOptions.external ?? false, error: message(error),
+                ...(planningPause ? { planningPause } : {}),
                 ...(rejectedResponses.length ? { rejectedResponses } : {}),
                 ...(completedBeforeCorrectionFailures.length ? { completedBeforeCorrectionFailures } : {}),
                 ...(rejectedReviews.length ? { rejectedReviews } : {}) };

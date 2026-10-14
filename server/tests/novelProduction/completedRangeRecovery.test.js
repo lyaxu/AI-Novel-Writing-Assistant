@@ -160,6 +160,9 @@ test('explicit restored range enters existing auto execution without repeating s
     '../recovery/novelDirectorRecovery': {}, './novelDirectorTakeoverRuntime': {}, '../phases/novelDirectorExecutionNodeAdapters': {},
     './directorRuntimeDefaults': {}, '../../../../db/prisma': { prisma },
     '../recovery/planningRepair/planningRepairRecovery': require('../../dist/services/novel/director/recovery/planningRepair/planningRepairRecovery'),
+    '../recovery/planningRepair': { PlanningRepairPipelineRecoveryService: class {
+      constructor() { assert.fail('Completed-range recovery has no active planning grant to reconnect'); }
+    } },
     '../automation/novelDirectorAutoExecution': auto,
     '../automation/novelDirectorAutoExecutionScopeRuntime': require('../../dist/services/novel/director/automation/novelDirectorAutoExecutionScopeRuntime'),
     '../../production/recovery': recovery, '../../production/reliability': require('../../dist/services/novel/production/reliability'),

@@ -585,6 +585,25 @@ export class PlanningRepairStore {
   private readonly seeds = new WeakMap<RepairSession, string | null>();
   private readonly owners = new WeakMap<RepairSession, string>();
 
+  /** Read-only witness inside the caller's recovery transaction; never rebases or grants budget. */
+  async assertPipelineRecoverySnapshot(tx: Prisma.TransactionClient, task: NovelWorkflowTask): Promise<void> {
+    const seed = parseSeed(task.seedPayloadJson);
+    const state = readState(seed);
+    const snapshot = readSnapshot(seed, task.id);
+    if (!state || state.novelId !== task.novelId || snapshot.committed || state.pendingOperation
+      || state.repairOutputPending || !state.candidateVersionId || !snapshot.eligibleChapterIds.includes(state.chapterId)) {
+      conflict("Planning recovery has no settled candidate snapshot.");
+    }
+    const source = await readSource(tx, state.novelId, task);
+    if (![source.token, source.legacyToken].includes(snapshot.snapshotToken)) {
+      conflict("Planning source changed before pipeline recovery.");
+    }
+    await this.loadCandidate(tx, state, snapshot);
+    const planned = snapshot.baselineDocument.volumes.find(volume => volume.id === state.volumeId)
+      ?.chapters.find(chapter => chapter.id === state.chapterId);
+    if (!planned || planned.chapterOrder !== state.chapterOrder) conflict("Planning recovery chapter mapping changed.");
+  }
+
   /** Persist a verified, already returned initial contract after cancellation; never calls AI or grants rounds. */
   async recoverCompletedInitialGeneration(input: {
     novelId: string; taskId: string; expectedSeedPayloadJson: string;
