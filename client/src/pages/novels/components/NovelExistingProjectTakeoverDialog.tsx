@@ -43,6 +43,7 @@ import {
   formatTakeoverStartError,
   isTakeoverEntryStepAllowedForScope,
   resolveRecommendedTakeoverEntryStep,
+  resolveTakeoverQuickExecution,
 } from "./novelExistingProjectTakeoverViewModel";
 import TakeoverDiagnosisPanel from "./takeover/TakeoverDiagnosisPanel";
 import { useDirectorAutoApprovalDraft } from "./useDirectorAutoApprovalDraft";
@@ -173,22 +174,11 @@ export default function NovelExistingProjectTakeoverDialog({
     () => buildTakeoverContinuousTarget(readiness, contextTaskSnapshot, selectedChapterTargetOrder),
     [contextTaskSnapshot, readiness, selectedChapterTargetOrder],
   );
-  const useFullBookAutopilot = !advancedOpen
-    && continuousTarget
-    && continuousTarget.selectedOrder >= continuousTarget.targetOrder;
-  const useRollingTargetAutopilot = !advancedOpen
-    && continuousTarget
-    && continuousTarget.selectedOrder > continuousTarget.currentWindowEndOrder;
-  const effectiveRunMode: DirectorRunMode = useRollingTargetAutopilot
-    ? "full_book_autopilot"
-    : !advancedOpen && quickChapterTarget
-      ? "auto_to_execution"
-      : runMode;
-  const autoExecutionPlan: DirectorAutoExecutionPlan | undefined = useFullBookAutopilot
+  const quickExecution = !advancedOpen ? resolveTakeoverQuickExecution(quickChapterTarget, continuousTarget) : null;
+  const effectiveRunMode: DirectorRunMode = quickExecution?.runMode ?? runMode;
+  const autoExecutionPlan: DirectorAutoExecutionPlan | undefined = quickExecution?.useFullBookPlan
     ? buildFullBookAutopilotExecutionPlan()
-    : !advancedOpen && quickChapterTarget
-      ? quickChapterTarget.plan
-      : advancedAutoExecutionPlan;
+    : quickExecution?.plan ?? advancedAutoExecutionPlan;
   const selectedScopeMode = effectiveRunMode === "auto_to_execution" || effectiveRunMode === "full_book_autopilot"
     ? autoExecutionPlan?.mode ?? autoExecutionDraft.mode
     : "book";
@@ -330,9 +320,9 @@ export default function NovelExistingProjectTakeoverDialog({
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
       setOpen(false);
       toast.success(
-        effectiveRunMode === "full_book_autopilot"
+        effectiveRunMode === "full_book_autopilot" && autoExecutionPlan?.mode === "book"
           ? "自动导演接管任务已提交，可在 AI 驾驶舱查看全书执行进度。"
-          : effectiveRunMode === "auto_to_execution"
+          : effectiveRunMode === "auto_to_execution" || effectiveRunMode === "full_book_autopilot"
           ? `自动导演接管任务已提交，可在 AI 驾驶舱查看 ${buildDirectorAutoExecutionPlanLabel(autoExecutionPlan)} 的执行进度。`
           : "自动导演接管任务已提交，可在 AI 驾驶舱查看排队和执行进度。",
       );

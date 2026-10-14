@@ -1,6 +1,7 @@
 import type {
   DirectorBookAutomationProjection,
   DirectorBookAutomationStatus,
+  DirectorDashboardMode,
 } from "@ai-novel/shared/types/directorRuntime";
 import type { TaskStatus, UnifiedTaskDetail } from "@ai-novel/shared/types/task";
 import type { NovelEditTakeoverState } from "./components/NovelEditView.types";
@@ -128,7 +129,7 @@ export function buildDisplayAutoDirectorTask(
   if (rangeRecovery) {
     const projected = projection.latestTask!;
     return { ...task, status: "waiting_approval", pendingManualRecovery: true,
-      progress: projected.progress, checkpointType: projected.checkpointType,
+      progress: projected.progress, checkpointType: "chapter_batch_ready",
       checkpointSummary: projected.checkpointSummary, currentStage: projected.currentStage,
       currentItemKey: projected.currentItemKey, currentItemLabel: projected.currentItemLabel,
       displayStatus: "waiting_recovery", blockingReason: projectionMessage(projection),
@@ -172,11 +173,12 @@ export function buildDisplayAutoDirectorTask(
 }
 
 export function canArchiveCompletedAutoDirectorTask(
-  task?: Pick<UnifiedTaskDetail, "status" | "checkpointType"> | null,
+  task?: Pick<UnifiedTaskDetail, "status" | "checkpointType" | "pendingManualRecovery"> | null,
 ): boolean {
   return Boolean(
     task
       && task.status === "succeeded"
+      && !task.pendingManualRecovery
       && task.checkpointType === "workflow_completed",
   );
 }
@@ -184,8 +186,10 @@ export function canArchiveCompletedAutoDirectorTask(
 export function resolveTakeoverModeFromAutomation(input: {
   task: UnifiedTaskDetail;
   projection: DirectorBookAutomationProjection | null | undefined;
+  dashboardMode?: DirectorDashboardMode | null;
 }): NovelEditTakeoverState["mode"] {
   const { task, projection } = input;
+  if (task.status === "failed" || task.status === "cancelled") return "failed";
   if (task.status === "waiting_approval" && task.checkpointType === "replan_required") {
     return "action_required";
   }
@@ -194,14 +198,14 @@ export function resolveTakeoverModeFromAutomation(input: {
     if (projection.status === "blocked") return "action_required";
     if (projection.status === "waiting_recovery") return "waiting";
     if (projection.status === "waiting_approval") return "waiting";
-    if (projection.status === "queued" || projection.status === "running") return "running";
   }
   if (task.pendingManualRecovery) {
     return "waiting";
   }
-  if (task.status === "failed" || task.status === "cancelled") {
-    return "failed";
-  }
+  if (canArchiveCompletedAutoDirectorTask(task)) return "completed";
+  if (input.dashboardMode === "failed") return "failed";
+  if (input.dashboardMode === "recovering") return "action_required";
+  if (input.dashboardMode === "waiting_user") return "waiting";
   if (task.status === "queued" || task.status === "running") {
     return "running";
   }

@@ -8,6 +8,7 @@ import {
   buildTakeoverProgressInspection,
   formatTakeoverStartError,
   resolveRecommendedTakeoverEntryStep,
+  resolveTakeoverQuickExecution,
 } from "./novelExistingProjectTakeoverViewModel.ts";
 
 function buildReadiness(overrides = {}) {
@@ -386,6 +387,38 @@ test("takeover accepts a smaller target below the full-book estimate", () => {
   assert.equal(target?.targetOrder, 80);
   assert.equal(target?.actionLabel, "推进至第 50 章");
   assert.match(target?.summary ?? "", /本次只推进第 4-50 章/);
+});
+
+test("completed materialized 1-3 window can authorize only 4-10 of the estimated 100 chapters", () => {
+  const readiness = buildReadiness({
+    snapshot: { chapterCount: 3, firstVolumeChapterCount: 3, plannedChapterCount: 100,
+      generatedChapterCount: 3, approvedChapterCount: 3,
+      volumeChapterRanges: [{ volumeOrder: 1, startOrder: 1, endOrder: 3 }] },
+    executableRange: { startOrder: 1, endOrder: 3, totalChapterCount: 3, nextChapterOrder: null },
+  });
+  for (const selectedOrder of [undefined, 1, 10]) {
+    const chapter = buildTakeoverChapterTarget(readiness, null, selectedOrder);
+    const continuous = buildTakeoverContinuousTarget(readiness, null, selectedOrder);
+    const execution = resolveTakeoverQuickExecution(chapter, continuous);
+    assert.equal(continuous.currentWindowEndOrder, 3);
+    assert.equal(continuous.startOrder, 4);
+    assert.equal(execution.runMode, "full_book_autopilot");
+    assert.equal(execution.useFullBookPlan, false);
+    assert.deepEqual(execution.plan, { mode: "chapter_range", startOrder: 4,
+      endOrder: selectedOrder === 10 ? 10 : 4, autoReview: true, autoRepair: true });
+    assert.doesNotMatch(continuous.summary, /第 4-3/);
+  }
+});
+
+test("ordinary prepared continuation does not request rolling planning or exceed the selection", () => {
+  const readiness = buildReadiness({ snapshot: { chapterCount: 12, firstVolumeChapterCount: 12,
+    plannedChapterCount: 100, generatedChapterCount: 3, approvedChapterCount: 3 } });
+  const execution = resolveTakeoverQuickExecution(buildTakeoverChapterTarget(readiness, null, 10),
+    buildTakeoverContinuousTarget(readiness, null, 10));
+  assert.equal(execution.runMode, "auto_to_execution");
+  assert.equal(execution.plan.endOrder, 10);
+  assert.equal(execution.useFullBookPlan, false);
+  assert.equal(resolveTakeoverQuickExecution(null, null), null);
 });
 
 test("takeover start errors are translated into a recoverable user action", () => {

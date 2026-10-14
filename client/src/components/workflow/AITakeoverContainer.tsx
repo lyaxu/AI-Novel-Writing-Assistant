@@ -7,7 +7,7 @@ import WorkflowProgressBar, {
   type WorkflowProgressTone,
 } from "./WorkflowProgressBar";
 
-export type AITakeoverMode = "loading" | "running" | "waiting" | "action_required" | "failed";
+export type AITakeoverMode = "loading" | "running" | "waiting" | "action_required" | "failed" | "completed";
 
 export interface AITakeoverAction {
   label: string;
@@ -30,6 +30,8 @@ export interface AITakeoverContainerProps {
 
 function modeLabel(mode: AITakeoverMode): string {
   switch (mode) {
+    case "completed":
+      return "本轮完成";
     case "loading":
       return "加载中";
     case "running":
@@ -46,6 +48,8 @@ function modeLabel(mode: AITakeoverMode): string {
 
 function shellClass(mode: AITakeoverMode): string {
   switch (mode) {
+    case "completed":
+      return "bg-muted/30";
     case "loading":
       return "border-border bg-gradient-to-br from-background via-background to-muted/35";
     case "failed":
@@ -78,6 +82,8 @@ function progressShellClass(mode: AITakeoverMode): string {
 
 function progressTone(mode: AITakeoverMode): WorkflowProgressTone {
   switch (mode) {
+    case "completed":
+      return "default";
     case "loading":
       return "loading";
     case "failed":
@@ -93,6 +99,8 @@ function progressTone(mode: AITakeoverMode): WorkflowProgressTone {
 
 function progressStatusLabel(mode: AITakeoverMode): string | null {
   switch (mode) {
+    case "completed":
+      return "本轮已完成";
     case "running":
       return "实时推进中";
     case "waiting":
@@ -132,7 +140,8 @@ export default function AITakeoverContainer({
   return (
     <div className="space-y-4">
       <div className={cn(
-        "rounded-2xl border px-5 py-5 shadow-[0_22px_55px_-42px_hsl(var(--foreground)/0.55)] sm:px-6",
+        "rounded-2xl px-5 py-5 sm:px-6",
+        (mode === "failed" || mode === "action_required") && "border",
         shellClass(mode),
       )}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -161,7 +170,7 @@ export default function AITakeoverContainer({
       </div>
 
       {resolvedProgress !== null ? (
-        <div className={cn("mt-5 rounded-xl border border-border/60 px-4 py-3", progressShellClass(mode))}>
+        <div className={cn("mt-5 rounded-xl px-4 py-3", progressShellClass(mode))}>
           <div className="flex items-center justify-between gap-3 text-sm">
             <div className="flex min-w-0 items-center gap-2">
               {mode === "running" ? (

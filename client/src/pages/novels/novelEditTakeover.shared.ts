@@ -51,6 +51,9 @@ export function buildTakeoverTitle(input: {
   checkpointType: string | null | undefined;
   scopeLabel: string;
 }): string {
+  if (input.mode === "completed") {
+    return `《${input.novelTitle}》本轮自动导演已完成`;
+  }
   if (
     input.mode === "running"
     && input.checkpointType === "chapter_batch_ready"
@@ -92,6 +95,9 @@ export function buildTakeoverDescription(input: {
   reviewScope: DirectorLockScope | null | undefined;
   scopeLabel: string;
 }): string {
+  if (input.mode === "completed") {
+    return `本轮${input.scopeLabel}任务完成。可以查看正文与质量检查结果，或点击“完成并收起”收起提醒；继续写作需另选后续章节范围。`;
+  }
   if (
     input.mode === "running"
     && input.checkpointType === "chapter_batch_ready"

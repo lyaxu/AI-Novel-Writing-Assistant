@@ -287,23 +287,46 @@ export function buildTakeoverContinuousTarget(
       snapshot: { ...readiness.snapshot, plannedChapterCount: null },
     }, taskSnapshot)
     : null;
+  const chapterTarget = buildTakeoverChapterTarget(readiness, taskSnapshot, selectedOrder);
   const targetOrder = normalizePositiveOrder(readiness?.snapshot.plannedChapterCount ?? null);
-  if (!currentWindow || !targetOrder || targetOrder <= currentWindow.maxOrder) {
+  // A completed materialized window has no next chapter inside it. Its end still
+  // distinguishes a bounded rolling continuation from an already prepared range.
+  const currentWindowEndOrder = currentWindow?.maxOrder ?? maxNormalizedOrder([
+    readiness?.executableRange?.endOrder,
+    readiness?.snapshot.chapterCount,
+    readiness?.snapshot.firstVolumeChapterCount,
+    ...(readiness?.snapshot.volumeChapterRanges ?? []).map((range) => range.endOrder),
+  ]);
+  if (!chapterTarget || !currentWindowEndOrder || !targetOrder || targetOrder <= currentWindowEndOrder) {
     return null;
   }
   const normalizedSelected = normalizePositiveOrder(selectedOrder ?? null);
   const resolvedSelected = normalizedSelected
-    ? Math.min(Math.max(normalizedSelected, currentWindow.startOrder), targetOrder)
-    : currentWindow.startOrder;
+    ? Math.min(Math.max(normalizedSelected, chapterTarget.startOrder), targetOrder)
+    : chapterTarget.startOrder;
   return {
-    startOrder: currentWindow.startOrder,
-    currentWindowEndOrder: currentWindow.maxOrder,
+    startOrder: chapterTarget.startOrder,
+    currentWindowEndOrder,
     targetOrder,
     selectedOrder: resolvedSelected,
     actionLabel: resolvedSelected === targetOrder ? `持续推进至第 ${targetOrder} 章` : `推进至第 ${resolvedSelected} 章`,
     summary: resolvedSelected === targetOrder
-      ? `先推进第 ${currentWindow.startOrder}-${currentWindow.maxOrder} 章；接近范围末尾时，AI 会补后续卷骨架和近期拆章，不会预先生成远期章节任务。`
-      : `本次只推进第 ${currentWindow.startOrder}-${resolvedSelected} 章；之后仍可从当前进度继续，预计章节数为 ${targetOrder} 章。`,
+      ? `从第 ${chapterTarget.startOrder} 章继续；AI 会按进度补后续卷骨架和近期拆章，不会预先生成远期章节任务。`
+      : `本次只推进第 ${chapterTarget.startOrder}-${resolvedSelected} 章；之后仍可从当前进度继续，预计章节数为 ${targetOrder} 章。`,
+  };
+}
+
+export function resolveTakeoverQuickExecution(
+  chapterTarget: TakeoverChapterTargetViewModel | null,
+  continuousTarget: TakeoverContinuousTargetViewModel | null,
+): { runMode: DirectorRunMode; plan: DirectorAutoExecutionPlan; useFullBookPlan: boolean } | null {
+  if (!chapterTarget) return null;
+  const useFullBookPlan = Boolean(continuousTarget && continuousTarget.selectedOrder >= continuousTarget.targetOrder);
+  const needsRollingPlanning = Boolean(continuousTarget && continuousTarget.selectedOrder > continuousTarget.currentWindowEndOrder);
+  return {
+    runMode: needsRollingPlanning ? "full_book_autopilot" : "auto_to_execution",
+    plan: chapterTarget.plan,
+    useFullBookPlan,
   };
 }
 

@@ -5,7 +5,7 @@ import { BOOK_ANALYSIS_SECTIONS } from "@ai-novel/shared/types/bookAnalysis";
 import type { DirectorContinuationMode, DirectorLockScope, DirectorSessionState, DirectorStepCalibrationAction } from "@ai-novel/shared/types/novelDirector";
 import { extractDirectorTaskSeedPayloadFromMeta } from "@ai-novel/shared/types/novelDirector";
 import type { AutoDirectorAction, AutoDirectorMutationActionCode } from "@ai-novel/shared/types/autoDirectorFollowUp";
-import type { DirectorBookAutomationAction, DirectorDashboardMode, DirectorTaskSnapshot } from "@ai-novel/shared/types/directorRuntime";
+import type { DirectorBookAutomationAction, DirectorTaskSnapshot } from "@ai-novel/shared/types/directorRuntime";
 import type { NovelExportDownloadFormat, NovelExportFormat, NovelExportScope } from "@ai-novel/shared/types/novelExport";
 import type {
   Chapter,
@@ -106,25 +106,6 @@ import {
   shouldPreserveRequestedDirectorTaskId,
   shouldAutofocusProjectedDirectorTask,
 } from "./novelEditAutomationStatus";
-
-function mapDashboardModeToTakeoverMode(mode: DirectorDashboardMode | null | undefined): NovelEditTakeoverState["mode"] | null {
-  switch (mode) {
-    case "running":
-    case "queued":
-    case "completed":
-      return "running";
-    case "waiting_user":
-      return "waiting";
-    case "recovering":
-      return "action_required";
-    case "failed":
-      return "failed";
-    case "idle":
-      return "loading";
-    default:
-      return null;
-  }
-}
 
 function parsePipelineBackgroundActivities(payload: string | null | undefined): ChapterExecutionBackgroundActivity[] {
   if (!payload?.trim()) {
@@ -1459,10 +1440,10 @@ export default function NovelEdit() {
       chapterCount: chapters.length,
     });
     const dashboardView = activeDirectorSnapshot?.dashboardView ?? null;
-    const mode = mapDashboardModeToTakeoverMode(dashboardView?.mode)
-      ?? resolveTakeoverModeFromAutomation({
+    const mode = resolveTakeoverModeFromAutomation({
       task,
       projection: bookAutomationProjection,
+      dashboardMode: dashboardView?.mode,
     });
     const automationActionText = resolveAutomationActionText({
       task,
@@ -1590,7 +1571,7 @@ export default function NovelEdit() {
         },
         variant: "outline",
       });
-    } else if (mode === "waiting" && task.checkpointType === "workflow_completed") {
+    } else if (mode === "completed" || (mode === "waiting" && task.checkpointType === "workflow_completed")) {
       actions.push({
         label: "进入章节执行",
         onClick: () => openChapterExecution(task),
@@ -1750,7 +1731,7 @@ export default function NovelEdit() {
             reviewScope,
             scopeLabel: autoExecutionScopeLabel,
           }),
-      progress: typeof dashboardView?.progressPercent === "number"
+      progress: mode === "completed" ? 100 : typeof dashboardView?.progressPercent === "number"
         ? dashboardView.progressPercent
         : task.progress,
       currentAction: consistencyIssue === "missing_characters"
@@ -1764,6 +1745,8 @@ export default function NovelEdit() {
               || task.lastError?.trim()
               || "任务已暂停，等待从最近检查点恢复。"
             )
+          : mode === "completed"
+            ? `本轮${autoExecutionScopeLabel}任务完成，可以查看正文与质量检查结果。`
           : dashboardView?.currentAction?.trim()
             ? dashboardView.currentAction.trim()
           : activeDirectorSnapshot?.displayState.currentAction?.trim()

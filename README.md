@@ -165,6 +165,8 @@ Open-source AI novel writing assistant and long-form production studio.
 
 #### 修复
 
+- 自动导演完成后显示本轮完成并停止运行动画；完成已有章节后，可按所选终点继续补规划和续写，保留原稿与质量检查。
+
 - 已授权的规划修复从原章节任务接续，保留授权次数、规划候选和已写正文，避免新建任务与原保存记录冲突；重复点击复用同一授权，未确认的外部调用仍需核对。
 
 完整历史见[版本更新说明](docs/releases/release-notes.md)。

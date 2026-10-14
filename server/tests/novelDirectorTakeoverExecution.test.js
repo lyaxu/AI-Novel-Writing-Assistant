@@ -438,13 +438,13 @@ test("continue_existing from chapter records the production handoff without auto
   assert.equal(checkpointInput.seedPayload.directorSession.runMode, "auto_to_ready");
 });
 
-test("continue_existing chapter takeover does not reuse the requested auto execution range", async () => {
+test("continue_existing chapter takeover preserves the explicit 4-10 range at production handoff", async () => {
   let preparedInput = null;
   let bootstrapInput = null;
   let checkpointInput = null;
   const takeoverState = buildTakeoverState();
-  takeoverState.executableRange.nextChapterOrder = 3;
-  takeoverState.latestAutoExecutionState.nextChapterOrder = 3;
+  takeoverState.executableRange.nextChapterOrder = 4;
+  takeoverState.latestAutoExecutionState.nextChapterOrder = 4;
 
   await startDirectorTakeoverExecution({
     request: {
@@ -453,17 +453,17 @@ test("continue_existing chapter takeover does not reuse the requested auto execu
       strategy: "continue_existing",
       autoExecutionPlan: {
         mode: "chapter_range",
-        startOrder: 1,
+        startOrder: 4,
         endOrder: 10,
       },
     },
     takeoverState,
     directorInput: {
       candidate: { workingTitle: "Neon Archive" },
-      runMode: "auto_to_execution",
+      runMode: "full_book_autopilot",
       autoExecutionPlan: {
         mode: "chapter_range",
-        startOrder: 1,
+        startOrder: 4,
         endOrder: 10,
       },
     },
@@ -493,8 +493,41 @@ test("continue_existing chapter takeover does not reuse the requested auto execu
   });
 
   assert.equal(preparedInput, null);
-  assert.equal(bootstrapInput.seedPayload.autoExecutionPlan, undefined);
+  assert.deepEqual(bootstrapInput.seedPayload.autoExecutionPlan, { mode: "chapter_range", startOrder: 4, endOrder: 10 });
+  assert.deepEqual(checkpointInput.seedPayload.autoExecutionPlan, bootstrapInput.seedPayload.autoExecutionPlan);
   assert.equal(checkpointInput.checkpointType, "production_experience_required");
+});
+
+test("structured continuation carries the selected 4-10 range through bootstrap and the scheduled planning phase", async () => {
+  const plan = { mode: "chapter_range", startOrder: 4, endOrder: 10, autoReview: true, autoRepair: true };
+  const takeoverState = buildTakeoverState();
+  takeoverState.executableRange = null;
+  takeoverState.latestAutoExecutionState = { enabled: true, mode: "chapter_range", startOrder: 1, endOrder: 3,
+    totalChapterCount: 3, completedChapterCount: 3, nextChapterId: null, nextChapterOrder: null };
+  Object.assign(takeoverState.snapshot, { chapterCount: 3, plannedChapterCount: 100,
+    generatedChapterCount: 3, approvedChapterCount: 3, firstVolumeChapterCount: 3 });
+  let boot; let scheduled; let phase; let reset;
+  await startDirectorTakeoverExecution({
+    request: { novelId: "novel_takeover_demo", entryStep: "structured", strategy: "continue_existing",
+      runMode: "full_book_autopilot", autoExecutionPlan: plan },
+    directorInput: { candidate: { workingTitle: "Neon Archive", targetChapterCount: 100 },
+      runMode: "full_book_autopilot", autoExecutionPlan: plan }, takeoverState,
+    workflowService: { bootstrapTask: async input => { boot = input; return { id: "next-4-10" }; },
+      markTaskRunning: async () => {}, recordCheckpoint: async () => assert.fail("must prepare missing planning first") },
+    autoExecutionRuntime: { prepareRequestedAutoExecution: async () => assert.fail("no prose before planning"), runFromReady: async () => assert.fail("no prose before planning") },
+    buildDirectorSeedPayload: (request, _novelId, extra) => ({ directorInput: request, autoExecutionPlan: request.autoExecutionPlan, ...extra }),
+    scheduleBackgroundRun: (_id, runner) => { scheduled = runner; },
+    runDirectorPipeline: async input => { phase = input; },
+    resetDownstreamState: async input => { reset = input; },
+    cancelReplacedRuns: async () => {},
+  });
+  assert.equal(boot.forceNew, true);
+  assert.deepEqual(boot.seedPayload.directorInput.autoExecutionPlan, plan);
+  assert.deepEqual(reset.directorInput.autoExecutionPlan, plan);
+  await scheduled();
+  assert.equal(phase.startPhase, "structured_outline");
+  assert.deepEqual(phase.input.autoExecutionPlan, plan);
+  assert.equal(takeoverState.latestAutoExecutionState.endOrder, 3);
 });
 
 test("restart_current_step records downstream reset metadata for workspace navigation", async () => {

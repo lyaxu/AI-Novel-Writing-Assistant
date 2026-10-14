@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { buildTakeoverTitle, buildTakeoverDescription } from "./novelEditTakeover.shared.ts";
 
 import {
   buildDisplayAutoDirectorTask,
@@ -18,6 +19,31 @@ function buildTask(overrides = {}) {
     ...overrides,
   };
 }
+
+test("saved completed range stays completed with or without a dashboard, including stale running views", () => {
+  const task = buildTask({ id: "original", progress: 1 });
+  for (const dashboardMode of [undefined, "completed", "running", "queued"]) {
+    assert.equal(resolveTakeoverModeFromAutomation({ task, projection: null, dashboardMode }), "completed");
+    assert.equal(resolveTakeoverModeFromAutomation({ task, projection: { latestTask: { id: task.id }, status: "running" }, dashboardMode }), "completed");
+  }
+  assert.match(buildTakeoverTitle({ mode: "completed", novelTitle: "验收书", scopeLabel: "第 1-3 章" }), /本轮自动导演已完成/);
+  assert.match(buildTakeoverDescription({ mode: "completed", scopeLabel: "第 1-3 章" }), /另选后续章节范围/);
+});
+
+test("100 percent and completed dashboards cannot hide running, failed, or pending recovery", () => {
+  for (const [overrides, expected] of [
+    [{ status: "running", progress: 1 }, "running"],
+    [{ status: "failed" }, "failed"],
+    [{ status: "cancelled" }, "failed"],
+    [{ pendingManualRecovery: true }, "waiting"],
+    [{ status: "waiting_approval", checkpointType: "replan_required" }, "action_required"],
+  ]) assert.equal(resolveTakeoverModeFromAutomation({ task: buildTask(overrides), projection: null, dashboardMode: "completed" }), expected);
+  assert.equal(canArchiveCompletedAutoDirectorTask(buildTask({ pendingManualRecovery: true })), false);
+  for (const [status, expected] of [["waiting_recovery", "waiting"], ["blocked", "action_required"]]) {
+    assert.equal(resolveTakeoverModeFromAutomation({ task: buildTask({ id: "original" }),
+      projection: { latestTask: { id: "original" }, status }, dashboardMode: "completed" }), expected);
+  }
+});
 
 test("incomplete completed range uses original task continuation and cannot be archived", () => {
   const task = buildTask({ id: "original", progress: 1, finishedAt: "historical" });
