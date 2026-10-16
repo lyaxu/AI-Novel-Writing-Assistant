@@ -1,25 +1,23 @@
 # 最新交接入口
 
-2026-10-16，阶段3生产界面等待、原失败任务恢复与完整有界范围工程修复完成。最新完整快照：[生产选择与范围恢复](../evals/2026-10-16-production-choice-range-recovery.md)。前轮[完成状态与后续续写](../evals/2026-10-14-completed-director-next-range.md)的再次接管指引已失效：用户4—10任务已经创建，不能重复创建。
+2026-10-16 10:35 UTC，用户已完成第4、5章后暂停。最新快照：[五章完成、用量暂停与人物能力](../evals/2026-10-16-five-chapters-usage-and-cast.md)。接续[生产选择恢复](../evals/2026-10-16-production-choice-range-recovery.md)；旧“选择完整工作台”操作已执行，不能重做或重建4—10任务。
 
-## 真实状态与保护
+## 当前真实状态
 
-书cmv3wyvw40015gow0780pycx9《外卖小哥的茅山账本》。原导演cmv3wvaqm000sgow0l5or2pke已完成1—3章，3013/3680/3729字，approved/completed，正文hash全保持。新任务cmv8d55el0033z8w0hneoiiru为failed/production_experience_required，原授权chapter_range 4—10。4、5仅规划无正文，6—10未物化；真实数据保留原停点，由用户明确选择后恢复。
+书cmv3wyvw40015gow0780pycx9《外卖小哥的茅山账本》。原1—3导演成功；4—10任务cmv8d55el0033z8w0hneoiiru完成2/7，nextOrder=6、remaining=6—10。第4/5章3916/5808字符，approved/completed，对应job成功；前3章hash不变。用户认可节奏和文笔，代理尚未作本轮全文文学审读。
 
-自2026-10-11T17:00:00统计窗口65次调用（旧任务64，新任务1），本轮代理0；本书活跃jobs/commands/sideEffects为0。只读恢复资格核验通过，前后正文、任务、规划版本、资源、journal指纹一致。禁止自动点击选择、恢复、确认资源或调用模型。
+新任务running但pendingManualRecovery=1，实际用量暂停，活跃jobs/commands/sideEffects为0。新task调用26（本轮用户25），统一自10-11T17窗口90，代理0。当前保留暂停，不反复点继续或改阈值。原稿、规划、质量门禁及原任务保留。
 
-## 修复与证据
+## 下一项边界：尚未实施
 
-规划准备窗口不缩短授权范围；生产选择是正式门禁，自动审批和通用正文校准不得越过。误失败现场用原任务CAS及零生产证据恢复，原ContinueRuntime按明确选择回执接入逐章生产，不因后续未拆章退回整批规划。质量检查及写前规划复核照常。GET保留选择停点和历史失败证据，不自动恢复。
+P0为阶段3用量统计和恢复：246741是第5章规划4调用累计，不是一次输出；规划虚拟ID与正文持久ID分裂，下一章未物化时activeID集合为空导致旧最大用量触发，固定80000阈值与真实上下文不匹配。另确认autoExecution.completionProfile误为7章compact，seed书级仍100章serial；该profile传入后续逐章规划，须在继续第6章前一起修复。正常推进高用量宜提醒，明确预算上限/无进展循环/输出额度终止等仍需安全暂停；不以关闭检查、抬高阈值或重复重置替代修复。
 
-server编译通过，104文件封网离线1265通过、0失败、8既有skip，包括历史审查失败、单章保存恢复、真实选择停点、4—10及201—210范围。只读数据库核验真实恢复资格通过。未做浏览器交互或模型验收；前三章真实完成不等于固定版本连续十章通过。
+人物两项明确列主线独立验收：按整书篇幅和故事结构分层规划人物，规划候选阶段直接改名并维护稳定ID、别名、用户锁定及引用。旧版开书核心3—6并非整书上限，本书10条；已有档案改名不覆盖所有正文/章纲/旧候选。三条相近摊主称呼列疑似身份重复样本，未经核验不得合并。详见最新快照与PROJECT_CONTEXT。
 
-## 用户下一步
+## 环境、验证与保护
 
-修复已加载旧3000/5190，源码78b9f92873c4，health stale=false，原源页及任务GET均200。打开[本书当前4—10任务](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv8d55el0033z8w0hneoiiru&stage=structured)，刷新，在创作界面选择页核对“本次写作范围：第4-10章”，点击一次“使用完整工作台”。它继续此任务，保留前三章与4、5规划；不是重新开书或再次接管，也不是恢复原1—3的审查。
+D:/novel/AI-Novel-Writing-Assistant，codex/production-core-refactor，接续9da855be；DB D:/novel/.comparison/2026-10-10/old-test.db。旧3000/PID19224加载78b9f92873c4（07:07:50.445Z），5190可访问，health stale=false。不动新版，不恢复废弃样本，不自动调用模型。预存三个Structured组件及台账历史964行保留。
 
-## 环境和主线
+本轮只读数据库/日志/代码和文档同步，无产品改动、重启、模型调用或新测试。上一轮1265项通过只支持旧修复，不能当成本轮用量/profile问题已解决。五章完成仍非固定版本连续十章通过；未来断线续作与书内agent继续保留待设计。
 
-仓库D:/novel/AI-Novel-Writing-Assistant，codex/production-core-refactor，接续e72163c3；DB D:/novel/.comparison/2026-10-10/old-test.db。隔离旧3000/5190，新版5173/8787不动。旧后端PID19224（07:07:50.445Z启动），前端PID36796；新版两端口仍关闭。82项源码hash及GET前后保护基线一致。预存三个Structured组件及台账历史964行保留；无push/合并/发布。
-
-主线仍为可靠保存、原步恢复、阶段3生产链一致性和固定版本连续十章验收。未来断线续作、书内agent、资源确认体验为后续事项。长期边界[PROJECT_CONTEXT](PROJECT_CONTEXT.md)、[台账](WORK_LEDGER.md)、[批准方案](../plans/2026-10-11-production-core-refactor.md)、[恢复wiki](../wiki/workflows/chapter-review-resume.md)。
+接手顺序AGENTS→[PROJECT_CONTEXT](PROJECT_CONTEXT.md)→本页→[最新快照](../evals/2026-10-16-five-chapters-usage-and-cast.md)，再核验branch/dirty/真实停点。主线台账[WORK_LEDGER](WORK_LEDGER.md)，批准方案[生产链重构](../plans/2026-10-11-production-core-refactor.md)。
