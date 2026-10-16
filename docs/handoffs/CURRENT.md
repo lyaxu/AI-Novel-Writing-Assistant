@@ -1,6 +1,6 @@
 # 最新交接入口
 
-2026-10-16 10:35 UTC，用户已完成第4、5章后暂停。最新快照：[五章完成、用量暂停与人物能力](../evals/2026-10-16-five-chapters-usage-and-cast.md)。接续[生产选择恢复](../evals/2026-10-16-production-choice-range-recovery.md)；旧“选择完整工作台”操作已执行，不能重做或重建4—10任务。
+2026-10-16 10:35（UTC-05:00；15:35 UTC）只读复核，仍为五章完成后的原暂停，26条调用及五章hash不变。最新完整交接：[主线复核与开发路线](2026-10-16_1535Z_mainline-roadmap.md)，现场根因见[五章诊断](../evals/2026-10-16-five-chapters-usage-and-cast.md)。本轮用户明确把人物两项纳入主线开发；顺序为3A用量/书级规模→3B按篇幅阵容→3C规划改名→3D整合回归→固定版本十章。建议本窗口整理完交接新窗口开发，不自动创建任务。旧“选择完整工作台”操作已执行，不能重做或重建4—10任务。
 
 ## 当前真实状态
 
@@ -16,8 +16,8 @@ P0为阶段3用量统计和恢复：246741是第5章规划4调用累计，不是
 
 ## 环境、验证与保护
 
-D:/novel/AI-Novel-Writing-Assistant，codex/production-core-refactor，接续9da855be；DB D:/novel/.comparison/2026-10-10/old-test.db。旧3000/PID19224加载78b9f92873c4（07:07:50.445Z），5190可访问，health stale=false。不动新版，不恢复废弃样本，不自动调用模型。预存三个Structured组件及台账历史964行保留。
+D:/novel/AI-Novel-Writing-Assistant，codex/production-core-refactor，本轮核验HEAD 91d7753f，随后仅文档提交（最终以git log为准）；DB D:/novel/.comparison/2026-10-10/old-test.db。旧3000/PID19224加载78b9f92873c4（07:07:50.445Z），5190可访问、health stale=false是10:35 UTC的前轮证据，本轮未复核服务。不动新版，不恢复废弃样本，不自动调用模型。预存三个Structured组件及台账历史964行保留。
 
 本轮只读数据库/日志/代码和文档同步，无产品改动、重启、模型调用或新测试。上一轮1265项通过只支持旧修复，不能当成本轮用量/profile问题已解决。五章完成仍非固定版本连续十章通过；未来断线续作与书内agent继续保留待设计。
 
-接手顺序AGENTS→[PROJECT_CONTEXT](PROJECT_CONTEXT.md)→本页→[最新快照](../evals/2026-10-16-five-chapters-usage-and-cast.md)，再核验branch/dirty/真实停点。主线台账[WORK_LEDGER](WORK_LEDGER.md)，批准方案[生产链重构](../plans/2026-10-11-production-core-refactor.md)。
+接手顺序AGENTS→[PROJECT_CONTEXT](PROJECT_CONTEXT.md)→本页→[完整交接](2026-10-16_1535Z_mainline-roadmap.md)及[现场诊断](../evals/2026-10-16-five-chapters-usage-and-cast.md)，再核验branch/dirty/真实停点。主线台账[WORK_LEDGER](WORK_LEDGER.md)，批准方案[生产链重构](../plans/2026-10-11-production-core-refactor.md)的3A—3D表为当前开发顺序，历史操作指引不再有效。
