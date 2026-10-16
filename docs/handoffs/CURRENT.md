@@ -16,10 +16,10 @@ server编译通过，104文件封网离线1265通过、0失败、8既有skip，�
 
 ## 用户下一步
 
-加载核验身份随后补充。打开[本书当前4—10任务](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv8d55el0033z8w0hneoiiru&stage=structured)，刷新，在创作界面选择页核对“本次写作范围：第4-10章”，点击一次“使用完整工作台”。它继续此任务，保留前三章与4、5规划；不是重新开书或再次接管，也不是恢复原1—3的审查。
+修复已加载旧3000/5190，源码78b9f92873c4，health stale=false，原源页及任务GET均200。打开[本书当前4—10任务](http://127.0.0.1:5190/novels/cmv3wyvw40015gow0780pycx9/edit?directorTaskId=cmv8d55el0033z8w0hneoiiru&stage=structured)，刷新，在创作界面选择页核对“本次写作范围：第4-10章”，点击一次“使用完整工作台”。它继续此任务，保留前三章与4、5规划；不是重新开书或再次接管，也不是恢复原1—3的审查。
 
 ## 环境和主线
 
-仓库D:/novel/AI-Novel-Writing-Assistant，codex/production-core-refactor，接续e72163c3；DB D:/novel/.comparison/2026-10-10/old-test.db。隔离旧3000/5190，新版5173/8787不动。首次核验四端口均关闭，受控加载另记。预存三个Structured组件及台账历史964行保留；无push/合并/发布。
+仓库D:/novel/AI-Novel-Writing-Assistant，codex/production-core-refactor，接续e72163c3；DB D:/novel/.comparison/2026-10-10/old-test.db。隔离旧3000/5190，新版5173/8787不动。旧后端PID19224（07:07:50.445Z启动），前端PID36796；新版两端口仍关闭。82项源码hash及GET前后保护基线一致。预存三个Structured组件及台账历史964行保留；无push/合并/发布。
 
 主线仍为可靠保存、原步恢复、阶段3生产链一致性和固定版本连续十章验收。未来断线续作、书内agent、资源确认体验为后续事项。长期边界[PROJECT_CONTEXT](PROJECT_CONTEXT.md)、[台账](WORK_LEDGER.md)、[批准方案](../plans/2026-10-11-production-core-refactor.md)、[恢复wiki](../wiki/workflows/chapter-review-resume.md)。

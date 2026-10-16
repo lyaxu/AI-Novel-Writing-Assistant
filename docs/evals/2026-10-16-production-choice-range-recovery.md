@@ -42,3 +42,9 @@ server TypeScript编译通过，104文件封网/隔离DB回归共1273项，1265�
 真实数据库通过read-only SQLite适配调用恢复资格检查：四个历史失败步骤、无后续调用/生产、7章剩余，eligible=true；未执行选择事务。Private evidence：read-only-recovery-check.json、regression.log、test-files.json、server-tsc.log。前两次组合失败分别是旧测试缺新增只读依赖、候选fixture缺已有必填书级构思，以及新常量未显式装载到隔离harness；已修测试fixture，未放宽产品契约。
 
 选择事务保存同task/novel/plan的回执，ContinueRuntime核验后交给runFromReady，避免将后续缺规划当成重新运行前置结构化阶段；每章质量及写前规划门禁保留。当前没有真实生成第4章，UI交互由用户验收。
+
+## 隔离服务加载
+
+**加载核验（2026-10-16 07:08 UTC）**：78b9f92873c4已加载旧3000/PID19224，应用启动07:07:50.445Z；旧5190/PID36796页面与代理health均200，stale=false，82项源码及共享产物hash通过。原4—10任务详情GET保留production_experience_required和原授权，前后全部保护指纹、65调用、活跃0不变；全库126条调用及废弃样本人工暂停job也未变，代理0。新版5173/8787保持关闭。用户打开当前任务源页刷新，核对4—10并点击一次“使用完整工作台”；无需运行脚本，不要取消或再接管。UI交互与真实模型验收仍由用户执行。
+
+证据：.codex-run/production-choice-range-20261016/health.json、task-entry.json、source-manifest.json、cold-start-processes.json、verified-state.json、global-startup-baseline.json。加载后只做GET及read-only SQLite；没有调用生产选择POST。原失败状态保留是等待用户操作，不代表修复未加载。
