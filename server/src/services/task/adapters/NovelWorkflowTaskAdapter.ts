@@ -449,7 +449,7 @@ export class NovelWorkflowTaskAdapter {
       take: input.take,
     });
     const healed = await Promise.all(
-      rows.map((row) => row.status === "succeeded" ? Promise.resolve(false)
+      rows.map((row) => row.status === "succeeded" || row.checkpointType === "production_experience_required" ? Promise.resolve(false)
         : this.workflowService.healAutoDirectorTaskState(row.id, row)),
     );
     const normalizedRows = healed.some(Boolean)
@@ -527,7 +527,8 @@ export class NovelWorkflowTaskAdapter {
       return null;
     }
     // A completed range is inspected, never reopened or rewritten by a GET.
-    if (options.heal !== false && storedRow.status !== "succeeded") {
+    if (options.heal !== false && storedRow.status !== "succeeded"
+      && storedRow.checkpointType !== "production_experience_required") {
       const healed = await this.workflowService.healAutoDirectorTaskState(id, storedRow);
       if (healed) storedRow = await prisma.novelWorkflowTask.findUnique(query) ?? storedRow;
     }

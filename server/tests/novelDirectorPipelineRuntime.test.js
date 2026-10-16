@@ -44,7 +44,7 @@ function buildDirectorInput(overrides = {}) {
 
 function createRuntime(overrides = {}) {
   const deps = {
-    workflowService: {},
+    workflowService: { async getTaskById() { return null; } },
     novelContextService: {
       async listCharacters() {
         return [];
@@ -84,7 +84,13 @@ function createRuntime(overrides = {}) {
     async assertHighMemoryStartAllowed() {},
     ...overrides,
   };
-  return new NovelDirectorPipelineRuntime(deps);
+  // This suite exercises phase sequencing using in-memory module executors.
+  // Module fact inventories have their own service tests; never reach the
+  // singleton Prisma-backed inventory from these orchestration fixtures.
+  deps.workflowService = { async getTaskById() { return null; }, ...deps.workflowService };
+  const runtime = new NovelDirectorPipelineRuntime(deps);
+  runtime.isModuleFactCompleted = async () => false;
+  return runtime;
 }
 
 test("pipeline resumes structured outline from persisted volume workspace when volume step is already completed", async () => {
@@ -675,4 +681,35 @@ test("pipeline treats empty story macro shell as incomplete during recovery", as
   });
 
   assert.equal(modules[0], "story.macro.plan");
+});
+
+test("structured pipeline stops at persisted production choice even with every automatic approval", async () => {
+  const task = { status: "running", checkpointType: null };
+  const modules = [];
+  let chapterCalls = 0;
+  const runtime = createRuntime({
+    workflowService: { async getTaskById() { return task; } },
+    volumeService: { async getVolumes() { return { volumes: [{ id: "v", chapters: [] }], strategyPlan: {} }; } },
+    novelContextService: { async listCharacters() { return [{ id: "c" }]; } },
+    storyMacroService: { async getPlan() { return { storyInput: "saved", decomposition: {} }; } },
+    bookContractService: { async getByNovelId() { return {}; } },
+    runtimeOrchestrator: {
+      async runStepModule({ module }) {
+        modules.push(module.id);
+        if (module.id === "volume.chapter_detail_bundle.generate") {
+          task.status = "waiting_approval";
+          task.checkpointType = "production_experience_required";
+        }
+      },
+      async runChapterExecutionNode() { chapterCalls += 1; },
+    },
+  });
+  await runtime.runPipeline({ taskId: "cmv8d55el0033z8w0hneoiiru", novelId: "same-book",
+    startPhase: "structured_outline", approveCurrentGate: true, approveAutoExecutionScope: true,
+    input: buildDirectorInput({ runMode: "full_book_autopilot",
+      autoExecutionPlan: { mode: "chapter_range", startOrder: 4, endOrder: 10, autoReview: true, autoRepair: true } }) });
+  assert.ok(modules.includes("chapter.execution_contract.sync"));
+  assert.equal(chapterCalls, 0);
+  assert.equal(task.status, "waiting_approval");
+  assert.equal(task.checkpointType, "production_experience_required");
 });

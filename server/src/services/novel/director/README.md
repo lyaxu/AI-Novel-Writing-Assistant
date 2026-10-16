@@ -68,3 +68,7 @@ import {
 ## 范围完成边界
 
 automation 以授权起止章号逐号计算待办，缺失 Chapter 交给 ChapterRouteWindowService 有界补规划；不得把剩余实体数为零当全部完成。recovery/rangeCompletion 负责旧误完成记录的只读资格检查及源页显式命令 CAS；projections/rangeCompletion 统一状态展示，不写库或启动任务。旧成功 job 保留历史，但进入下一缺章规划前解除运行绑定。已存稿、质量政策、预算和原范围不得因恢复扩大或重置。详见 docs/wiki/workflows/chapter-review-resume.md。
+
+## 生产界面选择边界
+
+production_experience_required由规划阶段持久化，PipelineRuntime与RuntimeOrchestrator在正文入口尊重它。commands/productionExperience负责既有误失败选择停点的证据检查及授权范围重建，仅由DirectorProductionExperienceService显式选择事务调用；不创建第二套命令队列、不自动恢复。任务读取保留门禁，正文范围来自授权而非当前准备窗口。稳定规则见chapter-review-resume wiki。

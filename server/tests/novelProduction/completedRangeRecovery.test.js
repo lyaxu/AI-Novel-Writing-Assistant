@@ -75,6 +75,7 @@ function commandService(f) {
       }
     } };
   const { DirectorCommandService } = loadRuntimeSource('../director/commands/DirectorCommandService.ts', {
+    '../workflowStepRuntime/directorWorkflowStepIds': require('../../dist/services/novel/director/workflowStepRuntime/directorWorkflowStepIds'),
     '@ai-novel/shared/types/novelFraming': {}, '../../../../db/prisma': { prisma: database },
     '../../../../db/sqliteRetry': { withSqliteRetry: fn => fn() }, '../../../../middleware/errorHandler': { AppError },
     '../../workflow/NovelWorkflowService': {}, '../runtime/novelDirectorHelpers': {},

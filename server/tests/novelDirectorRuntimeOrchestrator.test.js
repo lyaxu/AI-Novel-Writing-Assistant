@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   NovelDirectorRuntimeOrchestrator,
+  isDirectorRuntimeGateError,
 } = require("../dist/services/novel/director/runtime/novelDirectorRuntimeOrchestrator.js");
 const {
   createWorkflowStepModule,
@@ -415,6 +416,42 @@ test("chapter execution stops projection steps while manual recovery is pending"
 
   assert.equal(getPipelineRuns(), 1);
   assert.deepEqual(runtimeCalls.map((call) => call.nodeKey), ["chapter_execution_node"]);
+});
+
+test("production interface checkpoint prevents draft execution and all projection nodes", async () => {
+  for (const status of ["waiting_approval", "failed"]) {
+    const task = { status, checkpointType: "production_experience_required", pendingManualRecovery: false };
+    const { orchestrator, runtimeCalls, getPipelineRuns } = buildOrchestrator([], { task });
+    await orchestrator.runChapterExecutionNode({
+      taskId: "real-next-range", novelId: "same-book", request: {},
+      resumeCheckpointType: "chapter_batch_ready", approveAutoExecutionScope: true,
+      approveCurrentGate: true,
+    });
+    assert.equal(getPipelineRuns(), 0);
+    assert.deepEqual(runtimeCalls, []);
+    assert.equal(task.status, status, "read boundary must not heal old failed state implicitly");
+  }
+});
+
+test("generic chapter draft entry preserves production choice before inspection, execution and validation", async () => {
+  for (const runMode of ["stage_review", "auto_to_ready", "auto_to_execution", "full_book_autopilot"]) {
+    const task = { status: "waiting_approval", checkpointType: "production_experience_required",
+      pendingManualRecovery: false, seedPayloadJson: JSON.stringify({ directorInput: { runMode } }) };
+    const original = structuredClone(task);
+    const { orchestrator, runtimeCalls, getPipelineRuns } = buildOrchestrator([], { task });
+    const module = buildNoopModule({ id: "chapter.draft.write", nodeKey: "chapter_execution_node",
+      label: "Draft", writes: ["chapter_draft"], completed: true,
+      inspectCompletion: () => assert.fail("choice must precede completed-draft reuse"),
+      validateOutput: () => assert.fail("a user-choice pause is not a draft validation failure") });
+    module.inspectReadiness = () => assert.fail("choice must precede draft readiness");
+    await assert.rejects(orchestrator.runStepModule({ module, taskId: "saved-choice", novelId: "book",
+      approveCurrentGate: true, approveAutoExecutionScope: true,
+      runner: () => assert.fail("choice must precede markTaskRunning and draft execution"),
+    }), error => isDirectorRuntimeGateError(error));
+    assert.equal(getPipelineRuns(), 0);
+    assert.deepEqual(runtimeCalls, []);
+    assert.deepEqual(task, original);
+  }
 });
 
 test.skip("chapter execution records the standard node sequence without rerunning the pipeline", { skip: "Runtime orchestrator node sequencing is covered by newer module tests until this legacy fixture is rebuilt." }, async () => {

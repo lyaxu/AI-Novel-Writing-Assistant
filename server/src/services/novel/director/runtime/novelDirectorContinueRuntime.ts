@@ -365,9 +365,22 @@ export class NovelDirectorContinueRuntime {
     // An interrupted review has not produced a replan decision yet. A stale
     // director checkpoint cannot make it run planning ahead of that saved review.
     if (savedPipelineRecovery?.currentStage === "reviewing") requestedReplanRecovery = false;
+    const choice = seedPayload.productionChoiceAuthorization as {
+      version?: number; taskId?: string; novelId?: string; sourceCheckpoint?: string;
+      sourceUpdatedAt?: string; plan?: DirectorConfirmRequest["autoExecutionPlan"];
+    } | undefined;
+    const resumesPreparedChoice = Boolean(input?.forceResume === true
+      && continuationMode === "auto_execute_range" && row.checkpointType === "chapter_batch_ready"
+      && !row.cancelRequestedAt && ["queued", "running", "waiting_approval"].includes(row.status)
+      && (seedPayload.productionExperience === "simple" || seedPayload.productionExperience === "professional")
+      && choice?.version === 1 && choice.taskId === taskId && choice.novelId === novelId
+      && choice.sourceCheckpoint === "production_experience_required" && choice.sourceUpdatedAt
+      && Number.isFinite(Date.parse(choice.sourceUpdatedAt)) && choice.plan
+      && JSON.stringify(normalizeDirectorAutoExecutionPlan(choice.plan))
+        === JSON.stringify(normalizeDirectorAutoExecutionPlan(effectiveDirectorInput.autoExecutionPlan)));
     const assetFirstRecovery: DirectorAssetFirstRecovery = savedPipelineRecovery
       ? { type: "auto_execution", resumeCheckpointType: requestedReplanRecovery ? "replan_required" : "chapter_batch_ready" }
-      : resumesIncompleteRange
+      : resumesIncompleteRange || resumesPreparedChoice
       ? { type: "auto_execution", resumeCheckpointType: "chapter_batch_ready" }
       : planningRepairRecovery
       ? planningRepairRecovery.resumePhase === "chapter_execution"

@@ -52,11 +52,25 @@ test("repeated read synchronization cannot clear a checkpoint or fabricate a hea
 });
 test("GET healing stops before all legacy and stale write paths when the linked batch is paused", async () => {
   job = pipeline(); writes.length = 0; const task = row();
+  task.checkpointType = "chapter_batch_ready";
   const service = new NovelWorkflowHealingService({ getTaskByIdWithoutHealing: async () => task });
   service.healBrokenAutoDirectorCandidateSeedPayload = async () => { throw new Error("must not enter write healing"); };
   assert.equal(await service.healAutoDirectorTaskState("task", task), false);
   assert.equal(await service.healAutoDirectorTaskState("task"), false);
   assert.equal(writes.length, 0);
+});
+
+test("all workflow read entrypoints preserve a saved interface choice without a linked job", async () => {
+  job = null;
+  for (const status of ["waiting_approval", "failed"]) {
+    const task = row(); task.status = status; task.seedPayloadJson = "{}";
+    const before = structuredClone(task); writes.length = 0;
+    const service = new NovelWorkflowHealingService({ getTaskByIdWithoutHealing: async () => task });
+    service.healBrokenAutoDirectorCandidateSeedPayload = async () => { assert.fail("choice cannot enter read healing"); };
+    assert.equal(await service.healAutoDirectorTaskState("task", task), false);
+    assert.equal(await service.healAutoDirectorTaskState("task"), false);
+    assert.deepEqual(task, before); assert.equal(writes.length, 0);
+  }
 });
 test("historical recovery also rejects paused, cancelled and foreign jobs instead of projecting activity", async () => {
   const task = row();

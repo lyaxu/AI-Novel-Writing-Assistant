@@ -43,6 +43,7 @@ import { assertPlanningRepairResumeAllowed, readPlanningRepairSeed } from "../re
 import { isPlanningRepairTaskPaused } from "@ai-novel/shared/types/planningRepair/recovery";
 import { createChapterPipelineRecoveryService, assertUnchangedPipelineRecoveryScope } from "../../production/recovery";
 import { acceptIncompleteCompletedRangeCommand } from "../recovery/rangeCompletion";
+import { DIRECTOR_EXECUTION_STEP_IDS } from "../workflowStepRuntime/directorWorkflowStepIds";
 
 const ACTIVE_COMMAND_STATUSES: DirectorRunCommandStatus[] = ["queued", "leased", "running"];
 const EXECUTION_COMMAND_TYPES: DirectorRunCommandType[] = [
@@ -451,6 +452,14 @@ export class DirectorCommandService {
   }
 
   async enqueueCalibrateStepCommand(taskId: string, input: DirectorStepCalibrationRequest): Promise<DirectorCommandAcceptedResponse> {
+    if (input.stepId.trim() === DIRECTOR_EXECUTION_STEP_IDS.chapter_execution) {
+      const task = await this.workflowService.getTaskByIdWithoutHealing(taskId);
+      if (task?.checkpointType === "production_experience_required") {
+        // Reject before enqueue changes task state. A calibration request does not
+        // replace the source-workspace production-interface selection command.
+        throw new AppError("请选择创作界面后再校准章节正文。", 409);
+      }
+    }
     return this.enqueueExecutionCommand({
       taskId,
       commandType: "calibrate_step",

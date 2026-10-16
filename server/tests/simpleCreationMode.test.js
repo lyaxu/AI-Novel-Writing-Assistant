@@ -50,6 +50,7 @@ function candidate(title) {
     writingPlatformReason: "适合高冲突、快推进的移动端长篇阅读。",
     toneKeywords: ["紧张", "成长"],
     targetChapterCount: 120,
+    bookStoryFoundation: require("./fixtures/bookStoryFoundation").foundation,
     storyPrototype: {
       protagonistWant: "保住家人", opposition: "封城者", difficultChoice: "救人暴露自己或隐藏线索",
       distinctiveEngine: "救援导致敌人改变布防", earlyPayoff: "救出第一个被困者", appealRisk: "避免重复逃亡",
@@ -293,4 +294,55 @@ test("preparation-only takeover with a stored range still requires explicit prod
   assert.equal(selected.runMode, "full_book_autopilot");
   assert.equal(selected.productionScope, "sample3");
   assert.deepEqual(selected.autoExecutionPlan, { mode: "chapter_range", startOrder: 1, endOrder: 3, autoReview: true, autoRepair: true });
+});
+
+test("saved failed production-choice checkpoint recovers only through explicit scoped selection", async () => {
+  const seed = directorSeed();
+  seed.takeover = { entryStep: "structured", strategy: "continue_existing" };
+  seed.directorInput.runMode = "full_book_autopilot";
+  seed.directorInput.autoExecutionPlan = { mode: "chapter_range", startOrder: 4, endOrder: 10, autoReview: true, autoRepair: true };
+  seed.autoExecution = { enabled: true, mode: "chapter_range", startOrder: 4, endOrder: 5, pipelineJobId: null };
+  const task = { id: "cmv8d55el0033z8w0hneoiiru", novelId: "same-book", lane: "auto_director",
+    status: "failed", checkpointType: "production_experience_required", cancelRequestedAt: null,
+    lastError: "Chapter execution did not produce observable draft content", finishedAt: new Date(),
+    milestonesJson: JSON.stringify([{ checkpointType: "production_experience_required", createdAt: "2026-10-14T17:07:54.306Z" }]),
+    updatedAt: new Date("2026-10-14T17:07:54.714Z"), seedPayloadJson: JSON.stringify(seed) };
+  const originals = { findUnique: prisma.novelWorkflowTask.findUnique, transaction: prisma.$transaction };
+  let update; let queued = 0; let novelUpdates = 0;
+  prisma.novelWorkflowTask.findUnique = async () => task;
+  prisma.$transaction = async run => run({ novelWorkflowTask: { findFirst: async () => null, updateMany: async args => {
+    update = args; return { count: 1 };
+  } }, novel: { update: async () => { novelUpdates += 1; } },
+    directorRunCommand: { findFirst: async () => null }, directorRuntimeExecution: { findFirst: async () => null },
+    generationJob: { findMany: async () => [] }, novelSideEffectJob: { findFirst: async () => null },
+    directorLlmUsageRecord: { findFirst: async () => null },
+    directorStepRun: { findMany: async () => [{ id: "stopped-node", nodeKey: "chapter_execution_node", status: "failed", error: task.lastError,
+      startedAt: new Date("2026-10-14T17:07:54.679Z") }] },
+    chapter: { findMany: async () => [4, 5].map(order => ({ id: `ch-${order}`, order, content: "", generationState: "planned" })) },
+    directorEvent: { create: async () => ({}) },
+    chapterArtifactSyncCheckpoint: { findFirst: async () => null },
+  });
+  try {
+    const service = new DirectorProductionExperienceService({ enqueueContinueCommand: async (id, input) => {
+      assert.equal(id, task.id); assert.deepEqual(input, { continuationMode: "auto_execute_range", forceResume: true });
+      queued += 1; return { commandId: "scoped-resume" };
+    } });
+    const result = await service.select(task.id, "professional");
+    assert.equal(queued, 1); assert.equal(novelUpdates, 1);
+    assert.deepEqual(result.autoExecutionPlan, seed.directorInput.autoExecutionPlan);
+    assert.equal(update.where.status, "failed"); assert.equal(update.where.updatedAt, task.updatedAt);
+    assert.equal(update.where.cancelRequestedAt, null); assert.equal(update.where.seedPayloadJson, task.seedPayloadJson);
+    assert.equal(update.data.status, "waiting_approval"); assert.equal(update.data.lastError, null);
+    assert.equal(update.data.finishedAt, null); assert.equal(update.data.checkpointType, "chapter_batch_ready");
+    assert.deepEqual(JSON.parse(update.data.seedPayloadJson).directorInput.autoExecutionPlan, seed.directorInput.autoExecutionPlan);
+    assert.equal(JSON.parse(update.data.seedPayloadJson).autoExecution.endOrder, 10);
+    assert.equal(JSON.parse(update.data.seedPayloadJson).autoExecution.remainingChapterCount, 7);
+    for (const patch of [{ status: "cancelled" }, { status: "running" }, { status: "queued" },
+      { cancelRequestedAt: new Date() }, { seedPayloadJson: JSON.stringify({ ...seed, autoExecution: { ...seed.autoExecution, pipelineJobId: "owned-job" } }) }]) {
+      const previous = { ...task }; Object.assign(task, patch);
+      await assert.rejects(service.select(task.id, "professional"), /状态已变化/);
+      Object.assign(task, previous);
+    }
+    assert.equal(queued, 1); assert.equal(novelUpdates, 1);
+  } finally { prisma.novelWorkflowTask.findUnique = originals.findUnique; prisma.$transaction = originals.transaction; }
 });

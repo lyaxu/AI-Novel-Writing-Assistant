@@ -560,8 +560,11 @@ export async function runDirectorStructuredOutlinePhase(input: {
 
   const autoExecutionState = buildDirectorAutoExecutionState({
     range: {
-      startOrder: selectedChapterOrders[0] ?? 1,
-      endOrder: selectedChapterOrders[selectedChapterOrders.length - 1] ?? selectedChapterOrders[0] ?? 1,
+      // A prepared window is only the currently materialized part of the authorized range.
+      // Keep missing future orders pending so incremental planning cannot shorten the task.
+      startOrder: targetChapterRange?.startOrder ?? selectedChapterOrders[0] ?? 1,
+      endOrder: targetChapterRange?.endOrder
+        ?? selectedChapterOrders[selectedChapterOrders.length - 1] ?? selectedChapterOrders[0] ?? 1,
       totalChapterCount: targetChapterRange
         ? countDirectorAutoExecutionChapterRange(targetChapterRange)
         : selectedChapters.length,

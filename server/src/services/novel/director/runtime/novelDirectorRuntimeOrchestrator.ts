@@ -247,6 +247,15 @@ export class NovelDirectorRuntimeOrchestrator {
     runner?: () => Promise<T>;
     collectArtifacts?: (output: T) => Promise<DirectorArtifactRef[]> | DirectorArtifactRef[];
   }): Promise<T> {
+    if (input.module.id === DIRECTOR_EXECUTION_STEP_IDS.chapter_execution) {
+      const task = await this.deps.workflowService.getTaskById(input.taskId);
+      if (task?.checkpointType === "production_experience_required") {
+        // Generic step/calibration entrypoints must obey the same saved choice
+        // boundary as the pipeline. Check before completion inspection or runNode:
+        // returning a void draft here would be misclassified by output validation.
+        throw new DirectorRuntimeGateError("请选择创作界面后继续本次写作。");
+      }
+    }
     if (isExecutableWorkflowStepModule(input.module)) {
       try {
         return await this.runExecutableStepModule({
@@ -422,6 +431,13 @@ export class NovelDirectorRuntimeOrchestrator {
     approveAutoExecutionScope?: boolean;
   }): Promise<void> {
     const isQualityRepair = input.resumeCheckpointType === "replan_required";
+    // This is a persisted user-choice boundary, not a successful draft and not a
+    // failed draft. Do not create a chapter node until the explicit choice command
+    // replaces the checkpoint; automatic policy approval is not that command.
+    const entryTask = await this.deps.workflowService.getTaskById(input.taskId);
+    if (entryTask?.checkpointType === "production_experience_required") {
+      return;
+    }
     const workflowPlan = buildChapterPipelineWorkflowTemplate(
       isQualityRepair ? "quality_repair" : "chapter_execution",
     );

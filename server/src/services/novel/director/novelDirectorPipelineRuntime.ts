@@ -384,6 +384,12 @@ export class NovelDirectorPipelineRuntime {
   }
 
   private async maybeRunAutoApprovedChapters(input: DirectorPipelineRunInput): Promise<void> {
+    // Planning approval does not choose a production interface. The outline phase
+    // persists this checkpoint before returning, including for full-book mode.
+    const task = await this.deps.workflowService.getTaskById(input.taskId);
+    if (task?.checkpointType === "production_experience_required") {
+      return;
+    }
     const shouldAutoApproveCheckpoint = this.shouldAutoApproveCheckpoint(input.input, "chapter_batch_ready");
     if (!input.approveAutoExecutionScope && !shouldAutoApproveCheckpoint) {
       return;

@@ -1064,3 +1064,36 @@ test("director command service requeues task recovery when worker execution fail
     harness.restore();
   }
 });
+
+test("chapter calibration cannot enqueue through the saved production choice checkpoint", async () => {
+  for (const status of ["waiting_approval", "failed"]) {
+    const harness = createHarness(createTask({ status, checkpointType: "production_experience_required",
+      pendingManualRecovery: false, lastError: status === "failed" ? "retained historical failure" : null }));
+    const before = structuredClone(harness.task);
+    try {
+      for (const action of ["validate", "improve", "regenerate"]) {
+        await assert.rejects(harness.service.enqueueCalibrateStepCommand("task-1", {
+          stepId: " chapter.draft.write ", action,
+        }), error => error.statusCode === 409);
+      }
+      assert.deepEqual(harness.task, before);
+      assert.deepEqual(harness.commands, []);
+      assert.deepEqual(harness.taskUpdates, []);
+      assert.deepEqual(harness.stepUpdates, []);
+      assert.deepEqual(harness.bootstraps, []);
+      assert.deepEqual(harness.requeued, []);
+    } finally { harness.restore(); }
+  }
+});
+
+test("chapter calibration can enqueue after explicit production interface selection", async () => {
+  const harness = createHarness(createTask({ checkpointType: "chapter_batch_ready" }));
+  try {
+    const response = await harness.service.enqueueCalibrateStepCommand("task-1", {
+      stepId: "chapter.draft.write", action: "improve",
+    });
+    assert.equal(response.status, "queued");
+    assert.equal(harness.commands.length, 1);
+    assert.equal(harness.commands[0].commandType, "calibrate_step");
+  } finally { harness.restore(); }
+});

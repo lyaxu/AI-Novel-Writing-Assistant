@@ -13,6 +13,7 @@ import {
   type DirectorWorkflowSeedPayload,
 } from "../runtime/novelDirectorHelpers";
 import { DirectorCommandService } from "./DirectorCommandService";
+import { recoverPreparedChoice } from "./productionExperience/preparedChoiceRecovery";
 
 export function parseSelectedExperience(seed: DirectorWorkflowSeedPayload): NovelProductionExperience | null {
   return seed.productionExperience === "simple" || seed.productionExperience === "professional"
@@ -117,14 +118,31 @@ export class DirectorProductionExperienceService {
       if (task.checkpointType !== "production_experience_required") {
         throw new AppError("自动导演还没有完成正文生产前的准备。", 409);
       }
-      const nextSeed = buildProductionExperienceSeed(seed, experience, productionScope);
-
+      // Older orchestration could mark this saved choice checkpoint failed before
+      // any chapter job was dispatched. Only this explicit source-page selection
+      // can recover it; cancelled, active, or already-dispatched work is excluded.
+      if ((task.status !== "waiting_approval" && task.status !== "failed")
+        || task.cancelRequestedAt
+        || (task.status === "failed" && seed.autoExecution?.pipelineJobId)) {
+        throw new AppError("写作任务状态已变化，请刷新本书工作区核对后继续。", 409);
+      }
       const claimed = await prisma.$transaction(async (tx) => {
+        const recovery = await recoverPreparedChoice(tx, task, seed);
+        const nextSeed = buildProductionExperienceSeed(recovery.seed, experience, productionScope);
+        nextSeed.productionChoiceAuthorization = {
+          version: 1, taskId: task.id, novelId: task.novelId,
+          sourceCheckpoint: "production_experience_required",
+          sourceUpdatedAt: task.updatedAt?.toISOString(),
+          plan: nextSeed.directorInput?.autoExecutionPlan,
+        };
         const updated = await tx.novelWorkflowTask.updateMany({
           where: {
             id: task.id,
             checkpointType: "production_experience_required",
             seedPayloadJson: task.seedPayloadJson,
+            status: task.status,
+            cancelRequestedAt: null,
+            updatedAt: task.updatedAt,
           },
           data: {
             seedPayloadJson: JSON.stringify(nextSeed),
@@ -135,6 +153,8 @@ export class DirectorProductionExperienceService {
             checkpointType: "chapter_batch_ready",
             checkpointSummary: authorizedPlan ? "AI 将按接管时确认的范围继续写作，保留已有正文。" : productionScope === "book" ? "章节执行资源已准备完成，AI 将开始全书生产。" : `仅试写前${productionScope === "sample3" ? 3 : 5}章，完成后等待试读，不自动扩写整本。`,
             pendingManualRecovery: false,
+            lastError: null,
+            finishedAt: null,
           },
         });
         if (updated.count === 0) {
@@ -144,11 +164,22 @@ export class DirectorProductionExperienceService {
           where: { id: task.novelId! },
           data: { creationExperience: experience },
         });
+        if (recovery.failedStepIds.length) {
+          await tx.directorEvent.create({ data: {
+            id: `${task.id}:production_interface_selected:${task.updatedAt.getTime()}`,
+            taskId: task.id, novelId: task.novelId, type: "run_resumed",
+            summary: "已选择创作界面，按本次确认范围继续写作。", severity: "low",
+            metadataJson: JSON.stringify({ reason: "production_interface_selected",
+              checkpoint: task.checkpointType, previousError: task.lastError,
+              retainedFailedStepIds: recovery.failedStepIds, autoExecutionPlan: nextSeed.autoExecutionPlan }),
+            occurredAt: new Date(),
+          } });
+        }
         return true;
       });
 
       if (!claimed) {
-        return this.select(taskId, experience, scope);
+        throw new AppError("写作任务刚刚发生变化，请刷新后再选择创作界面。", 409);
       }
     }
 

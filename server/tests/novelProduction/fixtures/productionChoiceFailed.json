@@ -1,0 +1,136 @@
+{
+  "task": {
+    "id": "cmv8d55el0033z8w0hneoiiru",
+    "novelId": "cmv3wyvw40015gow0780pycx9",
+    "lane": "auto_director",
+    "title": "外卖小哥的茅山账本",
+    "status": "failed",
+    "progress": 0.92,
+    "currentStage": "章节执行",
+    "currentItemKey": "chapter_execution",
+    "currentItemLabel": "第 4-10 章已可开写，等待选择创作界面",
+    "checkpointType": "production_experience_required",
+    "checkpointSummary": "《外卖小哥的茅山账本》已完成前期准备，请选择创作界面。",
+    "resumeTargetJson": "{\"route\":\"/novels/:id/edit\",\"novelId\":\"cmv3wyvw40015gow0780pycx9\",\"taskId\":\"cmv8d55el0033z8w0hneoiiru\",\"lane\":\"auto_director\",\"stage\":\"chapter\",\"chapterId\":\"cmv3wyvw40015gow0780pycx9-chapter-64d770af-1b98-4fb4-9edf-b578678ebf50\",\"volumeId\":\"cmv3wyvw40015gow0780pycx9-volume-aba7a8e2-4a3b-49d3-bc43-b33d4cca4a7e\"}",
+    "seedPayloadJson": "{\"takeover\":{\"source\":\"existing_novel\",\"startPhase\":\"structured_outline\",\"entryStep\":\"structured\",\"strategy\":\"continue_existing\",\"effectiveStep\":\"structured\",\"effectiveStage\":\"structured_outline\",\"downstreamReset\":{\"preserveAssets\":true,\"resetStatus\":\"not_started\",\"fromStep\":\"structured\",\"resetSteps\":[\"chapter\",\"pipeline\"]}},\"novelId\":\"cmv3wyvw40015gow0780pycx9\",\"runMode\":\"full_book_autopilot\",\"directorInput\":{\"runMode\":\"full_book_autopilot\",\"autoExecutionPlan\":{\"autoRepair\":true,\"autoReview\":true,\"endOrder\":10,\"mode\":\"chapter_range\",\"startOrder\":4},\"autoApproval\":{\"approvalPointCodes\":[\"candidate_direction_confirmed\",\"character_setup_ready\",\"volume_strategy_ready\",\"structured_outline_ready\",\"chapter_execution_continue\",\"low_risk_quality_repair_continue\",\"replan_continue\",\"rewrite_cleanup_confirmed\"],\"enabled\":true},\"estimatedChapterCount\":100,\"candidate\":{\"id\":\"takeover-cmv3wyvw40015gow0780pycx9\",\"workingTitle\":\"现场样本\",\"targetChapterCount\":100}},\"autoExecutionPlan\":{\"autoRepair\":true,\"autoReview\":true,\"endOrder\":10,\"mode\":\"chapter_range\",\"startOrder\":4},\"autoExecution\":{\"enabled\":true,\"latestRiskAssessment\":null,\"closingExtensionCount\":0,\"mode\":\"chapter_range\",\"autoReview\":true,\"autoRepair\":true,\"artifactSyncMode\":\"adaptive\",\"scopeLabel\":\"第 4-10 章\",\"volumeTitle\":null,\"preparedVolumeIds\":[],\"beatChapterListReady\":true,\"volumeChapterListComplete\":false,\"skippedChapterIds\":[],\"skippedChapterOrders\":[],\"qualityDebtChapterIds\":[],\"qualityDebtChapterOrders\":[],\"qualityDebtSummaries\":[],\"qualityLoopLedger\":null,\"circuitBreaker\":null,\"firstChapterId\":\"cmv8d5at300kbz8w0a7rihjuk\",\"startOrder\":4,\"endOrder\":5,\"totalChapterCount\":2,\"completedChapterCount\":0,\"remainingChapterCount\":2,\"remainingChapterIds\":[\"cmv8d5at300kbz8w0a7rihjuk\",\"cmv8d5at400kcz8w0cs0zyrc7\"],\"remainingChapterOrders\":[4,5],\"nextChapterId\":\"cmv8d5at300kbz8w0a7rihjuk\",\"nextChapterOrder\":4,\"pipelineJobId\":null,\"pipelineStatus\":null},\"directorSession\":{\"runMode\":\"full_book_autopilot\",\"phase\":\"chapter_execution\",\"isBackgroundRunning\":false,\"lockedScopes\":[],\"reviewScope\":\"chapter\"},\"resumeTarget\":{\"route\":\"/novels/:id/edit\",\"novelId\":\"cmv3wyvw40015gow0780pycx9\",\"taskId\":\"cmv8d55el0033z8w0hneoiiru\",\"lane\":null,\"stage\":\"chapter\",\"chapterId\":\"cmv3wyvw40015gow0780pycx9-chapter-64d770af-1b98-4fb4-9edf-b578678ebf50\",\"volumeId\":\"cmv3wyvw40015gow0780pycx9-volume-aba7a8e2-4a3b-49d3-bc43-b33d4cca4a7e\"}}",
+    "milestonesJson": "[{\"checkpointType\":\"production_experience_required\",\"summary\":\"《外卖小哥的茅山账本》已完成前期准备，请选择创作界面。\",\"createdAt\":\"2026-10-14T17:07:54.306Z\"},{\"checkpointType\":\"chapter_batch_ready\",\"summary\":\"AI 已自动通过「节奏拆章完成后继续」，并继续推进。《外卖小哥的茅山账本》已完成前期准备，请选择创作界面。\",\"createdAt\":\"2026-10-14T17:07:54.576Z\"}]",
+    "pendingManualRecovery": 0,
+    "heartbeatAt": "2026-10-14T17:07:54.712+00:00",
+    "startedAt": "2026-10-14T17:07:47.375+00:00",
+    "finishedAt": "2026-10-14T17:07:54.712+00:00",
+    "cancelRequestedAt": null,
+    "attemptCount": 0,
+    "maxAttempts": 3,
+    "lastError": "Chapter execution did not produce observable draft content（实际中断原因：《外卖小哥的茅山账本》已完成前期准备，请选择创作界面。）。",
+    "createdAt": "2026-10-14T17:07:47.229+00:00",
+    "updatedAt": "2026-10-14T17:07:54.714+00:00",
+    "promptTokens": 13049,
+    "completionTokens": 608,
+    "totalTokens": 13657,
+    "llmCallCount": 1,
+    "lastTokenRecordedAt": "2026-10-14T17:07:54.041+00:00"
+  },
+  "steps": [
+    {
+      "id": "cmv8d5b5p00vrz8w0c2n8p8lv",
+      "nodeKey": "chapter_execution_node",
+      "status": "failed",
+      "error": "Chapter execution did not produce observable draft content（实际中断原因：《外卖小哥的茅山账本》已完成前期准备，请选择创作界面。）。",
+      "startedAt": "2026-10-14T17:07:54.679+00:00",
+      "finishedAt": "2026-10-14T17:07:54.699+00:00",
+      "updatedAt": "2026-10-14T17:07:54.707+00:00"
+    },
+    {
+      "id": "cmv8d5aum00kfz8w07cz7ipp9",
+      "nodeKey": "structured_outline.chapter_detail_bundle",
+      "status": "failed",
+      "error": "Chapter execution did not produce observable draft content（实际中断原因：《外卖小哥的茅山账本》已完成前期准备，请选择创作界面。）。",
+      "startedAt": "2026-10-14T17:07:54.278+00:00",
+      "finishedAt": "2026-10-14T17:07:54.716+00:00",
+      "updatedAt": "2026-10-14T17:07:54.716+00:00"
+    },
+    {
+      "id": "cmv8d55z100k5z8w072lgs0vp",
+      "nodeKey": "structured_outline.chapter_list",
+      "status": "failed",
+      "error": "Chapter execution did not produce observable draft content（实际中断原因：《外卖小哥的茅山账本》已完成前期准备，请选择创作界面。）。",
+      "startedAt": "2026-10-14T17:07:47.958+00:00",
+      "finishedAt": "2026-10-14T17:07:54.716+00:00",
+      "updatedAt": "2026-10-14T17:07:54.716+00:00"
+    },
+    {
+      "id": "cmv8d5as000kaz8w0wgvr45c7",
+      "nodeKey": "structured_outline.chapter_sync",
+      "status": "failed",
+      "error": "Chapter execution did not produce observable draft content（实际中断原因：《外卖小哥的茅山账本》已完成前期准备，请选择创作界面。）。",
+      "startedAt": "2026-10-14T17:07:54.184+00:00",
+      "finishedAt": "2026-10-14T17:07:54.716+00:00",
+      "updatedAt": "2026-10-14T17:07:54.716+00:00"
+    },
+    {
+      "id": "cmv8d55y300k4z8w0e0ym36o3",
+      "nodeKey": "volume_chapter_list_generate",
+      "status": "succeeded",
+      "error": null,
+      "startedAt": "2026-10-14T17:07:47.923+00:00",
+      "finishedAt": "2026-10-14T17:07:54.432+00:00",
+      "updatedAt": "2026-10-14T17:07:54.442+00:00"
+    }
+  ],
+  "chapters": [
+    {
+      "id": "cmv3x2mt600jsgow0e6kb0852",
+      "order": 1,
+      "title": "chapter 1",
+      "content": "[protected original manuscript chapter 1]",
+      "generationState": "approved",
+      "chapterStatus": "completed",
+      "sourceContentHash": "d4fb3b8f6b9230632a4bafe29740ae8744950ab105bc1e5e08562e7f883dcda6",
+      "sourceContentChars": 3013
+    },
+    {
+      "id": "cmv3x2mt800jtgow0la32yn38",
+      "order": 2,
+      "title": "chapter 2",
+      "content": "[protected original manuscript chapter 2]",
+      "generationState": "approved",
+      "chapterStatus": "completed",
+      "sourceContentHash": "4704d2b0170166b28e798971db8c2b6aa295a04db03c9141bf16686330da309a",
+      "sourceContentChars": 3680
+    },
+    {
+      "id": "cmv7le2dq0002qow0mxfnhkt8",
+      "order": 3,
+      "title": "chapter 3",
+      "content": "[protected original manuscript chapter 3]",
+      "generationState": "approved",
+      "chapterStatus": "completed",
+      "sourceContentHash": "2260cac78879bfbd562ae19fd1363e0fd816a9b971c70236200a7981e66d172b",
+      "sourceContentChars": 3729
+    },
+    {
+      "id": "cmv8d5at300kbz8w0a7rihjuk",
+      "order": 4,
+      "title": "chapter 4",
+      "content": "",
+      "generationState": "planned",
+      "chapterStatus": "unplanned",
+      "sourceContentHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceContentChars": 0
+    },
+    {
+      "id": "cmv8d5at400kcz8w0cs0zyrc7",
+      "order": 5,
+      "title": "chapter 5",
+      "content": "",
+      "generationState": "planned",
+      "chapterStatus": "unplanned",
+      "sourceContentHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceContentChars": 0
+    }
+  ],
+  "evidence": {
+    "source": "read-only 2026-10-16 snapshot of 2026-10-14 incident",
+    "redaction": "Full story direction, style and manuscripts omitted; runtime identifiers, timestamps, authorized range, failed steps and source manuscript hashes retained."
+  }
+}

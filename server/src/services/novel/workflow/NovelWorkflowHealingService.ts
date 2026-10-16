@@ -219,6 +219,11 @@ export class NovelWorkflowHealingService {
       return false;
     }
     const sourceRow = row ?? await this.workflow.getTaskByIdWithoutHealing(taskId);
+    // A user interface choice is a saved boundary. No read-side reconciler may
+    // replace it with a draft checkpoint, including historical failed choices.
+    if (sourceRow?.checkpointType === "production_experience_required") {
+      return false;
+    }
     if (sourceRow?.lane === "auto_director" && await hasPausedAutoDirectorPipelineJob(taskId, sourceRow)) {
       return false;
     }

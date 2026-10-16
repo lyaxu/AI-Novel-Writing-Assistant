@@ -15,6 +15,7 @@ function fixture({ preflightFails = false, taskCasFails = false, jobCasFails = f
     directorRunCommand: { create: async query => { calls.push(["create", query]); return { id: "command", ...query.data }; } },
   };
   const { DirectorCommandService } = loadRuntimeSource("../director/commands/DirectorCommandService.ts", {
+    "../workflowStepRuntime/directorWorkflowStepIds": require("../../dist/services/novel/director/workflowStepRuntime/directorWorkflowStepIds"),
     "@ai-novel/shared/types/novelFraming": {},
     "../../../../db/prisma": { prisma: {
       directorRunCommand: { findFirst: async () => null, create: async () => assert.fail("must create inside transaction") },

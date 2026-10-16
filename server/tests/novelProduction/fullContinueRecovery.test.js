@@ -252,7 +252,7 @@ test("planning completion through actual chapter orchestrator preserves saved jo
   const orchestrator = new NovelDirectorRuntimeOrchestrator({ ...f.common, autoExecutionRuntime: f.auto });
   // Runtime step persistence/approval UI is outside this forwarding boundary; runner and its input stay real.
   orchestrator.runStepModule = async ({runner}) => runner();
-  const pipeline = new NovelDirectorPipelineRuntime({ runtimeOrchestrator: orchestrator });
+  const pipeline = new NovelDirectorPipelineRuntime({ runtimeOrchestrator: orchestrator, workflowService: f.common.workflowService });
   const seed = JSON.parse(f.row.seedPayloadJson);
   const request = { ...seed.directorInput, runMode: "full_book_autopilot", autoApproval: {} };
   await pipeline.maybeRunAutoApprovedChapters({ taskId: f.row.id, novelId: f.row.novelId, input: request,
