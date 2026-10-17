@@ -165,6 +165,8 @@ Open-source AI novel writing assistant and long-form production studio.
 
 #### 修复
 
+- 本地测试启动器固定打开指定书稿和数据库，重复启动复用同一服务；数据库缺失或端口冲突时明确停止，避免误开其他书库。
+
 - 自动导演在已完成章节之间暂停后，可从本书工作区继续原范围的后续章节，保留已写正文；章节内中断仍核对保留稿与调用结果。
 
 完整历史见[版本更新说明](docs/releases/release-notes.md)。
