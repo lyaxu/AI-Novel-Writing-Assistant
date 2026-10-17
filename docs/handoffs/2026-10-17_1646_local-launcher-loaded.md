@@ -20,8 +20,10 @@ start-local.bat转到scripts/local-test/start.ps1，Node24固定来源；entry.c
 - scripts/local-test/startup.test.cjs 7/7通过，内存数据库验证暂停保留与六种自动任务拒绝。
 - 经cmd执行start-local.bat -NoBrowser冷启动成功；重复启动exit0，仍39704/43320。未做浏览器视觉验收，自动打开URL分支由脚本直接调用系统默认浏览器。
 - 3000及5190代理health均200、相同PID39704、stale=false、source、加载a42fb99d8962；原导演任务GET保持pendingManualRecovery=true。
-- 真实库保护摘要与16:27:50基线一致；五章approved/completed，字符3013/3680/3729/3916/5808、完整SHA256不变。任务26调用/全库151，原4—10完成2/7、next6。旧停止样本仍保留。代理0次模型请求。
+- 原导演完整记录与备份一致，除手动工作区导航之外的保护摘要与16:27:50基线一致；五章approved/completed，字符3013/3680/3729/3916/5808、完整SHA256不变。任务26调用/全库151，原4—10完成2/7、next6。旧停止样本仍保留。代理0次模型请求。
 - 复用前轮server编译、126相关恢复测试及4项新整链离线通过；本轮未变server/src/shared/client，无需重复应用构建。
+
+16:44:36手动工作区manual_create记录的导航/seed/时间变化，使按整书所有任务做hash的旧脚本断言失败；已逐行核对原导演完整记录与备份一致，其余保护表hash和26/151调用一致。此项单独记录，不冒称整库或全部任务逐字未变，详见final-protection.json。
 
 ## 已知问题与临时绕过
 当前重载阻塞已解除。启动器是此checkout指定环境，不是跨机器通用默认；缺Node24或目标库需明确配置，不能自动创建空库。后续应用源码变动时要求受控重载；双击不会中断正在运行的生成。原stop-local.bat仍为用户原广泛匹配脚本，未修改、未使用；不推荐拿它作为精确维护动作。旧dashboard阶段/实时状态残留仍待UI反馈。
