@@ -560,3 +560,13 @@ KIMI/GLM/QWEN/GEMINI），**当前无法发真实模型请求**，30 字重合�
 - 用户验收待做：极寒原稿全文节奏诊断→新样本前三章人工审读→固定版本十章及其他题材。UI/模型全生产链/文学验收尚未通过，不把工程结果解释为节奏已解决。
 - 交接：[2026-10-17_2356_planning-closed-loop-loaded.md](2026-10-17_2356_planning-closed-loop-loaded.md)。CURRENT、wiki、发布说明及独立模型观察齐全；个人记忆仅新增extensions/ad_hoc/notes/20261017-2356-novel-planning-closed-loop.md。
 - 本次后续交接为纯内部记录，发布说明已随代码提交，按readme-release-updater不重复添加；文档单独提交推送。三个Structured组件、历史台账964行、数据库与无关资料保持未提交。
+
+## 2026-10-18 01:16 北京时间 — 新书初始合同拒收的通用性评估
+
+- 用户要求先调查评估，再修改；本轮只读运行数据与原始请求、纯内存回放，无应用修改、模型调用、恢复或服务重载。用户已删除旧极寒稿并选择直接重写，不再等待原稿。
+- 新书 cmvcmyfvt000c14w05b61rm5w / task cmvcmumqq000014w0ycmxc44s，首章合同拒收，无candidateVersionId，waiting_approval/pending1、planning waiting_confirmation/0/2；第1/2章空稿，24调用/258227 tokens。两次生成与两次格式纠正共4调用/61798 tokens，均完整返回。
+- 通用缺口：关系双向重复维护；postValidate纠正仅带错误而未带完整失败合同；初始拒收没有可接续的候选恢复。实际模型收到字段骨架及错误反馈，不归因为缺字段提示或反馈完全丢失。首章设定来源为设计风险，非本次已触发的终止错误。
+- 真实响应及去人物/命题文本的纯结构回放均复现同样错误；GET两种候选恢复均available=false。严格校验应保留，不手改本书声明ID，不建议重开碰运气或购买无候选修复建议。
+- 旧样本32调用/1396340 tokens、原候选与五章SHA256、暂停0/2不变，第6章空。应用加载f9d9ee23a7cb，Node24.19.0，3000/PID2632与5190/PID60636，固定old-test.db，stale=false。仅文档不重载。
+- 先前520工程测试及审查样本不覆盖真实新合同生成全链。推荐单一归属协议、完整失败输出有界纠正、初始拒收持久恢复及独立多题材全链验收；尚未实施，用户验收未通过。
+- CURRENT、[诊断快照](2026-10-18_0116_initial-contract-diagnosis.md)、wiki与个人记忆备注同步。纯内部诊断记录，按readme-release-updater不改README/发布说明、不重跑应用构建。文档单独提交推送，三个Structured组件和台账历史964行不混入。

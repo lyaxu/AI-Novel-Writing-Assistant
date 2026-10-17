@@ -1,13 +1,15 @@
 # 最新交接入口
 
-2026-10-17 23:56（北京时间）。[最新完整交接](2026-10-17_2356_planning-closed-loop-loaded.md)。**通用规划状态闭环已实现、已测试、已推送、已加载；用户UI与新书全文验收尚未进行。旧书明确保留暂停作为回归样本，不再恢复第6—10章。**
+2026-10-18 01:16（北京时间）。[最新完整诊断交接](2026-10-18_0116_initial-contract-diagnosis.md)。**新书首章执行合同拒收：确认通用生成/纠正/无候选恢复缺口；本轮只调查评估，未改应用、未重载、未恢复、未调用模型。**
 
-仓库D:/novel/AI-Novel-Writing-Assistant，codex/production-core-refactor，远端lyaxu。代码b3705bd4ff3aff79cd0bfc8a9270302bd279e277已推送且远端一致；本交接另作纯文档提交。23:55核验后端3000/PID56952、前端5190/PID55684、Node24.19.0，加载b3705bd4ff3a、stale=false。DB固定D:/novel/.comparison/2026-10-10/old-test.db，start-local.bat仍启动此旧版环境，不自动恢复任务。
+用户已删除旧极寒正文并选择直接重写，不再等待原稿。新书《零下八十度，我买下地铁站建城》novel cmvcmyfvt000c14w05b61rm5w，task cmvcmumqq000014w0ycmxc44s；waiting_approval/pending1，planning waiting_confirmation/0/2，无candidateVersionId，第1/2章空稿。调用24、258227 tokens；同章初始合同两次生成+两次格式纠正共4次/61798 tokens，均完整返回而非截断。
 
-联合30文件520/520通过，shared/server编译与client类型检查通过。独立模型最终4组符合预期（1组用一次审查纠正）；开发共13次、183147 tokens，未记入旧书任务。模型仍可能误判，不代表十章或文学验收通过。[完整验证与边界](../evals/framework-quality/observations/2026-10-17-planning-closed-loop-verification.md)。
+第一次跨关系校验报声明引用不存在场景；第二次报scene1必须绑定自己的action声明，另有多项跨场/阶段错位。实际提示骨架含entryState/exitState，第二请求也收到错误反馈；不能误诊为字段或反馈完全未发送。问题是重复维护图关系、纠正仅收到错误串而缺完整失败合同。无候选时review-existing与resume-policy实际均不可用，建议授权后的通用恢复也有候选前置断点。
 
-旧书cmv3wyvw40015gow0780pycx9，任务cmv8d55el0033z8w0hneoiiru：waiting_approval/pending1，规划waiting_confirmation/rounds0/max2，原候选保留，前5章hash不变、第6章空稿，调用32、累计1396340 tokens。重载前后保护摘要完全一致；没有恢复、没有旧书模型调用。只读原策略入口可用不代表授权恢复停用样本。
+工作区D:/novel/AI-Novel-Writing-Assistant，codex/production-core-refactor，lyaxu。调查时HEAD及已加载f9d9ee23a7cb，Node24.19.0，3000/PID2632、5190/PID60636，stale=false；DB固定D:/novel/.comparison/2026-10-10/old-test.db。本次仅诊断文档另提交推送，无需重载。
 
-下一步：用户拟重写已签约、写过7—8章的末世极寒文，原稿路径尚未提供。先读取全文，分析保留卖点、重复铺垫与开篇回报，再新建独立样本，前三章人工审读通过后推进固定版本十章。旧稿仅为重写素材，未经确认不当成新稿既定事实；不自动发布或替换平台稿。
+旧五章书cmv3wyvw40015gow0780pycx9与任务cmv8d55el0033z8w0hneoiiru继续冻结：32调用/1396340 tokens，暂停0/2，原候选和5章hash不变、第6章空。新旧书均未执行恢复或修改。
 
-三个Structured组件、台账历史964行及无关本地资料保持未提交。人物阵容/候选改名独立验收与dashboard等原待办保留。交接链：[PROJECT_CONTEXT](PROJECT_CONTEXT.md)→[最新快照](2026-10-17_2356_planning-closed-loop-loaded.md)→[主线计划](../plans/2026-10-11-production-core-refactor.md)。
+下一阶段建议：单一归属生成合同→完整失败响应有界纠正→无候选拒收的持久恢复→独立多题材生成全链验收。先不建议用户点AI方案、自定义或重开书；不能用上轮520工程测试及质量审查样本冒充新书生成链已验收。用户强调先评估再修改，应用实现尚未开始。
+
+三个Structured组件、台账历史964行和无关本地资料保留；人物/候选改名独立验收与dashboard原待办保留。[PROJECT_CONTEXT](PROJECT_CONTEXT.md)→[本轮诊断](2026-10-18_0116_initial-contract-diagnosis.md)；上次已实现范围见[23:56快照](2026-10-17_2356_planning-closed-loop-loaded.md)。
