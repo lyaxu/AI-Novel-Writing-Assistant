@@ -530,3 +530,15 @@ KIMI/GLM/QWEN/GEMINI），**当前无法发真实模型请求**，30 字重合�
 ## 2026-10-17 16:46（北京时间）固定启动与重载完成
 
 - 用户明确授权后，start-local.bat固定当前old-test.db/5190/3000与原书入口；缺库和端口冲突拒绝、重复启动复用。7项启动保护测试、经bat冷启动及重复启动、health/任务GET/保护摘要通过。后端39704/source/Node24/加载a42fb99d8962/stale=false，前端43320；五章hash、原人工暂停、next6、26/151调用不变。用户可继续6—10，代理未发恢复/模型请求。未使用原stop-local.bat。详见[交接](2026-10-17_1646_local-launcher-loaded.md)。
+
+
+## 2026-10-17 17:25（北京时间）规划审查准确引用与保留候选复核
+
+- 用户授权：修复、测试、推送、重载、同步台账及记忆，保留五章和原暂停；必要可调模型。本轮0模型调用、0恢复命令。
+- 主因：模型首次错引章节，纠正后把旧规划/压缩事实当原文；目录完整。质量错误包装丢完成回执，原候选停在unknown准备边界，普通AI建议不能解决恢复关卡。
+- 代码完成/已推送：68bcbb093fce701e0ab46bf556d0fa282442e43c，lyaxu/codex/production-core-refactor远端一致。新v18正文ID引用还原后严格校验；明确复核授权锁来源/候选/job/journal，归档未知记录，保持0/2轮，不自动改候选。未合并main/beta。
+- 已加载：17:24:13，Node24.19.0，后端49200/3000、前端54884/5190，旧库D:/novel/.comparison/2026-10-10/old-test.db；health stale=false，真实复核GET available=true/current6/range4—10。
+- 验证：server编译、client类型检查、366/366定向回归、实际回答离线回放通过。回放保留现金冲突和repair_contract，不代替新模型/文学验收。独立审查补旧授权漂移、冲突归档、不完整租约保护。
+- 数据：前五章字符及SHA256不变，第六章空稿；原导演waiting_approval/pending1，technical_failed/rounds0/max2；原保护摘要一致。用户恢复时四次调用26→30/全库155，213724 tokens；本轮保持30。原一致性备份仍1027043328字节，无新迁移。
+- 下一步：用户刷新源书页，在规划修复区勾选确认后点“重新复核保留候选”；失败暂停，通过继续6—10。UI/模型/文学/固定版本十章待验收；人物功能另样本。
+- 完整交接：[2026-10-17_1725_planning-citation-recovery-loaded.md](2026-10-17_1725_planning-citation-recovery-loaded.md)。本地证据.codex-run/planning-citation-20261017/；个人记忆扩展记录已同步。三个Structured组件、台账历史964行及临时资料保留。
