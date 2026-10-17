@@ -82,6 +82,14 @@
 
 具体全文与接收反例见[三章核验](../../evals/framework-quality/observations/2026-10-01-chapter-three-quality-and-tool-audit.md)。本规则影响规划、接收、补丁、选稿和事实同步，问题仍按已有局部质量债/结构性重规划策略处理。
 
+## 未来选择与已发生事实的审查边界
+
+前文尚未决定，允许后章作出决定；物品暂时无法取出，允许安排新的尝试。只有候选无过渡声称过去已经决定、持有或成功，才可能构成对应事实冲突。审查须区分主体、时点、意图、尝试和结果，不能用准确引文支持不成立的推理。部分还债与总债务也不是同一个数值命题。
+
+逐问题修复决定与汇总建议应共用事实依据，汇总不得新增数量或状态。规划目标不能冒充行动前提。正常运行与技术恢复应依据原授权和剩余预算；明确选择的只复核不得暗中扩大成修复。这些是维护及验收规则，当前仍有事实输入、命题绑定、跨结论一致性缺口，不因写入wiki就视为已保障。
+
+证据及未实施范围见[第六章系统诊断](../../evals/framework-quality/observations/2026-10-17-planning-state-review-root-cause.md)。
+
 ## Related Modules
 
 - `shared/types/novel/sceneCausality.ts` 与 `shared/types/chapterLengthControl.ts`

@@ -542,3 +542,10 @@ KIMI/GLM/QWEN/GEMINI），**当前无法发真实模型请求**，30 字重合�
 - 数据：前五章字符及SHA256不变，第六章空稿；原导演waiting_approval/pending1，technical_failed/rounds0/max2；原保护摘要一致。用户恢复时四次调用26→30/全库155，213724 tokens；本轮保持30。原一致性备份仍1027043328字节，无新迁移。
 - 下一步：用户刷新源书页，在规划修复区勾选确认后点“重新复核保留候选”；失败暂停，通过继续6—10。UI/模型/文学/固定版本十章待验收；人物功能另样本。
 - 完整交接：[2026-10-17_1725_planning-citation-recovery-loaded.md](2026-10-17_1725_planning-citation-recovery-loaded.md)。本地证据.codex-run/planning-citation-20261017/；个人记忆扩展记录已同步。三个Structured组件、台账历史964行及临时资料保留。
+
+## 2026-10-17 20:15 北京时间 — 规划再次暂停的系统性诊断
+
+- 用户要求查根因，不再逐条救测试书。实际全文/请求/候选/代码核验：章节列表无正文事实；细化有正文仍新增1700；审查将未来选择误判为事实冲突且170/1070建议自相矛盾；只复核恢复未接回原自动预算0/2。
+- 完整诊断和下一阶段验收矩阵：docs/evals/framework-quality/observations/2026-10-17-planning-state-review-root-cause.md。建议旧书作为故障样本，通用闭环完成后新书多题材验收；不是用户已确认弃书。新的通用修复未实施，不以本书金额/人物写特例。
+- 当前32调用，用户新增174339 tokens，累计1396340；waiting_approval/pending1，规划waiting_confirmation/0/2，前5章hash不变、第6章空稿。代理零模型调用、零业务写入、零恢复。旧17:25的30调用已过时。
+- 更新CURRENT/快照/wiki/个人记忆备注。仅内部诊断文档，按readme-release-updater跳过发布说明；不重复应用测试或重载。此前366工程回归不代表本次语义问题通过。文档单独提交推送，不合并main/beta；历史964行及三个Structured组件不混入。
