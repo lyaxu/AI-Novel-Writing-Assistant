@@ -22,6 +22,7 @@ export async function invokePlannerLLM(input: {
   planLevel: StoryPlanLevel;
   contextBlocks: PromptContextBlock[];
   payoffValidation?: ChapterPayoffValidationInput;
+  attribution?: { novelId: string; chapterId?: string };
 }): Promise<PlannerOutput> {
   const asset = input.planLevel === "book"
     ? plannerBookPlanPrompt
@@ -39,6 +40,10 @@ export async function invokePlannerLLM(input: {
       provider: input.options.provider,
       model: input.options.model,
       temperature: input.options.temperature ?? 0.4,
+      novelId: input.attribution?.novelId,
+      chapterId: input.attribution?.chapterId,
+      stage: "story_plan",
+      scope: input.planLevel,
     },
   });
 

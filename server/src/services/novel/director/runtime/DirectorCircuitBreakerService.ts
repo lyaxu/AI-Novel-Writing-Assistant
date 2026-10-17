@@ -6,12 +6,10 @@ import type {
 
 export const DIRECTOR_CIRCUIT_BREAKER_THRESHOLDS = {
   modelFailureOpenAt: 3,
-  // A chapter with one normal repair cycle costs ~55-60k tokens (write + accept×2 + patch
-  // + timeline + artifact_delta). 80k allows up to two repair cycles before triggering.
-  // Anything beyond two repairs per chapter is genuinely abnormal and warrants a pause.
-  chapterTotalTokenLimit: 80_000,
+  // Advisory thresholds only. Context size is not evidence of a stalled operation.
   singleStepTotalTokenLimit: 150_000,
   usageAnomalyOpenAt: 2,
+  noProgressCallLimit: 6,
 } as const;
 
 export function isDirectorCircuitBreakerOpen(
@@ -30,6 +28,7 @@ export function buildClosedDirectorCircuitBreakerState(
     replanLoopCount: previous?.replanLoopCount ?? 0,
     modelFailureCount: previous?.modelFailureCount ?? 0,
     usageAnomalyCount: previous?.usageAnomalyCount ?? 0,
+    lastUsageRecordId: previous?.lastUsageRecordId ?? null,
   };
 }
 
@@ -65,6 +64,7 @@ export function openDirectorCircuitBreaker(input: {
     reason: input.reason,
     message: input.message,
     openedAt: now,
+    resetAt: input.previous?.resetAt ?? null,
     chapterId: input.chapterId ?? null,
     chapterOrder: input.chapterOrder ?? null,
     nodeKey: input.nodeKey ?? null,
@@ -107,6 +107,7 @@ export function recordModelFailureSignal(input: {
   return {
     status: "closed",
     reason: input.reason,
+    resetAt: input.previous?.resetAt ?? null,
     message: input.message,
     nodeKey: input.nodeKey ?? null,
     patchFailureCount: input.previous?.patchFailureCount ?? 0,
@@ -124,6 +125,7 @@ export function recordUsageAnomalySignal(input: {
   totalTokens: number;
   nodeKey?: string | null;
 }): DirectorCircuitBreakerState | null {
+  if (isDirectorCircuitBreakerOpen(input.previous)) return input.previous;
   if (input.totalTokens < DIRECTOR_CIRCUIT_BREAKER_THRESHOLDS.singleStepTotalTokenLimit) {
     return null;
   }
@@ -135,19 +137,10 @@ export function recordUsageAnomalySignal(input: {
     return input.previous ?? null;
   }
   const usageAnomalyCount = previousCount + 1;
-  const message = `单步骤 AI 用量达到 ${input.totalTokens} Tokens，已暂停以避免继续异常消耗。`;
-  if (usageAnomalyCount >= DIRECTOR_CIRCUIT_BREAKER_THRESHOLDS.usageAnomalyOpenAt) {
-    return openDirectorCircuitBreaker({
-      reason: "usage_anomaly",
-      message,
-      previous: input.previous,
-      nodeKey: input.nodeKey,
-      usageAnomalyCount,
-      lastUsageRecordId: input.usageRecordId ?? null,
-    });
-  }
+  const message = `单次 AI 调用累计输入和输出 ${input.totalTokens} Tokens，可在运行记录中查看用量。`;
   return {
     status: "closed",
+    resetAt: input.previous?.resetAt ?? null,
     reason: "usage_anomaly",
     message,
     nodeKey: input.nodeKey ?? null,
@@ -167,16 +160,18 @@ export function recordChapterUsageBudgetExceededSignal(input: {
   chapterId?: string | null;
   chapterOrder?: number | null;
   nodeKey?: string | null;
+  tokenLimit?: number;
 }): DirectorCircuitBreakerState | null {
-  if (input.totalTokens < DIRECTOR_CIRCUIT_BREAKER_THRESHOLDS.chapterTotalTokenLimit) {
+  const tokenLimit = input.tokenLimit;
+  if (!Number.isSafeInteger(tokenLimit) || tokenLimit! <= 0 || input.totalTokens < tokenLimit!) {
     return null;
   }
-  if (input.usageRecordId && input.previous?.lastUsageRecordId === input.usageRecordId) {
+  if (input.previous?.status === "open" && input.usageRecordId && input.previous.lastUsageRecordId === input.usageRecordId) {
     return input.previous ?? null;
   }
   return openDirectorCircuitBreaker({
     reason: "usage_anomaly",
-    message: `单章 AI 用量达到 ${input.totalTokens} Tokens，已暂停以避免继续异常消耗。`,
+    message: `本章 AI 用量达到 ${input.totalTokens} Tokens，已达到设定的 ${tokenLimit} Tokens 上限，请在本书工作区核对预算。`,
     previous: input.previous,
     chapterId: input.chapterId,
     chapterOrder: input.chapterOrder,

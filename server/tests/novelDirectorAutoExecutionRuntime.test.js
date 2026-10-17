@@ -2153,6 +2153,7 @@ test("prepareRequestedAutoExecution resolves the selected volume range instead o
         mode: "volume",
         volumeOrder: 2,
       },
+      estimatedChapterCount: 100,
     }),
     existingState: {
       enabled: true,
@@ -2161,6 +2162,7 @@ test("prepareRequestedAutoExecution resolves the selected volume range instead o
       startOrder: 1,
       endOrder: 4,
       totalChapterCount: 4,
+      completionProfile: require('@ai-novel/shared/types/directorCompletion').buildDirectorCompletionProfile(4),
     },
   });
 
@@ -2172,6 +2174,8 @@ test("prepareRequestedAutoExecution resolves the selected volume range instead o
   });
   assert.equal(resolved.autoExecution.volumeOrder, 2);
   assert.equal(resolved.autoExecution.scopeLabel, "第 2 卷 · 反扑卷");
+  assert.equal(resolved.autoExecution.completionProfile.targetChapterCount, 100);
+  assert.equal(resolved.autoExecution.completionProfile.mode, "serial_book");
   assert.deepEqual(resolved.autoExecution.remainingChapterOrders, [5, 6, 7, 8]);
 });
 

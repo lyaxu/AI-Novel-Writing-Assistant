@@ -41,6 +41,51 @@ const chapter = (order, complete = true) => ({ id: `c${order}`, order, content: 
 const range = (startOrder = 1, endOrder = 3) => ({ startOrder, endOrder, totalChapterCount: endOrder - startOrder + 1, firstChapterId: `c${startOrder}` });
 const plan = (startOrder = 1, endOrder = 3) => ({ enabled: true, mode: 'chapter_range', startOrder, endOrder });
 const build = (rows, limits = range(), extra = {}) => core.buildDirectorAutoExecutionState({ range: limits, chapters: rows, plan: { ...plan(limits.startOrder, limits.endOrder), ...extra } });
+const profile = require('@ai-novel/shared/types/directorCompletion').buildDirectorCompletionProfile;
+
+test('book size survives requested batch changes and repairs historical batch-derived profiles', () => {
+  for (const target of [17, 60, 61, 100, 407]) {
+    for (const hasPlan of [false, true]) {
+      const existingState = { ...plan(4, 10), completionProfile: profile(7), closingExtensionCount: 2,
+        circuitBreaker: { status: 'open' }, pipelineJobId: 'original-job' };
+      const request = { candidate: { targetChapterCount: target }, completionProfile: profile(target),
+        ...(hasPlan ? { autoExecutionPlan: plan(4, 10) } : {}) };
+      const actual = scope.buildRequestedAutoExecutionState({ request, existingState, existingPipelineJobId: 'original-job' });
+      assert.deepEqual(actual.completionProfile, profile(target));
+      assert.equal(actual.startOrder, 4); assert.equal(actual.endOrder, 10);
+      assert.equal(actual.closingExtensionCount, 2); assert.equal(actual.circuitBreaker.status, 'open');
+      assert.equal(actual.pipelineJobId, 'original-job');
+      assert.equal(existingState.completionProfile.targetChapterCount, 7, 'read input is not mutated');
+    }
+  }
+});
+
+test('task seed book intent overrides contaminated caller state and supports older director inputs', () => {
+  const request = { candidate: { targetChapterCount: 7 }, completionProfile: profile(7) };
+  for (const seed of [{ completionProfile: profile(100) }, { estimatedChapterCount: 100 },
+    { directorInput: { estimatedChapterCount: 100 } }, { directorInput: { candidate: { targetChapterCount: 100 } } }]) {
+    assert.deepEqual(preparation.restoreAutoExecutionBookRequest(request, seed, { completionProfile: profile(7) }).completionProfile, profile(100));
+  }
+});
+
+test('missing book metadata never derives ending from batch length or materialized chapter count', async () => {
+  for (const [start, end] of [[4, 10], [201, 203]]) {
+    const result = await scope.resolveAutoExecutionRangeAndState({ novelId: 'n',
+      existingState: plan(start, end), allowLazyChapterPlanning: true,
+      deps: { listChapters: async () => [chapter(start), chapter(end)] } });
+    assert.deepEqual(result.autoExecution.completionProfile, profile(80));
+    assert.equal(result.autoExecution.totalChapterCount, end - start + 1);
+    assert.equal(result.autoExecution.nextChapterOrder, start + 1);
+  }
+});
+
+test('compact book stage labels use absolute book progress instead of a short remaining batch', () => {
+  const state = { ...plan(4, 10), nextChapterOrder: 6, remainingChapterCount: 5,
+    completedChapterCount: 2, completionProfile: profile(50) };
+  assert.equal(core.buildDirectorAutoExecutionStageLabel(state), '正在推进故事');
+  assert.equal(core.buildDirectorAutoExecutionStageLabel({ ...state, nextChapterOrder: 45 }), '正在收束主线');
+  assert.equal(core.buildDirectorAutoExecutionStageLabel({ ...state, nextChapterOrder: 49 }), '正在补齐结局');
+});
 
 test('range 1-3 counts nonexistent third chapter and never requeues approved chapters', () => {
   const state = build([chapter(1), chapter(2)]);
@@ -113,6 +158,46 @@ function executionHarness(initialRows, endOrder = 3, ensureImpl) {
   return { rows, deps, request, task, prepared, starts, savedCheckpoints,
     run: () => new runtime.NovelDirectorAutoExecutionRuntime(deps).runFromReady({ taskId: 'task', novelId: 'n', request, existingState: plan(1, endOrder) }) };
 }
+
+test('original 4-10 task retains 100-chapter intent while materializing only missing 6-10 routes', async () => {
+  const h = executionHarness([1, 2, 3, 4, 5].map(order => chapter(order)), 10);
+  const oldState = { ...plan(4, 10), completionProfile: profile(7) };
+  const original = structuredClone(h.rows);
+  h.task.seedPayloadJson = JSON.stringify({ completionProfile: profile(100), autoExecution: oldState });
+  await new runtime.NovelDirectorAutoExecutionRuntime(h.deps).runFromReady({
+    taskId: 'task', novelId: 'n', request: { ...h.request, completionProfile: profile(7), autoExecutionPlan: plan(4, 10) },
+    existingState: oldState,
+  });
+  assert.deepEqual(h.prepared.map(item => item.order), [6, 7, 8, 9, 10]);
+  assert.ok(h.prepared.every(item => item.options.completionProfile.targetChapterCount === 100
+    && item.options.completionProfile.mode === 'serial_book' && item.options.endOrder === item.order));
+  assert.deepEqual(h.rows.slice(0, 5), original);
+  const saved = h.savedCheckpoints[0].seedPayload.autoExecution;
+  assert.equal(saved.startOrder, 4); assert.equal(saved.endOrder, 10); assert.equal(saved.totalChapterCount, 7);
+  assert.deepEqual(saved.completionProfile, profile(100));
+});
+
+test('high-order batch preserves full-book size through holes and ready chapters', async () => {
+  const h = executionHarness([chapter(199), chapter(200), chapter(202, false), chapter(204)], 203);
+  const oldState = { ...plan(200, 203), completionProfile: profile(4) };
+  h.task.seedPayloadJson = JSON.stringify({ directorInput: { estimatedChapterCount: 407 }, autoExecution: oldState });
+  await new runtime.NovelDirectorAutoExecutionRuntime(h.deps).runFromReady({ taskId: 'task', novelId: 'n',
+    request: { ...h.request, autoExecutionPlan: plan(200, 203) }, existingState: oldState });
+  assert.deepEqual(h.prepared.map(item => item.order), [201, 203]);
+  assert.deepEqual(h.starts.map(item => item.startOrder), [201, 202, 203]);
+  assert.ok(h.prepared.every(item => item.options.completionProfile.endingRequiredBy === 407));
+  assert.equal(h.rows.find(item => item.order === 200).content, 'saved-200');
+  assert.equal(h.rows.find(item => item.order === 204).content, 'saved-204');
+  assert.equal(h.savedCheckpoints[0].seedPayload.autoExecution.completionProfile.targetChapterCount, 407);
+});
+
+test('already materialized next chapter gets corrected book profile without route generation', async () => {
+  const result = await preparation.prepareNextAutoExecutionChapter({}, { taskId: 'task', novelId: 'n', range: range(4, 10),
+    request: { candidate: { targetChapterCount: 100 } },
+    autoExecution: { ...plan(4, 10), completionProfile: profile(7), nextChapterOrder: 6, nextChapterId: 'c6' } });
+  assert.deepEqual(result.autoExecution.completionProfile, profile(100));
+  assert.equal(result.autoExecution.nextChapterId, 'c6');
+});
 
 test('runtime materializes chapter 3 in its original task then executes it once before completing 1-3', async () => {
   const h = executionHarness([chapter(1), chapter(2), chapter(4, false)]);

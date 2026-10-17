@@ -24,7 +24,7 @@ test("pipeline failures remain runtime failures when automatic repair is enabled
   assert.equal(state.patchFailureCount, 0);
 });
 
-test("usage anomaly ignores the same usage record twice", () => {
+test("high usage warns idempotently and does not equate context size with a stalled operation", () => {
   let state = recordUsageAnomalySignal({
     previous: null,
     usageRecordId: "usage-1",
@@ -49,6 +49,6 @@ test("usage anomaly ignores the same usage record twice", () => {
     totalTokens: 180000,
     nodeKey: "chapter_execution_node",
   });
-  assert.equal(state.status, "open");
+  assert.equal(state.status, "closed");
   assert.equal(state.reason, "usage_anomaly");
 });

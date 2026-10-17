@@ -58,6 +58,7 @@ export function normalizeDirectorAutoExecutionPlan(
   const autoReview = plan?.autoReview ?? true;
   const autoRepair = autoReview ? (plan?.autoRepair ?? true) : false;
   const artifactSyncMode = plan?.artifactSyncMode ?? "adaptive";
+  const usageBudget = plan?.usageBudget;
   const rawMode = typeof (plan as { mode?: unknown } | null | undefined)?.mode === "string"
     ? (plan as { mode?: string }).mode
     : null;
@@ -71,6 +72,7 @@ export function normalizeDirectorAutoExecutionPlan(
       autoReview,
       autoRepair,
       artifactSyncMode,
+      usageBudget,
     };
   }
   if (plan?.mode === "volume") {
@@ -80,6 +82,7 @@ export function normalizeDirectorAutoExecutionPlan(
       autoReview,
       autoRepair,
       artifactSyncMode,
+      usageBudget,
     };
   }
   if (plan?.mode === "book") {
@@ -88,6 +91,7 @@ export function normalizeDirectorAutoExecutionPlan(
       autoReview,
       autoRepair,
       artifactSyncMode,
+      usageBudget,
     };
   }
   const fallbackStartOrder = Math.max(
@@ -105,6 +109,7 @@ export function normalizeDirectorAutoExecutionPlan(
     autoReview,
     autoRepair,
     artifactSyncMode,
+    usageBudget,
   };
 }
 
@@ -440,6 +445,7 @@ export function buildDirectorAutoExecutionState(input: {
     autoReview: plan.autoReview ?? true,
     autoRepair: plan.autoReview === false ? false : (plan.autoRepair ?? true),
     artifactSyncMode: plan.artifactSyncMode ?? "adaptive",
+    usageBudget: plan.usageBudget,
     scopeLabel: input.scopeLabel?.trim() || buildDirectorAutoExecutionScopeLabel(plan, totalChapterCount, input.volumeTitle),
     volumeOrder: plan.mode === "volume" ? plan.volumeOrder : undefined,
     volumeTitle: input.volumeTitle ?? null,
@@ -478,10 +484,12 @@ export function buildDirectorAutoExecutionStageLabel(state: DirectorAutoExecutio
   if (state.completionProfile?.mode !== "compact_book") {
     return `正在自动执行${buildDirectorAutoExecutionScopeLabelFromState(state)}`;
   }
-  const remaining = state.remainingChapterCount ?? 0;
+  // Batch completion must not announce the ending of a compact book prematurely.
+  const nextOrder = state.nextChapterOrder ?? state.endOrder ?? 1;
+  const remaining = Math.max(0, state.completionProfile.endingRequiredBy - nextOrder + 1);
   if (remaining <= 3) return "正在补齐结局";
   if (remaining <= 8) return "正在收束主线";
-  if ((state.completedChapterCount ?? 0) <= 3) return "正在完成开篇";
+  if (nextOrder <= 3) return "正在完成开篇";
   return "正在推进故事";
 }
 

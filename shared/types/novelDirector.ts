@@ -206,6 +206,8 @@ export interface DirectorAutoExecutionPlan {
   autoReview?: boolean;
   autoRepair?: boolean;
   artifactSyncMode?: ArtifactSyncMode;
+  /** Explicit user limits; cumulative across retries and manual recovery. */
+  usageBudget?: { taskTokenLimit?: number; chapterTokenLimit?: number };
 }
 
 export interface DirectorFullBookAutopilotContract {

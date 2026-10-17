@@ -24,6 +24,7 @@ import {
 import { isSkippableAutoExecutionReviewFailure } from "./novelDirectorAutoExecutionFailure";
 import {
   buildFailureCircuitBreaker,
+  buildClosedDirectorCircuitBreakerState,
   isDirectorCircuitBreakerOpen,
   resolveUsageCircuitBreaker,
   stopAutoExecutionForCircuitBreaker,
@@ -34,7 +35,7 @@ import {
   resolveSingleChapterExecutionRange,
   shouldClearAutoExecutionCheckpoint,
 } from "./novelDirectorAutoExecutionRuntimeUtils";
-import { prepareNextAutoExecutionChapter, prepareRequestedAutoExecution as prepareRequestedAutoExecutionState, readAutoExecutionIdentity, resolveAutoExecutionRuntimeRangeAndState, shouldStopAutoExecution } from "./novelDirectorAutoExecutionRuntimePreparation";
+import { prepareNextAutoExecutionChapter, prepareRequestedAutoExecution as prepareRequestedAutoExecutionState, readAutoExecutionIdentity, resolveAutoExecutionRuntimeRangeAndState, restoreAutoExecutionBookRequest, shouldStopAutoExecution } from "./novelDirectorAutoExecutionRuntimePreparation";
 import type { NovelDirectorAutoExecutionRuntimeDeps, PipelineJobSnapshot } from "./novelDirectorAutoExecutionRuntimePorts";
 import { prisma } from "../../../../db/prisma";
 import { ChapterProductionError } from "../../production/reliability";
@@ -65,7 +66,11 @@ export class NovelDirectorAutoExecutionRuntime {
     const executionIdentity = await readAutoExecutionIdentity(this.deps, input.taskId);
     if (!executionIdentity || await shouldStopAutoExecution(this.deps, input.taskId, null, executionIdentity)) return;
     let savedExecution: DirectorAutoExecutionState | undefined;
-    try { savedExecution = JSON.parse(executionIdentity.seedPayloadJson || "{}")?.autoExecution; }
+    try {
+      const seed = JSON.parse(executionIdentity.seedPayloadJson || "{}");
+      savedExecution = seed?.autoExecution;
+      input = { ...input, request: restoreAutoExecutionBookRequest(input.request, seed ?? {}, savedExecution ?? input.existingState) };
+    }
     catch { throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "原章节任务记录无法解析，请保留正文并核对恢复位置。"); }
     if (savedExecution?.pipelineJobId
       && savedExecution.pipelineStatus !== "succeeded"
@@ -83,6 +88,24 @@ export class NovelDirectorAutoExecutionRuntime {
     });
     let knownPipelineJob: PipelineJobSnapshot = null;
     if (await shouldStopAutoExecution(this.deps, input.taskId, pipelineJobId || null, executionIdentity)) return;
+    if (input.resumePendingManualRecovery && autoExecution.circuitBreaker?.reason === "usage_anomaly"
+      && isDirectorCircuitBreakerOpen(autoExecution.circuitBreaker)) {
+      autoExecution = withCircuitBreakerState(autoExecution, buildClosedDirectorCircuitBreakerState(autoExecution.circuitBreaker));
+      // Explicit resume acknowledges the old signal; limits still count every task call.
+      const budgetStop = await resolveUsageCircuitBreaker({ taskId: input.taskId, novelId: input.novelId, autoExecution });
+      if (budgetStop) autoExecution = withCircuitBreakerState(autoExecution, budgetStop);
+    }
+    if (autoExecution.usageBudget && !isDirectorCircuitBreakerOpen(autoExecution.circuitBreaker)) {
+      const budgetStop = await resolveUsageCircuitBreaker({ taskId: input.taskId, novelId: input.novelId, autoExecution });
+      if (budgetStop) autoExecution = withCircuitBreakerState(autoExecution, budgetStop);
+    }
+    if (isDirectorCircuitBreakerOpen(autoExecution.circuitBreaker)) {
+      await stopAutoExecutionForCircuitBreaker(this.deps, {
+        taskId: input.taskId, novelId: input.novelId, request: input.request, range, autoExecution,
+        circuitBreaker: autoExecution.circuitBreaker, resumeStage: input.resumeStage,
+      });
+      return;
+    }
     if (pipelineJobId) {
       knownPipelineJob = await this.deps.novelService.getPipelineJobById(pipelineJobId);
       if (knownPipelineJob?.pendingManualRecovery && input.resumePendingManualRecovery) {
@@ -103,7 +126,7 @@ export class NovelDirectorAutoExecutionRuntime {
             ...autoExecution,
             pipelineJobId: null,
             pipelineStatus: null,
-            circuitBreaker: null,
+            circuitBreaker: autoExecution.circuitBreaker,
           },
           pipelineJobId: null,
           pipelineStatus: "queued",
@@ -111,19 +134,6 @@ export class NovelDirectorAutoExecutionRuntime {
         }));
       }
     }
-    if (isDirectorCircuitBreakerOpen(autoExecution.circuitBreaker)) {
-      await stopAutoExecutionForCircuitBreaker(this.deps, {
-        taskId: input.taskId,
-        novelId: input.novelId,
-        request: input.request,
-        range,
-        autoExecution,
-        circuitBreaker: autoExecution.circuitBreaker,
-        resumeStage: input.resumeStage,
-      });
-      return;
-    }
-
     await syncAutoExecutionTaskState(this.deps, {
         taskId: input.taskId,
         novelId: input.novelId,
@@ -218,6 +228,19 @@ export class NovelDirectorAutoExecutionRuntime {
         if (await shouldStopAutoExecution(this.deps, input.taskId, null, executionIdentity)) return;
         // Planning can race with another completed chapter; recalculate before starting prose.
         if (isDirectorAutoExecutionRangeComplete(range, autoExecution) || !autoExecution.nextChapterId) continue autoExecutionLoop;
+
+        // Route planning may consume an explicit limit. Check its saved usage before prose.
+        if (autoExecution.usageBudget) {
+          const budgetStop = await resolveUsageCircuitBreaker({ taskId: input.taskId, novelId: input.novelId, autoExecution });
+          if (budgetStop) autoExecution = withCircuitBreakerState(autoExecution, budgetStop);
+          if (isDirectorCircuitBreakerOpen(autoExecution.circuitBreaker)) {
+            await stopAutoExecutionForCircuitBreaker(this.deps, {
+              taskId: input.taskId, novelId: input.novelId, request: input.request, range, autoExecution,
+              circuitBreaker: autoExecution.circuitBreaker, resumeStage: "pipeline",
+            });
+            return;
+          }
+        }
 
         await this.deps.workflowService.markTaskRunning(input.taskId, {
           stage: "chapter_execution",

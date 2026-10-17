@@ -38,8 +38,32 @@ export interface DirectorUsageTelemetryProjection {
 
 export interface DirectorChapterUsageBudgetSummary extends DirectorLlmUsageSummary {
   chapterId: string;
+  chapterOrder: number | null;
+  sourceChapterIds: string[];
   latestUsageRecordId: string;
   nodeKey?: string | null;
+}
+
+export interface DirectorControlUsageRecord extends DirectorLlmUsageRecordSummary {
+  chapterOrder: number | null;
+  sourceChapterId: string | null;
+  finishReason: string | null;
+}
+
+export interface DirectorTaskControlUsage {
+  summary: DirectorLlmUsageSummary | null;
+  chapterUsage: DirectorChapterUsageBudgetSummary[];
+  unattributedUsage: DirectorLlmUsageSummary | null;
+  nodeUsage: Array<DirectorLlmUsageSummary & { nodeKey: string | null }>;
+  stageUsage: Array<DirectorLlmUsageSummary & { stage: string | null }>;
+  /** Complete, chronological records, not the truncated display history. */
+  records: DirectorControlUsageRecord[];
+}
+
+interface ChapterIdentity {
+  chapterId: string;
+  chapterOrder: number;
+  volumeId?: string;
 }
 
 interface DirectorUsageMetadata {
@@ -49,6 +73,7 @@ interface DirectorUsageMetadata {
   itemKey?: string | null;
   scope?: string | null;
   entrypoint?: string | null;
+  finishReason?: string | null;
 }
 
 function parseUsageMetadata(row: DirectorUsageRow): DirectorUsageMetadata {
@@ -64,6 +89,7 @@ function parseUsageMetadata(row: DirectorUsageRow): DirectorUsageMetadata {
       itemKey: typeof parsed.itemKey === "string" ? parsed.itemKey : null,
       scope: typeof parsed.scope === "string" ? parsed.scope : null,
       entrypoint: typeof parsed.entrypoint === "string" ? parsed.entrypoint : null,
+      finishReason: typeof parsed.finishReason === "string" ? parsed.finishReason : null,
     };
   } catch {
     return {};
@@ -157,10 +183,13 @@ function mapUsageRecord(row: DirectorUsageRow): DirectorLlmUsageRecordSummary {
   };
 }
 
-function buildChapterUsage(rows: DirectorUsageRow[]): DirectorChapterUsageBudgetSummary[] {
+function buildChapterUsage(
+  rows: DirectorUsageRow[],
+  identities: Map<string, ChapterIdentity>,
+): DirectorChapterUsageBudgetSummary[] {
   const grouped = new Map<string, DirectorUsageRow[]>();
   for (const row of rows) {
-    const chapterId = parseUsageMetadata(row).chapterId?.trim();
+    const chapterId = resolveChapterIdentity(row, identities)?.chapterId;
     if (!chapterId) {
       continue;
     }
@@ -178,11 +207,34 @@ function buildChapterUsage(rows: DirectorUsageRow[]): DirectorChapterUsageBudget
       return {
         ...summary,
         chapterId,
+        chapterOrder: resolveChapterIdentity(sortedRows[0]!, identities)?.chapterOrder ?? null,
+        sourceChapterIds: [...new Set(sortedRows.map((row) => parseUsageMetadata(row).chapterId!))],
         latestUsageRecordId: sortedRows[0]?.id ?? chapterId,
         nodeKey: sortedRows[0]?.nodeKey ?? null,
       };
     })
     .sort((left, right) => right.totalTokens - left.totalTokens);
+}
+
+function resolveChapterIdentity(row: DirectorUsageRow, identities: Map<string, ChapterIdentity>) {
+  const metadata = parseUsageMetadata(row);
+  const identity = identities.get(metadata.chapterId?.trim() ?? "");
+  // A contradictory volume reference is not reliable chapter attribution.
+  if (identity?.volumeId && metadata.volumeId && identity.volumeId !== metadata.volumeId) {
+    return undefined;
+  }
+  return identity;
+}
+
+function summarizeByDimension(rows: DirectorUsageRow[], key: (row: DirectorUsageRow) => string | null) {
+  const grouped = new Map<string | null, DirectorUsageRow[]>();
+  for (const row of rows) {
+    const dimension = key(row);
+    const group = grouped.get(dimension) ?? [];
+    group.push(row);
+    grouped.set(dimension, group);
+  }
+  return [...grouped].map(([dimension, group]) => ({ dimension, ...summarizeRows(group)! }));
 }
 
 function buildStepUsage(
@@ -278,7 +330,6 @@ export class DirectorUsageTelemetryQueryService {
     const rows = await prisma.directorLlmUsageRecord.findMany({
       where: { taskId },
       orderBy: { recordedAt: "desc" },
-      take: 300,
       select: this.selectUsageRow(),
     });
     return this.buildProjection(rows, steps);
@@ -292,10 +343,62 @@ export class DirectorUsageTelemetryQueryService {
     const rows = await prisma.directorLlmUsageRecord.findMany({
       where: normalizeWhereByNovelOrTask(input.novelId, input.taskIds ?? []),
       orderBy: { recordedAt: "desc" },
-      take: 500,
       select: this.selectUsageRow(),
     });
     return this.buildProjection(rows, input.steps ?? []);
+  }
+
+  async getTaskControlUsage(input: {
+    novelId: string;
+    taskId: string;
+    since?: Date;
+  }): Promise<DirectorTaskControlUsage> {
+    if (!input.taskId.trim() || !input.novelId.trim()) {
+      throw new Error("Task-scoped usage requires a task and novel identifier.");
+    }
+    if (input.since && !Number.isFinite(input.since.getTime())) {
+      throw new Error("Usage recovery boundary must be a valid date.");
+    }
+    const [rows, identities] = await Promise.all([
+      prisma.directorLlmUsageRecord.findMany({
+        where: {
+          taskId: input.taskId,
+          ...(input.since ? { recordedAt: { gte: input.since } } : {}),
+        },
+        orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
+        select: this.selectUsageRow(),
+      }),
+      this.loadChapterIdentities(input.novelId),
+    ]);
+    // Defensively preserve the query boundary in test adapters and imported stores too.
+    const scopedRows = rows.filter((row) => row.taskId === input.taskId
+      && (!input.since || toTimestamp(row.recordedAt) >= input.since.getTime()))
+      .sort((left, right) => toTimestamp(left.recordedAt) - toTimestamp(right.recordedAt)
+        || left.id.localeCompare(right.id));
+    const resolve = (row: DirectorUsageRow) => row.novelId && row.novelId !== input.novelId
+      ? undefined
+      : resolveChapterIdentity(row, identities);
+    const attributableRows = scopedRows.filter((row) => resolve(row));
+    return {
+      summary: summarizeRows(scopedRows),
+      chapterUsage: buildChapterUsage(attributableRows, identities),
+      unattributedUsage: summarizeRows(scopedRows.filter((row) => !resolve(row))),
+      nodeUsage: summarizeByDimension(scopedRows, (row) => row.nodeKey)
+        .map(({ dimension, ...summary }) => ({ ...summary, nodeKey: dimension })),
+      stageUsage: summarizeByDimension(scopedRows, (row) => parseUsageMetadata(row).stage ?? null)
+        .map(({ dimension, ...summary }) => ({ ...summary, stage: dimension })),
+      records: scopedRows.map((row) => {
+        const identity = resolve(row);
+        const metadata = parseUsageMetadata(row);
+        return {
+          ...mapUsageRecord(row),
+          sourceChapterId: metadata.chapterId ?? null,
+          chapterId: identity?.chapterId ?? null,
+          chapterOrder: identity?.chapterOrder ?? null,
+          finishReason: metadata.finishReason ?? null,
+        };
+      }),
+    };
   }
 
   async getLargestChapterUsage(input: {
@@ -318,10 +421,41 @@ export class DirectorUsageTelemetryQueryService {
         ...(input.since ? { recordedAt: { gte: input.since } } : {}),
       },
       orderBy: { recordedAt: "desc" },
-      take: 1000,
       select: this.selectUsageRow(),
     });
-    return buildChapterUsage(rows)[0] ?? null;
+    const identities = await this.loadChapterIdentities(input.novelId);
+    return buildChapterUsage(rows.filter((row) => !row.novelId || row.novelId === input.novelId), identities)[0] ?? null;
+  }
+
+  private async loadChapterIdentities(novelId: string): Promise<Map<string, ChapterIdentity>> {
+    const [chapters, plans] = await Promise.all([
+      prisma.chapter.findMany({
+        where: { novelId },
+        select: { id: true, order: true },
+      }),
+      prisma.volumeChapterPlan.findMany({
+        where: { volume: { novelId } },
+        select: { id: true, chapterId: true, chapterOrder: true, volumeId: true },
+      }),
+    ]);
+    const identities = new Map<string, ChapterIdentity>(chapters.map((chapter) => [chapter.id, {
+      chapterId: chapter.id,
+      chapterOrder: chapter.order,
+    }]));
+    for (const plan of plans) {
+      if (!Number.isSafeInteger(plan.chapterOrder) || plan.chapterOrder < 1) continue;
+      const linked = plan.chapterId ? identities.get(plan.chapterId) : undefined;
+      // Never guess from titles, timestamp proximity, or matching chapter orders.
+      // Broken/cross-book links and conflicting orders remain unassigned.
+      if (plan.chapterId && (!linked || linked.chapterOrder !== plan.chapterOrder)) continue;
+      if (identities.has(plan.id)) continue;
+      identities.set(plan.id, {
+        chapterId: linked?.chapterId ?? plan.id,
+        chapterOrder: plan.chapterOrder,
+        volumeId: plan.volumeId,
+      });
+    }
+    return identities;
   }
 
   private buildProjection(

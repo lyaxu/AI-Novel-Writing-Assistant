@@ -78,6 +78,10 @@ const autoExecutionPlanSchema = z.object({
   autoReview: z.boolean().optional(),
   autoRepair: z.boolean().optional(),
   artifactSyncMode: z.enum(["adaptive", "deferred", "strict"]).optional(),
+  usageBudget: z.object({
+    taskTokenLimit: z.number().int().positive().safe().optional(),
+    chapterTokenLimit: z.number().int().positive().safe().optional(),
+  }).optional(),
 }).optional();
 
 const autoApprovalSchema = z.object({

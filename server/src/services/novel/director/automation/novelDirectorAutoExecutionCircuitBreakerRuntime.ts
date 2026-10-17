@@ -17,6 +17,8 @@ import {
 } from "./novelDirectorAutoExecutionCheckpointRuntime";
 import {
   buildClosedDirectorCircuitBreakerState,
+  DIRECTOR_CIRCUIT_BREAKER_THRESHOLDS,
+  openDirectorCircuitBreaker,
   isDirectorCircuitBreakerOpen,
   recordChapterUsageBudgetExceededSignal,
   recordModelFailureSignal,
@@ -32,6 +34,7 @@ import {
   type DirectorIssueAction,
   type DirectorIssueCode,
 } from "@ai-novel/shared/types/directorIssue";
+import { prisma } from "../../../../db/prisma";
 
 type AutomationLedgerEventPort = Pick<
   typeof directorAutomationLedgerEventService,
@@ -212,48 +215,87 @@ export async function resolveUsageCircuitBreaker(input: {
   novelId: string;
   autoExecution: DirectorAutoExecutionState;
 }): Promise<DirectorCircuitBreakerState | null> {
-  const largestChapterUsage = await directorUsageTelemetryQueryService.getLargestChapterUsage({
+  // An open pause is a persisted workflow boundary, never cleared by polling.
+  if (isDirectorCircuitBreakerOpen(input.autoExecution.circuitBreaker)) {
+    return input.autoExecution.circuitBreaker;
+  }
+  const usage = await directorUsageTelemetryQueryService.getTaskControlUsage({
     novelId: input.novelId,
-    taskIds: [input.taskId],
-  }).catch(() => null);
-  const activeBudgetChapterIds = new Set([
-    input.autoExecution.nextChapterId,
-    ...(input.autoExecution.remainingChapterIds ?? []),
-  ].filter((chapterId): chapterId is string => Boolean(chapterId?.trim())));
-  const shouldOpenChapterBudgetBreaker = largestChapterUsage
-    ? activeBudgetChapterIds.size === 0 || activeBudgetChapterIds.has(largestChapterUsage.chapterId)
-    : false;
-  const chapterBudgetBreaker = largestChapterUsage && shouldOpenChapterBudgetBreaker
+    taskId: input.taskId,
+  }).catch((error) => {
+    // Explicit financial limits must fail closed if their evidence is unavailable.
+    if (input.autoExecution.usageBudget?.taskTokenLimit || input.autoExecution.usageBudget?.chapterTokenLimit) throw error;
+    return null;
+  });
+  if (!usage) return null;
+  const previous = input.autoExecution.circuitBreaker;
+  const latest = usage.records.at(-1);
+  const taskLimit = input.autoExecution.usageBudget?.taskTokenLimit;
+  if (Number.isSafeInteger(taskLimit) && taskLimit! > 0 && (usage.summary?.totalTokens ?? 0) >= taskLimit!) {
+    return openDirectorCircuitBreaker({
+      previous, reason: "usage_anomaly",
+      message: `本任务 AI 用量达到 ${usage.summary?.totalTokens} Tokens，已达到设定的 ${taskLimit} Tokens 上限，请在本书工作区核对预算。`,
+      lastUsageRecordId: latest?.id,
+    });
+  }
+  const currentChapter = usage.chapterUsage.find((chapter) =>
+    input.autoExecution.nextChapterOrder != null
+      ? chapter.chapterOrder === input.autoExecution.nextChapterOrder
+      : Boolean(input.autoExecution.nextChapterId && (chapter.chapterId === input.autoExecution.nextChapterId
+        || chapter.sourceChapterIds.includes(input.autoExecution.nextChapterId))));
+  const chapterBudgetBreaker = currentChapter
     ? recordChapterUsageBudgetExceededSignal({
-      previous: input.autoExecution.circuitBreaker,
-      usageRecordId: largestChapterUsage.latestUsageRecordId,
-      totalTokens: largestChapterUsage.totalTokens,
-      chapterId: largestChapterUsage.chapterId,
-      chapterOrder: input.autoExecution.nextChapterId === largestChapterUsage.chapterId
-        ? input.autoExecution.nextChapterOrder
-        : null,
-      nodeKey: largestChapterUsage.nodeKey ?? "chapter_execution_node",
+      previous,
+      tokenLimit: input.autoExecution.usageBudget?.chapterTokenLimit,
+      usageRecordId: currentChapter.latestUsageRecordId,
+      totalTokens: currentChapter.totalTokens,
+      chapterId: currentChapter.chapterId,
+      chapterOrder: currentChapter.chapterOrder,
+      nodeKey: currentChapter.nodeKey,
     })
     : null;
-  if (chapterBudgetBreaker) {
-    return chapterBudgetBreaker;
+  if (chapterBudgetBreaker) return chapterBudgetBreaker;
+  // Recovery establishes a new attempt window, not a new monetary budget.
+  const resetAt = previous?.resetAt ? Date.parse(previous.resetAt) : 0;
+  const attempts = usage.records.filter((record) => !resetAt || Date.parse(record.recordedAt) >= resetAt);
+  const last = attempts.at(-1);
+  if (!last) return null;
+  const targetsCurrent = last.chapterOrder != null
+    ? last.chapterOrder === input.autoExecution.nextChapterOrder
+    : Boolean(last.chapterId && last.chapterId === input.autoExecution.nextChapterId);
+  if (targetsCurrent && ["length", "max_tokens", "output_limit"].includes(last.finishReason ?? "")) {
+    return openDirectorCircuitBreaker({
+      previous, reason: "usage_anomaly", chapterId: last.chapterId, chapterOrder: last.chapterOrder,
+      nodeKey: last.nodeKey, lastUsageRecordId: last.id,
+      message: "模型输出额度耗尽，请在本书工作区核对输出预算后手动继续。",
+    });
   }
-
-  const usage = await directorUsageTelemetryQueryService.getBookUsage({
-    novelId: input.novelId,
-    taskIds: [input.taskId],
-  }).catch(() => null);
-  const largestRecentUsage = usage?.recentUsage
-    .slice()
-    .sort((left, right) => right.totalTokens - left.totalTokens)[0] ?? null;
-  if (!largestRecentUsage) {
-    return null;
+  if (last.stepIdempotencyKey && targetsCurrent) {
+    const repeated = [];
+    for (const record of attempts.slice().reverse()) {
+      if (record.stepIdempotencyKey !== last.stepIdempotencyKey
+        || record.nodeKey !== last.nodeKey || record.promptAssetKey !== last.promptAssetKey) break;
+      repeated.push(record);
+    }
+    if (repeated.length >= DIRECTOR_CIRCUIT_BREAKER_THRESHOLDS.noProgressCallLimit) {
+      const step = await prisma.directorStepRun.findUnique({
+        where: { idempotencyKey: last.stepIdempotencyKey },
+        select: { taskId: true, status: true, finishedAt: true },
+      });
+      if (step?.taskId === input.taskId && step.status !== "succeeded") {
+        return openDirectorCircuitBreaker({
+          previous, reason: "usage_anomaly", chapterId: last.chapterId, chapterOrder: last.chapterOrder,
+          nodeKey: last.nodeKey, lastUsageRecordId: last.id,
+          message: `同一步骤已连续调用 ${repeated.length} 次且没有完成记录，请在本书工作区检查后继续。`,
+        });
+      }
+    }
   }
   return recordUsageAnomalySignal({
-    previous: input.autoExecution.circuitBreaker,
-    usageRecordId: largestRecentUsage.id,
-    totalTokens: largestRecentUsage.totalTokens,
-    nodeKey: largestRecentUsage.nodeKey,
+    previous,
+    usageRecordId: last.id,
+    totalTokens: last.totalTokens,
+    nodeKey: last.nodeKey,
   });
 }
 
@@ -273,4 +315,4 @@ export function buildFailureCircuitBreaker(input: {
   });
 }
 
-export { isDirectorCircuitBreakerOpen, withCircuitBreakerState };
+export { isDirectorCircuitBreakerOpen, withCircuitBreakerState, buildClosedDirectorCircuitBreakerState };

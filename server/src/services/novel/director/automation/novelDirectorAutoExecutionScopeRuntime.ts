@@ -38,6 +38,25 @@ export interface AutoExecutionScopeRuntimeDeps {
   getVolumes?: (novelId: string) => Promise<VolumePlanDocument>;
 }
 
+/** Book intent is authoritative; execution ranges and materialized rows are never book size. */
+export function resolveAutoExecutionBookProfile(input: {
+  completionProfile?: DirectorAutoExecutionState["completionProfile"];
+  estimatedChapterCount?: number | null;
+  candidateTargetChapterCount?: number | null;
+  existingState?: DirectorAutoExecutionState | null;
+}): NonNullable<DirectorAutoExecutionState["completionProfile"]> {
+  if (input.completionProfile && Number.isFinite(input.completionProfile.targetChapterCount)
+    && input.completionProfile.targetChapterCount > 0) return { ...input.completionProfile };
+  const target = [
+    input.completionProfile?.targetChapterCount,
+    input.estimatedChapterCount,
+    input.candidateTargetChapterCount,
+  ].find((value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0);
+  if (target === undefined && input.existingState?.completionProfile) return { ...input.existingState.completionProfile };
+  // Legacy records without book intent retain the shared book default, never the batch length.
+  return buildDirectorCompletionProfile(target ?? 80);
+}
+
 function findMissingChapterOrders(
   chapters: DirectorAutoExecutionChapterRef[],
   range: DirectorAutoExecutionRange,
@@ -126,12 +145,18 @@ export function buildRequestedAutoExecutionState(input: {
 }): DirectorAutoExecutionState | null {
   const requestedPlan = normalizeDirectorAutoExecutionPlan(input.request.autoExecutionPlan);
   const hasRequestedPlan = Boolean(input.request.autoExecutionPlan);
+  const completionProfile = resolveAutoExecutionBookProfile({
+    completionProfile: input.request.completionProfile,
+    estimatedChapterCount: input.request.estimatedChapterCount,
+    candidateTargetChapterCount: input.request.candidate?.targetChapterCount,
+    existingState: input.existingState,
+  });
   if (!input.existingState) {
     return {
       enabled: true,
-      completionProfile: input.request.completionProfile
-        ?? buildDirectorCompletionProfile(input.request.estimatedChapterCount ?? input.request.candidate.targetChapterCount),
+      completionProfile,
       closingExtensionCount: 0,
+      usageBudget: requestedPlan.usageBudget,
       mode: requestedPlan.mode,
       startOrder: requestedPlan.startOrder,
       endOrder: requestedPlan.endOrder,
@@ -148,6 +173,7 @@ export function buildRequestedAutoExecutionState(input: {
   if (!hasRequestedPlan) {
     return {
       ...input.existingState,
+      completionProfile,
       pipelineJobId: keepPipelineBinding
         ? (input.existingPipelineJobId?.trim() || input.existingState.pipelineJobId || null)
         : null,
@@ -156,7 +182,9 @@ export function buildRequestedAutoExecutionState(input: {
   }
   return {
     ...input.existingState,
+    completionProfile,
     mode: requestedPlan.mode,
+    usageBudget: requestedPlan.usageBudget ?? input.existingState.usageBudget,
     startOrder: requestedPlan.startOrder,
     endOrder: requestedPlan.endOrder,
     volumeOrder: requestedPlan.volumeOrder,
@@ -342,8 +370,7 @@ export async function resolveAutoExecutionRangeAndState(input: {
       preparedVolumeIds,
       beatChapterListReady,
       volumeChapterListComplete,
-      completionProfile: input.existingState?.completionProfile
-        ?? buildDirectorCompletionProfile(range.totalChapterCount),
+      completionProfile: resolveAutoExecutionBookProfile({ existingState: input.existingState }),
       pipelineJobId: input.pipelineJobId ?? input.existingState?.pipelineJobId ?? null,
       pipelineStatus: input.pipelineStatus ?? input.existingState?.pipelineStatus ?? null,
     }),

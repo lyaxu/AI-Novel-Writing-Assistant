@@ -8,11 +8,40 @@ import {
   applyReviewSkipOverride,
   buildRequestedAutoExecutionState,
   resolveAutoExecutionRangeAndState,
+  resolveAutoExecutionBookProfile,
 } from "./novelDirectorAutoExecutionScopeRuntime";
 import { isSkippableAutoExecutionReviewFailure } from "./novelDirectorAutoExecutionFailure";
 import type { DirectorAutoExecutionRange } from "./novelDirectorAutoExecution";
 import type { AutoExecutionTaskIdentityRow, NovelDirectorAutoExecutionRuntimeDeps } from "./novelDirectorAutoExecutionRuntimePorts";
 import { ChapterProductionError } from "../../production/reliability";
+
+/** Repair historical batch-derived profiles from the original task's book intent. */
+export function restoreAutoExecutionBookRequest(
+  request: DirectorConfirmRequest,
+  seed: {
+    completionProfile?: DirectorAutoExecutionState["completionProfile"];
+    estimatedChapterCount?: number | null;
+    directorInput?: Partial<DirectorConfirmRequest>;
+  },
+  existingState?: DirectorAutoExecutionState | null,
+): DirectorConfirmRequest {
+  const savedProfile = seed.completionProfile ?? seed.directorInput?.completionProfile;
+  const savedBookTarget = seed.estimatedChapterCount
+    ?? seed.directorInput?.estimatedChapterCount
+    ?? seed.directorInput?.candidate?.targetChapterCount;
+  return {
+    ...request,
+    completionProfile: resolveAutoExecutionBookProfile({
+      ...(savedProfile && Number.isFinite(savedProfile.targetChapterCount) && savedProfile.targetChapterCount > 0
+        ? { completionProfile: savedProfile }
+        : typeof savedBookTarget === "number" && Number.isFinite(savedBookTarget) && savedBookTarget > 0
+        ? { estimatedChapterCount: savedBookTarget }
+        : { completionProfile: request.completionProfile, estimatedChapterCount: request.estimatedChapterCount,
+          candidateTargetChapterCount: request.candidate?.targetChapterCount }),
+      existingState,
+    }),
+  };
+}
 
 export async function readAutoExecutionIdentity(deps: NovelDirectorAutoExecutionRuntimeDeps, taskId: string) {
   return deps.workflowService.getTaskByIdWithoutHealing
@@ -117,11 +146,20 @@ export async function prepareNextAutoExecutionChapter(
     autoExecution: DirectorAutoExecutionState;
   },
 ): Promise<{ range: DirectorAutoExecutionRange; autoExecution: DirectorAutoExecutionState }> {
+  const autoExecution = {
+    ...input.autoExecution,
+    completionProfile: resolveAutoExecutionBookProfile({
+      completionProfile: input.request.completionProfile,
+      estimatedChapterCount: input.request.estimatedChapterCount,
+      candidateTargetChapterCount: input.request.candidate?.targetChapterCount,
+      existingState: input.autoExecution,
+    }),
+  };
   const order = input.autoExecution.nextChapterOrder;
   if (!Number.isInteger(order) || order! < input.range.startOrder || order! > input.range.endOrder) {
     throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "下一章不在已授权的自动执行范围内，无法准备章节规划。");
   }
-  if (input.autoExecution.nextChapterId) return { range: input.range, autoExecution: input.autoExecution };
+  if (input.autoExecution.nextChapterId) return { range: input.range, autoExecution };
   if (!isFullBookAutopilotRunMode(input.request.runMode)) {
     throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "下一章不在已授权的自动执行范围内，无法准备章节规划。");
   }
@@ -132,10 +170,10 @@ export async function prepareNextAutoExecutionChapter(
   await ensureRouteWindow(input.novelId, order!, {
     taskId: input.taskId, endOrder: order!, min: 1, target: 1,
     provider: input.request.provider, model: input.request.model, temperature: input.request.temperature,
-    completionProfile: input.autoExecution.completionProfile,
+    completionProfile: autoExecution.completionProfile,
   });
   const refreshed = await resolveAutoExecutionRuntimeRangeAndState(deps, {
-    novelId: input.novelId, existingState: { ...input.autoExecution, pipelineJobId: null, pipelineStatus: null },
+    novelId: input.novelId, existingState: { ...autoExecution, pipelineJobId: null, pipelineStatus: null },
     allowLazyChapterPlanning: true,
   });
   if (refreshed.range.startOrder !== input.range.startOrder || refreshed.range.endOrder !== input.range.endOrder) {
