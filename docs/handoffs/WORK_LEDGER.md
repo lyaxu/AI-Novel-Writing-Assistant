@@ -520,3 +520,8 @@ KIMI/GLM/QWEN/GEMINI），**当前无法发真实模型请求**，30 字重合�
   `chapterContractGuardTrace 5/5`
 - 基线未变：`planningRepairPausedRecovery` 仍是既有的 `pipelinePause` 加载失败
 
+
+
+## 2026-10-17 16:34（北京时间）章间暂停恢复
+
+- 修复已完成并推送a2452c7b：成功第5章job空currentItemKey不再误作丢失恢复位置；命令CAS及ContinueRuntime均核验成功边界，接回原范围第6章规划。server编译、126相关测试及4项新整链离线测试通过。五章/原暂停/26调用保持，未发真实恢复。自动审批拦截两种服务脚本准备，未执行重载；后端31072仍旧代码/stale=true，需先加载后用户继续。start-local.bat仍为普通5173/dev.db入口。详见[交接](2026-10-17_1634_completed-boundary-recovery.md)。
