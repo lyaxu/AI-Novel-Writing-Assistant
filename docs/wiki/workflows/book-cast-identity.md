@@ -29,3 +29,9 @@ coverage完成不代表人物已出场，补档完成不代表已进入正式库
 结构字段由 PostgreSQL/SQLite additive migration 增加，旧NULL身份可保留；迁移不自动合并人物、不删除原记录。模型输出模式、生成器、存储、应用、同步和前端必须一起维护，不能只在界面加输入框。
 
 模块：`characterPrep/{domain,application,infrastructure}`、`characters/identity`、`dynamics/commands/confirmCharacterCandidateIdentity`、人物准备 HTTP 与客户端候选组件。模块README保留更细技术合同。离线身份与迁移测试不代表真实模型或UI验收。
+
+## 旧库接入与加载
+
+旧库可能已有应用表但没有Prisma迁移历史。不能直接运行全量migrate deploy，也不能为了标记完成而伪造历史。对已验证的增量SQL，先在线备份并验证可读/完整性及原表指纹，再在事务中检查前提、应用新增字段/索引并比较所有原字段。用外部回执记录SQL校验和、备份和结果；部分已应用或schema不符应停止核对。web运行模式与desktop自动迁移的入口不同，必须核对实际模式，避免重复执行。
+
+迁移完成、代码推送、服务加载和真实验收是四项独立证据。加载后核对启动提交、源码/共享产物指纹、只读接口及任务人工暂停；历史停止任务不得随服务启动自动恢复。已加载代码未变化时，后续纯文档提交不要求重启。
