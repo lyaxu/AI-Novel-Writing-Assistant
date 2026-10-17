@@ -3,11 +3,11 @@ const assert = require("node:assert/strict");
 const { loadRuntimeSource } = require("./sourceHarness.cjs");
 const scope = loadRuntimeSource("../production/recovery/ChapterPipelineRecoveryService.ts", { "../reliability": { ChapterProductionError: class extends Error {} } });
 
-function fixture({ preflightFails = false, taskCasFails = false, jobCasFails = false } = {}) {
+function fixture({ preflightFails = false, taskCasFails = false, jobCasFails = false, completed = false } = {}) {
   const calls = [];
   const row = { id: "director", novelId: "novel", lane: "auto_director", status: "queued", pendingManualRecovery: true,
     updatedAt: new Date(1000), cancelRequestedAt: null, seedPayloadJson: JSON.stringify({ autoExecution: { pipelineJobId: "original" } }) };
-  const expected = { novelId: "novel", chapterId: "chapter", updatedAt: new Date(900), payload: '{"workflowTaskId":"director"}' };
+  const expected = { kind: completed ? "completed" : "paused", novelId: "novel", chapterId: completed ? null : "chapter", updatedAt: new Date(900), payload: '{"workflowTaskId":"director"}' };
   class AppError extends Error { constructor(message, status) { super(message); this.status = status; } }
   const tx = {
     generationJob: { findFirst: async query => { calls.push(["job-cas", query]); return jobCasFails ? null : { id: "original" }; } },
@@ -32,7 +32,7 @@ function fixture({ preflightFails = false, taskCasFails = false, jobCasFails = f
     "../recovery/planningRepair/planningRepairRecovery": { assertPlanningRepairResumeAllowed: () => {} },
     "../recovery/rangeCompletion": {},
     "@ai-novel/shared/types/planningRepair/recovery": {},
-    "../../production/recovery": { assertUnchangedPipelineRecoveryScope: scope.assertUnchangedPipelineRecoveryScope, createChapterPipelineRecoveryService: () => ({ prepareDirector: async (...args) => {
+    "../../production/recovery": { assertUnchangedPipelineRecoveryScope: scope.assertUnchangedPipelineRecoveryScope, createChapterPipelineRecoveryService: () => ({ prepareDirectorContinuation: async (...args) => {
       calls.push(["preflight", ...args]); if (preflightFails) throw new AppError("unknown or changed manuscript", 409); return expected;
     } }) },
   });
@@ -52,6 +52,22 @@ test("director command checks original saved execution before clearing task paus
   assert.equal(taskMutation.where.updatedAt, f.row.updatedAt); assert.equal(taskMutation.where.cancelRequestedAt, null);
   assert.equal(taskMutation.data.cancelRequestedAt, undefined);
   assert.equal(taskMutation.data.pendingManualRecovery, false);
+});
+
+for (const failure of [null, "taskCasFails", "jobCasFails"]) test(`between-chapter continuation checks succeeded job and task atomically: ${failure ?? "accepted"}`, async () => {
+  const f = fixture({ completed: true, ...(failure ? { [failure]: true } : {}) });
+  const run = () => f.service.enqueueContinueCommand("director", { forceResume: true });
+  if (failure) await assert.rejects(run(), { status: 409 });
+  else await run();
+  const where = f.calls.find(c => c[0] === "job-cas")[1].where;
+  assert.equal(where.status, "succeeded");
+  assert.equal(where.pendingManualRecovery, false);
+  assert.equal(where.currentItemKey, null);
+  assert.equal(where.cancelRequestedAt, null);
+  assert.equal(where.payload, f.expected.payload);
+  assert.equal(where.updatedAt, f.expected.updatedAt);
+  assert.equal(f.calls.some(c => c[0] === "create"), !failure);
+  assert.equal(f.calls.some(c => c[0] === "notify"), !failure);
 });
 
 for (const reason of ["preflightFails", "taskCasFails", "jobCasFails"]) test(`director command cannot queue on ${reason}`, async () => {

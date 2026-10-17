@@ -780,7 +780,7 @@ export class DirectorCommandService {
     }
     if (pausedJobId && pausedSeed) assertUnchangedPipelineRecoveryScope(pausedSeed);
     const pausedRecovery = pausedJobId
-      ? await createChapterPipelineRecoveryService().prepareDirector(pausedJobId, {
+      ? await createChapterPipelineRecoveryService().prepareDirectorContinuation(pausedJobId, {
         novelId: row.novelId!, directorTaskId: input.taskId,
       }) : null;
 
@@ -805,7 +805,8 @@ export class DirectorCommandService {
       const stillPaused = await tx.generationJob.findFirst({ where: {
         id: pausedJobId, novelId: pausedRecovery.novelId, currentItemKey: pausedRecovery.chapterId,
         updatedAt: pausedRecovery.updatedAt, payload: pausedRecovery.payload,
-        status: { in: ["queued", "running", "failed"] }, pendingManualRecovery: true, cancelRequestedAt: null,
+        status: pausedRecovery.kind === "completed" ? "succeeded" : { in: ["queued", "running", "failed"] },
+        pendingManualRecovery: pausedRecovery.kind !== "completed", cancelRequestedAt: null,
         OR: [{ executionOwner: null }, { executionLeaseExpiresAt: null }, { executionLeaseExpiresAt: { lte: new Date() } }],
       }, select: { id: true } });
       if (!stillPaused) throw new AppError("原章节任务状态已变化，请刷新工作区后核对。", 409);

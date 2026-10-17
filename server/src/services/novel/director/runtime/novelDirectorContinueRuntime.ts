@@ -57,7 +57,7 @@ export type DirectorAssetFirstRecovery =
   }
   | null;
 
-type SavedPipelineRecovery = PipelineRecoveryExpectation & { currentStage?: string | null };
+type SavedPipelineRecovery = Omit<PipelineRecoveryExpectation, "chapterId"> & { chapterId: string | null; currentStage?: string | null };
 
 function mergeResumeTargets(
   primary: ReturnType<typeof parseResumeTarget>,
@@ -697,12 +697,23 @@ export class NovelDirectorContinueRuntime {
     if (this.deps.prepareSavedPipelineRecovery) return this.deps.prepareSavedPipelineRecovery(input);
     const job = await prisma.generationJob.findUnique({
       where: { id: input.pipelineJobId },
-      select: { novelId: true, pendingManualRecovery: true, currentStage: true, updatedAt: true },
+      select: { novelId: true, status: true, pendingManualRecovery: true, currentStage: true, updatedAt: true },
     });
     if (!job || job.novelId !== input.novelId) {
       throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "原章节任务关联无法核对，请保留正文并返回本书工作区核对。");
     }
-    if (!job.pendingManualRecovery) return null;
+    if (!job.pendingManualRecovery) {
+      if (job.status !== "succeeded" || !input.forceResume) return null;
+      // A director can pause after a finished chapter. Validate that terminal boundary,
+      // then continue its authorized range rather than reopening future outline setup.
+      const continuation = await createChapterPipelineRecoveryService().prepareDirectorContinuation(input.pipelineJobId, {
+        novelId: input.novelId, directorTaskId: input.taskId,
+      });
+      if (continuation.kind !== "completed" || job.updatedAt.getTime() !== continuation.updatedAt.getTime()) {
+        throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "原章节任务完成位置已变化，请刷新工作区后核对。");
+      }
+      return { ...continuation, currentStage: null };
+    }
     if (!input.forceResume) {
       throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "请从本书工作区明确确认原章节任务恢复。");
     }

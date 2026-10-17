@@ -8,7 +8,9 @@ GET 只读取，返回 `pipelineJobId / pipelineRange / canResumePipeline`。外
 
 源页恢复将任务的 updatedAt、原 payload、小说与章节交给既有恢复服务做 CAS。仅当任务仍暂停、未取消、无有效租约且快照匹配，才能解除人工暂停并调度原 job。CAS 失败不能调度；不清除并发取消、不重置重试次数。之后的章节 journal 和执行租约继续检查当前稿件与所有权。普通后台 resume 不得清人工暂停。
 
-导演源页 resume 命令先调用只读 prepareDirector，检查原范围未更换，再在同事务中核对 job 快照、CAS 接受导演任务并创建命令。执行端重新预检并恢复同一 job；重读后仍失败/取消/暂停则报冲突，不丢掉原 jobId 新建替代任务。冻结 pipeline.options、请求指纹及剩余预算必须回放，prepare/draft/save 已完成就不重做。
+导演源页继续命令先调用只读 `prepareDirectorContinuation`，区分两个边界。`completed` 只接受确属本书、本导演的 succeeded job，且当前章节为空、无人工暂停、取消或有效父级租约；它表示上一章已完成，导演可以继续后续范围，不能再调用该 job 的章内恢复。`paused` 调用原 `prepareDirector`，保留章节 journal、原稿、未知调用、归属和租约的全部预检。其他状态不能借用 completed 通道绕过章内校验。旧成功 job 缺少 currentItemKey 是正常完成事实，不是丢失恢复位置。
+
+预检只返回判别结果与原 `updatedAt / payload / novelId / chapterId` 快照，不清状态。命令接受必须检查原范围未更换，并在同事务中按对应分支重新核对 job 状态、归属、暂停与租约，再 CAS 接受导演任务并创建命令。章内恢复的执行端仍重新预检并恢复同一 job；重读后仍失败/取消/暂停则报冲突，不丢掉原 jobId 新建替代任务。冻结 pipeline.options、请求指纹及剩余预算必须回放，prepare/draft/save 已完成就不重做。
 
 稳定规则见 [章节审查与原任务恢复](../../../../../../docs/wiki/workflows/chapter-review-resume.md)。真实现场回放及命令竞争由 firstChapterReviewRecovery、failedReviewOriginalJobRecovery、directorPausedCommandRecovery、directorOriginalJobRuntime 测试覆盖，修正后的审查响应仅为离线替身，不是模型实测。
 

@@ -4,7 +4,7 @@ import { createDefaultChapterProductionJournal } from "../reliability";
 import { ChapterPipelineRecoveryService } from "./ChapterPipelineRecoveryService";
 
 export { ChapterPipelineRecoveryService, assertUnchangedPipelineRecoveryScope } from "./ChapterPipelineRecoveryService";
-export type { ChapterPipelineRecoveryDeps, PipelineRecoveryJob, PipelineRecoveryProjection, PipelineRecoveryExpectation, DirectorPipelineRecoveryRequest } from "./ChapterPipelineRecoveryService";
+export type { ChapterPipelineRecoveryDeps, PipelineRecoveryJob, PipelineRecoveryProjection, PipelineRecoveryExpectation, DirectorPipelineRecoveryRequest, DirectorPipelineContinuationExpectation } from "./ChapterPipelineRecoveryService";
 
 export function createChapterPipelineRecoveryService() {
   return new ChapterPipelineRecoveryService({

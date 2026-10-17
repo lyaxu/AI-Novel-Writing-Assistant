@@ -8,6 +8,9 @@ export interface PipelineRecoveryJob {
   updatedAt: Date;
 }
 export interface PipelineRecoveryExpectation { novelId: string; chapterId: string; updatedAt: Date; payload: string | null }
+export type DirectorPipelineContinuationExpectation =
+  | { kind: "completed"; novelId: string; chapterId: null; updatedAt: Date; payload: string | null }
+  | ({ kind: "paused" } & PipelineRecoveryExpectation);
 export interface DirectorPipelineRecoveryRequest { novelId: string; directorTaskId: string }
 interface ExecutionScope { mode?: string; startOrder?: number; endOrder?: number; volumeOrder?: number }
 /** A paused execution must finish its saved boundary before a new scope can replace it. */
@@ -88,6 +91,36 @@ export class ChapterPipelineRecoveryService {
       throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "请先在章节源页核对原任务、保留稿和未确认的调用结果，再继续自动导演。");
     }
     return { ...target, updatedAt: job.updatedAt, payload: job.payload };
+  }
+
+  /** A completed chapter needs no journal resume; only its original director may continue. */
+  async prepareDirectorContinuation(
+    jobId: string,
+    request: DirectorPipelineRecoveryRequest,
+  ): Promise<DirectorPipelineContinuationExpectation> {
+    const original = await this.deps.findJob(jobId);
+    if (original?.status !== "succeeded") {
+      return { kind: "paused", ...await this.prepareDirector(jobId, request) };
+    }
+    const leaseExpiry = original.executionLeaseExpiresAt?.getTime();
+    const leaseActiveOrInvalid = Boolean(original.executionOwner
+      && (leaseExpiry === undefined || !Number.isFinite(leaseExpiry) || leaseExpiry > (this.deps.now?.() ?? Date.now())));
+    let payload: Record<string, unknown> | null = null;
+    try {
+      const parsed: unknown = JSON.parse(original.payload ?? "null");
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) payload = parsed as Record<string, unknown>;
+    } catch { /* Invalid stored ownership cannot authorize continuation. */ }
+    if (!jobId.trim() || !request.novelId.trim() || !request.directorTaskId.trim()
+      || original.id !== jobId || original.novelId !== request.novelId
+      || payload?.workflowTaskId !== request.directorTaskId
+      || original.currentItemKey !== null || original.pendingManualRecovery !== false
+      || original.cancelRequestedAt !== null || leaseActiveOrInvalid) {
+      throw new ChapterProductionError("CHAPTER_PRODUCTION_CONFLICT", "上一章任务的完成状态或所属导演记录已变化，请刷新本书工作区核对后继续。");
+    }
+    return {
+      kind: "completed", novelId: original.novelId, chapterId: null,
+      updatedAt: original.updatedAt, payload: original.payload,
+    };
   }
 
   async resume(target: RecoveryTarget & { operationId: string }): Promise<{ jobId: string }> {
