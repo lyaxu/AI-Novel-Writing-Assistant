@@ -500,6 +500,9 @@ const CHAPTER_ARTIFACT_DELTA_EXAMPLE: ChapterArtifactDeltaOutput = {
       confidence: 0.88,
       riskLevel: "low",
       riskReason: "",
+      reviewQuestion: null,
+      ledgerFact: null,
+      chapterFact: "人物已在本章获得该资源。",
     },
   ],
   payoffDeltas: [
@@ -563,7 +566,7 @@ export const chapterArtifactDeltaPrompt: PromptAsset<
   ChapterArtifactDeltaOutput
 > = {
   id: "novel.chapter.artifact_delta.extract",
-  version: "v2",
+  version: "v3",
   taskType: "fact_extraction",
   mode: "structured",
   language: "zh",
@@ -612,7 +615,8 @@ export const chapterArtifactDeltaPrompt: PromptAsset<
       "18. characterResourceDeltas.statusAfter 只能使用 available、hidden、borrowed、transferred、lost、consumed、damaged、destroyed、stale；不要输出 active、owned、usable、used、broken 等自定义状态。",
       "19. characterResourceDeltas 最多输出 8 条；优先保留会跨章影响行动边界、伏笔兑现或资源归属的变化。",
       "19a. characterResourceDeltas.riskLevel/riskReason 评估把本条变化写入事实账本的风险，不是物品对人物的危险程度或情节重要性。明确获得危险物品、发现神秘线索或未知用途，本身不构成 high。剧情中的危险和使用限制写入 constraints/narrativeImpact。",
-      "19b. 正文证据明确、归属与已有账本一致的首次获得或信息揭示可为 low；有需核对的重大状态影响为 medium；证据不足、人物/归属矛盾、与已销毁/消耗状态冲突或把未发生能力当事实才为 high。riskReason 必须解释具体的证据、归属或状态冲突，不用未来可能发生的剧情危险代替。",
+      "19b. 正文证据明确、归属与已有账本一致的获得、信息揭示、消耗、销毁、丢失、损坏或转交均可为 low；有事实疑问才提高风险。证据不足、人物/归属矛盾、与已销毁/消耗状态冲突或把未发生能力当事实才为 high。riskReason 必须解释具体的证据、归属或状态冲突，不用未来可能发生的剧情危险代替。",
+      "19c. 需要作者核对的资源变化，reviewQuestion 写具体可回答的问题，ledgerFact 只引用输入中相关旧账事实（没有就留空），chapterFact 写正文实际支持的变化；明确指出两者哪里不一致或缺什么证据。禁止用‘请核对归属/状态’代替具体问题。无事实疑问的常规变化 reviewQuestion 留空。",
       "19c. 记录角色持有物品不等于确认其法律所有权、隐藏能力或传言真实。未知归属保持 unknown；未验证能力和警告只记录为角色所见/所知，不扩展成已生效规则。",
       "20. payoffDeltas.scopeType 只能使用 book、volume、chapter；全书/故事级伏笔统一用 book，不要输出 story、novel 或 global。",
       "21. stateDeltas.foreshadowStates 的 setupChapterId/payoffChapterId 只有在能确认真实 chapterId 时才填写；如果只能确认第几章，宁可省略或写入章节序号字符串，不要输出数字。",

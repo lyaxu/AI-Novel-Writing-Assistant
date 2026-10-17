@@ -4,7 +4,7 @@ const { loadRuntimeSource } = require("./novelProduction/sourceHarness.cjs");
 const fixture = require("./fixtures/directorUsage/fiveChapterPause.json");
 const circuit = loadRuntimeSource("../director/runtime/DirectorCircuitBreakerService.ts", {});
 
-function harness({ rows = fixture.rows, stepStatus = "running", usageError } = {}) {
+function harness({ rows = fixture.rows, chapters = fixture.chapters, plans = fixture.plans, stepStatus = "running", usageError } = {}) {
   const calls = [];
   const prisma = {
     directorLlmUsageRecord: { findMany: async (query) => {
@@ -12,8 +12,8 @@ function harness({ rows = fixture.rows, stepStatus = "running", usageError } = {
       if (usageError) throw usageError;
       return rows.map((row) => ({ ...row, recordedAt: new Date(row.recordedAt) }));
     } },
-    chapter: { findMany: async () => fixture.chapters },
-    volumeChapterPlan: { findMany: async () => fixture.plans },
+    chapter: { findMany: async () => chapters },
+    volumeChapterPlan: { findMany: async () => plans },
     directorStepRun: { findUnique: async () => {
       calls.push(["step"]);
       return stepStatus === null ? null : { taskId: "fixture-task", status: stepStatus };
@@ -200,3 +200,52 @@ test("explicit resume cannot clear a still-exceeded task budget", async () => {
   assert.equal(h.events.some(([name]) => name === "resume-job"), false);
   assert.match(h.events.find(([name]) => name === "stop")[1].circuitBreaker.message, /1008277/);
 });
+
+for (const limit of ["taskTokenLimit", "chapterTokenLimit"]) {
+  test(`${limit} consumed by next-route planning stops before the first prose job`, async () => {
+    const events = [];
+    const rows = [];
+    const chapters = [];
+    const plans = [];
+    const h = harness({ rows, chapters, plans });
+    let state = { mode: "chapter_range", startOrder: 4, endOrder: 10, nextChapterOrder: 6,
+      nextChapterId: null, pipelineJobId: null, usageBudget: { [limit]: 500 } };
+    const range = { startOrder: 4, endOrder: 10, totalChapterCount: 7 };
+    const { NovelDirectorAutoExecutionRuntime } = loadRuntimeSource("../director/automation/novelDirectorAutoExecutionRuntime.ts", {
+      "@ai-novel/shared/types/novelDirector": { isFullBookAutopilotRunMode: () => true },
+      "./novelDirectorAutoExecution": { isDirectorAutoExecutionRangeComplete: () => false },
+      "./novelDirectorAutoExecutionCheckpointRuntime": { syncAutoExecutionTaskState: async () => events.push("sync") },
+      "./novelDirectorAutoExecutionFailure": {},
+      "./novelDirectorAutoExecutionCircuitBreakerRuntime": { ...h.runtime,
+        stopAutoExecutionForCircuitBreaker: async (_deps, input) => events.push({ stop: input.circuitBreaker }),
+      },
+      "./novelDirectorAutoExecutionRuntimeUtils": { resolveSingleChapterExecutionRange: () => ({ startOrder: 6, endOrder: 6 }) },
+      "./novelDirectorAutoExecutionRuntimePreparation": {
+        readAutoExecutionIdentity: async () => ({ seedPayloadJson: "{}" }),
+        shouldStopAutoExecution: async () => false,
+        restoreAutoExecutionBookRequest: (request) => request,
+        prepareRequestedAutoExecution: async () => ({ range, autoExecution: state, pipelineJobId: "" }),
+        resolveAutoExecutionRuntimeRangeAndState: async () => ({ range, autoExecution: state }),
+        prepareNextAutoExecutionChapter: async () => {
+          events.push("plan-next-route");
+          rows.push({ ...fixture.rows[1], id: "new-planning-usage", totalTokens: 600,
+            metadataJson: JSON.stringify({ chapterId: "plan-chapter-6", volumeId: "fixture-volume" }) });
+          chapters.push({ id: "chapter-6", order: 6 });
+          plans.push({ id: "plan-chapter-6", chapterId: "chapter-6", chapterOrder: 6, volumeId: "fixture-volume" });
+          state = { ...state, nextChapterId: "chapter-6" };
+          return { range, autoExecution: state };
+        },
+      },
+      "../../../../db/prisma": {}, "../../production/reliability": { ChapterProductionError: class extends Error {} },
+    });
+    const deps = { novelService: {
+      findActivePipelineJobForRange: async () => null,
+      startPipelineJob: async () => assert.fail("explicit planning budget must prevent prose dispatch"),
+    }, workflowService: { markTaskRunning: async () => assert.fail("must not enter prose stage") } };
+    await new NovelDirectorAutoExecutionRuntime(deps).runFromReady({ taskId: "fixture-task", novelId: "fixture-novel", request: {} });
+    assert.equal(events.filter((event) => event === "plan-next-route").length, 1);
+    assert.equal(events.at(-1).stop.status, "open");
+    assert.match(events.at(-1).stop.message, /600/);
+    assert.equal(h.calls.filter(([name]) => name === "usage").length, 2, "checks both before planning and before prose");
+  });
+}

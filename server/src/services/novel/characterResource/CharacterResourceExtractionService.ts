@@ -165,7 +165,7 @@ export class CharacterResourceExtractionService {
         chapterContent: content,
         rosterText: buildRosterText(characters),
         existingResourceText: existingResources.slice(0, 20).map((item) => (
-          `- ${item.name} | holder=${item.holderCharacterName ?? "未知"} | status=${item.status} | ${item.summary}`
+          `- ${item.name} | holder=${item.holderCharacterName ?? "未知"} | ownerType=${item.ownerType} | owner=${item.ownerName ?? "未知"} | status=${item.status} | ${item.summary}`
         )).join("\n"),
       },
       options: {
@@ -236,6 +236,10 @@ export class CharacterResourceExtractionService {
           },
           summary: update.summary ?? undefined,
           narrativeImpact: update.narrativeImpact,
+          riskReason: update.riskReason ?? null,
+          reviewQuestion: update.reviewQuestion ?? null,
+          ledgerFact: update.ledgerFact ?? null,
+          chapterFact: update.chapterFact ?? null,
           expectedFutureUse: update.expectedFutureUse ?? null,
           expectedUseStartChapterOrder: update.expectedUseStartChapterOrder ?? null,
           expectedUseEndChapterOrder: update.expectedUseEndChapterOrder ?? null,

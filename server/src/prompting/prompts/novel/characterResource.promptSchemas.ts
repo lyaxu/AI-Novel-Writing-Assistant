@@ -42,6 +42,9 @@ export const characterResourceExtractionUpdateSchema = z.object({
   confidence: z.preprocess(normalizeOptionalConfidence, z.number().min(0).max(1).optional().nullable()),
   riskLevel: z.enum(["low", "medium", "high"]).default("low").describe("将变化写入事实账本的风险；不是物品在剧情中的危险程度。high 需要证据、归属、状态冲突等具体依据。"),
   riskReason: z.string().trim().optional().nullable().describe("具体的事实写入风险依据；物品危险和未知用途写入 constraints/narrativeImpact。"),
+  reviewQuestion: z.string().trim().optional().nullable().describe("仅存在事实、证据或归属疑问时填写需要作者回答的具体问题；常规明确变化留空，不把故事危险写成核对问题。"),
+  ledgerFact: z.string().trim().optional().nullable().describe("与核对问题相关的已有账本事实；只引用输入中的事实，无已有记录时留空。"),
+  chapterFact: z.string().trim().optional().nullable().describe("本章正文实际支持的变化，与 ledgerFact 分开陈述；推测和计划不能当作已发生事实。"),
 });
 
 export const characterResourceContinuityRiskSchema = z.object({

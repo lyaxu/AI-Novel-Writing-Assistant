@@ -93,6 +93,8 @@ export function stringifyChapterResourceText(items: Awaited<ReturnType<typeof ch
   return items.slice(0, 20).map((item) => [
     `- ${item.name}`,
     `holder=${item.holderCharacterName ?? "未知"}`,
+    `ownerType=${item.ownerType}`,
+    `owner=${item.ownerName ?? "未知"}`,
     `status=${item.status}`,
     `function=${item.narrativeFunction}`,
     item.summary,

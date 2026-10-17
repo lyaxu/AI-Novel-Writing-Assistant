@@ -1,6 +1,5 @@
 import { currentActualStateTransaction } from "../production/actualState";
 import type {
-  CharacterResourceEventType,
   CharacterResourceUpdatePayload,
 } from "@ai-novel/shared/types/characterResource";
 import type { StateChangeProposal } from "@ai-novel/shared/types/canonicalState";
@@ -11,7 +10,6 @@ import {
   markDebtSourcePendingReview,
 } from "../state/stateProposalSourceQuality";
 
-const HIGH_RISK_EVENTS = new Set<CharacterResourceEventType>(["lost", "consumed", "destroyed", "damaged"]);
 const AUTO_DIRECTOR_RESOURCE_SOURCE_TYPES = new Set(["chapter_background_sync"]);
 
 function parsePayload(proposal: StateChangeProposal): CharacterResourceUpdatePayload | null {
@@ -51,12 +49,10 @@ export class CharacterResourceValidationService {
     }
 
     const lowConfidence = typeof payload.confidence === "number" && payload.confidence < 0.55;
-    const highImpact = HIGH_RISK_EVENTS.has(payload.updateType)
-      || payload.narrativeFunction === "hidden_card"
-      || payload.statusAfter === "destroyed"
-      || payload.statusAfter === "lost";
+    // AI reports factual uncertainty; a story event's severity is not an accounting conflict.
+    const hasReviewQuestion = Boolean(compactText(payload.reviewQuestion));
 
-    if (proposal.riskLevel === "high" || lowConfidence || highImpact) {
+    if (proposal.riskLevel === "high" || lowConfidence || hasReviewQuestion) {
       return {
         ...proposal,
         status: "pending_review",

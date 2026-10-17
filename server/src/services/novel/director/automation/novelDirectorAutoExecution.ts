@@ -72,7 +72,7 @@ export function normalizeDirectorAutoExecutionPlan(
       autoReview,
       autoRepair,
       artifactSyncMode,
-      usageBudget,
+      ...(usageBudget ? { usageBudget } : {}),
     };
   }
   if (plan?.mode === "volume") {
@@ -82,7 +82,7 @@ export function normalizeDirectorAutoExecutionPlan(
       autoReview,
       autoRepair,
       artifactSyncMode,
-      usageBudget,
+      ...(usageBudget ? { usageBudget } : {}),
     };
   }
   if (plan?.mode === "book") {
@@ -91,7 +91,7 @@ export function normalizeDirectorAutoExecutionPlan(
       autoReview,
       autoRepair,
       artifactSyncMode,
-      usageBudget,
+      ...(usageBudget ? { usageBudget } : {}),
     };
   }
   const fallbackStartOrder = Math.max(
@@ -109,7 +109,7 @@ export function normalizeDirectorAutoExecutionPlan(
     autoReview,
     autoRepair,
     artifactSyncMode,
-    usageBudget,
+    ...(usageBudget ? { usageBudget } : {}),
   };
 }
 
