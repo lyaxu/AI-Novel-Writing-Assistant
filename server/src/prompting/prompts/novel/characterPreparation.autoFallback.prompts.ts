@@ -23,7 +23,7 @@ export const characterCastAutoMembersPrompt: PromptAsset<
   z.infer<typeof characterCastAutoMembersResponseSchema>
 > = {
   id: "novel.character.castAuto.members",
-  version: "v2",
+  version: "v3",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -52,10 +52,10 @@ export const characterCastAutoMembersPrompt: PromptAsset<
       "你的任务是先产出可直接落库的角色成员骨架，不要在这一步生成 relations。",
       "",
       "只返回严格 JSON，不要输出 Markdown、解释、注释、代码块或额外文本。",
-      "最终 JSON 只能包含：title、summary、whyItWorks、recommendedReason、members。",
+      "最终 JSON 只能包含：title、summary、whyItWorks、recommendedReason、coveragePlan、members。",
       "",
       "硬规则：",
-      "1. members 必须是 3-6 个角色。",
+      "1. members 是 3-6 个深入刻画的核心角色，不代表全书人数；coveragePlan 必须依据整书规模给出全书分层覆盖，每个核心成员须提供与覆盖条目一致的 identityKey。",
       "2. 必须有且只能有 1 个 protagonist。",
       "3. 每个角色都必须输出 gender，允许值只有 male、female、other、unknown。",
       "4. castRole 只能使用：protagonist, antagonist, ally, foil, mentor, love_interest, pressure_source, catalyst。",

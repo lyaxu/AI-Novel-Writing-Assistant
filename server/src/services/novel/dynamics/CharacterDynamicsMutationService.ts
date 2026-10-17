@@ -17,11 +17,13 @@ import { buildForwardVolumeBeatImpactItems } from "../volume/volumePlanUtils";
 import {
   CHAPTER_EXTRACT_SOURCE_TYPE,
   MANUAL_SOURCE_TYPE,
-  normalizeName,
   PROJECTION_SOURCE_TYPES,
 } from "./characterDynamicsShared";
 import { buildVolumeWindows, dedupeStrings, mergeProjectionAssignments, resolveCurrentVolume, toCharacterRelationStage } from "./characterDynamicsUtils";
 import { buildContentHash } from "../runtime/ChapterArtifactDeltaService";
+import { attachCharacterIdentityAliases, buildCharacterIdentityIndex, normalizeCharacterIdentityName as normalizeName } from "../characters/identity";
+import { confirmCharacterCandidateIdentity } from "./commands/confirmCharacterCandidateIdentity";
+import { queueRagUpsert } from "../novelCoreSupport";
 
 type NovelContextCharacterPort = Pick<NovelContextService, "createCharacter">;
 type NovelContextServiceFactory = () => NovelContextCharacterPort;
@@ -121,15 +123,10 @@ export class CharacterDynamicsMutationService {
       throw new Error("角色候选不存在。");
     }
 
-    const createdCharacter = await this.novelContextServiceFactory().createCharacter(novelId, {
-      name: candidate.proposedName,
-      role: input.role?.trim() || candidate.proposedRole?.trim() || "新角色",
-      castRole: input.castRole,
-      relationToProtagonist: input.relationToProtagonist?.trim() || undefined,
-      currentState: input.currentState?.trim() || undefined,
-      currentGoal: input.currentGoal?.trim() || undefined,
-      background: input.summary?.trim() || candidate.summary?.trim() || undefined,
-    });
+    const resolved = await confirmCharacterCandidateIdentity(novelId, candidateId, input);
+    if (!resolved) throw new Error("人物身份尚未确认。");
+    const createdCharacter = resolved.character;
+    if (resolved.created) queueRagUpsert("character", createdCharacter.id);
 
     await prisma.$transaction(async (tx) => {
       await tx.characterCandidate.update({
@@ -144,7 +141,7 @@ export class CharacterDynamicsMutationService {
           novelId,
           chapterId: candidate.sourceChapter?.id ?? null,
           category: "character_dynamic_confirm",
-          content: `确认新角色：${createdCharacter.name}。来源候选：${candidate.proposedName}。${candidate.summary ?? ""}`.trim(),
+          content: `确认角色身份：${createdCharacter.name}。来源候选：${candidate.proposedName}。${candidate.summary ?? ""}`.trim(),
           importance: "high",
           sourceType: "character_candidate",
           sourceRefId: candidate.id,
@@ -714,6 +711,7 @@ export class CharacterDynamicsMutationService {
     }
 
     const currentVolume = resolveCurrentVolume(buildVolumeWindows(novel.volumePlans), chapterOrder);
+    const roster = await attachCharacterIdentityAliases(prisma, novelId, novel.characters);
     const extracted = await extractChapterDynamics({
       novelId,
       chapterId,
@@ -722,14 +720,15 @@ export class CharacterDynamicsMutationService {
       bookSellingPoint: novel.bookSellingPoint,
       first30ChapterPromise: novel.first30ChapterPromise,
       currentVolumeTitle: currentVolume?.title ?? null,
-      rosterLines: novel.characters.map((item) => `${item.name} | ${item.role} | goal=${item.currentGoal ?? ""} | state=${item.currentState ?? ""}`),
+      rosterLines: roster.map((item) => `${item.name} | aliases=${item.aliases.join("、")} | ${item.role} | goal=${item.currentGoal ?? ""} | state=${item.currentState ?? ""}`),
       relationLines: novel.characterRelations.map((item) => `${item.sourceCharacter.name} -> ${item.targetCharacter.name} | ${item.surfaceRelation} | dynamic=${item.dynamicLabel ?? ""} | next=${item.nextTurnPoint ?? ""}`),
       chapterOrder: chapter.order,
       chapterTitle: chapter.title,
       chapterContent: chapter.content,
     });
 
-    const characterByName = new Map(novel.characters.map((item) => [normalizeName(item.name), item]));
+    const identities = buildCharacterIdentityIndex(roster);
+    const characterByName = identities.unique;
     const relationByPair = new Map(novel.characterRelations.map((item) => [
       `${item.sourceCharacterId}:${item.targetCharacterId}`,
       item,
@@ -750,7 +749,7 @@ export class CharacterDynamicsMutationService {
         const matchedCharacter = candidate.matchedCharacterName
           ? characterByName.get(normalizeName(candidate.matchedCharacterName))
           : characterByName.get(normalizeName(candidate.proposedName));
-        if (matchedCharacter) {
+        if (matchedCharacter && !identities.isAmbiguous(candidate.proposedName)) {
           continue;
         }
         await tx.characterCandidate.create({
@@ -852,13 +851,13 @@ export class CharacterDynamicsMutationService {
     if (candidates.length === 0) {
       return;
     }
-    const novelContextService = this.novelContextServiceFactory();
+    const confirmedCandidates: typeof candidates = [];
     for (const candidate of candidates) {
-      const createdCharacter = await novelContextService.createCharacter(novelId, {
-        name: candidate.proposedName,
-        role: candidate.proposedRole?.trim() || "新角色",
-        background: candidate.summary?.trim() || undefined,
-      });
+      const resolved = await confirmCharacterCandidateIdentity(novelId, candidate.id, {}, true);
+      if (!resolved) continue;
+      const createdCharacter = resolved.character;
+      if (resolved.created) queueRagUpsert("character", createdCharacter.id);
+      confirmedCandidates.push(candidate);
       await prisma.$transaction(async (tx) => {
         await tx.characterCandidate.update({
           where: { id: candidate.id },
@@ -869,7 +868,7 @@ export class CharacterDynamicsMutationService {
             novelId,
             chapterId: candidate.sourceChapter?.id ?? null,
             category: "character_dynamic_confirm",
-            content: `自动导演确认新角色：${createdCharacter.name}。来源候选：${candidate.proposedName}。${candidate.summary ?? ""}`.trim(),
+            content: `自动导演确认角色身份：${createdCharacter.name}。来源候选：${candidate.proposedName}。${candidate.summary ?? ""}`.trim(),
             importance: "high",
             sourceType: "character_candidate",
             sourceRefId: candidate.id,
@@ -878,8 +877,9 @@ export class CharacterDynamicsMutationService {
         });
       });
     }
+    if (!confirmedCandidates.length) return;
     await this.rebuildDynamics(novelId, { sourceType: "rebuild_projection" });
-    for (const candidate of candidates) {
+    for (const candidate of confirmedCandidates) {
       await this.recordCharacterInjectionBeatImpact({
         novelId,
         characterName: candidate.proposedName,

@@ -1,4 +1,5 @@
 import { currentProductionSession } from "../production/reliability";
+import { attachCharacterIdentityAliases, buildCharacterIdentityIndex } from "../characters/identity";
 import { normalizeName, cleanOptionalText, cleanNullableText, clampConfidence, resolveCharacter, uniqueTextItems, joinFactContents, buildKnowledgeBoundaryLine, mergeKnowledgeBoundaryState, normalizeLedgerKey, stringifyChapterResourceText, stringifyPayoffText, stringifyActiveCharacterDialogueInfluenceText, stringifyPreviousState } from "./artifactSync/domain/deltaFormatting";
 export { mergeKnowledgeBoundaryState } from "./artifactSync/domain/deltaFormatting";
 import type {
@@ -47,6 +48,7 @@ const ARTIFACT_DELTA_SOURCE_STAGE = "chapter_execution";
 export type CharacterLookupItem = {
   id: string;
   name: string;
+  aliases?: string[];
   role: string;
   castRole: string | null;
   currentGoal: string | null;
@@ -438,8 +440,8 @@ export class ChapterArtifactDeltaService {
     return chapter;
   }
 
-  private listCharacterLookupItems(novelId: string): Promise<CharacterLookupItem[]> {
-    return prisma.character.findMany({
+  private async listCharacterLookupItems(novelId: string): Promise<CharacterLookupItem[]> {
+    const characters = await prisma.character.findMany({
       where: { novelId },
       orderBy: { createdAt: "asc" },
       select: {
@@ -451,6 +453,7 @@ export class ChapterArtifactDeltaService {
         currentState: true,
       },
     });
+    return attachCharacterIdentityAliases(prisma, novelId, characters);
   }
 
   private async filterPreviouslyAppliedResourceProposals(proposals: StateChangeProposal[]): Promise<StateChangeProposal[]> {
@@ -588,6 +591,7 @@ export class ChapterArtifactDeltaService {
     return characters.map((character) => [
       `- ${character.id}`,
       character.name,
+      character.aliases?.length ? `aliases=${character.aliases.join("、")}` : "",
       character.role,
       character.castRole ? `cast=${character.castRole}` : "",
       character.currentGoal ? `goal=${character.currentGoal}` : "",
@@ -742,7 +746,7 @@ export class ChapterArtifactDeltaService {
         .map((name) => resolveCharacter(input.characters, name)?.id)
         .filter((id): id is string => Boolean(id));
       const ownerCharacter = update.ownerType === "character"
-        ? resolveCharacter(input.characters, update.ownerName) ?? holderCharacter
+        ? (update.ownerName?.trim() ? resolveCharacter(input.characters, update.ownerName) : holderCharacter)
         : null;
       const resourceKey = normalizeResourceKey({
         name: update.resourceName,
@@ -951,7 +955,8 @@ export class ChapterArtifactDeltaService {
     output: ChapterArtifactDeltaOutput;
     expectedChapterContent: string;
   }): Promise<number> {
-    const characterByName = new Map(input.characters.map((item) => [normalizeName(item.name), item]));
+    const identities = buildCharacterIdentityIndex(input.characters);
+    const characterByName = identities.unique;
     const [currentVolume, relations] = await Promise.all([
       prisma.volumePlan.findFirst({
         where: {
@@ -992,7 +997,7 @@ export class ChapterArtifactDeltaService {
         const matched = candidate.matchedCharacterName
           ? characterByName.get(normalizeName(candidate.matchedCharacterName))
           : proposed;
-        if (matched) {
+        if (matched && !identities.isAmbiguous(candidate.proposedName)) {
           continue;
         }
         await tx.characterCandidate.create({
@@ -1093,7 +1098,7 @@ export class ChapterArtifactDeltaService {
     characters: CharacterLookupItem[];
     output: ChapterArtifactDeltaOutput;
   }): Promise<number> {
-    const characterByName = new Map(input.characters.map((item) => [normalizeName(item.name), item]));
+    const characterByName = buildCharacterIdentityIndex(input.characters).unique;
     const updates = input.output.characterKnowledgeStates
       .map((state) => {
         const character = characterByName.get(normalizeName(state.characterName));

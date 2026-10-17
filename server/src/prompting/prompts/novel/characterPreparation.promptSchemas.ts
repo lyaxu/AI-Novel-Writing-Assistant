@@ -120,6 +120,7 @@ export const characterCastRoleSchema = z.string().trim().transform(normalizeChar
 export const characterGenderSchema = z.string().trim().transform(normalizeCharacterGender).pipe(characterGenderEnum);
 
 export const characterCastOptionMemberSchema = z.object({
+  identityKey: nonEmptyString.optional(),
   name: nonEmptyString,
   role: nonEmptyString,
   gender: characterGenderSchema,
@@ -159,7 +160,30 @@ export const characterCastOptionRelationSchema = z.object({
   nextTurnPoint: z.string().trim().optional().default(""),
 });
 
+export const characterCastCoveragePlanSchema = z.object({
+  version: z.literal(1),
+  scope: z.literal("book"),
+  targetChapterCount: z.number().int().positive().nullable(),
+  targetWordCount: z.number().int().positive().nullable(),
+  rationale: nonEmptyString,
+  roles: z.array(z.object({
+    identityKey: nonEmptyString,
+    aliases: z.array(nonEmptyString).optional(),
+    nameLocked: z.boolean().optional(),
+    name: nonEmptyString,
+    tier: z.enum(["core", "recurring", "arc", "support"]),
+    storyFunction: nonEmptyString,
+    introductionStage: nonEmptyString,
+    detailStatus: z.enum(["planned", "completed"]).default("planned"),
+  })).min(1).max(200),
+});
+
+export const characterCastDevelopBatchSchema = z.object({
+  members: z.array(characterCastOptionMemberSchema.extend({ identityKey: nonEmptyString })).length(1),
+});
+
 export const characterCastOptionSchema = z.object({
+  coveragePlan: characterCastCoveragePlanSchema.optional(),
   title: nonEmptyString,
   summary: nonEmptyString,
   whyItWorks: z.string().trim().optional().default(""),
@@ -177,6 +201,7 @@ export const characterCastAutoResponseSchema = z.object({
 });
 
 export const characterCastAutoMembersResponseSchema = characterCastOptionSchema.pick({
+  coveragePlan: true,
   title: true,
   summary: true,
   whyItWorks: true,

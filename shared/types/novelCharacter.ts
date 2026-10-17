@@ -150,7 +150,31 @@ export interface CharacterRelation {
   updatedAt: string;
 }
 
+export interface CharacterCastCoverageRole {
+  aliases?: string[];
+  nameLocked?: boolean;
+  identityKey: string;
+  name: string;
+  tier: "core" | "recurring" | "arc" | "support";
+  storyFunction: string;
+  introductionStage: string;
+  detailStatus: "planned" | "completed";
+}
+
+export interface CharacterCastCoveragePlan {
+  version: 1;
+  scope: "book";
+  targetChapterCount: number | null;
+  targetWordCount: number | null;
+  rationale: string;
+  roles: CharacterCastCoverageRole[];
+}
+
 export interface CharacterCastOptionMember {
+  identityKey?: string | null;
+  appliedCharacterId?: string | null;
+  aliases?: string[];
+  nameLocked?: boolean;
   id: string;
   optionId: string;
   sortOrder: number;
@@ -186,6 +210,8 @@ export interface CharacterCastOptionMember {
 }
 
 export interface CharacterCastOptionRelation {
+  sourceIdentityKey?: string | null;
+  targetIdentityKey?: string | null;
   id: string;
   optionId: string;
   sortOrder: number;
@@ -225,6 +251,7 @@ export interface CharacterCastQualityAssessment {
 }
 
 export interface CharacterCastOption {
+  coveragePlan?: CharacterCastCoveragePlan | null;
   id: string;
   novelId: string;
   title: string;

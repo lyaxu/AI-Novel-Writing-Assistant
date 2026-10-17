@@ -13,6 +13,8 @@ export type {
   CharacterCastApplyResult,
   CharacterHardFacts,
   CharacterCastOption,
+  CharacterCastCoveragePlan,
+  CharacterCastCoverageRole,
   CharacterCastOptionClearResult,
   CharacterCastOptionDeleteResult,
   CharacterGender,

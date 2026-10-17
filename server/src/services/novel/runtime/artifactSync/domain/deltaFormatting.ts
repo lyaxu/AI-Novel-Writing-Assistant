@@ -1,4 +1,5 @@
 import { compactText } from "../../../characterResource/characterResourceShared";
+import { buildCharacterIdentityIndex } from "../../../characters/identity";
 import type { CharacterLookupItem, ActiveCharacterDialogueInfluence } from "../../ChapterArtifactDeltaService";
 import type { ChapterArtifactDeltaOutput } from "../../../../../prompting/prompts/novel/chapterArtifactDelta.prompts";
 import type { characterResourceLedgerService } from "../../../characterResource/CharacterResourceLedgerService";
@@ -25,22 +26,10 @@ export function clampConfidence(value: number | null | undefined): number | null
 }
 
 export function resolveCharacter(
-  characters: Array<{ id: string; name: string }>,
+  characters: Array<{ id: string; name: string; aliases?: string[] }>,
   name: string | null | undefined,
 ): { id: string; name: string } | null {
-  const normalized = normalizeName(name);
-  if (!normalized) {
-    return null;
-  }
-  const exact = characters.find((item) => normalizeName(item.name) === normalized);
-  if (exact) {
-    return exact;
-  }
-  const fuzzy = characters.find((item) => {
-    const itemName = normalizeName(item.name);
-    return itemName && (normalized.includes(itemName) || itemName.includes(normalized));
-  });
-  return fuzzy ?? null;
+  return buildCharacterIdentityIndex(characters).resolve(name);
 }
 
 export function uniqueTextItems(items: string[] | null | undefined, maxItems: number): string[] {

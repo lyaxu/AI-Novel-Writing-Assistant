@@ -596,6 +596,14 @@ export class DefaultNovelApplicationServices {
     return this.characterPreparationService.applyCharacterCastOption(...args);
   }
 
+  renameCharacterCastMember(...args: Parameters<CharacterPreparationService["renameCharacterCastMember"]>) {
+    return this.characterPreparationService.renameCharacterCastMember(...args);
+  }
+
+  developCharacterCastBatch(...args: Parameters<CharacterPreparationService["developCharacterCastBatch"]>) {
+    return this.characterPreparationService.developCharacterCastBatch(...args);
+  }
+
   runDeferredCharacterEnhancements(...args: Parameters<CharacterPreparationService["runDeferredEnhancements"]>) {
     return this.characterPreparationService.runDeferredEnhancements(...args);
   }

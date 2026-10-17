@@ -42,6 +42,10 @@ function stringifyJsonLike(value: string | null | undefined, fallback: string): 
 }
 
 export interface CharacterCastContextBlocksInput {
+  lockedCharacterIdentities?: unknown[];
+  targetChapterCount?: number | null;
+  targetWordCount?: number | null;
+  volumeStructure?: Array<{ title: string; sortOrder: number; summary: string | null }>;
   projectTitle: string;
   storyInput: string;
   genreName?: string | null;
@@ -90,6 +94,20 @@ function formatWorldFocusHints(input: {
 
 export function buildCharacterCastContextBlocks(input: CharacterCastContextBlocksInput): PromptContextBlock[] {
   const blocks = [
+    createBlock({ id: "character_cast_locked_identities", group: "output_policy", priority: 100, required: true,
+      content: ["【已保存人物与用户姓名约束】", JSON.stringify(input.lockedCharacterIdentities ?? []),
+        "既有方案中 nameLocked=true 的姓名由用户指定；后续规划必须尊重，旧名只作为别名用于识别，不得恢复为主名或另建同人。不同方案里的身份键有各自作用域，不得仅因键或称呼近似认定同人。"
+      ].join("\n"),
+    }),
+    createBlock({
+      id: "character_cast_book_scale", group: "output_policy", priority: 100, required: true,
+      content: ["【整书人物覆盖】", `整书目标章数：${input.targetChapterCount ?? "未确定"}`, `整书目标字数：${input.targetWordCount ?? "未确定"}`,
+        `卷级结构：${JSON.stringify(input.volumeStructure ?? [])}`,
+        "按整书规模、题材、关系和情节职责由你决定人物数量与层级，不得用当前写作批次替代全书规模。核心人物可以少而深入；后续人物只先规划身份、职责和入场阶段，允许分批补全，不要求开头全部出场。",
+        '每套方案必须输出 coveragePlan={version:1,scope:"book",targetChapterCount:整数或null,targetWordCount:整数或null,rationale:"覆盖依据",roles:[{identityKey:"稳定唯一键",name:"姓名或稳定称谓",tier:"core|recurring|arc|support",storyFunction:"具体职责",introductionStage:"卷或情节阶段",detailStatus:"planned"}]}。必须覆盖全书，而非仅重复核心名单。规模未知时如实用null，不猜固定人数。',
+        "members 每人必须给 identityKey 并与 coveragePlan.roles 对应；同一人物的别名不可另建身份。身份键不是姓名。已有人物的用户姓名与身份不可擅改。",
+      ].join("\n"),
+    }),
     createBlock({
       id: "character_cast_story_input",
       group: "idea_seed",

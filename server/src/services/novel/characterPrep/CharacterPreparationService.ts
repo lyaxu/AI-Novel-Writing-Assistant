@@ -1,3 +1,9 @@
+import { applyCharacterCastIdentity } from "./application/applyCharacterCastIdentity";
+import { renameCharacterCastMember, readCastAliases, type RenameCharacterCastMemberInput } from "./application/renameCharacterCastMember";
+import { queueRagUpsert } from "../novelCoreSupport";
+import { generateCharacterCastOptionsDraft, persistCharacterCastOptionsDraft } from "./characterCastGeneration";
+import { developCharacterCastBatch } from "./application/developCharacterCastBatch";
+import { parseCastCoverage } from "./domain/characterCastCoverage";
 import type {
   CharacterCastApplyResult,
   CharacterCastOption,
@@ -14,15 +20,6 @@ import type {
 } from "@ai-novel/shared/types/novel";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import { prisma } from "../../../db/prisma";
-import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
-import { buildCharacterCastContextBlocks } from "../../../prompting/prompts/novel/characterPreparation.contextBlocks";
-import {
-  characterCastOptionNormalizePrompt,
-  characterCastOptionPrompt,
-  characterCastOptionRepairPrompt,
-} from "../../../prompting/prompts/novel/characterPreparation.prompts";
-import type { CharacterCastOptionResponseParsed } from "../../../prompting/prompts/novel/characterPreparation.promptSchemas";
-import { buildStoryModePromptBlock, normalizeStoryModeOutput } from "../../storyMode/storyModeProfile";
 import { NovelContextService } from "../NovelContextService";
 import {
   CharacterVisibleProfileService,
@@ -33,12 +30,10 @@ import { CharacterMindService } from "../characterMind/CharacterMindService";
 import { CharacterPreparationSupplementalService } from "./characterPreparationSupplemental";
 import {
   parseCharacterProhibitionsJson,
-  serializeCharacterProhibitions,
 } from "../characters/characterHardFacts";
 import {
   assessCharacterCastBatch,
   buildCharacterCastBlockedMessage,
-  buildCharacterCastRepairReasons,
   type CharacterCastBatchAssessment,
 } from "./characterCastQuality";
 import { WorldContextGateway } from "../worldContext/WorldContextGateway";
@@ -58,21 +53,10 @@ interface CharacterCastApplyOptions {
   postApplyMode?: "sync" | "background" | "deferred";
 }
 
-function toOptionalText(value: string | null | undefined): string | null {
-  const normalized = value?.trim() ?? "";
-  return normalized || null;
-}
-
-function fillIfMissing(existing: string | null | undefined, incoming: string | null | undefined): string | undefined {
-  if (existing?.trim()) {
-    return undefined;
-  }
-  return toOptionalText(incoming) ?? undefined;
-}
-
 function serializeCharacterCastOption(row: {
   id: string;
   novelId: string;
+  coveragePlanJson?: string | null;
   title: string;
   summary: string;
   whyItWorks: string | null;
@@ -84,6 +68,10 @@ function serializeCharacterCastOption(row: {
   members: Array<{
     id: string;
     optionId: string;
+    identityKey?: string | null;
+    appliedCharacterId?: string | null;
+    aliasesJson?: string;
+    nameLocked?: boolean;
     sortOrder: number;
     name: string;
     role: string;
@@ -118,6 +106,8 @@ function serializeCharacterCastOption(row: {
     id: string;
     optionId: string;
     sortOrder: number;
+    sourceIdentityKey?: string | null;
+    targetIdentityKey?: string | null;
     sourceName: string;
     targetName: string;
     surfaceRelation: string;
@@ -131,6 +121,7 @@ function serializeCharacterCastOption(row: {
   }>;
 }): CharacterCastOption {
   return {
+    coveragePlan: parseCastCoverage(row.coveragePlanJson),
     id: row.id,
     novelId: row.novelId,
     title: row.title,
@@ -140,6 +131,10 @@ function serializeCharacterCastOption(row: {
     status: row.status,
     sourceStoryInput: row.sourceStoryInput,
     members: row.members.map((member) => ({
+      identityKey: member.identityKey,
+      appliedCharacterId: member.appliedCharacterId,
+      aliases: readCastAliases(member.aliasesJson),
+      nameLocked: member.nameLocked ?? false,
       id: member.id,
       optionId: member.optionId,
       sortOrder: member.sortOrder,
@@ -177,6 +172,8 @@ function serializeCharacterCastOption(row: {
       id: relation.id,
       optionId: relation.optionId,
       sortOrder: relation.sortOrder,
+      sourceIdentityKey: relation.sourceIdentityKey,
+      targetIdentityKey: relation.targetIdentityKey,
       sourceName: relation.sourceName,
       targetName: relation.targetName,
       surfaceRelation: relation.surfaceRelation,
@@ -224,120 +221,6 @@ export class CharacterPreparationService {
     this.characterDynamicsService,
     this.worldContextGateway,
   );
-
-  private async loadCastGenerationContext(novelId: string, options: CharacterPrepOptions) {
-    const novel = await prisma.novel.findUnique({
-      where: { id: novelId },
-      include: {
-        genre: { select: { name: true } },
-        bible: {
-          select: {
-            coreSetting: true,
-            mainPromise: true,
-            characterArcs: true,
-          },
-        },
-        storyMacroPlan: {
-          select: {
-            storyInput: true,
-            decompositionJson: true,
-            constraintEngineJson: true,
-          },
-        },
-        bookContract: {
-          select: {
-            readingPromise: true,
-            protagonistFantasy: true,
-            coreSellingPoint: true,
-            chapter3Payoff: true,
-            chapter10Payoff: true,
-            chapter30Payoff: true,
-            escalationLadder: true,
-            relationshipMainline: true,
-          },
-        },
-        primaryStoryMode: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            template: true,
-            parentId: true,
-            profileJson: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        },
-        secondaryStoryMode: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            template: true,
-            parentId: true,
-            profileJson: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        },
-        characters: {
-          select: {
-            name: true,
-          },
-          orderBy: { createdAt: "asc" },
-        },
-      },
-    });
-
-    if (!novel) {
-      throw new Error("Novel not found.");
-    }
-
-    const storyInput = options.storyInput?.trim()
-      || novel.storyMacroPlan?.storyInput?.trim()
-      || novel.description?.trim()
-      || "";
-    const worldContext = options.useWorldContext === false
-      ? null
-      : await this.worldContextGateway.getWorldContextBlock(novelId, {
-        purpose: "character",
-        strength: "normal",
-        storyInput,
-        provider: options.provider,
-        model: options.model,
-        temperature: options.temperature,
-      });
-    const storyModeBlock = buildStoryModePromptBlock({
-      primary: novel.primaryStoryMode ? normalizeStoryModeOutput(novel.primaryStoryMode) : null,
-      secondary: novel.secondaryStoryMode ? normalizeStoryModeOutput(novel.secondaryStoryMode) : null,
-    });
-    const contextBlocks = buildCharacterCastContextBlocks({
-      projectTitle: novel.title,
-      storyInput: storyInput || "暂无直接故事输入，请结合书级约束补齐真实可入戏角色。",
-      genreName: novel.genre?.name ?? null,
-      storyModeBlock,
-      styleTone: novel.styleTone ?? null,
-      narrativePov: novel.narrativePov ?? null,
-      pacePreference: novel.pacePreference ?? null,
-      emotionIntensity: novel.emotionIntensity ?? null,
-      corePromise: novel.bible?.mainPromise ?? null,
-      coreSetting: novel.bible?.coreSetting ?? null,
-      characterArcs: novel.bible?.characterArcs ?? null,
-      worldRules: worldContext?.worldRulesText ?? null,
-      worldStage: worldContext?.worldStageText ?? null,
-      worldFocusHints: options.useWorldContext === false ? null : options.worldFocusHints,
-      storyDecomposition: novel.storyMacroPlan?.decompositionJson ?? null,
-      constraintEngine: novel.storyMacroPlan?.constraintEngineJson ?? null,
-      bookContract: novel.bookContract,
-      existingCharacterNames: novel.characters.map((character) => character.name),
-    });
-
-    return {
-      novel,
-      storyInput,
-      contextBlocks,
-    };
-  }
 
   private async runPostApplyEnhancements(input: {
     novelId: string;
@@ -419,112 +302,6 @@ export class CharacterPreparationService {
     });
   }
 
-  private async normalizeCharacterCastOptions(
-    parsed: CharacterCastOptionResponseParsed,
-    options: CharacterPrepOptions,
-  ): Promise<CharacterCastOptionResponseParsed> {
-    const result = await runStructuredPrompt({
-      asset: characterCastOptionNormalizePrompt,
-      promptInput: {
-        payloadJson: JSON.stringify(parsed, null, 2),
-      },
-      options: {
-        provider: options.provider,
-        model: options.model,
-        temperature: 0.2,
-      },
-    });
-    return result.output;
-  }
-
-  private async repairCharacterCastOptions(input: {
-    parsed: CharacterCastOptionResponseParsed;
-    assessment: CharacterCastBatchAssessment;
-    contextBlocks: ReturnType<typeof buildCharacterCastContextBlocks>;
-    options: CharacterPrepOptions;
-  }): Promise<CharacterCastOptionResponseParsed> {
-    const result = await runStructuredPrompt({
-      asset: characterCastOptionRepairPrompt,
-      promptInput: {
-        payloadJson: JSON.stringify(input.parsed, null, 2),
-        failureReasons: buildCharacterCastRepairReasons(input.assessment),
-      },
-      contextBlocks: input.contextBlocks,
-      options: {
-        provider: input.options.provider,
-        model: input.options.model,
-        temperature: Math.max(0.2, Math.min(input.options.temperature ?? 0.55, 0.6)),
-      },
-    });
-    return result.output;
-  }
-
-  private async persistCharacterCastOptions(
-    novelId: string,
-    storyInput: string,
-    parsed: CharacterCastOptionResponseParsed,
-  ): Promise<void> {
-    await prisma.$transaction(async (tx) => {
-      await tx.characterCastOption.deleteMany({ where: { novelId } });
-      for (const option of parsed.options) {
-        await tx.characterCastOption.create({
-          data: {
-            novelId,
-            title: option.title,
-            summary: option.summary,
-            whyItWorks: toOptionalText(option.whyItWorks),
-            recommendedReason: toOptionalText(option.recommendedReason),
-            sourceStoryInput: toOptionalText(storyInput),
-            members: {
-              create: option.members.map((member, index) => ({
-                sortOrder: index,
-                name: member.name,
-                role: member.role,
-                gender: member.gender,
-                castRole: member.castRole,
-                relationToProtagonist: toOptionalText(member.relationToProtagonist),
-                storyFunction: member.storyFunction,
-                shortDescription: toOptionalText(member.shortDescription),
-                personality: toOptionalText(member.personality),
-                background: toOptionalText(member.background),
-                development: toOptionalText(member.development),
-                identityLabel: toOptionalText(member.identityLabel),
-                factionLabel: toOptionalText(member.factionLabel),
-                stanceLabel: toOptionalText(member.stanceLabel),
-                powerLevel: toOptionalText(member.powerLevel),
-                realm: toOptionalText(member.realm),
-                currentLocation: toOptionalText(member.currentLocation),
-                availability: toOptionalText(member.availability),
-                prohibitionsJson: serializeCharacterProhibitions(member.prohibitions),
-                outerGoal: toOptionalText(member.outerGoal),
-                innerNeed: toOptionalText(member.innerNeed),
-                fear: toOptionalText(member.fear),
-                wound: toOptionalText(member.wound),
-                misbelief: toOptionalText(member.misbelief),
-                secret: toOptionalText(member.secret),
-                moralLine: toOptionalText(member.moralLine),
-                firstImpression: toOptionalText(member.firstImpression),
-              })),
-            },
-            relations: {
-              create: option.relations.map((relation, index) => ({
-                sortOrder: index,
-                sourceName: relation.sourceName,
-                targetName: relation.targetName,
-                surfaceRelation: relation.surfaceRelation,
-                hiddenTension: toOptionalText(relation.hiddenTension),
-                conflictSource: toOptionalText(relation.conflictSource),
-                secretAsymmetry: toOptionalText(relation.secretAsymmetry),
-                dynamicLabel: toOptionalText(relation.dynamicLabel),
-                nextTurnPoint: toOptionalText(relation.nextTurnPoint),
-              })),
-            },
-          },
-        });
-      }
-    });
-  }
-
   assessCharacterCastOptions(
     castOptions: CharacterCastOption[],
     storyInput: string,
@@ -593,35 +370,16 @@ export class CharacterPreparationService {
     novelId: string,
     options: CharacterPrepOptions = {},
   ): Promise<CharacterCastOption[]> {
-    const context = await this.loadCastGenerationContext(novelId, options);
-    const generation = await runStructuredPrompt({
-      asset: characterCastOptionPrompt,
-      promptInput: {
-        optionCount: 3,
-      },
-      contextBlocks: context.contextBlocks,
-      options: {
-        provider: options.provider,
-        model: options.model,
-        temperature: options.temperature ?? 0.5,
-      },
-    });
-
-    let parsed = generation.output;
-
-    let assessment = assessCharacterCastBatch(parsed.options, context.storyInput);
-    if (assessment.autoApplicableOptionIndex === null) {
-      parsed = await this.repairCharacterCastOptions({
-        parsed,
-        assessment,
-        contextBlocks: context.contextBlocks,
-        options,
-      }).catch(() => parsed);
-      assessment = assessCharacterCastBatch(parsed.options, context.storyInput);
-    }
-
-    await this.persistCharacterCastOptions(novelId, context.storyInput, parsed);
+    const generated = await generateCharacterCastOptionsDraft(novelId, options);
+    await persistCharacterCastOptionsDraft(novelId, generated.storyInput, generated.parsed);
     return this.listCharacterCastOptions(novelId);
+  }
+
+  async developCharacterCastBatch(novelId: string, optionId: string, options: CharacterPrepOptions & { identityKeys?: string[] } = {}): Promise<CharacterCastOption> {
+    await developCharacterCastBatch(novelId, optionId, options);
+    const result = (await this.listCharacterCastOptions(novelId)).find((option) => option.id === optionId);
+    if (!result) throw new Error("人物方案不存在。");
+    return result;
   }
 
   async applyCharacterCastOption(
@@ -647,154 +405,9 @@ export class CharacterPreparationService {
       throw new Error(buildCharacterCastBlockedMessage(assessment));
     }
 
-    const existingCharacters = await prisma.character.findMany({
-      where: { novelId },
-      select: {
-        id: true,
-        name: true,
-        personality: true,
-        background: true,
-        development: true,
-        identityLabel: true,
-        factionLabel: true,
-        stanceLabel: true,
-        powerLevel: true,
-        realm: true,
-        currentLocation: true,
-        availability: true,
-        prohibitionsJson: true,
-      },
-      orderBy: { createdAt: "asc" },
-    });
-
-    const characterIdByName = new Map<string, string>();
-    const involvedCharacterIds: string[] = [];
-    let createdCount = 0;
-    let updatedCount = 0;
-
-    for (const member of option.members) {
-      const matched = existingCharacters.find((item) => item.name === member.name);
-      if (matched) {
-        updatedCount += 1;
-        const updated = await this.novelContextService.updateCharacter(novelId, matched.id, {
-          name: member.name,
-          role: member.role,
-          gender: member.gender as "male" | "female" | "other" | "unknown",
-          castRole: member.castRole,
-          storyFunction: member.storyFunction,
-          relationToProtagonist: member.relationToProtagonist ?? undefined,
-          personality: fillIfMissing(matched.personality, member.personality),
-          background: fillIfMissing(matched.background, member.background),
-          development: fillIfMissing(matched.development, member.development),
-          identityLabel: fillIfMissing(matched.identityLabel, member.identityLabel),
-          factionLabel: fillIfMissing(matched.factionLabel, member.factionLabel),
-          stanceLabel: fillIfMissing(matched.stanceLabel, member.stanceLabel),
-          powerLevel: fillIfMissing(matched.powerLevel, member.powerLevel),
-          realm: fillIfMissing(matched.realm, member.realm),
-          currentLocation: fillIfMissing(matched.currentLocation, member.currentLocation),
-          availability: fillIfMissing(matched.availability, member.availability),
-          prohibitions: parseCharacterProhibitionsJson(matched.prohibitionsJson).length === 0
-            ? parseCharacterProhibitionsJson(member.prohibitionsJson)
-            : undefined,
-          outerGoal: member.outerGoal ?? undefined,
-          innerNeed: member.innerNeed ?? undefined,
-          fear: member.fear ?? undefined,
-          wound: member.wound ?? undefined,
-          misbelief: member.misbelief ?? undefined,
-          secret: member.secret ?? undefined,
-          moralLine: member.moralLine ?? undefined,
-          firstImpression: member.firstImpression ?? undefined,
-        });
-        involvedCharacterIds.push(updated.id);
-        characterIdByName.set(updated.name, updated.id);
-        continue;
-      }
-
-      createdCount += 1;
-      const created = await this.novelContextService.createCharacter(novelId, {
-        name: member.name,
-        role: member.role,
-        gender: member.gender as "male" | "female" | "other" | "unknown",
-        castRole: member.castRole,
-        storyFunction: member.storyFunction,
-        relationToProtagonist: member.relationToProtagonist ?? undefined,
-        personality: member.personality ?? undefined,
-        background: member.background ?? undefined,
-        development: member.development ?? undefined,
-        identityLabel: member.identityLabel ?? undefined,
-        factionLabel: member.factionLabel ?? undefined,
-        stanceLabel: member.stanceLabel ?? undefined,
-        powerLevel: member.powerLevel ?? undefined,
-        realm: member.realm ?? undefined,
-        currentLocation: member.currentLocation ?? undefined,
-        availability: member.availability ?? undefined,
-        prohibitions: parseCharacterProhibitionsJson(member.prohibitionsJson),
-        outerGoal: member.outerGoal ?? undefined,
-        innerNeed: member.innerNeed ?? undefined,
-        fear: member.fear ?? undefined,
-        wound: member.wound ?? undefined,
-        misbelief: member.misbelief ?? undefined,
-        secret: member.secret ?? undefined,
-        moralLine: member.moralLine ?? undefined,
-        firstImpression: member.firstImpression ?? undefined,
-        currentGoal: member.outerGoal ?? undefined,
-        currentState: "等待进入正文",
-      });
-      involvedCharacterIds.push(created.id);
-      characterIdByName.set(created.name, created.id);
-    }
-
-    const uniqueCharacterIds = Array.from(new Set(involvedCharacterIds));
-    await prisma.characterRelation.deleteMany({
-      where: {
-        novelId,
-        OR: [
-          { sourceCharacterId: { in: uniqueCharacterIds } },
-          { targetCharacterId: { in: uniqueCharacterIds } },
-        ],
-      },
-    });
-
-    const seenRelationKeys = new Set<string>();
-    const relationRows = option.relations
-      .map((relation) => {
-        const sourceCharacterId = characterIdByName.get(relation.sourceName);
-        const targetCharacterId = characterIdByName.get(relation.targetName);
-        if (!sourceCharacterId || !targetCharacterId || sourceCharacterId === targetCharacterId) {
-          return null;
-        }
-        const relationKey = `${sourceCharacterId}:${targetCharacterId}`;
-        if (seenRelationKeys.has(relationKey)) {
-          return null;
-        }
-        seenRelationKeys.add(relationKey);
-        return {
-          novelId,
-          sourceCharacterId,
-          targetCharacterId,
-          surfaceRelation: relation.surfaceRelation,
-          hiddenTension: relation.hiddenTension || null,
-          conflictSource: relation.conflictSource || null,
-          secretAsymmetry: relation.secretAsymmetry || null,
-          dynamicLabel: relation.dynamicLabel || null,
-          nextTurnPoint: relation.nextTurnPoint || null,
-        };
-      })
-      .filter((item): item is NonNullable<typeof item> => Boolean(item));
-
-    if (relationRows.length > 0) {
-      await prisma.characterRelation.createMany({ data: relationRows });
-    }
-
-    await prisma.characterCastOption.updateMany({
-      where: { novelId },
-      data: { status: "draft" },
-    });
-    await prisma.characterCastOption.update({
-      where: { id: option.id },
-      data: { status: "applied" },
-    });
-
+    const applied = await applyCharacterCastIdentity(novelId, optionId, option.updatedAt);
+    const uniqueCharacterIds = applied.characterIds;
+    uniqueCharacterIds.forEach((id) => queueRagUpsert("character", id));
     const postApplyInput = {
       novelId,
       optionId: option.id,
@@ -818,17 +431,18 @@ export class CharacterPreparationService {
     }
 
     return {
-      optionId: option.id,
-      createdCount,
-      updatedCount,
-      relationCount: relationRows.length,
-      characterIds: uniqueCharacterIds,
-      primaryCharacterId: characterIdByName.get(option.members[0]?.name ?? "") ?? null,
+      ...applied,
       qualityOverrideApplied: hasQualityRisk && Boolean(options.overrideQualityGate),
       qualityWarnings: assessment.blockingReasons,
     };
   }
 
+  async renameCharacterCastMember(novelId: string, optionId: string, input: RenameCharacterCastMemberInput): Promise<CharacterCastOption> {
+    await renameCharacterCastMember(novelId, optionId, input);
+    const result = (await this.listCharacterCastOptions(novelId)).find((item) => item.id === optionId);
+    if (!result) throw new Error("人物方案不存在。");
+    return result;
+  }
   async deleteCharacterCastOption(
     novelId: string,
     optionId: string,

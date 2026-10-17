@@ -275,6 +275,7 @@ test("resource payload deduplication cannot inherit a prior operation or legacy 
   let operationId = "old"; let existing = [];
   const quality = loadRuntimeSource("../state/stateProposalSourceQuality.ts", {});
   const { ChapterArtifactDeltaService } = loadRuntimeSource("ChapterArtifactDeltaService.ts", {
+    "../characters/identity": {},
     "../production/reliability": { currentProductionSession: () => ({ operationId }) },
     "../production/actualState": { actualStateDb: { stateChangeProposal: { findMany: async () => existing } } },
     "./artifactSync/domain/deltaFormatting": { resolveCharacter: () => null },

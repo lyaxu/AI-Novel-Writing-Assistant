@@ -33,6 +33,19 @@ const castOptionApplySchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
 }).default({});
 
+const renameCastMemberSchema = z.object({
+  identityKey: z.string().trim().min(1).max(160),
+  name: z.string().trim().min(1).max(80),
+  expectedUpdatedAt: z.string().datetime(),
+});
+
+const developCastBatchSchema = z.object({
+  identityKeys: z.array(z.string().trim().min(1).max(160)).min(1).max(6).optional(),
+  provider: llmProviderSchema.optional(),
+  model: z.string().trim().optional(),
+  temperature: z.number().min(0).max(2).optional(),
+}).default({});
+
 interface RegisterNovelCharacterPreparationRoutesInput {
   router: Router;
   novelService: Pick<NovelApplicationServices,
@@ -40,6 +53,8 @@ interface RegisterNovelCharacterPreparationRoutesInput {
     | "listCharacterCastOptions"
     | "generateCharacterCastOptions"
     | "applyCharacterCastOption"
+    | "renameCharacterCastMember"
+    | "developCharacterCastBatch"
     | "generateSupplementalCharacters"
     | "applySupplementalCharacter"
     | "deleteCharacterCastOption"
@@ -52,6 +67,24 @@ export function registerNovelCharacterPreparationRoutes(
   input: RegisterNovelCharacterPreparationRoutesInput,
 ): void {
   const { router, novelService, idParamsSchema } = input;
+
+  router.patch("/:id/character-prep/cast-options/:optionId/member-name",
+    validate({ params: optionParamsSchema, body: renameCastMemberSchema }), async (req, res, next) => {
+      try {
+        const { id, optionId } = req.params as z.infer<typeof optionParamsSchema>;
+        const data = await novelService.renameCharacterCastMember(id, optionId, req.body as z.infer<typeof renameCastMemberSchema>);
+        res.status(200).json({ success: true, data, message: "姓名已保存，后续人物完善会沿用这个姓名。" } satisfies ApiResponse<typeof data>);
+      } catch (error) { next(error); }
+    });
+
+  router.post("/:id/character-prep/cast-options/:optionId/develop-batch",
+    validate({ params: optionParamsSchema, body: developCastBatchSchema }), async (req, res, next) => {
+      try {
+        const { id, optionId } = req.params as z.infer<typeof optionParamsSchema>;
+        const data = await novelService.developCharacterCastBatch(id, optionId, req.body as z.infer<typeof developCastBatchSchema>);
+        res.status(200).json({ success: true, data, message: "这批人物资料已保存。" } satisfies ApiResponse<typeof data>);
+      } catch (error) { next(error); }
+    });
 
   router.get("/:id/character-relations", validate({ params: idParamsSchema }), async (req, res, next) => {
     try {

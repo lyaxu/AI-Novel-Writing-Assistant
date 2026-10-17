@@ -8,6 +8,7 @@ import type {
   SupplementalCharacterGenerationResult,
 } from "@ai-novel/shared/types/novel";
 import { prisma } from "../../../db/prisma";
+import { attachCharacterIdentityAliases, buildCharacterIdentityIndex } from "../characters/identity";
 import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
 import { buildSupplementalCharacterContextBlocks } from "../../../prompting/prompts/novel/characterPreparation.contextBlocks";
 import {
@@ -378,7 +379,11 @@ export class CharacterPreparationSupplementalService {
       orderBy: { createdAt: "asc" },
     });
 
-    if (existingCharacters.some((character) => character.name === parsedCandidate.name)) {
+    const identities = buildCharacterIdentityIndex(await attachCharacterIdentityAliases(prisma, novelId, existingCharacters));
+    if (identities.isAmbiguous(parsedCandidate.name)) {
+      throw new Error(`称呼「${parsedCandidate.name}」对应多位角色，请先核对角色身份。`);
+    }
+    if (identities.resolve(parsedCandidate.name)) {
       throw new Error(`角色「${parsedCandidate.name}」已存在，请重新生成或修改名称后再创建。`);
     }
 

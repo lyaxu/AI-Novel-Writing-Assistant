@@ -153,6 +153,20 @@ export async function applyCharacterCastOption(
   return data;
 }
 
+export async function renameCharacterCastMember(id: string, optionId: string,
+  payload: { identityKey: string; name: string; expectedUpdatedAt: string }) {
+  const { data } = await apiClient.patch<ApiResponse<CharacterCastOption>>(
+    `/novels/${id}/character-prep/cast-options/${optionId}/member-name`, payload);
+  return data;
+}
+
+export async function developCharacterCastBatch(id: string, optionId: string,
+  payload?: { identityKeys?: string[]; provider?: LLMProvider; model?: string; temperature?: number }) {
+  const { data } = await apiClient.post<ApiResponse<CharacterCastOption>>(
+    `/novels/${id}/character-prep/cast-options/${optionId}/develop-batch`, payload ?? {});
+  return data;
+}
+
 export async function deleteCharacterCastOption(id: string, optionId: string) {
   const { data } = await apiClient.delete<ApiResponse<CharacterCastOptionDeleteResult>>(
     `/novels/${id}/character-prep/cast-options/${optionId}`,

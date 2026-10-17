@@ -1,4 +1,5 @@
 const PROMPT_CATALOG_SHORT_DESCRIPTIONS: Record<string, string> = {
+  "novel.character.castDevelopBatch": "分批完善全书人物",
   "novel.chapter.writer": "章节正文生成",
   "novel.short_story.segment.write": "短篇正文生成",
   "novel.short_story.full.audit": "短篇全文审校",

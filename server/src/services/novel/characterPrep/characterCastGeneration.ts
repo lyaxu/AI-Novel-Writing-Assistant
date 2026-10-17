@@ -1,3 +1,4 @@
+import { buildCastIdentityContext } from "./domain/characterCastCoverage";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import type { CharacterWorldFocusHints } from "@ai-novel/shared/types/novel";
 import { prisma } from "../../../db/prisma";
@@ -47,6 +48,8 @@ export interface CharacterPrepOptions {
 type CharacterCastGenerationContextBlocks = ReturnType<typeof buildCharacterCastContextBlocks>;
 
 interface CharacterCastGenerationContext {
+  targetChapterCount: number | null;
+  targetWordCount: number | null;
   storyInput: string;
   contextBlocks: CharacterCastGenerationContextBlocks;
 }
@@ -91,7 +94,7 @@ function buildAutoCastMemberRosterText(parsed: CharacterCastAutoMembersResponseP
   }).join("\n");
 }
 
-async function loadCastGenerationContext(
+export async function loadCastGenerationContext(
   novelId: string,
   options: CharacterPrepOptions,
 ): Promise<CharacterCastGenerationContext> {
@@ -150,8 +153,11 @@ async function loadCastGenerationContext(
           updatedAt: true,
         },
       },
+      characterCastOptions: { select: { id: true, coveragePlanJson: true, members: { select: { identityKey: true, name: true, aliasesJson: true, appliedCharacterId: true, nameLocked: true } } } },
+      volumePlans: { select: { title: true, sortOrder: true, summary: true }, orderBy: { sortOrder: "asc" } },
       characters: {
         select: {
+          id: true,
           name: true,
         },
         orderBy: { createdAt: "asc" },
@@ -183,6 +189,9 @@ async function loadCastGenerationContext(
   });
   const contextBlocks = buildCharacterCastContextBlocks({
     projectTitle: novel.title,
+    targetChapterCount: novel.estimatedChapterCount,
+    targetWordCount: novel.targetWordCount,
+    volumeStructure: novel.volumePlans,
     storyInput: storyInput || "暂无直接故事输入，请结合书级约束补齐真实可入戏角色。",
     genreName: novel.genre?.name ?? null,
     storyModeBlock,
@@ -200,11 +209,14 @@ async function loadCastGenerationContext(
     constraintEngine: novel.storyMacroPlan?.constraintEngineJson ?? null,
     bookContract: novel.bookContract,
     existingCharacterNames: novel.characters.map((character) => character.name),
+    lockedCharacterIdentities: buildCastIdentityContext(novel.characterCastOptions, novel.characters),
   });
 
   return {
     storyInput,
     contextBlocks,
+    targetChapterCount: novel.estimatedChapterCount,
+    targetWordCount: novel.targetWordCount,
   };
 }
 
@@ -371,6 +383,7 @@ export async function generateCharacterCastOptionsDraft(
     assessment = assessCharacterCastBatch(parsed.options, context.storyInput);
   }
 
+  validateCoverageScale(parsed.options, context);
   return {
     storyInput: context.storyInput,
     parsed,
@@ -424,74 +437,20 @@ export async function generateAutoCharacterCastDraft(
     assessment = assessCharacterCastBatch([parsed.option], context.storyInput);
   }
 
+  validateCoverageScale([parsed.option], context);
   return {
     storyInput: context.storyInput,
     parsed,
   };
 }
 
-export async function persistCharacterCastOptionsDraft(
-  novelId: string,
-  storyInput: string,
-  parsed: CharacterCastOptionResponseParsed,
-): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    await tx.characterCastOption.deleteMany({ where: { novelId } });
-    for (const option of parsed.options) {
-      await tx.characterCastOption.create({
-        data: {
-          novelId,
-          title: option.title,
-          summary: option.summary,
-          whyItWorks: toOptionalText(option.whyItWorks),
-          recommendedReason: toOptionalText(option.recommendedReason),
-          sourceStoryInput: toOptionalText(storyInput),
-          members: {
-            create: option.members.map((member, index) => ({
-              sortOrder: index,
-              name: member.name,
-              role: member.role,
-              gender: member.gender,
-              castRole: member.castRole,
-              relationToProtagonist: toOptionalText(member.relationToProtagonist),
-              storyFunction: member.storyFunction,
-              shortDescription: toOptionalText(member.shortDescription),
-              personality: toOptionalText(member.personality),
-              background: toOptionalText(member.background),
-              development: toOptionalText(member.development),
-              identityLabel: toOptionalText(member.identityLabel),
-              factionLabel: toOptionalText(member.factionLabel),
-              stanceLabel: toOptionalText(member.stanceLabel),
-              powerLevel: toOptionalText(member.powerLevel),
-              realm: toOptionalText(member.realm),
-              currentLocation: toOptionalText(member.currentLocation),
-              availability: toOptionalText(member.availability),
-              prohibitionsJson: serializeCharacterProhibitions(member.prohibitions),
-              outerGoal: toOptionalText(member.outerGoal),
-              innerNeed: toOptionalText(member.innerNeed),
-              fear: toOptionalText(member.fear),
-              wound: toOptionalText(member.wound),
-              misbelief: toOptionalText(member.misbelief),
-              secret: toOptionalText(member.secret),
-              moralLine: toOptionalText(member.moralLine),
-              firstImpression: toOptionalText(member.firstImpression),
-            })),
-          },
-          relations: {
-            create: option.relations.map((relation, index) => ({
-              sortOrder: index,
-              sourceName: relation.sourceName,
-              targetName: relation.targetName,
-              surfaceRelation: relation.surfaceRelation,
-              hiddenTension: toOptionalText(relation.hiddenTension),
-              conflictSource: toOptionalText(relation.conflictSource),
-              secretAsymmetry: toOptionalText(relation.secretAsymmetry),
-              dynamicLabel: toOptionalText(relation.dynamicLabel),
-              nextTurnPoint: toOptionalText(relation.nextTurnPoint),
-            })),
-          },
-        },
-      });
+export { persistCharacterCastOptionsDraft } from "./infrastructure/characterCastRepository";
+
+function validateCoverageScale(options: CharacterCastOptionResponseParsed["options"], context: CharacterCastGenerationContext) {
+  for (const option of options) {
+    if (!option.coveragePlan) throw new Error("人物阵容缺少整书覆盖计划，请重新生成。");
+    if (option.coveragePlan.targetChapterCount !== context.targetChapterCount || option.coveragePlan.targetWordCount !== context.targetWordCount) {
+      throw new Error("人物覆盖使用的篇幅与本书目标不一致，请按整书规模重新规划。");
     }
-  });
+  }
 }

@@ -13,10 +13,13 @@ import {
   generateCharacterCastOptions,
   getCharacterCastOptions,
   getCharacterRelations,
+  renameCharacterCastMember,
+  developCharacterCastBatch,
 } from "@/api/novel";
 import { getNovelWorldSlice } from "@/api/novelWorldSlice";
 import { queryKeys } from "@/api/queryKeys";
 import SelectControl from "@/components/common/SelectControl";
+import CastCandidatePlanning, { CandidateNameEditor } from "./characterPrep/CastCandidatePlanning";
 
 interface CharacterCastOptionsSectionProps {
   novelId: string;
@@ -234,6 +237,27 @@ export default function CharacterCastOptionsSection(props: CharacterCastOptionsS
     },
   });
 
+  const renameMutation = useMutation({
+    mutationFn: (input: { option: CharacterCastOption; identityKey: string; name: string }) =>
+      renameCharacterCastMember(novelId, input.option.id, {
+        identityKey: input.identityKey, name: input.name, expectedUpdatedAt: input.option.updatedAt,
+      }),
+    onSuccess: async () => {
+      setStatusMessage("姓名已保存。后续人物完善会沿用你的命名，原称呼作为别名保留。");
+      await refreshCastOptions();
+    },
+    onError: (error) => setStatusMessage(error instanceof Error ? error.message : "姓名保存失败，请刷新方案后重试。"),
+  });
+
+  const developMutation = useMutation({
+    mutationFn: (optionId: string) => developCharacterCastBatch(novelId, optionId, { provider: llmProvider, model: llmModel, temperature: 0.6 }),
+    onSuccess: async () => { setStatusMessage("这批人物资料已保存，可应用到角色资产或继续完善下一批。"); await refreshCastOptions(); },
+    onError: async (error) => {
+      setStatusMessage(error instanceof Error ? error.message : "人物完善中断，已完成的人物会保留。");
+      await refreshCastOptions();
+    },
+  });
+
   function handleApplyOption(option: CharacterCastOption) {
     const qualityWarnings = getCharacterCastQualityWarnings(option);
     if (qualityWarnings.length > 0) {
@@ -285,6 +309,8 @@ export default function CharacterCastOptionsSection(props: CharacterCastOptionsS
     generateMutation.isPending
     || applyMutation.isPending
     || deleteMutation.isPending
+    || renameMutation.isPending
+    || developMutation.isPending
     || clearMutation.isPending;
 
   return (
@@ -438,8 +464,8 @@ export default function CharacterCastOptionsSection(props: CharacterCastOptionsS
                       return (
                         <div
                           key={option.id}
-                          className={`rounded-2xl border p-4 ${
-                            option.status === "applied" ? "border-emerald-500/40 bg-emerald-50/40" : ""
+                          className={`rounded-2xl p-4 ${
+                            option.status === "applied" ? "bg-emerald-50/40" : "bg-muted/20"
                           }`}
                         >
                           <div className="flex flex-wrap items-start justify-between gap-2">
@@ -499,11 +525,24 @@ export default function CharacterCastOptionsSection(props: CharacterCastOptionsS
                           {option.whyItWorks ? (
                             <div className="mt-2 text-xs text-muted-foreground">成立原因：{option.whyItWorks}</div>
                           ) : null}
+                          <CastCandidatePlanning option={option} disabled={isWorking}
+                            characterNameById={characterNameById}
+                            developing={developMutation.isPending && developMutation.variables === option.id}
+                            onDevelop={() => developMutation.mutate(option.id)}
+                            onRename={(identityKey, name) => renameMutation.mutate({ option, identityKey, name })} />
                           <div className="mt-3 grid gap-2 sm:grid-cols-2">
                             {option.members.map((member) => (
-                              <div key={member.id} className="rounded-xl border border-dashed p-3">
+                              <div key={member.id} className="space-y-2 p-3">
+                                {member.appliedCharacterId || (option.status === "applied" && !member.identityKey) ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">{member.appliedCharacterId ? characterNameById.get(member.appliedCharacterId) ?? member.name : member.name}</span>
+                                    {member.appliedCharacterId ? <Button size="sm" variant="ghost" onClick={() => onSelectedCharacterChange(member.appliedCharacterId!)}>查看角色档案</Button> : null}
+                                    <span className="text-xs text-muted-foreground">改名请从角色档案操作</span>
+                                  </div>
+                                ) : <CandidateNameEditor name={member.name} identityKey={member.identityKey || member.id}
+                                  nameLocked={member.nameLocked} disabled={isWorking}
+                                  onSave={(identityKey, name) => renameMutation.mutate({ option, identityKey, name })} />}
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <span className="font-medium">{member.name}</span>
                                   <Badge variant="outline">{getCastRoleLabel(member.castRole)}</Badge>
                                   <Badge variant="secondary">{getCharacterGenderLabel(member.gender)}</Badge>
                                 </div>

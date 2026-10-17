@@ -382,7 +382,11 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/novel/characterResource.prompts").characterResourceExtractionPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.character.castOptions@v3",
+    key: "novel.character.castDevelopBatch@v1",
+    load: () => require("../prompts/novel/characterPreparation.development.prompts").characterCastDevelopBatchPrompt as UnknownPromptAsset,
+  },
+  {
+    key: "novel.character.castOptions@v4",
     load: () => require("../prompts/novel/characterPreparation.prompts").characterCastOptionPrompt as UnknownPromptAsset,
   },
   {
@@ -394,11 +398,11 @@ export const promptAssetLoaderEntries: PromptAssetLoaderEntry[] = [
     load: () => require("../prompts/novel/characterPreparation.prompts").characterCastOptionNormalizePrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.character.castAuto@v2",
+    key: "novel.character.castAuto@v3",
     load: () => require("../prompts/novel/characterPreparation.prompts").characterCastAutoPrompt as UnknownPromptAsset,
   },
   {
-    key: "novel.character.castAuto.members@v2",
+    key: "novel.character.castAuto.members@v3",
     load: () => require("../prompts/novel/characterPreparation.autoFallback.prompts").characterCastAutoMembersPrompt as UnknownPromptAsset,
   },
   {

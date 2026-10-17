@@ -15,8 +15,10 @@ const CHARACTER_CAST_OPTION_RESPONSE_TEMPLATE = `{
       "summary": "string",
       "whyItWorks": "string",
       "recommendedReason": "string",
-      "members": [
+      "coveragePlan": {"version":1,"scope":"book","targetChapterCount":null,"targetWordCount":null,"rationale":"根据整书规模和故事结构解释人数与层级","roles":[{"identityKey":"core-1","name":"string","tier":"core","storyFunction":"string","introductionStage":"开篇","detailStatus":"planned"}]},
+    "members": [
         {
+          "identityKey": "core-1",
           "name": "string",
           "role": "string",
           "gender": "male",
@@ -67,9 +69,11 @@ const CHARACTER_CAST_AUTO_RESPONSE_TEMPLATE = `{
     "summary": "string",
     "whyItWorks": "string",
     "recommendedReason": "string",
+    "coveragePlan": {"version":1,"scope":"book","targetChapterCount":null,"targetWordCount":null,"rationale":"根据整书规模和故事结构解释人数与层级","roles":[{"identityKey":"core-1","name":"string","tier":"core","storyFunction":"string","introductionStage":"开篇","detailStatus":"planned"}]},
     "members": [
       {
-        "name": "string",
+        "identityKey": "core-1",
+          "name": "string",
         "role": "string",
         "gender": "male",
         "castRole": "protagonist",
@@ -197,7 +201,7 @@ export const characterCastOptionPrompt: PromptAsset<
   z.infer<typeof characterCastOptionResponseSchema>
 > = {
   id: "novel.character.castOptions",
-  version: "v3",
+  version: "v4",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -228,7 +232,7 @@ export const characterCastOptionPrompt: PromptAsset<
       "【结构硬规则】",
       "1. 必须严格遵守给定 JSON 结构。",
       "2. 字段名必须保持英文，字段值内容使用简体中文。",
-      "3. 每套方案必须包含 3-6 个成员、2-12 条关系。",
+      "3. 每套方案必须包含 3-6 个深入刻画的核心成员（不是全书上限），coveragePlan 给出全书分层人物覆盖、2-12 条关系。",
       "4. 每个角色都必须输出 gender，允许值只有 male、female、other、unknown。",
       "5. castRole 只能使用：protagonist, antagonist, ally, foil, mentor, love_interest, pressure_source, catalyst。",
       "6. 每个角色必须输出 personality、background、development，不得只给 shortDescription。",
@@ -368,7 +372,7 @@ export const characterCastAutoPrompt: PromptAsset<
   z.infer<typeof characterCastAutoResponseSchema>
 > = {
   id: "novel.character.castAuto",
-  version: "v2",
+  version: "v3",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -398,7 +402,7 @@ export const characterCastAutoPrompt: PromptAsset<
       "【结构硬规则】",
       "1. 必须严格遵守给定 JSON 结构。",
       "2. 字段名必须保持英文，字段值内容使用简体中文。",
-      "3. 阵容必须包含 3-6 个成员、2-12 条关系。",
+      "3. 阵容必须包含 3-6 个深入刻画的核心成员（不是全书上限），coveragePlan 给出全书分层人物覆盖、2-12 条关系。",
       "4. 每个角色都必须输出 gender，允许值只有 male、female、other、unknown。",
       "5. castRole 只能使用：protagonist, antagonist, ally, foil, mentor, love_interest, pressure_source, catalyst。",
       "6. 每个角色必须输出 personality、background、development，不得只给 shortDescription。",

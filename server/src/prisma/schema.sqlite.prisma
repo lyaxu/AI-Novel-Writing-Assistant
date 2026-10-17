@@ -1006,6 +1006,7 @@ model CharacterRelation {
 }
 
 model CharacterCastOption {
+  coveragePlanJson   String?
   id                String   @id @default(cuid())
   novelId           String
   title             String
@@ -1024,6 +1025,10 @@ model CharacterCastOption {
 }
 
 model CharacterCastOptionMember {
+  identityKey           String?
+  appliedCharacterId    String?
+  aliasesJson           String @default("[]")
+  nameLocked            Boolean @default(false)
   id                    String   @id @default(cuid())
   optionId              String
   sortOrder             Int
@@ -1057,10 +1062,13 @@ model CharacterCastOptionMember {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
+  @@unique([optionId, identityKey])
   @@index([optionId, sortOrder])
 }
 
 model CharacterCastOptionRelation {
+  sourceIdentityKey String?
+  targetIdentityKey String?
   id              String   @id @default(cuid())
   optionId        String
   sortOrder       Int

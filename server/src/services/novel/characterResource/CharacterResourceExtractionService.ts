@@ -5,6 +5,7 @@ import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
 import { characterResourceExtractionPrompt } from "../../../prompting/prompts/novel/characterResource.prompts";
 import { compactText, normalizeResourceKey } from "./characterResourceShared";
 import { characterResourceLedgerService } from "./CharacterResourceLedgerService";
+import { attachCharacterIdentityAliases, buildCharacterIdentityIndex } from "../characters/identity";
 
 const BACKGROUND_RESOURCE_SOURCE_TYPE = "chapter_background_sync";
 const MANUAL_BACKFILL_SOURCE_TYPE = "manual_resource_backfill";
@@ -23,24 +24,15 @@ function getSourceStage(input: { sourceStage?: string | null }): string {
   return input.sourceStage ?? "character_resource_extraction";
 }
 
-function buildRosterText(characters: Array<{ id: string; name: string; role: string; castRole: string | null }>): string {
-  return characters.map((item) => `- ${item.id} | ${item.name} | ${item.role}${item.castRole ? ` | ${item.castRole}` : ""}`).join("\n");
+function buildRosterText(characters: Array<{ id: string; name: string; role: string; castRole: string | null; aliases?: string[] }>): string {
+  return characters.map((item) => `- ${item.id} | ${item.name} | aliases=${item.aliases?.join("、") ?? ""} | ${item.role}${item.castRole ? ` | ${item.castRole}` : ""}`).join("\n");
 }
 
 function resolveCharacterId(
-  characters: Array<{ id: string; name: string }>,
+  characters: Array<{ id: string; name: string; aliases?: string[] }>,
   name: string | null | undefined,
 ): string | null {
-  const normalized = compactText(name);
-  if (!normalized) {
-    return null;
-  }
-  const exact = characters.find((item) => item.name === normalized);
-  if (exact) {
-    return exact.id;
-  }
-  const fuzzy = characters.find((item) => normalized.includes(item.name) || item.name.includes(normalized));
-  return fuzzy?.id ?? null;
+  return buildCharacterIdentityIndex(characters).resolve(name)?.id ?? null;
 }
 
 export class CharacterResourceExtractionService {
@@ -119,7 +111,7 @@ export class CharacterResourceExtractionService {
     model?: string;
     temperature?: number;
   }): Promise<StateChangeProposal[]> {
-    const [novel, chapter, characters, existingResources] = await Promise.all([
+    const [novel, chapter, characterRows, existingResources] = await Promise.all([
       prisma.novel.findUnique({
         where: { id: input.novelId },
         select: { title: true },
@@ -137,9 +129,10 @@ export class CharacterResourceExtractionService {
     ]);
 
     const content = compactText(chapter?.content);
-    if (!novel || !chapter || !content || characters.length === 0) {
+    if (!novel || !chapter || !content || characterRows.length === 0) {
       return [];
     }
+    const characters = await attachCharacterIdentityAliases(prisma, input.novelId, characterRows);
 
     const sourceType = input.sourceType ?? BACKGROUND_RESOURCE_SOURCE_TYPE;
     const sourceStage = getSourceStage(input);
@@ -203,7 +196,7 @@ export class CharacterResourceExtractionService {
         .map((name) => resolveCharacterId(characters, name))
         .filter((id): id is string => Boolean(id));
       const ownerCharacterId = update.ownerType === "character"
-        ? resolveCharacterId(characters, update.ownerName) ?? holderCharacterId
+        ? (update.ownerName?.trim() ? resolveCharacterId(characters, update.ownerName) : holderCharacterId)
         : null;
       const resourceKey = normalizeResourceKey({
         name: update.resourceName,
