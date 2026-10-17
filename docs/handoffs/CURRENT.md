@@ -1,23 +1,21 @@
 # 最新交接入口
 
-2026-10-16 10:35（UTC-05:00；15:35 UTC）只读复核，仍为五章完成后的原暂停，26条调用及五章hash不变。最新完整交接：[主线复核与开发路线](2026-10-16_1535Z_mainline-roadmap.md)，现场根因见[五章诊断](../evals/2026-10-16-five-chapters-usage-and-cast.md)。本轮用户明确把人物两项纳入主线开发；顺序为3A用量/书级规模→3B按篇幅阵容→3C规划改名→3D整合回归→固定版本十章。建议本窗口整理完交接新窗口开发，不自动创建任务。旧“选择完整工作台”操作已执行，不能重做或重建4—10任务。
+2026-10-16 22:58（UTC-05:00；17日03:58 UTC）。最新完整快照：[主线3A—3D开发收尾](2026-10-17_0353Z_mainline-development.md)，工程证据：[阶段3整合](../evals/2026-10-16-mainline-stage3-integration.md)。用户要求读1535Z路线图后继续开发，本轮已完成代码实施和离线整合；**数据库未迁移、服务未加载，UI/真实模型及固定版本十章未验收**。
 
-## 当前真实状态
+## 环境与已完成工作
 
-书cmv3wyvw40015gow0780pycx9《外卖小哥的茅山账本》。原1—3导演成功；4—10任务cmv8d55el0033z8w0hneoiiru完成2/7，nextOrder=6、remaining=6—10。第4/5章3916/5808字符，approved/completed，对应job成功；前3章hash不变。用户认可节奏和文笔，代理尚未作本轮全文文学审读。
+仓库 D:/novel/AI-Novel-Writing-Assistant，分支 codex/production-core-refactor，产品HEAD 32765647，随后交接文档提交以git log为准。3A 11ec8a4e：用量归属、安全预算与整书规模；3B/3C 6495c413：AI整书人物覆盖、分批完善、候选改名与稳定身份；3D 32765647：资源具体疑问/事实/证据及回归兼容性。无push/分支合并。
 
-新任务running但pendingManualRecovery=1，实际用量暂停，活跃jobs/commands/sideEffects为0。新task调用26（本轮用户25），统一自10-11T17窗口90，代理0。当前保留暂停，不反复点继续或改阈值。原稿、规划、质量门禁及原任务保留。
+shared/server编译、client typecheck通过；119文件综合回归1352通过、0失败、8既有skip。本地Node24匹配SQLite驱动，系统Node25不匹配；详见证据。按AGENTS未做浏览器验收，离线结果不等于模型或文学验收。
 
-## 下一项边界：尚未实施
+## 原现场仍保留
 
-P0为阶段3用量统计和恢复：246741是第5章规划4调用累计，不是一次输出；规划虚拟ID与正文持久ID分裂，下一章未物化时activeID集合为空导致旧最大用量触发，固定80000阈值与真实上下文不匹配。另确认autoExecution.completionProfile误为7章compact，seed书级仍100章serial；该profile传入后续逐章规划，须在继续第6章前一起修复。正常推进高用量宜提醒，明确预算上限/无进展循环/输出额度终止等仍需安全暂停；不以关闭检查、抬高阈值或重复重置替代修复。
+DB D:/novel/.comparison/2026-10-10/old-test.db，书cmv3wyvw40015gow0780pycx9《外卖小哥的茅山账本》，任务cmv8d55el0033z8w0hneoiiru。03:52:58Z只读复核仍running/pendingManualRecovery=1、2/7、next6，26调用；五章3013/3680/3729/3916/5808字符及hash、task/seed/jobs/人物与03:30基线一致，第6章无行。历史246741用量提示及7章profile未手改；正确规则在新代码的显式恢复路径。
 
-人物两项明确列主线独立验收：按整书篇幅和故事结构分层规划人物，规划候选阶段直接改名并维护稳定ID、别名、用户锁定及引用。旧版开书核心3—6并非整书上限，本书10条；已有档案改名不覆盖所有正文/章纲/旧候选。三条相近摊主称呼列疑似身份重复样本，未经核验不得合并。详见最新快照与PROJECT_CONTEXT。
+3000/5190/5173/8787未监听。本轮模型调用0、无生产DB写入；停止样本的queued人工恢复记录保留，无owner/lease。预存三个Structured组件和台账历史964行仍未提交，其他未跟踪资料不清理。
 
-## 环境、验证与保护
+## 下一项边界
 
-D:/novel/AI-Novel-Writing-Assistant，codex/production-core-refactor，本轮核验HEAD 91d7753f，随后仅文档提交（最终以git log为准）；DB D:/novel/.comparison/2026-10-10/old-test.db。旧3000/PID19224加载78b9f92873c4（07:07:50.445Z），5190可访问、health stale=false是10:35 UTC的前轮证据，本轮未复核服务。不动新版，不恢复废弃样本，不自动调用模型。预存三个Structured组件及台账历史964行保留。
+实际旧库一致性备份副本已验证新增迁移SQL及Prisma读取，162表/17227行的原数据不变、完整性正常，备份路径见整合证据。下一步核对正式迁移流程并准备受控迁移和加载、核对版本指纹与原暂停。**不能直接启动新代码连旧schema，不能自动继续第6章或新建4—10任务。** UI、真实模型与预算由用户验收；继续原6—10仅是恢复验证，正式固定版本十章另行冻结安排。断线/睡眠/重启全场景与书内agent仍为未启动设想。
 
-本轮只读数据库/日志/代码和文档同步，无产品改动、重启、模型调用或新测试。上一轮1265项通过只支持旧修复，不能当成本轮用量/profile问题已解决。五章完成仍非固定版本连续十章通过；未来断线续作与书内agent继续保留待设计。
-
-接手顺序AGENTS→[PROJECT_CONTEXT](PROJECT_CONTEXT.md)→本页→[完整交接](2026-10-16_1535Z_mainline-roadmap.md)及[现场诊断](../evals/2026-10-16-five-chapters-usage-and-cast.md)，再核验branch/dirty/真实停点。主线台账[WORK_LEDGER](WORK_LEDGER.md)，批准方案[生产链重构](../plans/2026-10-11-production-core-refactor.md)的3A—3D表为当前开发顺序，历史操作指引不再有效。
+接手顺序：完整AGENTS→[PROJECT_CONTEXT](PROJECT_CONTEXT.md)→本页→[新快照](2026-10-17_0353Z_mainline-development.md)及[整合证据](../evals/2026-10-16-mainline-stage3-integration.md)→[主线计划](../plans/2026-10-11-production-core-refactor.md)。历史1535Z快照是本轮起点，其“未实施”状态及旧恢复操作指引已被本页覆盖。主线台账见[WORK_LEDGER](WORK_LEDGER.md)。
