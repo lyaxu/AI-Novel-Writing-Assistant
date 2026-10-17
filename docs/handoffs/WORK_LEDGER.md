@@ -549,3 +549,14 @@ KIMI/GLM/QWEN/GEMINI），**当前无法发真实模型请求**，30 字重合�
 - 完整诊断和下一阶段验收矩阵：docs/evals/framework-quality/observations/2026-10-17-planning-state-review-root-cause.md。建议旧书作为故障样本，通用闭环完成后新书多题材验收；不是用户已确认弃书。新的通用修复未实施，不以本书金额/人物写特例。
 - 当前32调用，用户新增174339 tokens，累计1396340；waiting_approval/pending1，规划waiting_confirmation/0/2，前5章hash不变、第6章空稿。代理零模型调用、零业务写入、零恢复。旧17:25的30调用已过时。
 - 更新CURRENT/快照/wiki/个人记忆备注。仅内部诊断文档，按readme-release-updater跳过发布说明；不重复应用测试或重载。此前366工程回归不代表本次语义问题通过。文档单独提交推送，不合并main/beta；历史964行及三个Structured组件不混入。
+
+## 2026-10-17 23:56 北京时间 — 通用规划状态闭环完成并加载
+
+- 用户明确旧五章书保留暂停作回归样本，不再逐项救书；下一本拟为已签约、原有7—8章的末世极寒文重写，原稿尚未提供。
+- 代码完成/已推送：b3705bd4ff3aff79cd0bfc8a9270302bd279e277，lyaxu远端一致，不合并main/beta。统一事实声明、场景前后状态、逐声明语义复核、唯一修复决定、写后覆盖债和原策略剩余预算恢复；无数据库迁移。
+- 验证：shared/server编译、client类型检查、30文件520/520离线回归通过。独立模型最终4组合成案例符合预期（1组需要现有一次完整上下文纠正）；开发13次、183147 tokens，失败与用量全留档。未触发旧书调用，不是十章/全文验收。
+- 已加载：23:55双端health通过，Node24.19.0，后端56952/3000、前端55684/5190，加载b3705bd4ff3a、stale=false，固定旧库D:/novel/.comparison/2026-10-10/old-test.db。重载前旧进程已退出，空闲和保护检查后经固定启动器启动，无主动终止进程。
+- 保护：原任务waiting_approval/pending1，规划waiting_confirmation/rounds0/max2；候选不变，前5章SHA256不变，第6章空稿，调用32/累计1396340 tokens。重载前后保护摘要一致；只读恢复入口可用但未执行POST，不授权继续旧书。
+- 用户验收待做：极寒原稿全文节奏诊断→新样本前三章人工审读→固定版本十章及其他题材。UI/模型全生产链/文学验收尚未通过，不把工程结果解释为节奏已解决。
+- 交接：[2026-10-17_2356_planning-closed-loop-loaded.md](2026-10-17_2356_planning-closed-loop-loaded.md)。CURRENT、wiki、发布说明及独立模型观察齐全；个人记忆仅新增extensions/ad_hoc/notes/20261017-2356-novel-planning-closed-loop.md。
+- 本次后续交接为纯内部记录，发布说明已随代码提交，按readme-release-updater不重复添加；文档单独提交推送。三个Structured组件、历史台账964行、数据库与无关资料保持未提交。
