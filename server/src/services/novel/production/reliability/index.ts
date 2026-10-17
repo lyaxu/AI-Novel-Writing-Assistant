@@ -5,6 +5,8 @@ export { createChapterProductionJournal } from "./session";
 export type { ChapterProductionSession, ChapterProductionJournalOptions, OpenChapterProductionInput } from "./session";
 export { createPrismaChapterProductionRepository } from "./repository";
 export { ChapterProductionError, chapterFingerprint, productionFingerprint, isDefinitiveProductionFailure } from "./types";
+export { completedPromptResponseFromError } from "./types";
+export type { CompletedPromptResponse } from "./types";
 export type { ChapterProductionJournalRepository, ChapterProductionJournalRecord, JournalChapter, JournalContentWrite, JournalStateWrite, JournalTransaction } from "./types";
 export { currentProductionSession, withProductionSession, productionStep, captureProductionStream } from "./executionContext";
 export { executeProduction, executeProductionStream } from "./ChapterProductionExecution";

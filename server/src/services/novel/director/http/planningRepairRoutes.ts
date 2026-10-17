@@ -7,11 +7,13 @@ import { AppError } from "../../../../middleware/errorHandler";
 import { isPlanningRepairConfirmationError } from "../recovery/planningRepair/planningRepairRecovery";
 import { PlanningRepairAdviceService } from "../recovery/planningRepair/advice/PlanningRepairAdviceService";
 import { planningRepairStore, type PlanningRepairStore } from "../../volume/planningRepair/PlanningRepairStore";
+import { PlanningRepairReviewExistingService } from "../recovery/planningRepair";
 
 const params = z.object({ id: z.string().trim().min(1) });
 const abandonBody = z.object({ reason: z.string().trim().max(400).optional() }).strict().optional();
 const adviceRequest = z.object({ repairKey: z.string().min(1), idempotencyKey: z.string().min(1).max(128) }).strict();
 const adviceSelection = adviceRequest.extend({ adviceId: z.string().min(1), optionId: z.string().min(1) }).strict();
+const reviewExistingRequest = adviceRequest.extend({ token: z.string().min(1).max(128) }).strict();
 const action = z.discriminatedUnion("action", [
   z.object({ action: z.literal("pause"), repairKey: z.string().trim().min(1) }).strict(),
   z.object({
@@ -27,8 +29,24 @@ export function createPlanningRepairRouter(
   commands: Pick<DirectorCommandService, "enqueuePlanningRepairRecoveryCommand"> = new DirectorCommandService(),
   advice: Pick<PlanningRepairAdviceService, "status" | "request" | "select"> = new PlanningRepairAdviceService(recovery),
   store: Pick<PlanningRepairStore, "abandon"> = planningRepairStore,
+  reviewExisting: Pick<PlanningRepairReviewExistingService, "status" | "grant"> = new PlanningRepairReviewExistingService(),
 ) {
   const router = Router();
+  router.get("/:id/planning-repair/review-existing", validate({ params }), async (req, res, next) => {
+    try { res.json({ success: true, data: await reviewExisting.status(String(req.params.id)) }); }
+    catch (error) { next(error); }
+  });
+  router.post("/:id/planning-repair/review-existing", validate({ params, body: reviewExistingRequest }), async (req, res, next) => {
+    try {
+      const taskId = String(req.params.id);
+      const input = req.body as z.infer<typeof reviewExistingRequest>;
+      const grant = await reviewExisting.grant(taskId, input);
+      const command = await commands.enqueuePlanningRepairRecoveryCommand(taskId, input.repairKey, input.idempotencyKey);
+      res.status(202).json({ success: true, data: { ...grant, command } });
+    } catch (error) {
+      next(isPlanningRepairConfirmationError(error) ? new AppError(error instanceof Error ? error.message : "复核位置已变化，请刷新后核对。", 409) : error);
+    }
+  });
   router.get("/:id/planning-repair/advice", validate({ params }), async (req, res, next) => {
     try { res.json({ success: true, data: await advice.status(String(req.params.id)) }); }
     catch (error) { next(error); }

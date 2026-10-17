@@ -18,3 +18,11 @@
 - 暂停状态由前后端共享判断：waiting_approval / failed，或历史 running / queued 且明确 pendingManualRecovery；取消中的任务不可恢复。历史兼容只读展示，不在GET中清挂起标记或修复数据库。是否允许生成建议还需核对可修复阶段、任务归属及后台执行冲突。
 - 已挂起的批次不是活跃生成。建议入口只忽略seed中本导演当前pipelineJobId指向、pendingManualRecovery且无executionOwner/执行租约的job；其他任务、仍有执行归属或租约的job和活跃命令仍阻止建议，不能按所有pending记录一概放行。
 - 离线测试 `server/tests/planningRepairRecovery.test.js` 在导入服务前封锁数据库模块，验证 HTTP、CAS、错误映射和两类恢复路径；`PLANNING_REPAIR_TEST_SOURCE=1` 可直接转译最新源码测试而不触发 server build。
+
+## 保留候选的明确重核
+
+`application/PlanningRepairReviewExistingService` 为源页提供独立的只读预检及提交入口。它只处理空稿准备阶段的已保存候选：复核结果未知，或已收到但被合同校验拒绝的复核。来源和候选通过 `PlanningRepairStore.assertPipelineRecoverySnapshot` 验证，禁止 rebase；变化的来源不能使“重核候选”悄悄变成重新生成。前端确认绑定预检 token，轮询取得不同 token 后必须重新勾选。
+
+提交事务保留原任务暂停，按生产日志既有归档格式保存原记录和用户确认，仅将执行合同准备的 unknown 改为 failed，并保存固定 `review_existing` 授权。原轮次、预算、范围和候选不变。存在其他未知步骤、正文、prepared 结果、活跃章节任务、命令或导演执行租约时拒绝。归档、日志、job 和任务 CAS 任一失败须整体回滚；HTTP 重放沿用请求键，enqueue 失败后可恢复同次授权。
+
+`domain/reviewExistingAcknowledgement` 验证专用授权和不可变归档，作为独立于 `settledPipelinePause` 的用户确认凭据。未知调用从未被宣称为已完成。后续恢复仍核对原 job、来源、正文及租约，不得创建替代 job 或开启自动修复。候选复核未通过立即保持暂停；通过后才能沿用户明确确认的原执行范围继续。UI 必须同时说明复核费用和通过后的后续写作费用。

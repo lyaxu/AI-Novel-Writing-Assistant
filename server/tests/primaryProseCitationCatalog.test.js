@@ -10,7 +10,7 @@ function load(relative) {
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  vm.runInThisContext(`(function(exports){${code}\n})`, { filename })(exports);
+  vm.runInThisContext(`(function(require,exports){${code}\n})`, { filename })(require,exports);
   return exports;
 }
 const { buildPrimaryProseCitationCatalog } = load("../src/prompting/prompts/novel/volume/evidence/primaryProseCitationCatalog.ts");

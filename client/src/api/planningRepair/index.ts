@@ -34,6 +34,18 @@ export interface PlanningRepairStatus {
 export const planningRepairQueryKey = (taskId: string) => ["planning-repair", "task", taskId] as const;
 export const novelPlanningRepairQueryKey = (novelId: string) => ["planning-repair", "novel", novelId] as const;
 export const planningRepairAdviceQueryKey = (taskId: string) => ["planning-repair", "advice", taskId] as const;
+export const planningReviewExistingQueryKey = (taskId: string) => ["planning-repair", "review-existing", taskId] as const;
+export type PlanningReviewExistingStatus = { available: false } | {
+  available: true; token: string; candidateVersionId: string; chapterOrder: number; startOrder: number; endOrder: number;
+};
+export async function getPlanningReviewExisting(taskId: string) {
+  const { data } = await apiClient.get<ApiResponse<PlanningReviewExistingStatus>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/review-existing`);
+  return data.data;
+}
+export async function reviewExistingPlanningCandidate(taskId: string, payload: { repairKey: string; token: string; idempotencyKey: string }) {
+  const { data } = await apiClient.post<ApiResponse<unknown>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/review-existing`, payload);
+  return data.data;
+}
 
 export async function getPlanningRepairAdvice(taskId: string) {
   const { data } = await apiClient.get<ApiResponse<PlanningRepairAdviceStatus>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/advice`);

@@ -30,7 +30,7 @@ const { chapterTaskSheetQualityPrompt: prompt } = load("../src/prompting/prompts
   "@ai-novel/shared/types/chapterTaskSheetQuality": quality,
   "./evidence/chapterEvidence": chapterEvidence, "./evidence/planningPromiseEvidence": promiseEvidence, "./evidence/issueCheckProjection": issueProjection,
   "./evidence/newIssueEvidence": newIssueEvidence,
-  "./evidence/primaryProseCitationCatalog": load("../src/prompting/prompts/novel/volume/evidence/primaryProseCitationCatalog.ts", {}),
+  "./evidence/primaryProseCitationCatalog": load("../src/prompting/prompts/novel/volume/evidence/primaryProseCitationCatalog.ts", { "node:crypto": require("node:crypto") }),
   "./evidence/narrativeProgressionEvidence": load("../src/prompting/prompts/novel/volume/evidence/narrativeProgressionEvidence.ts", { "./chapterEvidence": chapterEvidence }),
 });
 const candidate = { chapterOrder: 2, summary: "通过交换药物赢得初步信任" };
@@ -81,7 +81,7 @@ test("fresh quality output requires promise checks; old saved assessments remain
 
 test("expected source IDs force opening and payoff coverage; exact evidence cannot come from another source", () => {
   const output = assessment(checks()); const input = { candidate, reviewContextJson: context() };
-  assert.equal(prompt.postValidate(output, input), output);
+  assert.deepEqual(prompt.postValidate(output, input), output);
   assert.throws(() => prompt.postValidate(assessment(checks().slice(0, -1)), input), /every selected source/);
   const duplicate = checks(); duplicate[1] = duplicate[0];
   assert.throws(() => prompt.postValidate(assessment(duplicate), input), /every selected source/);
@@ -226,6 +226,7 @@ test("synthesized direction gaps retain eight original issues and overload witho
 test("existing quality call receives bounded output headroom and no additional model invocation", async () => {
   const calls = [];
   const { ChapterTaskSheetQualityGateService } = load("../src/services/novel/volume/ChapterTaskSheetQualityGateService.ts", {
+    "../production/reliability": load("../src/services/novel/production/reliability/types.ts", { "node:crypto": require("node:crypto") }),
     "@ai-novel/shared/types/novel/planningPromises": promises,
     "@ai-novel/shared/types/chapterTaskSheetQuality": { ...quality, assessChapterExecutionContractShape: () => ({ canEnterExecution: true }) },
     "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts": { chapterTaskSheetQualityPrompt: prompt },

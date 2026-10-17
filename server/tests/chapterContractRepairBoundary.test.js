@@ -15,6 +15,7 @@ function load(file, imports) {
   return exports;
 }
 const length = require("../../shared/dist/types/chapterLengthControl.js");
+const reliability = load("../src/services/novel/production/reliability/types.ts", { "node:crypto": require("node:crypto") });
 const schema = load("../../shared/types/chapterTaskSheetQuality.ts", { zod: require("zod"), "./chapterLengthControl.js": length });
 const valid = { verdict: "usable", safeToSync: true, summary: "可执行", issues: [], repairGuidance: [], confidence: .9, loadRisk: "normal", recommendedHandling: "use_as_is" };
 const output = () => ({ purpose: "核对账目", exclusiveEvent: "取得收据", endingState: "收据已核实", nextChapterEntryState: "带收据询问店主", conflictLevel: 20, revealLevel: 20, targetWordCount: 2200, mustAvoid: "不要提前结案", payoffRefs: [], taskSheet: "完成本次核对，保留店主解释入口。", sceneCards: [1,2,3].map(n=>({key:`s${n}`,title:"核对",purpose:"发现差异",mustAdvance:["查账"],mustPreserve:["未结案"],entryState:"有疑点",exitState:"取得线索",forbiddenExpansion:["勿结案"],targetWordCount:n===3?734:733})) });
@@ -22,6 +23,7 @@ function harness(responses) {
   const calls=[];
   const runner={runStructuredPrompt:async (input)=>{ calls.push(input); const response=responses.shift(); if(response instanceof Error)throw response; return {output:response}; }};
   const service=load("../src/services/novel/volume/ChapterTaskSheetQualityGateService.ts",{
+    "../production/reliability": reliability,
     "@ai-novel/shared/types/chapterTaskSheetQuality":schema,
     "@ai-novel/shared/types/novel/planningPromises":{selectedPlanningPromiseIds:()=>[]},
     "../../../prompting/core/promptRunner":runner,
@@ -50,6 +52,31 @@ test("invalid reviewer output retries the identical candidate without regenerati
   assert.deepEqual(h.calls.map(c=>c.asset.id),["contract","quality","quality"]);
   assert.strictEqual(h.calls[1].promptInput.candidate,h.calls[2].promptInput.candidate);
   assert.match(h.calls[2].promptInput.validationFeedback,/Quote absent/);
+});
+
+test("review wrapper preserves only validated completed post-validation failures", async () => {
+  const receipt = { promptId: "novel.volume.chapter_task_sheet_quality", promptVersion: "v18", output: { summary: "Full but invalid answer" },
+    validationError: "Quote absent", semanticRetryAttempts: 0, maxSemanticRetryAttempts: 0, repairAttempts: 0 };
+  const confirmed = Object.assign(malformed(), { code: "PROMPT_POST_VALIDATION_FAILED", completedPromptResponse: receipt });
+  const h = harness([output(), confirmed, confirmed]);
+  await assert.rejects(h.generation.generateChapterTaskSheetDetail(h.params), error => {
+    assert.equal(error.code, "PROMPT_POST_VALIDATION_FAILED");
+    assert.strictEqual(error.originalError, confirmed);
+    assert.strictEqual(reliability.completedPromptResponseFromError(error), receipt);
+    return true;
+  });
+  for (const source of [
+    new Error("transport unknown"),
+    Object.assign(malformed(), { code: "LLM_OUTPUT_LIMIT", completedPromptResponse: receipt }),
+    Object.assign(malformed(), { code: "PROMPT_POST_VALIDATION_FAILED" }),
+    Object.assign(malformed(), { code: "PROMPT_POST_VALIDATION_FAILED", completedPromptResponse: { ...receipt, maxSemanticRetryAttempts: 1 } }),
+    Object.assign(malformed(), { code: "PROMPT_POST_VALIDATION_FAILED", completedPromptResponse: { ...receipt, repairAttempts: -1 } }),
+  ]) {
+    const wrapped = new h.service.ChapterTaskSheetQualityReviewError(source);
+    assert.equal(wrapped.code, undefined);
+    assert.equal(reliability.completedPromptResponseFromError(wrapped), undefined);
+    assert.strictEqual(wrapped.originalError, source);
+  }
 });
 test("exhausted reviewer schema failures do not regenerate or approve the contract",async()=>{
   const h=harness([output(),malformed("schema_repair_failed"),malformed("schema_repair_failed")]);

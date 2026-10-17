@@ -200,3 +200,15 @@
 Planning repair output opts into strict generated-content constraints. The structured parser and post-validator must share the same schema, including the 600-character task sheet limit. Invalid output must enter bounded format repair before application, not silently pass a relaxed schema and fail later. This is not permission to increase chapter word budgets or discard obligations.
 
 A terminal post-validation failure carries a non-enumerable completed response for durable rejected-response history. It is not an approved candidate. Clear the pending operation only for this confirmed response; transport interruptions and persistence failures retain uncertainty safeguards. Preserve repair rounds and never replay rejected-response history as a successful repair.
+
+## 技术中断后只复核保留候选
+
+技术中断不等于候选有剧情缺陷。让用户先购买 AI 修复建议再选择“只复核”，既增加调用，也可能把原本不需要修改的候选带入修复。因此源页可以提供明确的“重新复核保留候选”，但不能凭错误消息关键词判断可恢复性。
+
+服务端只开放两种有持久化证据的准备停点：空稿执行合同准备步骤的未知复核，或已完成但被拒收的复核响应及 settled 回执。必须存在原候选版本和原来源快照，原章节 job 仍失败并暂停，且无其他未知调用、正文片段、prepared 结果或活跃租约。GET 预检只返回确认 token 和原范围，不产生授权、写库或模型调用。
+
+用户确认绑定 token，覆盖候选、来源快照、原 job、待复核操作和执行日志。提交时重新验证源与候选，不做 rebase；任何漂移都要求刷新确认。未知结果先按生产日志格式归档，保存用户允许重新发起复核的决定。这个决定与“原调用确定完成”的证据是两回事，恢复凭据不能将两者混用。
+
+专用授权固定 `review_existing`，保持已消耗轮次和预算，不允许客户端选修改模式或扩大章节窗口。同请求重放复用归档与授权；归档、日志、job、导演任务的 CAS 在同一事务完成。派发命令失败时保留暂停和授权，用户可继续同一次请求，无需再次确认增加预算。
+
+模型仍需通过逐章语义复核和窗口复核。未通过时保持暂停，不自动调用修复器；通过后按用户在按钮前确认的原范围继续，因此文案必须说明复核费用及后续写作费用。运行记录仍只提供查看和回源页面导航。

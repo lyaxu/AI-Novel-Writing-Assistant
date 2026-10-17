@@ -14,6 +14,7 @@ import {
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import { selectedPlanningPromiseIds, type SelectedPlanningDirection } from "@ai-novel/shared/types/novel/planningPromises";
 import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
+import { completedPromptResponseFromError, type CompletedPromptResponse } from "../production/reliability";
 import {
   chapterTaskSheetQualityPrompt,
 } from "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts";
@@ -83,9 +84,17 @@ export class ChapterTaskSheetQualityGateError extends Error {
 
 /** An invalid review is not a finding about the contract being reviewed. */
 export class ChapterTaskSheetQualityReviewError extends Error {
+  readonly code?: "PROMPT_POST_VALIDATION_FAILED";
+  readonly completedPromptResponse?: CompletedPromptResponse;
+
   constructor(readonly originalError: unknown) {
     super(originalError instanceof Error ? originalError.message : "章节合同审查输出无效。");
     this.name = "ChapterTaskSheetQualityReviewError";
+    const completed = completedPromptResponseFromError(originalError);
+    if (completed) {
+      this.code = "PROMPT_POST_VALIDATION_FAILED";
+      this.completedPromptResponse = completed;
+    }
   }
 }
 

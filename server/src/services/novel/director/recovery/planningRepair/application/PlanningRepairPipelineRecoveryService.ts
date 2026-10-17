@@ -8,6 +8,7 @@ import { assertUnchangedPipelineRecoveryScope } from "../../../../production/rec
 import { PlanningRepairStore } from "../../../../volume/planningRepair/PlanningRepairStore";
 import { readPlanningRepairSeed } from "../planningRepairRecovery";
 import { assertSettledPlanningPreparation } from "../domain/settledPipelinePause";
+import { assertReviewExistingAcknowledgement } from "../domain/reviewExistingAcknowledgement";
 
 export interface PlanningPipelineRecoveryInput { taskId: string; novelId: string; recoveryKey: string }
 export interface PlanningPipelineRecoveryResult {
@@ -30,7 +31,7 @@ function parse(value: string | null): Record<string, unknown> {
   catch { return conflict("原规划恢复记录无法读取，请保留现场。"); }
 }
 function liveLease(owner: string | null, expires: Date | null, now: number): boolean {
-  return Boolean(owner && expires && expires.getTime() > now);
+  return Boolean(owner && (!expires || !Number.isFinite(expires.getTime()) || expires.getTime() > now));
 }
 const slot = (novelId: string, chapterId: string) => ({
   novelId, chapterId, contentHash: "active", artifactType: "production_execution", syncMode: "journal",
@@ -133,7 +134,17 @@ export class PlanningRepairPipelineRecoveryService {
         })) conflict("当前关联任务已有章节执行记录，不能接替其所有权。");
       }
       await store.assertPipelineRecoverySnapshot(tx, task);
-      const proof = assertSettledPlanningPreparation({ repair, recovery, journal });
+      const acknowledgement = seed.planningReviewExistingAcknowledgement as Record<string, any> | undefined;
+      let proof;
+      if (acknowledgement?.requestId === input.recoveryKey) {
+        const archived = await tx.chapterArtifactSyncCheckpoint.findUnique({ where: {
+          novelId_chapterId_contentHash_artifactType_syncMode: { ...identity, contentHash: String(acknowledgement.archiveId) },
+        } });
+        if (!archived?.metadataJson || acknowledgement.pipelineJobId !== jobId) conflict("找不到本次明确确认的原执行记录。");
+        proof = assertReviewExistingAcknowledgement({ acknowledgement, archive: parse(archived.metadataJson), repair, recovery, journal });
+      } else {
+        proof = assertSettledPlanningPreparation({ repair, recovery, journal });
+      }
       if (proof.source === "history" && job.error !== repair.summary) {
         conflict("原章节任务与规划暂停证据不一致，不能重复发送。");
       }

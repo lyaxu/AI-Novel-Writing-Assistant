@@ -67,6 +67,22 @@ test("review-only direction never modifies or spends a repair round when review 
   assert.equal(JSON.stringify(h.session.candidate), before);
 });
 
+for (const windowReject of [false, true]) test(`saved review-only candidate ${windowReject ? "pauses on window failure" : "commits after both reviews"} without regeneration or repair`, async () => {
+  const h = harness({ windowReject });
+  h.session.candidate = document();
+  const before = JSON.stringify(h.session.candidate);
+  h.input.generateInitial = async () => assert.fail("review-only must not regenerate the saved candidate");
+  h.gate.evaluate = async () => { h.calls.push("chapter_review"); return pass; };
+  Object.assign(h.session.state, { phase: "reviewing", affectedChapterIds: ["c3"],
+    recoveryAction: { requestId: "explicit-review", mode: "review_existing" } });
+  if (windowReject) await assert.rejects(h.coordinator.run(h.input), { code: "PLANNING_REPAIR_CONFIRMATION_REQUIRED" });
+  else await h.coordinator.run(h.input);
+  assert.deepEqual(h.calls, ["chapter_review", "novel.volume.planning_repair_review"]);
+  assert.equal(h.session.state.phase, windowReject ? "waiting_confirmation" : "committed");
+  assert.equal(h.session.state.rounds, 0); assert.equal(h.session.state.maxRounds, 2);
+  assert.equal(h.commits, windowReject ? 0 : 1); assert.equal(JSON.stringify(h.session.candidate), before);
+});
+
 test("paid repair response is replayed and clears its authorized action without another repair purchase", async () => {
   const h = harness({ local: true });
   h.session.candidate = document();

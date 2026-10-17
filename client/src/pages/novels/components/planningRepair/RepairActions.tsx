@@ -4,6 +4,7 @@ import { Pause, RefreshCw, Sparkles } from "lucide-react";
 import {
   actOnPlanningRepair, getPlanningRepairAdvice, planningRepairAdviceQueryKey,
   requestPlanningRepairAdvice, selectPlanningRepairAdvice, type PlanningRepairStatus,
+  getPlanningReviewExisting, planningReviewExistingQueryKey, reviewExistingPlanningCandidate,
 } from "@/api/planningRepair";
 import { queryKeys } from "@/api/queryKeys";
 import { Button } from "@/components/ui/button";
@@ -20,9 +21,14 @@ export function RepairActions({ status }: { status: PlanningRepairStatus }) {
   const [guidance, setGuidance] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [paused, setPaused] = useState(false);
+  const [confirmedReviewToken, setConfirmedReviewToken] = useState<string | null>(null);
   const inputId = useId();
   const adviceRequest = useRef<{ key: string; observedOutcome: string } | null>(null);
   const recoveryRequest = useRef<{ identity: string; key: string } | null>(null);
+  const reviewRequest = useRef<{ token: string; key: string } | null>(null);
+  const reviewQuery = useQuery({ queryKey: planningReviewExistingQueryKey(status.taskId),
+    queryFn: () => getPlanningReviewExisting(status.taskId), enabled: !status.recoveryRequest,
+    retry: false, refetchInterval: 4000 });
   const adviceQuery = useQuery({
     queryKey: planningRepairAdviceQueryKey(status.taskId),
     queryFn: () => getPlanningRepairAdvice(status.taskId),
@@ -59,8 +65,14 @@ export function RepairActions({ status }: { status: PlanningRepairStatus }) {
   });
   const mutation = useMutation({
     retry: false,
-    mutationFn: async (action: "adopt" | "custom" | "continue" | "pause") => {
+    mutationFn: async (action: "adopt" | "custom" | "continue" | "pause" | "review") => {
       if (action === "pause") return actOnPlanningRepair(status.taskId, { action, repairKey: repair.key });
+      if (action === "review") {
+        const current = reviewQuery.data;
+        if (!current?.available || confirmedReviewToken !== current.token) throw new Error("请刷新并核对保留候选的复核位置。");
+        if (!reviewRequest.current || reviewRequest.current.token !== current.token) reviewRequest.current = { token: current.token, key: crypto.randomUUID() };
+        return reviewExistingPlanningCandidate(status.taskId, { repairKey: repair.key, token: current.token, idempotencyKey: reviewRequest.current.key });
+      }
       if (status.recoveryRequest) return actOnPlanningRepair(status.taskId, authorizedPlanningRepairPayload(status));
       if (action === "continue") throw new Error("没有可继续的已授权修复。");
       const identity = action === "adopt" ? `advice:${advice?.adviceId}:${selected?.id}` : `custom:${guidance.trim()}`;
@@ -93,10 +105,26 @@ export function RepairActions({ status }: { status: PlanningRepairStatus }) {
         <RefreshCw className="h-4 w-4" />{mutation.isPending ? "正在提交…" : "继续已授权修复"}
       </Button>
     </div> : <>
+      {reviewQuery.data?.available ? <div className="space-y-2">
+        <p className="text-sm font-medium">重新复核第 {reviewQuery.data.chapterOrder} 章保留候选</p>
+        <p className="text-xs text-muted-foreground">重新复核会产生模型费用，保留候选内容和修复轮次。未通过时保持暂停；通过后按原授权范围第 {reviewQuery.data.startOrder}–{reviewQuery.data.endOrder} 章继续，后续写作也会产生费用。</p>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={confirmedReviewToken === reviewQuery.data.token} disabled={busy}
+            onChange={event => setConfirmedReviewToken(event.target.checked && reviewQuery.data?.available ? reviewQuery.data.token : null)} className="mt-1" />
+          <span>我已核对保留候选，同意重新发起复核，并在通过后继续原任务。</span>
+        </label>
+        <Button type="button" disabled={busy || confirmedReviewToken !== reviewQuery.data.token} onClick={() => mutation.mutate("review")}>
+          <RefreshCw className="h-4 w-4" />{mutation.isPending ? "正在提交…" : "重新复核保留候选"}
+        </Button>
+      </div> : null}
+      {reviewQuery.isError ? <div className="space-y-2">
+        <p role="alert" className="text-sm text-destructive">无法核对保留候选的复核入口。{errorText(reviewQuery.error)}</p>
+        <Button type="button" variant="ghost" disabled={reviewQuery.isFetching || busy} onClick={() => void reviewQuery.refetch()}>刷新复核位置</Button>
+      </div> : null}
       <div className="space-y-2">
         <p className="text-sm">让 AI 根据待处理问题给出方案，再由你选择修复方向。</p>
         <p className="text-xs text-muted-foreground">获取方案包含生成与独立核验，最多调用模型 2 次并产生费用；阅读方案不会启动修复。</p>
-        <Button type="button" variant={ready ? "secondary" : "default"} disabled={busy || adviceQuery.isPending}
+        <Button type="button" variant={ready || reviewQuery.data?.available ? "secondary" : "default"} disabled={busy || adviceQuery.isPending}
           onClick={() => generate.mutate()}>
           <Sparkles className="h-4 w-4" />{adviceRunning ? "AI 正在准备方案…" : advice && advice.status !== "none" ? "重新获取修复方案" : "让 AI 推荐修复方案"}
         </Button>
