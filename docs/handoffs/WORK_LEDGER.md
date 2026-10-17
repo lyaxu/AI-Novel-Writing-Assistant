@@ -525,3 +525,8 @@ KIMI/GLM/QWEN/GEMINI），**当前无法发真实模型请求**，30 字重合�
 ## 2026-10-17 16:34（北京时间）章间暂停恢复
 
 - 修复已完成并推送a2452c7b：成功第5章job空currentItemKey不再误作丢失恢复位置；命令CAS及ContinueRuntime均核验成功边界，接回原范围第6章规划。server编译、126相关测试及4项新整链离线测试通过。五章/原暂停/26调用保持，未发真实恢复。自动审批拦截两种服务脚本准备，未执行重载；后端31072仍旧代码/stale=true，需先加载后用户继续。start-local.bat仍为普通5173/dev.db入口。详见[交接](2026-10-17_1634_completed-boundary-recovery.md)。
+
+
+## 2026-10-17 16:46（北京时间）固定启动与重载完成
+
+- 用户明确授权后，start-local.bat固定当前old-test.db/5190/3000与原书入口；缺库和端口冲突拒绝、重复启动复用。7项启动保护测试、经bat冷启动及重复启动、health/任务GET/保护摘要通过。后端39704/source/Node24/加载a42fb99d8962/stale=false，前端43320；五章hash、原人工暂停、next6、26/151调用不变。用户可继续6—10，代理未发恢复/模型请求。未使用原stop-local.bat。详见[交接](2026-10-17_1646_local-launcher-loaded.md)。

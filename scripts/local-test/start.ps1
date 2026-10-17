@@ -24,7 +24,7 @@ try {
       $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$($owners[0])"
       if (!$record -or $record.database -ne $profile.database -or $record.fingerprint -ne $profile.fingerprint -or
           $expectedPid -ne $owners[0] -or $proc.ExecutablePath -ne $node -or
-          !$proc.CommandLine.Contains($entry) -or !$proc.CommandLine.EndsWith(" $role")) {
+          !$proc.CommandLine.Contains($entry) -or !$proc.CommandLine.TrimEnd().EndsWith(" $role")) {
         throw "Port $port belongs to an unverified or older service. No process was stopped and no alternate port was selected."
       }
     }
