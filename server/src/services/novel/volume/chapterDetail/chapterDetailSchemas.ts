@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { generatedChapterSceneCardSchema } from "@ai-novel/shared/types/chapterLengthControl";
 import { generatedReaderExperienceContractSchema } from "@ai-novel/shared/types/novel/readerExperience";
+import { chapterStateClaimsSchema, chapterStateClaimsWireSchema, sceneCausalitySchema,
+  sceneStateTransitionSchema, stateClaimPrerequisiteWireSchema } from "@ai-novel/shared/types/novel/sceneCausality";
 
 const conciseRequiredText = z.string().trim().min(1).max(240);
 const conciseTextList = z.array(z.string().trim().min(1).max(160)).max(8).default([]);
@@ -176,10 +178,19 @@ export function createChapterBoundarySchema() {
 
 export function createChapterTaskSheetSchema() {
   return z.preprocess(normalizeScenePlanPayload, z.object({
+    stateClaims: chapterStateClaimsSchema.optional(),
     requiredElements: z.array(z.string().trim().min(1).max(160)).max(8).default([]),
     taskSheet: z.string().trim().min(1).max(600),
     readerExperience: boundedReaderExperienceSchema,
     sceneCards: z.array(z.preprocess(normalizeSceneCardPayload, boundedSceneCardSchema)).min(3).max(8),
+    neighborEventUse: z.array(z.object({
+      relation: z.enum(["previous", "next"]), consumesExclusiveEvent: z.boolean(),
+      evidence: z.string().trim().min(1).max(200),
+    })).default([]),
+    mustAvoidConflicts: z.array(z.object({
+      forbiddenClause: z.string().trim().min(1).max(200), scheduledIn: z.string().trim().min(1).max(120),
+      reason: z.string().trim().min(1).max(200),
+    })).default([]),
   }));
 }
 
@@ -190,6 +201,7 @@ export function createChapterExecutionContractSchema() {
       requiredElements: ["requiredBeats", "mustHappen", "chapterRequiredElements", "必须落实"],
     }))),
     z.object({
+      stateClaims: chapterStateClaimsSchema.optional(),
       purpose: conciseRequiredText,
       exclusiveEvent: conciseRequiredText,
       endingState: conciseRequiredText,
@@ -228,4 +240,28 @@ export function createChapterExecutionContractSchema() {
       })).default([]),
     }),
   );
+}
+
+/** Fresh model output binds prerequisites by ID; legacy saved contracts keep their readable fields. */
+export const stateBoundSceneCardWireSchema = boundedSceneCardSchema.extend({
+  causality: sceneCausalitySchema.extend({
+    prerequisites: z.array(stateClaimPrerequisiteWireSchema).max(6),
+    stateTransition: sceneStateTransitionSchema,
+  }),
+});
+export function createChapterExecutionContractWireSchema() {
+  return z.preprocess(raw => normalizeScenePlanPayload(normalizeBoundaryPayload(normalizeObjectAlias(raw, {
+    purpose: ["章节目标", "chapterGoal", "goal", "objective"],
+    requiredElements: ["requiredBeats", "mustHappen", "chapterRequiredElements", "必须落实"],
+  }))),
+    createChapterExecutionContractSchema().out.extend({
+      stateClaims: chapterStateClaimsWireSchema,
+      sceneCards: z.array(stateBoundSceneCardWireSchema).min(3).max(8),
+    }));
+}
+export function createChapterTaskSheetWireSchema() {
+  return z.preprocess(normalizeScenePlanPayload, createChapterTaskSheetSchema().out.extend({
+    stateClaims: chapterStateClaimsWireSchema,
+    sceneCards: z.array(stateBoundSceneCardWireSchema).min(3).max(8),
+  }));
 }

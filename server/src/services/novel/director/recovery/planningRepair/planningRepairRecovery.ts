@@ -1,5 +1,5 @@
 import { AppError } from "../../../../../middleware/errorHandler";
-import { isPlanningRepairConfirmationPhase, isTerminalPlanningRepairPhase } from "@ai-novel/shared/types/planningRepair/recovery";
+import { isPlanningRepairConfirmationPhase, isTerminalPlanningRepairPhase, type PlanningRepairRecoveryMode } from "@ai-novel/shared/types/planningRepair/recovery";
 
 export interface PlanningRepairState extends Record<string, unknown> {
   version: 1;
@@ -14,12 +14,12 @@ export interface PlanningRepairState extends Record<string, unknown> {
   summary?: string;
   history: unknown[];
   guidance?: string;
-  recoveryAction?: { requestId: string; mode: "repair_then_review" | "review_existing"; paidRound?: number; affectedChapterIds?: string[] };
+  recoveryAction?: { requestId: string; mode: PlanningRepairRecoveryMode; paidRound?: number; affectedChapterIds?: string[] };
   candidateVersionId?: string;
 }
 
 export interface PlanningRepairRecovery {
-  executionMode?: "repair_then_review" | "review_existing";
+  executionMode?: PlanningRepairRecoveryMode;
   affectedChapterIds?: string[];
   repairKey: string;
   resumePhase: "structured_outline" | "chapter_execution";
@@ -62,7 +62,7 @@ export function assertPlanningRepairResumeAllowed(json: string | null | undefine
     || Boolean(repair.pendingOperation) || recovery?.pendingGrant;
   if (!blocked && ["assessing", "repairing", "reviewing", "ready"].includes(repair.phase)
     && (!recoveryKey || recovery?.idempotencyKey === recoveryKey)) return;
-  throw new AppError("请回到节奏 / 拆章工作区补充修复方向，并确认追加一轮规划修复。", 409);
+  throw new AppError("请回到节奏 / 拆章工作区核对保留候选，并选择继续方式。", 409);
 }
 
 export function resolvePlanningRepairResumePhase(input: {

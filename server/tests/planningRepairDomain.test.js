@@ -335,7 +335,11 @@ test("registered assets expose the coordinator API without model routing or call
     const contextJson = JSON.stringify({ originalDocument: document(), qualityResults: [{ complete: "quality" }],
       bookConstraints: { rule: "fixed" }, beatSheet: { full: true }, readonlyContext: { previous: "entry", next: "exit" }, guidance: ["Repair overload."] });
     const messages = asset.render({ contextJson }, {});
-    assert.equal(messages[1].content, contextJson);
+    if (asset === planningRepairPrompt) {
+      assert.equal(messages[1].content, `${contextJson}\nprimaryProseCitationCatalog (stateClaims.source.evidenceIds only):\n[]`);
+    } else {
+      assert.equal(messages[1].content, contextJson);
+    }
     assert.match(messages[0].content, /readonly/);
     assert.match(messages[0].content, /原始目标字数/);
     assert.match(messages[0].content, /人物线/);

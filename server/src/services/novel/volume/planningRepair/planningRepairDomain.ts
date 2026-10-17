@@ -2,8 +2,9 @@
 import { preserveGeneratedContentConstraints } from "../../../../llm/generatedContentSchema";
 import type { VolumeChapterPlan, VolumePlanDocument } from "@ai-novel/shared/types/novel";
 import { normalizeChapterScenePlan, parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
-import { createChapterTaskSheetSchema } from "../chapterDetail/chapterDetailSchemas";
+import { createChapterTaskSheetSchema, stateBoundSceneCardWireSchema } from "../chapterDetail/chapterDetailSchemas";
 import { requiredElementRevisionSchema, applyRequiredElementRevisions } from "./domain/requiredElementRevisions";
+import { chapterStateClaimsSchema, chapterStateClaimsWireSchema } from "@ai-novel/shared/types/novel/sceneCausality";
 export { mergeAppliedPlanningRepairRequiredElements } from "./domain/requiredElementRevisions";
 
 const requiredText = z.string().trim().min(1);
@@ -26,6 +27,7 @@ export const planningRepairChangeSchema = z.object({
   mustAvoid: contractText,
   payoffRefs: z.array(requiredText.max(160)).max(8),
   sceneCards: taskSheetShape.sceneCards,
+  stateClaims: chapterStateClaimsSchema.optional(),
   readerExperience: taskSheetShape.readerExperience,
   requiredElementRevisions: z.array(requiredElementRevisionSchema).max(8).optional(),
 }).strict();
@@ -62,6 +64,13 @@ export const planningRepairReviewOutputSchema = z.object({
     context.addIssue({ code: "custom", path: ["safeToSync"], message: "Unusable, undecided or unresolved repairs cannot be safe to sync." });
   }
 });
+
+export const planningRepairWireOutputSchema = preserveGeneratedContentConstraints(planningRepairOutputSchema.extend({
+  changes: z.array(planningRepairChangeSchema.extend({
+    stateClaims: chapterStateClaimsWireSchema,
+    sceneCards: z.array(stateBoundSceneCardWireSchema).min(3).max(8),
+  })),
+}));
 
 export type PlanningRepairChange = z.infer<typeof planningRepairChangeSchema>;
 export type PlanningRepairOutput = z.infer<typeof planningRepairOutputSchema>;
@@ -200,8 +209,12 @@ export function applyPlanningRepairCandidate(
     // Legacy output preserves the complete minimum-event list. Explicit mappings may correct an
     // obsolete implementation, with mandatory subsequent AI review of the retained narrative duty.
     const existingPlan = parseChapterScenePlan(chapter.sceneCards, { targetWordCount: target });
+    if (existingPlan?.stateClaims !== undefined && change.stateClaims === undefined) {
+      throw new Error(`Planning repair chapter ${chapter.id} must return its state claims together with the replaced scenes.`);
+    }
     const scenePlan = normalizeChapterScenePlan({
       scenes: change.sceneCards,
+      ...(change.stateClaims !== undefined ? { stateClaims: change.stateClaims } : {}),
       readerExperience: change.readerExperience,
       requiredElements: applyRequiredElementRevisions({ chapterId: chapter.id,
         elements: existingPlan?.requiredElements ?? [], sceneKeys: change.sceneCards.map(scene => scene.key),

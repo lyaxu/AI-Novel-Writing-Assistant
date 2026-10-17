@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { sceneStateTransitionSchema } from "./sceneCausality/stateClaims.js";
+export {
+  chapterStateClaimSchema, chapterStateClaimWireSchema, chapterStateClaimsSchema, chapterStateClaimsWireSchema,
+  sceneStateTransitionSchema, stateClaimPrerequisiteWireSchema,
+  type ChapterStateClaim, type ChapterStateClaimWire, type SceneStateTransition,
+} from "./sceneCausality/stateClaims.js";
 export {
   actionStateEvidenceSchema, actionStateDimensionCheckSchema, actionStateCheckSchema,
   type ActionStateEvidence, type ActionStateDimensionCheck, type ActionStateCheck,
@@ -15,7 +21,9 @@ export const sceneCausalitySchema = z.object({
     condition: causalText,
     sourceKind: z.enum(["established_in_context", "establish_in_scene", "unresolved"]),
     reference: causalText,
+    claimIds: z.array(z.string().trim().min(1).max(64)).min(1).max(6).optional(),
   })).max(6),
+  stateTransition: sceneStateTransitionSchema.optional(),
   resistanceResponse: causalText,
   outcomeMechanism: causalText,
   resultingConstraints: z.array(z.object({

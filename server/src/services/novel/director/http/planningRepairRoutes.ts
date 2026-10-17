@@ -32,6 +32,21 @@ export function createPlanningRepairRouter(
   reviewExisting: Pick<PlanningRepairReviewExistingService, "status" | "grant"> = new PlanningRepairReviewExistingService(),
 ) {
   const router = Router();
+  router.get("/:id/planning-repair/resume-policy", validate({ params }), async (req, res, next) => {
+    try { res.json({ success: true, data: await reviewExisting.status(String(req.params.id), "resume_existing_policy") }); }
+    catch (error) { next(error); }
+  });
+  router.post("/:id/planning-repair/resume-policy", validate({ params, body: reviewExistingRequest }), async (req, res, next) => {
+    try {
+      const taskId = String(req.params.id);
+      const input = req.body as z.infer<typeof reviewExistingRequest>;
+      const grant = await reviewExisting.grant(taskId, input, "resume_existing_policy");
+      const command = await commands.enqueuePlanningRepairRecoveryCommand(taskId, input.repairKey, input.idempotencyKey);
+      res.status(202).json({ success: true, data: { ...grant, command } });
+    } catch (error) {
+      next(isPlanningRepairConfirmationError(error) ? new AppError(error instanceof Error ? error.message : "规划位置已变化，请刷新后核对。", 409) : error);
+    }
+  });
   router.get("/:id/planning-repair/review-existing", validate({ params }), async (req, res, next) => {
     try { res.json({ success: true, data: await reviewExisting.status(String(req.params.id)) }); }
     catch (error) { next(error); }

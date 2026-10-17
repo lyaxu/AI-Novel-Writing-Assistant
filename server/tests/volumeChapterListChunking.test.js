@@ -2,6 +2,11 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const promptRunner = require("../dist/prompting/core/promptRunner.js");
+const writtenEvidence = require("../dist/services/novel/volume/writtenEvidence/index.js");
+// List generation now reads actual prose before prompting; keep this suite entirely offline.
+writtenEvidence.loadPlanningWrittenEvidence = async (_novelId, order) => ({
+  chapters: order > 1 ? [{ chapterId: `prior-${order - 1}`, order: order - 1, content: "已写章节的已知事实。" }] : [],
+});
 const {
   generateBeatChunkedChapterList,
 } = require("../dist/services/novel/volume/volumeChapterListGeneration.js");

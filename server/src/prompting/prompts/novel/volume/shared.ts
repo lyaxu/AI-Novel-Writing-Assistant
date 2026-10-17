@@ -51,6 +51,7 @@ export interface VolumeBeatSheetPromptInput {
 }
 
 export interface VolumeChapterListPromptInput {
+  writtenEvidence?: import("@ai-novel/shared/types/novel/writtenEvidence").PlanningWrittenEvidence;
   novel: VolumeGenerationNovel;
   workspace: VolumeWorkspace;
   storyMacroPlan: StoryMacroPlan | null;

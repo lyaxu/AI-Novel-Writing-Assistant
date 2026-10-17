@@ -21,8 +21,18 @@
 
 ## 保留候选的明确重核
 
-`application/PlanningRepairReviewExistingService` 为源页提供独立的只读预检及提交入口。它只处理空稿准备阶段的已保存候选：复核结果未知，或已收到但被合同校验拒绝的复核。来源和候选通过 `PlanningRepairStore.assertPipelineRecoverySnapshot` 验证，禁止 rebase；变化的来源不能使“重核候选”悄悄变成重新生成。前端确认绑定预检 token，轮询取得不同 token 后必须重新勾选。
+`application/PlanningRepairReviewExistingService` 为源页提供保留候选的只读预检及提交入口。它只处理空稿准备阶段的已保存候选：复核结果未知、已收到但被合同校验拒绝的复核，或有 settled 回执及当前章 assessment 的确定质量暂停。来源和候选通过 `PlanningRepairStore.assertPipelineRecoverySnapshot` 验证，禁止 rebase；变化的来源不能使“重核候选”悄悄变成重新生成。前端确认绑定预检 token，轮询取得不同 token 后必须重新勾选。
 
 提交事务保留原任务暂停，按生产日志既有归档格式保存原记录和用户确认，仅将执行合同准备的 unknown 改为 failed，并保存固定 `review_existing` 授权。原轮次、预算、范围和候选不变。存在其他未知步骤、正文、prepared 结果、活跃章节任务、命令或导演执行租约时拒绝。归档、日志、job 和任务 CAS 任一失败须整体回滚；HTTP 重放沿用请求键，enqueue 失败后可恢复同次授权。
 
 `domain/reviewExistingAcknowledgement` 验证专用授权和不可变归档，作为独立于 `settledPipelinePause` 的用户确认凭据。未知调用从未被宣称为已完成。后续恢复仍核对原 job、来源、正文及租约，不得创建替代 job 或开启自动修复。候选复核未通过立即保持暂停；通过后才能沿用户明确确认的原执行范围继续。UI 必须同时说明复核费用和通过后的后续写作费用。
+
+## 按原策略继续与只复核的区别
+
+`GET/POST /planning-repair/resume-policy` 固定授权 `resume_existing_policy`。它复用候选确认事务和恢复凭据，但必须证明任务保存了全书自动模式、自动复核及自动修复授权，并且 `rounds < maxRounds`。普通继续、轮询、重启和质量暂停都不能自行获得这个授权。用户应看到剩余轮次、可能修复、通过后原范围写作与模型费用；未知结果还须明确说明重新调用的费用风险。
+
+本入口不调用通用追加轮次的 grant，不增加 `maxRounds`，不 rebase，不生成替代初始候选。先重核保存候选，随后由 `PlanningRepairCoordinator` 与正常执行共用 `nextPlanningRepairAction`：需要创作决定就暂停，剩余预算内可修复并复核，耗尽则暂停，两层复核通过才提交。`review_existing` 则在未通过时立即暂停，不能被隐式改成自动修复。
+
+授权同时将原执行策略、范围、费用预算及修复上限指纹写入归档；派发前重新比对，防止两份当前范围同时扩大绕过原确认。已结算质量暂停的原 job 可以是 pendingManualRecovery=false，授权事务只将它标回人工恢复等待，导演保持暂停，真正执行仍由原命令和原 job 接回。未知调用仍要求原 job 的暂停标记为 true，且仅允许执行合同准备复核这一未知步骤。
+
+派发失败后，状态返回同次候选 token 和请求键，客户端继续走对应专用端点；不得退入会追加轮次的普通 retry。候选、源、预算、归档或策略漂移时旧授权不能重放。这个边界恢复已有策略，不替用户选择新的创作方向，也不以一次重核保证候选必然通过。

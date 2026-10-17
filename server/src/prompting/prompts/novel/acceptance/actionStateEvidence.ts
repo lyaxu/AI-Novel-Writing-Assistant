@@ -1,4 +1,4 @@
-import type { ActionStateCheck, ActionStateEvidence, SceneCausalityVerdict } from "@ai-novel/shared/types/novel/sceneCausality";
+import type { ActionStateCheck, ActionStateEvidence, SceneCausalityVerdict, ChapterStateClaim } from "@ai-novel/shared/types/novel/sceneCausality";
 import { auditSemanticState } from "./semantic/actionFacts";
 
 export interface ActionStateEvidenceInput {
@@ -6,6 +6,7 @@ export interface ActionStateEvidenceInput {
   chapterOrder: number;
   content: string;
   expectedSceneKeys?: string[];
+  expectedStateClaims?: Array<{ sceneKey: string; requiredClaimIds: string[]; claims: ChapterStateClaim[] }>;
   establishedProse?: Array<{ chapterId: string; order: number; content: string }>;
 }
 
@@ -40,6 +41,12 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
   for (const key of expected) {
     if (checks.filter((check) => check.sceneKey === key).length > 1) coverageIssues.push(`action_state_coverage_duplicate:${key}`);
   }
+  // Missing coverage is visible local review debt, not proof that prose is defective.
+  const claimCoverageIssues = (input.expectedStateClaims ?? []).flatMap(scene => {
+    const covered = new Set(checks.filter(check => check.sceneKey === scene.sceneKey).flatMap(check => check.claimIds ?? []));
+    return scene.requiredClaimIds.filter(id => !covered.has(id))
+      .map(id => `state_claim_coverage_missing:${scene.sceneKey}:${id}`);
+  });
   const context = new Map((input.establishedProse ?? [])
     .filter((chapter) => chapter.order < input.chapterOrder && chapter.chapterId !== input.chapterId)
     .map((chapter) => [chapter.chapterId, chapter.content]));
@@ -70,6 +77,13 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
     let contradiction = false;
     let unknown = false;
     const checkField = `actionStateChecks[${checkIndex}](sceneKey=${check.sceneKey})`;
+    const claimScope = input.expectedStateClaims?.find(scene => scene.sceneKey === check.sceneKey);
+    if (check.claimIds?.length) {
+      if (new Set(check.claimIds).size !== check.claimIds.length) invalid.push("state_claim_binding_duplicate");
+      if (check.claimIds.some(id => !claimScope?.requiredClaimIds.includes(id)
+        || !claimScope.claims.some(claim => claim.id === id))) invalid.push("state_claim_binding_unknown_or_foreign");
+      if (invalid.length) correctionHints.push(`${checkField}.claimIds：只绑定本场expectedStateClaims中实际核验的声明，不重复、不得借用其他场景声明；计划是检查清单，证据仍只能来自正文目录。`);
+    }
     explainSources(check.actionEvidence, `${checkField}.actionEvidence`);
     if (!expected.includes(check.sceneKey)) invalid.push("unexpected_scene");
     if (!check.actionEvidence.length || check.actionEvidence.some((item) => item.source !== "current_prose" || !isFact(item))) {
@@ -253,7 +267,7 @@ export function validateActionStateEvidence(checks: ActionStateCheck[], input: A
     ])];
     return { ...check, verdict, ...(validationIssues.length ? { validationIssues } : { validationIssues: [] }) };
   });
-  return { checks: rows, coverageIssues, correctionHints };
+  return { checks: rows, coverageIssues, claimCoverageIssues, correctionHints };
 }
 
 /** A scene cannot remain earned when the same structured response identifies a broken key action. */

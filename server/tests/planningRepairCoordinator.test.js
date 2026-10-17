@@ -9,6 +9,7 @@ const ts = require("typescript");
 // Block every DB/model boundary before loading the coordinator; all execution below is in-memory.
 const coordinatorSource = path.resolve(__dirname, "../src/services/novel/volume/planningRepair/PlanningRepairCoordinator.ts");
 const imports = {
+  "@ai-novel/shared/types/planningRepair/recovery": require("./novelProduction/sourceHarness.cjs").loadRuntimeSource(path.resolve(__dirname,"../../shared/types/planningRepair/recovery.ts"), {}),
   "@ai-novel/shared/types/chapterLengthControl": require("@ai-novel/shared/types/chapterLengthControl"),
   "../planningPromises": { projectPlanningHorizon: () => ({ readonlyOpeningRoutes: [], readonlyPlanningHorizon: {} }) },
   "../../../../prompting/core/promptRunner": { runStructuredPrompt: () => { throw new Error("Unexpected live model call"); } },
@@ -65,6 +66,44 @@ test("review-only direction never modifies or spends a repair round when review 
   assert.deepEqual(h.calls, ["chapter_review"]);
   assert.equal(h.session.state.rounds, 0);
   assert.equal(JSON.stringify(h.session.candidate), before);
+});
+
+for (const alwaysReject of [false,true]) test(`original-policy recovery shares normal budget and review/repair order (${alwaysReject ? "exhaustion" : "pass"})`,async()=>{
+  const results=[];
+  for(const mode of [undefined,"resume_existing_policy"]){
+    const h=harness({alwaysReject,local:true}); h.session.candidate=document();
+    h.input.generateInitial=async()=>assert.fail("a preserved candidate cannot be regenerated");
+    Object.assign(h.session.state,{phase:"reviewing",affectedChapterIds:["c3"],
+      recoveryAction:mode?{requestId:"original-policy",mode}:undefined});
+    if(alwaysReject) await assert.rejects(h.coordinator.run(h.input),{code:"PLANNING_REPAIR_CONFIRMATION_REQUIRED"});
+    else await h.coordinator.run(h.input);
+    assert.equal(h.calls[0],"chapter_review");
+    assert.equal(h.session.state.rounds,alwaysReject?2:1); assert.equal(h.session.state.maxRounds,2);
+    assert.equal(h.calls.filter(x=>x==="novel.volume.planning_repair").length,alwaysReject?2:1);
+    assert.equal(h.commits,alwaysReject?0:1);
+    results.push({calls:h.calls,rounds:h.session.state.rounds,phase:h.session.state.phase});
+  }
+  assert.deepEqual(results[0],results[1]);
+});
+
+test("original-policy recovery spends only its remaining round and cannot bypass a manual window decision",async()=>{
+  const h=harness({alwaysReject:true,local:true}); h.session.candidate=document();
+  Object.assign(h.session.state,{rounds:1,phase:"reviewing",recoveryAction:{requestId:"resume",mode:"resume_existing_policy"}});
+  await assert.rejects(h.coordinator.run(h.input),{code:"PLANNING_REPAIR_CONFIRMATION_REQUIRED"});
+  assert.equal(h.session.state.rounds,2); assert.equal(h.session.state.maxRounds,2);
+  assert.equal(h.calls.filter(x=>x==="novel.volume.planning_repair").length,1);
+  const m=harness(); m.session.candidate=document(); m.gate.evaluate=async()=>pass;
+  Object.assign(m.session.state,{phase:"reviewing",recoveryAction:{requestId:"resume",mode:"resume_existing_policy"}});
+  const coordinator=new PlanningRepairCoordinator(m.store,m.gate,async()=>({output:{...windowPass,usable:false,safeToSync:false,requiresUserDecision:true}}));
+  await assert.rejects(coordinator.run(m.input),{code:"PLANNING_REPAIR_CONFIRMATION_REQUIRED"});
+  assert.equal(m.session.state.rounds,0); assert.equal(m.commits,0);
+});
+
+for(const mode of ["review_existing","resume_existing_policy"]) test(`${mode} refuses missing preserved candidate without generating replacement`,async()=>{
+  const h=harness(); h.session.state.recoveryAction={requestId:"resume",mode};
+  h.input.generateInitial=async()=>assert.fail("must not regenerate");
+  await assert.rejects(h.coordinator.run(h.input),{code:"PLANNING_REPAIR_CONFIRMATION_REQUIRED"});
+  assert.deepEqual(h.calls,[]); assert.equal(h.session.state.rounds,0);
 });
 
 for (const windowReject of [false, true]) test(`saved review-only candidate ${windowReject ? "pauses on window failure" : "commits after both reviews"} without regeneration or repair`, async () => {

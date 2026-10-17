@@ -1,14 +1,17 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "../../../../../../db/prisma";
 import { AppError } from "../../../../../../middleware/errorHandler";
-import { isPlanningRepairTaskPaused } from "@ai-novel/shared/types/planningRepair/recovery";
+import { canResumeOriginalPlanningPolicy, isPlanningRepairTaskPaused, type PlanningCandidateRecoveryMode } from "@ai-novel/shared/types/planningRepair/recovery";
 import { chapterFingerprint, productionFingerprint, type ChapterProductionJournalRecord } from "../../../../production/reliability";
 import { assertUnchangedPipelineRecoveryScope } from "../../../../production/recovery";
 import { PlanningRepairStore } from "../../../../volume/planningRepair/PlanningRepairStore";
 import { readPlanningRepairSeed } from "../planningRepairRecovery";
-import { assertReviewExistingAcknowledgement, reviewExistingBoundary } from "../domain/reviewExistingAcknowledgement";
+import { assertReviewExistingAcknowledgement, originalPlanningPolicyFingerprint, reviewExistingBoundary } from "../domain/reviewExistingAcknowledgement";
 
-const guidance = "仅重新复核保留的候选，不修改或重新生成；通过后按原授权章节范围继续，未通过则保持暂停。";
+const recoveryGuidance: Record<PlanningCandidateRecoveryMode, string> = {
+  review_existing: "仅重新复核保留的候选，不修改或重新生成；通过后按原授权章节范围继续，未通过则保持暂停。",
+  resume_existing_policy: "按原自动处理策略继续：先复核保留候选，必要时在原剩余轮次内修复并复核；不追加轮次，通过后按原授权范围继续写作。",
+};
 const contractStep = "prepare.execution_contract";
 function refuse(message: string): never { throw new AppError(message, 409); }
 function object(value: unknown): Record<string, any> {
@@ -28,7 +31,7 @@ export interface ReviewExistingRequest { repairKey: string; token: string; idemp
 export class PlanningRepairReviewExistingService {
   constructor(private readonly deps: Dependencies = {}) {}
 
-  private async inspect(tx: Prisma.TransactionClient, taskId: string) {
+  private async inspect(tx: Prisma.TransactionClient, taskId: string, mode: PlanningCandidateRecoveryMode) {
     const task = await tx.novelWorkflowTask.findUnique({ where: { id: taskId } });
     if (!task || !task.novelId || task.lane !== "auto_director" || !isPlanningRepairTaskPaused(task)) {
       return refuse("请在本书规划复核暂停后操作。");
@@ -41,6 +44,9 @@ export class PlanningRepairReviewExistingService {
       || !Number.isSafeInteger(repair.rounds) || repair.rounds < 0
       || !Number.isSafeInteger(repair.maxRounds ?? 2) || repair.rounds > (repair.maxRounds ?? 2)) {
       return refuse("当前停点不是可单独重新复核的保留候选。");
+    }
+    if (mode === "resume_existing_policy" && !canResumeOriginalPlanningPolicy({ ...seed, rounds: repair.rounds, maxRounds: repair.maxRounds ?? 2 })) {
+      return refuse("原自动修复策略未开启或剩余轮次已用完，请确认处理方向后再继续。");
     }
     const snapshot = object(seed.planningRepairSnapshot);
     const affected = repair.affectedChapterIds ?? [repair.chapterId];
@@ -59,10 +65,10 @@ export class PlanningRepairReviewExistingService {
     if (!chapter || (chapter.content ?? "").trim()) return refuse("当前章已有正文或不存在，不能按准备停点重核。");
     const job = await tx.generationJob.findUnique({ where: { id: execution.pipelineJobId } });
     const now = this.deps.now?.() ?? Date.now();
-    if (!job || job.novelId !== task.novelId || job.status !== "failed" || !job.pendingManualRecovery
+    if (!job || job.novelId !== task.novelId || job.status !== "failed"
       || job.cancelRequestedAt || job.currentItemKey !== chapter.id
       || job.startOrder !== chapter.order || job.endOrder !== chapter.order
-      || (job.executionOwner && (!job.executionLeaseExpiresAt || job.executionLeaseExpiresAt.getTime() > now))
+      || (job.executionOwner && (!job.executionLeaseExpiresAt || !Number.isFinite(job.executionLeaseExpiresAt.getTime()) || job.executionLeaseExpiresAt.getTime() > now))
       || parse(job.payload).workflowTaskId !== taskId) return refuse("原章节任务状态或执行权已变化。");
     if (await tx.generationJob.findFirst({ where: { novelId: task.novelId, status: { in: ["queued", "running"] } } })
       || await tx.directorRunCommand.findFirst({ where: { taskId, status: { in: ["queued", "leased", "running"] } } })
@@ -80,6 +86,7 @@ export class PlanningRepairReviewExistingService {
       || journal.expectedChapter?.id !== chapter.id || journal.expectedChapter.novelId !== task.novelId
       || (journal.expectedChapter.content ?? "").trim() || journal.partialText?.trim() || journal.prepared
       || !reviewExistingBoundary(repair, journal)
+      || (journal.steps?.[contractStep]?.status === "unknown" && !job.pendingManualRecovery)
       || Object.keys(journal.steps).some(key => !["prepare", "prepare.contract", contractStep].includes(key))
       || Object.entries(journal.steps).some(([key, step]) => key !== contractStep && (step.status === "unknown" || step.status === "running"))) {
       return refuse("只有空稿准备步骤的单个未确认复核可以重新授权；其他未知结果需先核对。");
@@ -88,20 +95,21 @@ export class PlanningRepairReviewExistingService {
     const settledView = { ...task, seedPayloadJson: JSON.stringify({ ...seed,
       planningRepair: { ...repair, pendingOperation: undefined } }) };
     await (this.deps.store ?? new PlanningRepairStore()).assertPipelineRecoverySnapshot(tx, settledView);
-    const token = productionFingerprint({ task: task.seedPayloadJson, updatedAt: task.updatedAt, status: task.status,
+    const token = productionFingerprint({ mode, task: task.seedPayloadJson, updatedAt: task.updatedAt, status: task.status,
       job: { id: job.id, updatedAt: job.updatedAt, payload: job.payload, executionOwner: job.executionOwner,
         executionLeaseExpiresAt: job.executionLeaseExpiresAt }, journal: row!.metadataJson });
     return { task, seed, repair, pending, execution, chapter, job, row: row!, journal, identity, token,
       boundary: reviewExistingBoundary(repair, journal)! };
   }
 
-  async status(taskId: string) {
+  async status(taskId: string, mode: PlanningCandidateRecoveryMode = "review_existing") {
     try {
       return await (this.deps.db ?? prisma).$transaction(async tx => {
-        const saved = await this.inspect(tx, taskId);
+        const saved = await this.inspect(tx, taskId, mode);
         return { available: true as const, token: saved.token, candidateVersionId: saved.repair.candidateVersionId!,
           startOrder: saved.execution.startOrder as number, endOrder: saved.execution.endOrder as number,
-          chapterOrder: saved.repair.chapterOrder };
+          chapterOrder: saved.repair.chapterOrder, remainingRounds: (saved.repair.maxRounds ?? 2) - saved.repair.rounds,
+          requiresUnknownAcknowledgement: saved.boundary === "acknowledge_unknown" };
       }, { isolationLevel: "Serializable", timeout: 20_000 });
     } catch (error) {
       if (error instanceof AppError || (error && typeof error === "object" && "code" in error && error.code === "PLANNING_REPAIR_CONFLICT")) {
@@ -111,14 +119,14 @@ export class PlanningRepairReviewExistingService {
     }
   }
 
-  async grant(taskId: string, input: ReviewExistingRequest) {
+  async grant(taskId: string, input: ReviewExistingRequest, mode: PlanningCandidateRecoveryMode = "review_existing") {
     return (this.deps.db ?? prisma).$transaction(async tx => {
       const task = await tx.novelWorkflowTask.findUnique({ where: { id: taskId } });
       if (!task || task.cancelRequestedAt || task.status === "cancelled") return refuse("任务已取消或不存在。");
       const stored = readPlanningRepairSeed(task.seedPayloadJson);
       const previous = stored.seed.planningReviewExistingAcknowledgement as Record<string, unknown> | undefined;
       if (previous?.requestId === input.idempotencyKey) {
-        if (previous.token !== input.token || previous.repairKey !== input.repairKey
+        if (previous.token !== input.token || previous.repairKey !== input.repairKey || (previous.executionMode ?? "review_existing") !== mode
           || stored.recovery?.idempotencyKey !== input.idempotencyKey || !stored.repair) return refuse("同一请求标识不能用于不同恢复位置。");
         if (task.lane !== "auto_director" || !isPlanningRepairTaskPaused(task)) return refuse("此请求已提交执行，请刷新任务状态。");
         assertUnchangedPipelineRecoveryScope(stored.seed);
@@ -131,7 +139,7 @@ export class PlanningRepairReviewExistingService {
         if (!job || job.id !== execution.pipelineJobId || job.novelId !== task.novelId || job.status !== "failed"
           || !job.pendingManualRecovery || job.cancelRequestedAt || job.currentItemKey !== chapter.id
           || job.startOrder !== chapter.order || job.endOrder !== chapter.order
-          || (job.executionOwner && (!job.executionLeaseExpiresAt || job.executionLeaseExpiresAt.getTime() > (this.deps.now?.() ?? Date.now())))
+          || (job.executionOwner && (!job.executionLeaseExpiresAt || !Number.isFinite(job.executionLeaseExpiresAt.getTime()) || job.executionLeaseExpiresAt.getTime() > (this.deps.now?.() ?? Date.now())))
           || parse(job.payload).workflowTaskId !== taskId || (chapter.content ?? "").trim()
           || stored.repair.chapterOrder < execution.startOrder || stored.repair.chapterOrder > execution.endOrder) return refuse("原任务已执行或发生变化，请刷新任务状态。");
         const archived = await tx.chapterArtifactSyncCheckpoint.findUnique({ where: {
@@ -141,17 +149,19 @@ export class PlanningRepairReviewExistingService {
           novelId_chapterId_contentHash_artifactType_syncMode: slot(task.novelId!, chapter.id),
         } });
         assertReviewExistingAcknowledgement({ acknowledgement: previous, archive: parse(archived?.metadataJson ?? null),
-          repair: stored.repair, recovery: stored.recovery, journal: parse(current?.metadataJson ?? null) as unknown as ChapterProductionJournalRecord });
+          repair: stored.repair, recovery: stored.recovery, seed: stored.seed, journal: parse(current?.metadataJson ?? null) as unknown as ChapterProductionJournalRecord });
         return { granted: true, replayed: true, taskId };
       }
-      const saved = await this.inspect(tx, taskId);
+      const saved = await this.inspect(tx, taskId, mode);
       if (!input.idempotencyKey.trim() || saved.token !== input.token || saved.repair.key !== input.repairKey) {
         return refuse("候选、来源或原任务已变化，请刷新后核对再操作。");
       }
       const acknowledgedAt = this.deps.now?.() ?? Date.now();
+      const policyFingerprint = mode === "resume_existing_policy"
+        ? originalPlanningPolicyFingerprint(saved.seed, saved.repair.maxRounds ?? 2) : undefined;
       const archiveId = `${saved.journal.operationId}:decision:${input.idempotencyKey}`;
       const archive = { ...structuredClone(saved.journal), operationId: archiveId,
-        reviewExistingDecision: { requestId: input.idempotencyKey, originalOperationId: saved.journal.operationId, acknowledgedAt },
+        reviewExistingDecision: { requestId: input.idempotencyKey, executionMode: mode, policyFingerprint, originalOperationId: saved.journal.operationId, acknowledgedAt },
         ...(saved.boundary === "acknowledge_unknown" ? { recoveryDecision: { kind: "acknowledge_unknown" as const,
           originalOperationId: saved.journal.operationId, acknowledgedAt, affectedSteps: [contractStep] } } : {}) };
       const next = structuredClone(saved.journal);
@@ -172,20 +182,21 @@ export class PlanningRepairReviewExistingService {
       });
       if (journalChanged.count !== 1) return refuse("原执行记录已变化，本次未授权。");
       const jobChanged = await tx.generationJob.updateMany({ where: { id: saved.job.id, status: "failed",
-        updatedAt: saved.job.updatedAt, payload: saved.job.payload, pendingManualRecovery: true, cancelRequestedAt: null,
+        updatedAt: saved.job.updatedAt, payload: saved.job.payload, pendingManualRecovery: saved.job.pendingManualRecovery, cancelRequestedAt: null,
         executionOwner: saved.job.executionOwner, executionLeaseExpiresAt: saved.job.executionLeaseExpiresAt },
         data: { pendingManualRecovery: true } });
       if (jobChanged.count !== 1) return refuse("原章节任务已变化，本次未授权。");
       const requests = Array.isArray(saved.seed.planningRepairRecoveryRequests) ? saved.seed.planningRepairRecoveryRequests : [];
       const affectedChapterIds = saved.repair.affectedChapterIds as string[] | undefined;
+      const guidance = recoveryGuidance[mode];
       const grant = { repairKey: input.repairKey, idempotencyKey: input.idempotencyKey, guidance,
-        executionMode: "review_existing" as const, affectedChapterIds };
+        executionMode: mode, affectedChapterIds };
       const nextSeed = { ...saved.seed,
         planningRepair: { ...saved.repair, phase: "reviewing", pendingOperation: undefined, quality: undefined,
-          guidance, recoveryAction: { requestId: input.idempotencyKey, mode: "review_existing", affectedChapterIds } },
+          guidance, recoveryAction: { requestId: input.idempotencyKey, mode, affectedChapterIds } },
         planningRepairRecovery: { ...grant, resumePhase: "chapter_execution", grantedAtRound: saved.repair.rounds },
         planningRepairRecoveryRequests: [...requests, grant],
-        planningReviewExistingAcknowledgement: { version: 1, requestId: input.idempotencyKey, token: input.token,
+        planningReviewExistingAcknowledgement: { version: 1, requestId: input.idempotencyKey, executionMode: mode, policyFingerprint, token: input.token,
           repairKey: input.repairKey, candidateVersionId: saved.repair.candidateVersionId, round: saved.repair.rounds,
           operationId: saved.journal.operationId, pipelineJobId: saved.job.id, archiveId,
           archiveFingerprint: productionFingerprint(archive), acknowledgedJournalFingerprint: productionFingerprint(next),

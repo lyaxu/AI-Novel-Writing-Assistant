@@ -1,3 +1,5 @@
+// This suite isolates legacy evidence contracts; fresh state decisions have their own regression suite.
+function parseFresh(value) { return prompt.outputSchema.safeParse({ issueDecisions: [], stateChecks: [], ...value }); }
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -17,7 +19,7 @@ function load(file, imports) {
 const promises = load("../../shared/types/novel/planningPromises.ts", { zod: require("zod"),
   "./bookStoryFoundation.js": load("../../shared/types/novel/bookStoryFoundation.ts", { zod: require("zod") }),
 });
-const quality = load("../../shared/types/chapterTaskSheetQuality.ts", { zod: require("zod"), "./chapterLengthControl.js": require("../../shared/dist/types/chapterLengthControl.js") });
+const quality = load("../../shared/types/chapterTaskSheetQuality.ts", { zod: require("zod"), "./novel/planningReviewDecision.js": require("../../shared/dist/types/novel/planningReviewDecision.js"), "./chapterLengthControl.js": require("../../shared/dist/types/chapterLengthControl.js") });
 const chapterEvidence = load("../src/prompting/prompts/novel/volume/evidence/chapterEvidence.ts", {});
 const promiseEvidence = load("../src/prompting/prompts/novel/volume/evidence/planningPromiseEvidence.ts", {
   "@ai-novel/shared/types/novel/planningPromises": promises, "./chapterEvidence": chapterEvidence,
@@ -30,6 +32,9 @@ const { chapterTaskSheetQualityPrompt: prompt } = load("../src/prompting/prompts
   "@ai-novel/shared/types/chapterTaskSheetQuality": quality,
   "./evidence/chapterEvidence": chapterEvidence, "./evidence/planningPromiseEvidence": promiseEvidence, "./evidence/issueCheckProjection": issueProjection,
   "./evidence/newIssueEvidence": newIssueEvidence,
+  "@ai-novel/shared/types/novel/planningReviewDecision": require("../../shared/dist/types/novel/planningReviewDecision.js"),
+  "./evidence/stateClaimBinding": require("../dist/prompting/prompts/novel/volume/evidence/stateClaimBinding.js"),
+  "./evidence/planningStateReview": require("../dist/prompting/prompts/novel/volume/evidence/planningStateReview.js"),
   "./evidence/primaryProseCitationCatalog": load("../src/prompting/prompts/novel/volume/evidence/primaryProseCitationCatalog.ts", { "node:crypto": require("node:crypto") }),
   "./evidence/narrativeProgressionEvidence": load("../src/prompting/prompts/novel/volume/evidence/narrativeProgressionEvidence.ts", { "./chapterEvidence": chapterEvidence }),
 });
@@ -75,8 +80,8 @@ test("selected source loads only from the matching director seed and its fingerp
 test("fresh quality output requires promise checks; old saved assessments remain compatible", () => {
   const old = assessment(undefined);
   assert.equal(quality.aiChapterTaskSheetQualityAssessmentSchema.safeParse(old).success, true);
-  assert.equal(prompt.outputSchema.safeParse(old).success, false);
-  assert.equal(prompt.outputSchema.safeParse(assessment(checks())).success, true);
+  assert.equal(parseFresh(old).success, false);
+  assert.equal(parseFresh(assessment(checks())).success, true);
 });
 
 test("expected source IDs force opening and payoff coverage; exact evidence cannot come from another source", () => {
@@ -229,12 +234,12 @@ test("existing quality call receives bounded output headroom and no additional m
     "../production/reliability": load("../src/services/novel/production/reliability/types.ts", { "node:crypto": require("node:crypto") }),
     "@ai-novel/shared/types/novel/planningPromises": promises,
     "@ai-novel/shared/types/chapterTaskSheetQuality": { ...quality, assessChapterExecutionContractShape: () => ({ canEnterExecution: true }) },
-    "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts": { chapterTaskSheetQualityPrompt: prompt },
+    "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts": { chapterTaskSheetQualityPrompt: prompt, validatePlanningStateSources: () => {} },
     "../../../prompting/core/promptRunner": { runStructuredPrompt: async input => { calls.push(input); return { output: assessment(checks()) }; } },
   });
   const result = await new ChapterTaskSheetQualityGateService().evaluate(candidate, { reviewContextJson: context() });
   assert.equal(calls.length, 1); assert.equal(result.status, "passed");
-  assert.equal(calls[0].options.maxTokens, 4000 + checks().length * 600);
+  assert.equal(calls[0].options.maxTokens, 5000 + checks().length * 600);
   assert.ok(calls[0].options.maxTokens <= 10000);
   assert.equal(calls[0].promptInput.reviewContextJson, context());
   await new ChapterTaskSheetQualityGateService().evaluate(candidate, { reviewContextJson: context(), previousIssues: Array(30).fill({ id: "old" }) });
@@ -250,7 +255,7 @@ test("non-empty citations never turn an explicitly partial, missing or conflicti
   }
   const value = checks(); Object.assign(value.at(-1), { status: "deferred", handoffStatus: "covered", contextEvidence: [{ sourcePath: "writtenEvidence.chapters[0].content", quote: "之前只取得地图" }] });
   assert.equal(quality.mapSemanticAssessmentToQualityGate(assessment(value), "full_book_autopilot").safeToSync, false);
-  assert.equal(prompt.outputSchema.safeParse(assessment(checks().map(({ handoffStatus, ...legacy }) => legacy))).success, false);
+  assert.equal(parseFresh(assessment(checks().map(({ handoffStatus, ...legacy }) => legacy))).success, false);
   assert.equal(quality.aiChapterTaskSheetQualityAssessmentSchema.safeParse(assessment(checks().map(({ handoffStatus, ...legacy }) => legacy))).success, true);
 });
 
@@ -262,13 +267,13 @@ test("validated unresolved checks retain original IDs and all new findings beyon
       executionImpact: "缺少可执行来源", whyExistingConstraintsInsufficient: "现有动作未交代来源" },
   }));
   value.issueChecks = previous.map(issue => ({ issueId: issue.id, status: "partially_resolved", candidateEvidence: [], explanation: `本轮仍未解决${issue.id}` }));
-  assert.equal(prompt.outputSchema.safeParse(value).success, true);
+  assert.equal(parseFresh(value).success, true);
   const projected = issueProjection.projectValidatedIssueChecks(value, {}, previous);
   assert.equal(projected.issues.length, 20); assert.equal(projected.safeToSync, false); assert.equal(projected.verdict, "repairable");
   for (const issue of previous) assert.deepEqual(projected.issues.find(item => item.id === issue.id), { ...issue, summary: `本轮仍未解决${issue.id}` });
   assert.deepEqual(projected.issues.slice(0, 8), value.issues);
   assert.equal(quality.aiChapterTaskSheetQualityAssessmentSchema.safeParse(projected).success, true);
-  assert.equal(prompt.outputSchema.safeParse(projected).success, false);
+  assert.equal(parseFresh(projected).success, false);
   assert.equal(quality.mapSemanticAssessmentToQualityGate(projected, "full_book_autopilot").canEnterExecution, false);
   assert.throws(() => issueProjection.projectValidatedIssueChecks({ ...value, issueChecks: value.issueChecks.slice(1) }, {}, previous), /exactly once/);
   const forged = structuredClone(value); forged.issueChecks[0].candidateEvidence = [{ sourcePath: "summary", quote: "伪造原文" }];

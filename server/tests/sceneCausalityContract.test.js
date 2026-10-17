@@ -12,8 +12,9 @@ const { resolvePromptContextBlocksForAsset } = require("../dist/prompting/contex
 const { chapterWriterPrompt } = require("../dist/prompting/prompts/novel/chapterWriter.prompts.js");
 const {
   chapterAcceptanceAssessmentSchema, generatedChapterAcceptanceAssessmentSchema,
-  chapterAcceptanceAssessmentPrompt,
+  chapterAcceptanceAssessmentPrompt, semanticChapterAcceptanceSchema,
 } = require("../dist/prompting/prompts/novel/chapterAcceptance.prompts.js");
+const { buildEvidenceCatalog } = require("../dist/prompting/prompts/novel/acceptance/evidenceCatalog.js");
 
 function causalContract() {
   return {
@@ -73,6 +74,7 @@ test("a quiet refusal needs neither a victory nor invented loss", () => {
 
 test("writer, review and repair preserve identical complete causal evidence under a tiny context budget", () => {
   const write = writeContext();
+  write.scenePlan.stateClaims = [{ id: "future-refusal", subject: "林宁", predicate: "本场暂不答应复合", temporalScope: "planned", modality: "intention", source: { kind: "planned_scene", sceneKey: "scene_1", phase: "action" } }];
   const review = { ...write, structureObligations: [], worldRules: [], historicalIssues: [] };
   const repair = { writeContext: write, issues: [], allowedEditBoundaries: [], structureObligations: [], worldRules: [], historicalIssues: [] };
   const variants = [buildChapterWriterContextBlocks(write), buildChapterReviewContextBlocks(review), buildChapterRepairContextBlocks(repair)];
@@ -85,6 +87,9 @@ test("writer, review and repair preserve identical complete causal evidence unde
     assert.equal(selected.summarizedBlockIds.includes(block.id), false);
     assert.match(block.content, /直到双方当面谈妥支出边界/);
     assert.match(block.content, /scene_3/);
+    assert.match(block.content, /future-refusal/);
+    assert.match(block.content, /"modality":"intention"/);
+    assert.match(block.content, /不是已发生证据/);
     return block.content;
   });
   assert.equal(new Set(projected).size, 1);
@@ -107,40 +112,59 @@ function assessment() {
   };
 }
 
-function verdict(sceneKey) {
-  return { sceneKey, outcomeObserved: true, verdict: "earned", prerequisiteEvidence: ["前文已交代失约"],
-    choiceAndResistanceEvidence: "她说再想想，他收起准备好的解释", outcomeMechanismEvidence: "沉默被理解成拒绝，两人没有谈妥",
-    constraintEvidence: ["她保留自己的账户"], explanation: "未和解的结果来自双方选择与理解差异" };
-}
-
-function actionCheck(sceneKey) {
-  const quote = (text) => ({ source: "current_prose", sourceId: "current", quote: text });
-  return { sceneKey, actor: "她", action: "收信", actionEvidence: [quote("她把信收好。")], verdict: "earned", explanation: "读信后收好信件",
-    states: [{ dimension: "knowledge", entity: "信件内容", before: "已读信", requiredForAction: "已知道信的内容", after: "仍知道信的内容",
-      beforeEvidence: [quote("她读完信。")], afterEvidence: [quote("她把信收好。")], transitionEvidence: [],
-      enablingTransitionRequired: false, stateChanged: false, transitionStatus: "not_needed" }] };
+function semanticReviewFixture(sceneKeys = ["scene_1", "scene_2"]) {
+  const moments = [
+    { actor: "林宁", text: "林宁读懂合同要求承担欠款后拒绝签字，仍然知道欠款条款，双方没有签约。", proposition: "合同要求承担欠款", action: "拒绝签字" },
+    { actor: "江舟", text: "江舟知道借条要求担保后拒绝担保，仍然知道借条的担保要求，双方没有达成协议。", proposition: "借条要求担保", action: "拒绝担保" },
+  ];
+  const input = { chapterId: "refusals", chapterOrder: 1, content: moments.map(row => row.text).join("\n"),
+    expectedSceneKeys: sceneKeys, establishedProse: [] };
+  const catalog = buildEvidenceCatalog(input);
+  const keys = sceneKeys.length ? sceneKeys : ["chapter"];
+  const actions = keys.map((sceneKey, index) => {
+    const moment = moments[index];
+    const entry = catalog.entries.find(item => item.quote.trim() === moment.text); assert.ok(entry);
+    const evidence = [{ evidenceId: entry.id }];
+    const entity = `${moment.actor}对条款的知情`;
+    const fact = storyTime => ({ entity, dimension: "knowledge", claim: `${moment.actor}知道${moment.proposition}`,
+      evidence, storyTime, support: "supported", reason: "正文明确理解条款后作出拒绝，拒绝时仍运用同一信息。" });
+    return { sceneKey, actor: moment.actor, action: moment.action, actionEvidence: evidence, claimIds: [],
+      states: [{ entity, dimension: "knowledge", requiredForAction: "了解所拒绝的条款",
+        before: fact("before_or_at_action"), after: fact("during_or_after_action"),
+        prerequisite: { status: "satisfied", basis: fact("before_or_at_action"), reason: "作出拒绝前已知条款。" },
+        resultChange: { status: "unchanged", basis: fact("during_or_after_action"), reason: "作出拒绝没有改变对同一条款的知情。" } }],
+      explanation: "知情后拒绝，双方没有达成协议，不需额外胜利或代价。" };
+  });
+  const { status, ...base } = assessment();
+  const raw = { ...base, issueChecks: [], missingObligations: [], decisionReason: "拒绝具有依据，继续写作。",
+    sceneCausalityVerdicts: sceneKeys.map((sceneKey, index) => ({ sceneKey, outcomeObserved: false,
+      choiceAndResistance: { claim: `${moments[index].actor}${moments[index].action}，没有达成协议`, evidence: actions[index].actionEvidence,
+        support: "supported", reason: "知情后的拒绝是有因果依据的选择，未达成协议不等于因果缺陷。" }, constraints: [] })),
+    progressionChecks: ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"].map(dimension => ({
+      dimension, status: "not_applicable", repeatsEstablishedBeat: null, addsNewConsequence: null,
+      priorState: "首章没有比较职责", actualChange: "本章作出拒绝", newConsequence: "", previousEvidence: [], currentEvidence: [],
+      explanation: "首章没有前章已完成职责。", repairSuggestion: "",
+    })), actionStateChecks: actions };
+  return { input, raw: semanticChapterAcceptanceSchema.parse(raw) };
 }
 
 test("fresh acceptance requires evidence rows and validates exact expected-scene coverage", () => {
   assert.equal(chapterAcceptanceAssessmentSchema.safeParse(assessment()).success, true);
   assert.equal(generatedChapterAcceptanceAssessmentSchema.safeParse(assessment()).success, false);
-  const complete = generatedChapterAcceptanceAssessmentSchema.parse({ ...assessment(), sceneCausalityVerdicts: [verdict("scene_1"), verdict("scene_2")],
-    progressionChecks: ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"].map((dimension) => ({
-      dimension, status: "not_applicable", repeatsEstablishedBeat: false, addsNewConsequence: false,
-      priorState: "首章没有比较职责", actualChange: "", newConsequence: "", previousEvidence: [],
-      currentEvidence: [{ source: "current_prose", sourceId: "current", quote: "她把信收好。" }],
-      explanation: "首章没有前章已完成职责。", repairSuggestion: "",
-    })),
-    actionStateChecks: [actionCheck("scene_1"), actionCheck("scene_2")] });
-  const input = { chapterOrder: 1, content: "她读完信。她把信收好。", expectedSceneKeys: ["scene_1", "scene_2"] };
-  assert.deepEqual(chapterAcceptanceAssessmentPrompt.postValidate(complete, input).sceneCausalityVerdicts, complete.sceneCausalityVerdicts);
-  for (const rows of [[], [verdict("scene_1")], [verdict("scene_1"), verdict("scene_1")], [verdict("scene_1"), verdict("wrong")]]) {
-    assert.throws(() => chapterAcceptanceAssessmentPrompt.postValidate({ ...complete, sceneCausalityVerdicts: rows }, input), /逐一覆盖/);
+  const { input, raw } = semanticReviewFixture();
+  const output = chapterAcceptanceAssessmentPrompt.postValidate(raw, input);
+  assert.deepEqual(output.sceneCausalityVerdicts.map(row => row.sceneKey), input.expectedSceneKeys);
+  assert.ok(output.sceneCausalityVerdicts.every(row => row.verdict === "earned"));
+  const [first, second] = raw.sceneCausalityVerdicts;
+  for (const rows of [[], [first], [first, first], [first, { ...second, sceneKey: "wrong" }]]) {
+    assert.throws(() => chapterAcceptanceAssessmentPrompt.postValidate({ ...raw, sceneCausalityVerdicts: rows }, input), /scene_coverage_invalid/);
   }
-  assert.doesNotThrow(() => chapterAcceptanceAssessmentPrompt.postValidate({ ...complete, sceneCausalityVerdicts: [] }, { ...input, expectedSceneKeys: [] }));
-  const brokenEvidence = verdict("scene_1");
-  brokenEvidence.outcomeMechanismEvidence = "";
-  assert.equal(generatedChapterAcceptanceAssessmentSchema.safeParse({ ...assessment(), sceneCausalityVerdicts: [brokenEvidence] }).success, false);
+  const fallback = semanticReviewFixture([]);
+  assert.doesNotThrow(() => chapterAcceptanceAssessmentPrompt.postValidate(fallback.raw, fallback.input));
+  const missingFinding = structuredClone(raw); delete missingFinding.sceneCausalityVerdicts[0].choiceAndResistance;
+  assert.throws(() => chapterAcceptanceAssessmentPrompt.postValidate(missingFinding, input), /required_semantic_finding_missing/);
+  const falseCitation = structuredClone(raw); falseCitation.actionStateChecks[0].actionEvidence = [{ evidenceId: "invented" }];
+  assert.throws(() => chapterAcceptanceAssessmentPrompt.postValidate(falseCitation, input), /unknown_evidence_id/);
 });
 
 test("acceptance prompt separates visible result from earned outcome and keeps negative outcomes valid", () => {
@@ -148,8 +172,13 @@ test("acceptance prompt separates visible result from earned outcome and keeps n
     chapterTitle: "会面", content: "她没有答应。", expectedSceneKeys: ["scene_1"] },
   { blocks: [], selectedBlockIds: [], droppedBlockIds: [], summarizedBlockIds: [], estimatedInputTokens: 0 });
   const system = String(messages[0].content);
-  assert.match(system, /不能把‘完成必达结果’当成‘结果有合理成因’/);
-  assert.match(system, /没有战斗、没有成功、安静的关系变化均可 earned/);
-  assert.match(system, /不能抄合同当正文证据/);
+  assert.match(system, /不能只检查结果发生/);
+  assert.match(system, /计划里的场景安排不能替代正文/);
+  assert.match(system, /未发生\/无法确认的声明如实保留未覆盖风险/);
   assert.match(String(messages[1].content), /expectedSceneKeys.*scene_1/);
+  const { input, raw } = semanticReviewFixture();
+  const output = chapterAcceptanceAssessmentPrompt.postValidate(raw, input);
+  assert.equal(output.status, "accepted");
+  assert.ok(output.sceneCausalityVerdicts.every(row => row.outcomeObserved === false && row.verdict === "earned"));
+  assert.deepEqual(output.blockingIssues, []); assert.deepEqual(output.repairDirectives, []);
 });

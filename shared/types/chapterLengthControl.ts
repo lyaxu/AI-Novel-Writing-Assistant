@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { sanitizeCreativeMustAdvanceItems } from "./chapterCreativeContract.js";
-import { sceneCausalitySchema } from "./novel/sceneCausality.js";
+import { sceneCausalitySchema, chapterStateClaimsSchema } from "./novel/sceneCausality.js";
 import {
   EMPTY_READER_EXPERIENCE_CONTRACT,
   generatedReaderExperienceContractSchema,
@@ -59,6 +59,7 @@ export const generatedChapterSceneCardSchema = chapterSceneCardSchema.extend({
 });
 
 export const chapterScenePlanSchema = z.object({
+  stateClaims: chapterStateClaimsSchema.optional(),
   targetWordCount: z.number().int().positive(),
   lengthBudget: lengthBudgetContractSchema,
   scenes: z.array(chapterSceneCardSchema).min(SCENE_COUNT_MIN).max(SCENE_COUNT_MAX),
@@ -323,6 +324,7 @@ export function normalizeChapterScenePlan(
 
   const boundedScenes = normalizedScenes.slice(0, SCENE_COUNT_MAX);
   return chapterScenePlanSchema.parse({
+    ...(record?.stateClaims !== undefined ? { stateClaims: record.stateClaims } : {}),
     targetWordCount: budget.targetWordCount,
     lengthBudget: budget,
     scenes: rescaleSceneTargets(budget.targetWordCount, boundedScenes),

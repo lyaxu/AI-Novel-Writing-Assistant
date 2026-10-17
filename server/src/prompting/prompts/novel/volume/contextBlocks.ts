@@ -1,6 +1,7 @@
 import { createContextBlock } from "../../../core/contextBudget";
 import type { PromptContextBlock } from "../../../core/promptTypes";
 import { renderSelectedPlanningDirection } from "./context/planningFoundations";
+import { buildPrimaryProseCitationCatalog } from "./evidence/primaryProseCitationCatalog";
 import {
   buildBeatCard,
   buildBeatChapterRangeContext,
@@ -229,6 +230,8 @@ export function buildVolumeBeatSheetContextBlocks(input: VolumeBeatSheetPromptIn
 
 export function buildVolumeChapterListContextBlocks(input: VolumeChapterListPromptInput): PromptContextBlock[] {
   return [
+    createContextBlock({ id: "written_evidence", group: "written_evidence", priority: 110, required: true, allowSummary: false,
+      content: JSON.stringify({ writtenEvidence: input.writtenEvidence ?? { coverage: { complete: false, unknown: ["未提供已写正文来源；不得把旧计划当作事实"] } } }) }),
     createContextBlock({ id: "selected_planning_direction", group: "selected_planning_direction", priority: 108, required: true, allowSummary: false,
       content: renderSelectedPlanningDirection(input.novel.selectedPlanningDirection) }),
     createContextBlock({
@@ -312,11 +315,14 @@ export function buildVolumeChapterListContextBlocks(input: VolumeChapterListProm
 }
 
 export function buildVolumeChapterDetailContextBlocks(input: VolumeChapterDetailPromptInput): PromptContextBlock[] {
+  const prose = buildPrimaryProseCitationCatalog(JSON.stringify({ writtenEvidence: input.writtenEvidence ?? {
+    coverage: { complete: false, unknown: ["未提供已写正文来源"] },
+  } }), input.targetChapter.chapterOrder);
   return [
     createContextBlock({ id: "selected_planning_direction", group: "selected_planning_direction", priority: 108, required: true, allowSummary: false,
       content: renderSelectedPlanningDirection(input.novel.selectedPlanningDirection) }),
     createContextBlock({ id: "written_evidence", group: "written_evidence", priority: 110, required: true, allowSummary: false,
-      content: JSON.stringify({ writtenEvidence: input.writtenEvidence ?? { coverage: { complete: false, unknown: ["未提供已写正文来源"] } } }) }),
+      content: `${prose.reviewContextDisplayJson}\nprimaryProseCitationCatalog (exact prior prose; stateClaims.source.evidenceIds select these IDs):\n${JSON.stringify(prose.sources)}` }),
     createContextBlock({
       id: "book_contract",
       group: "book_contract",

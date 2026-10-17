@@ -33,6 +33,8 @@ for (const size of [50, 200]) test(`bounded planning locates global ${size + 4} 
 for (const [size, secondSize] of [[50, 50], [200, 200], [70, 30]]) test(`single missing chapter in an accepted ${size}/${secondSize} chapter plan preserves budgets and finale position`, async () => {
   const document = documentFixture(size, secondSize), before = structuredClone(document);
   const calls = [];
+  const evidenceReads = [];
+  const priorProse = { chapters: [{ chapterId: 'prior', order: size + 3, content: '上一章明确保存的正文事实。' }] };
   const { generateBeatChunkedChapterList } = loadRuntimeSource('../volume/volumeChapterListGeneration.ts', {
     '../../../prompting/core/promptRunner': { runStructuredPrompt: async input => {
       calls.push(input); return { output: { beatKey: 'open_hook', chapterCount: 1,
@@ -45,6 +47,9 @@ for (const [size, secondSize] of [[50, 50], [200, 200], [70, 30]]) test(`single 
     './volumeGenerationHelpers': helpers,
     './chapterTitleDiversity': require('../../dist/services/novel/volume/chapterTitleDiversity'),
     './application/boundedChapterList': bounded, './volumeWorkspaceDocument': documentTools,
+    './writtenEvidence': { loadPlanningWrittenEvidence: async (novelId, order) => {
+      evidenceReads.push({ novelId, order }); return priorProse;
+    } },
   });
   const result = await generateBeatChunkedChapterList({ document, workspace: document,
     novel: { estimatedChapterCount: size + secondSize, title: '离线长篇', characters: [],
@@ -54,6 +59,8 @@ for (const [size, secondSize] of [[50, 50], [200, 200], [70, 30]]) test(`single 
   });
   assert.equal(calls.length, 1); assert.equal(calls[0].promptInput.targetChapterStartOrder, 4);
   assert.equal(calls[0].promptInput.targetBeatChapterCount, 1);
+  assert.deepEqual(evidenceReads, [{ novelId: 'novel', order: size + 4 }], 'prior prose uses global, not volume-local order');
+  assert.deepEqual(calls[0].promptInput.writtenEvidence, priorProse);
   assert.equal(calls[0].asset.isBookFinale, false, 'accepted prior-volume budgets must prevent a premature finale');
   const added = result.mergedDocument.volumes.flatMap(v => v.chapters).filter(c => !before.volumes.flatMap(v => v.chapters).some(old => old.id === c.id));
   assert.equal(added.length, 1); assert.equal(added[0].chapterOrder, size + 4);

@@ -703,4 +703,6 @@ export {
   createChapterExecutionContractSchema,
   createChapterPurposeSchema,
   createChapterTaskSheetSchema,
+  createChapterExecutionContractWireSchema,
+  createChapterTaskSheetWireSchema,
 } from "./chapterDetail/chapterDetailSchemas";

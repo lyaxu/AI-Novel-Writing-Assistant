@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { parseChapterScenePlan } from "./chapterLengthControl.js";
+import { planningIssueDecisionSchema, planningStateCheckSchema } from "./novel/planningReviewDecision.js";
+import type { PlanningIssueDecision, PlanningStateCheck } from "./novel/planningReviewDecision.js";
 
 export const CHAPTER_TASK_SHEET_QUALITY_MODES = [
   "full_book_autopilot",
@@ -73,6 +75,8 @@ export interface ChapterTaskSheetQualityGateResult {
   promiseChecks?: ChapterPlanningPromiseCheck[];
   progressionChecks?: ChapterNarrativeProgressionCheck[];
   refinements?: string[];
+  issueDecisions?: PlanningIssueDecision[];
+  stateChecks?: PlanningStateCheck[];
 }
 
 export const chapterPlanningEvidenceQuoteSchema = z.object({
@@ -224,13 +228,15 @@ export const aiChapterTaskSheetQualityAssessmentSchema = z.object({
   // Normalized saved assessments can include all unresolved historical issues plus new findings.
   // The prompt's fresh-output schema separately caps model-authored issues.
   issues: z.array(chapterTaskSheetQualityIssueSchema).default([]),
-  repairGuidance: z.array(z.string().trim().min(1)).max(8).default([]),
+  repairGuidance: z.array(z.string().trim().min(1)).default([]),
   confidence: z.preprocess(normalizeAssessmentConfidence, z.number().min(0).max(1)),
   issueChecks: z.array(chapterPlanningIssueCheckSchema).optional(),
   // Old saved assessments remain readable; fresh prompt output requires this field.
   promiseChecks: z.array(chapterPlanningPromiseCheckSchema).max(10).optional(),
   progressionChecks: chapterNarrativeProgressionChecksSchema.optional(),
   refinements: z.array(z.string().trim().min(1).max(500)).max(8).optional(),
+  issueDecisions: z.array(planningIssueDecisionSchema).optional(),
+  stateChecks: z.array(planningStateCheckSchema).optional(),
 });
 
 export type AiChapterTaskSheetQualityAssessment = z.infer<typeof aiChapterTaskSheetQualityAssessmentSchema>;
@@ -342,18 +348,21 @@ export function mapSemanticAssessmentToQualityGate(
   }
   const promiseGaps = unresolvedPlanningPromises(assessment.promiseChecks);
   if (promiseGaps.length) {
-    const repairHint = promiseGaps.map(check => `${check.sourceId}: ${check.repairHint || check.explanation}`).join("；");
+    const canonical = assessment.issueDecisions?.find(decision => decision.issueId === "selected_direction_drift");
+    const repairHint = canonical?.repair.instruction
+      ?? promiseGaps.map(check => `${check.sourceId}: ${check.repairHint || check.explanation}`).join("；");
     assessment = {
       ...assessment, verdict: assessment.verdict === "unusable" ? "unusable" : "repairable", safeToSync: false,
       recommendedHandling: assessment.recommendedHandling === "replan_window" ? "replan_window" : "repair_contract",
-      issues: [...assessment.issues.filter(issue => issue.id !== "selected_direction_drift"), {
+      issues: canonical ? assessment.issues : [...assessment.issues.filter(issue => issue.id !== "selected_direction_drift"), {
         id: "selected_direction_drift", severity: "high", target: "semantic",
         summary: "用户确认方向中的关系或回报承诺缺少可核验的承接。", repairHint,
       }],
-      repairGuidance: [assessment.repairGuidance.join("；"), repairHint].filter(Boolean),
+      repairGuidance: canonical ? assessment.issues.map(issue => issue.repairHint)
+        : [assessment.repairGuidance.join("；"), repairHint].filter(Boolean),
     };
   }
-  const issues = assessment.recommendedHandling === "replan_window"
+  const issues = assessment.loadRisk === "overloaded"
     && !assessment.issues.some((issue) => issue.id === "contract_overloaded")
     ? assessment.issues.concat({
       id: "contract_overloaded",
@@ -363,7 +372,7 @@ export function mapSemanticAssessmentToQualityGate(
       repairHint: "先重排附近章节职责，再进入正文生成。",
     })
     : assessment.issues;
-  if (assessment.verdict === "usable" && assessment.safeToSync) {
+  if (assessment.verdict === "usable" && assessment.safeToSync && issues.length === 0) {
     return {
       status: "passed",
       canEnterExecution: true,
@@ -379,6 +388,8 @@ export function mapSemanticAssessmentToQualityGate(
       promiseChecks: assessment.promiseChecks ?? [],
       progressionChecks: assessment.progressionChecks,
       refinements: assessment.refinements ?? [],
+      issueDecisions: assessment.issueDecisions,
+      stateChecks: assessment.stateChecks,
     };
   }
 
@@ -394,10 +405,8 @@ export function mapSemanticAssessmentToQualityGate(
     safeToSync: assessment.safeToSync,
     loadRisk: assessment.loadRisk,
     recommendedHandling: assessment.recommendedHandling,
-    // 全书自动执行保留语义审校结果供后续正文验收消费，但不为可写的
-    // 任务单重复生成整份合同；结构缺失仍由 shape gate 阻断。
-    canEnterExecution: mode === "full_book_autopilot" && !progressionStalled && promiseGaps.length === 0
-      && !(assessment.issueChecks ?? []).some(check => check.status !== "resolved"),
+    // Unapproved plans are repaired before writing, even under completion-first prose policy.
+    canEnterExecution: false,
     issues,
     summary: assessment.summary,
     repairGuidance: assessment.repairGuidance,
@@ -406,6 +415,8 @@ export function mapSemanticAssessmentToQualityGate(
     promiseChecks: assessment.promiseChecks ?? [],
     progressionChecks: assessment.progressionChecks,
     refinements: assessment.refinements ?? [],
+    issueDecisions: assessment.issueDecisions,
+    stateChecks: assessment.stateChecks,
   };
 }
 

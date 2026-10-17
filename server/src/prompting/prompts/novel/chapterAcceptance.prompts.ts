@@ -7,6 +7,7 @@ import { NOVEL_PROMPT_BUDGETS } from "./promptBudgetProfiles";
 import { CHAPTER_PROSE_QUALITY_AUDIT_RULES } from "@ai-novel/shared/types/chapterProseContract";
 import { actionStateCheckSchema, sceneCausalityVerdictSchema } from "@ai-novel/shared/types/novel/sceneCausality";
 import { reconcileSceneActionVerdicts, validateActionStateEvidence } from "./acceptance/actionStateEvidence";
+import type { ActionStateEvidenceInput } from "./acceptance/actionStateEvidence";
 import { chapterProgressionCheckSchema } from "@ai-novel/shared/types/novel/progression/index";
 import { CHAPTER_EMOTION_AUDIT_RULES } from "./context/emotionPresence";
 import { CHAPTER_TYPOGRAPHY_AUDIT_RULES } from "./context/typography";
@@ -334,6 +335,7 @@ export interface ChapterAcceptancePromptInput {
   targetWordCount?: number | null;
   content: string;
   expectedSceneKeys?: string[];
+  expectedStateClaims?: ActionStateEvidenceInput["expectedStateClaims"];
   establishedProse?: Array<{ chapterId: string; order: number; content: string }>;
 }
 
@@ -527,7 +529,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ReviewEnvelope
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v17",
+  version: "v18",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -610,6 +612,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       `章节：第 ${input.chapterOrder} 章 ${input.chapterTitle}`,
       typeof input.targetWordCount === "number" ? `目标长度：约 ${input.targetWordCount} 字` : "目标长度：未指定",
       `expectedSceneKeys：${JSON.stringify(input.expectedSceneKeys ?? [])}`,
+      `expectedStateClaims（规划核验清单，不是正文证据）：${JSON.stringify(input.expectedStateClaims ?? [])}`,
       `chapterId（current_prose来源ID）：${input.chapterId ?? "current"}`,
       `established_context可用已写正文来源：${JSON.stringify((input.establishedProse ?? []).map(({ chapterId, order }) => ({ chapterId, order })))}`,
       "",

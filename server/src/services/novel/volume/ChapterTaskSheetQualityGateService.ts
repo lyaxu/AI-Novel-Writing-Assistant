@@ -17,6 +17,7 @@ import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
 import { completedPromptResponseFromError, type CompletedPromptResponse } from "../production/reliability";
 import {
   chapterTaskSheetQualityPrompt,
+  validatePlanningStateSources,
 } from "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts";
 
 export interface ChapterTaskSheetQualityGateOptions {
@@ -111,6 +112,16 @@ export class ChapterTaskSheetQualityGateService {
     if (!shapeResult.canEnterExecution) {
       return shapeResult;
     }
+    try {
+      validatePlanningStateSources(candidate, options.reviewContextJson);
+    } catch (error) {
+      const repairHint = "根据本次提供的正文重新绑定状态声明及其证据，保留有效场景；缺少来源时明确标记未知，不能沿用过期事实。";
+      return { status: "repairable", canEnterExecution: false, verdict: "repairable", safeToSync: false,
+        recommendedHandling: "repair_contract", loadRisk: "normal", confidence: 1,
+        summary: "章节计划的状态来源需要重新核对。",
+        issues: [{ id: "state_claim_source_invalid", severity: "high", target: "scene_cards",
+          summary: error instanceof Error ? error.message : "状态声明来源无效。", repairHint }], repairGuidance: [repairHint] };
+    }
 
     const assessment = this.semanticAssessor
       ? await this.semanticAssessor({ candidate, mode, options })
@@ -135,6 +146,8 @@ export class ChapterTaskSheetQualityGateService {
     options: ChapterTaskSheetQualityGateOptions,
   ): Promise<AiChapterTaskSheetQualityAssessment> {
     let promiseCount = 0;
+    let stateClaimCount = 0;
+    try { stateClaimCount = JSON.parse(candidate.sceneCards || "{}").stateClaims?.length ?? 0; } catch { /* Shape gate handles malformed plans. */ }
     try {
       const context = JSON.parse(options.reviewContextJson || "{}");
       promiseCount = selectedPlanningPromiseIds(context?.selectedPlanningDirection as SelectedPlanningDirection | undefined, candidate.chapterOrder).length;
@@ -158,7 +171,8 @@ export class ChapterTaskSheetQualityGateService {
             model: options.model,
             temperature: options.temperature ?? 0.1,
             // Bounded output headroom; invalid review output may be reissued once for this same candidate.
-            maxTokens: Math.min(16000, 4000 + promiseCount * 600 + (options.previousIssues?.length ?? 0) * 500),
+            maxTokens: Math.min(16000, 5000 + Math.min(stateClaimCount, 80) * 180
+              + promiseCount * 600 + (options.previousIssues?.length ?? 0) * 600),
             taskId: options.taskId,
             entrypoint: options.entrypoint,
             novelId: candidate.novelId,

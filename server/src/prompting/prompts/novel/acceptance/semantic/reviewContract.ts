@@ -4,7 +4,7 @@ import { resolveAcceptanceReferences } from "../referenceAssessment";
 import { collectAcceptanceDiagnostics } from "../reviewDiagnostics";
 import { normalizeSemanticActions, SEMANTIC_ACTION_RULES } from "./actionFacts";
 import { normalizeSemanticScenes, SEMANTIC_SCENE_RULES } from "./sceneFindings";
-import { normalizeRepairFindings, REPAIR_FINDING_RULES } from "./repairFindings";
+import { normalizeRepairFindings, retainStateClaimCoverageDebt, REPAIR_FINDING_RULES } from "./repairFindings";
 
 function inspect(raw: SemanticChapterAcceptanceOutput, input: ChapterAcceptancePromptInput) {
   const catalog = buildEvidenceCatalog(input);
@@ -42,8 +42,8 @@ export function validateSemanticAcceptance(raw: SemanticChapterAcceptanceOutput,
   if (problems.length) throw Object.assign(new Error([
     "审查事实或判断对应关系尚未核实，请结合完整正文一次纠正以下全部问题。", ...problems, ...hints,
   ].join("\n")), { reviewContractIssues: problems, reviewCorrectionHints: hints });
-  return { ...output, actionStateChecks: diagnostics.audit.checks, progressionChecks: diagnostics.progression.checks,
-    reviewContractIssues: [], actionStateAuditIssues: [], progressionAuditIssues: [] };
+  return retainStateClaimCoverageDebt({ ...output, actionStateChecks: diagnostics.audit.checks, progressionChecks: diagnostics.progression.checks,
+    reviewContractIssues: [], actionStateAuditIssues: [], progressionAuditIssues: [] }, diagnostics.audit.claimCoverageIssues);
 }
 
 export function recoverSemanticAcceptance(raw: SemanticChapterAcceptanceOutput, input: ChapterAcceptancePromptInput, validationError: string): ChapterAcceptanceAssessmentOutput {

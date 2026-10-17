@@ -211,6 +211,7 @@ export async function generateChapterTaskSheetDetail(params: {
       const scenePlan = normalizeChapterScenePlan(
         {
           scenes: generated.output.sceneCards,
+          stateClaims: generated.output.stateClaims,
           readerExperience: generated.output.readerExperience,
           requiredElements: generated.output.requiredElements,
         },

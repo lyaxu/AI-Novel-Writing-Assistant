@@ -43,7 +43,7 @@ export interface PlanningRepairState {
   /** Only mappings saved atomically with the repaired candidate; proposed output is history only. */
   requiredElementRevisions?: unknown[];
   guidance?: string;
-  recoveryAction?: { requestId: string; mode: "repair_then_review" | "review_existing"; paidRound?: number; affectedChapterIds?: string[] };
+  recoveryAction?: { requestId: string; mode: import("@ai-novel/shared/types/planningRepair/recovery").PlanningRepairRecoveryMode; paidRound?: number; affectedChapterIds?: string[] };
   technicalError?: string;
   /** Set when the user gives up on this session. Kept as evidence; the session is not reusable. */
   abandonedAt?: string;

@@ -1,3 +1,12 @@
+function parseFreshStrict(value) {
+ return prompt.outputSchema.parse({ ...value, stateChecks: [], issueDecisions: value.issues.map(issue => ({
+ issueId: issue.id, claimIds: [], candidateAssertion: {subject:'chapter',statement:issue.summary, temporalScope:'planned',modality:'outcome',evidence:issue.basis.candidateEvidence},
+ referenceAssertion:null,relation:'missing_requirement',comparisonScope:'unknown',transition:'missing',transitionEvidence:[],explanation:issue.summary,
+ repair:{instruction:issue.repairHint,premiseEvidence:[]}
+ })) });
+}
+// This suite isolates legacy evidence contracts; fresh state decisions have their own regression suite.
+function parseFresh(value) { return prompt.outputSchema.safeParse({ issueDecisions: [], stateChecks: [], ...value }); }
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -55,10 +64,10 @@ function wire(value, reviewContextJson = context, chapterOrder = candidate.chapt
 test("fresh output requires all three unique dimensions, while historical assessments remain readable", () => {
   const value = assessment(); const { progressionChecks, ...legacy } = value;
   assert.equal(shared.aiChapterTaskSheetQualityAssessmentSchema.safeParse(legacy).success, true);
-  assert.equal(prompt.outputSchema.safeParse(legacy).success, false);
-  assert.equal(prompt.outputSchema.safeParse(wire(value)).success, true);
-  assert.equal(prompt.outputSchema.safeParse({ ...value, progressionChecks: progressionChecks.slice(1) }).success, false);
-  assert.equal(prompt.outputSchema.safeParse({ ...value, progressionChecks: [progressionChecks[0], progressionChecks[0], progressionChecks[2]] }).success, false);
+  assert.equal(parseFresh(legacy).success, false);
+  assert.equal(parseFresh(wire(value)).success, true);
+  assert.equal(parseFresh({ ...value, progressionChecks: progressionChecks.slice(1) }).success, false);
+  assert.equal(parseFresh({ ...value, progressionChecks: [progressionChecks[0], progressionChecks[0], progressionChecks[2]] }).success, false);
   assert.doesNotThrow(() => validate(legacy, candidate));
 });
 
@@ -71,7 +80,7 @@ test("AI-identified repeated pressure and re-deciding a prior goal use the exist
   for (const check of value.progressionChecks.filter(c => c.dimension !== "knowledge_repetition")) Object.assign(check, {
     status: "stalled", issueId: value.issues[0].id, repairHint: value.issues[0].repairHint, explanation: "The same refusal and return leave the goal, resources and relationship unchanged.",
   });
-  const parsed = prompt.outputSchema.parse(wire(value));
+  const parsed = parseFreshStrict(wire(value));
   const projected = prompt.postValidate(parsed, { candidate, reviewContextJson: context });
   for (const mode of shared.CHAPTER_TASK_SHEET_QUALITY_MODES) {
     const result = shared.mapSemanticAssessmentToQualityGate(projected, mode);
@@ -130,7 +139,7 @@ test("future plans, summaries and wrong prose cannot establish previous events",
 test("no earlier prose yields explicit uncertainty without an automatic block or invented history", () => {
   const value = assessment("insufficient_context", candidate, null);
   const reviewContextJson = JSON.stringify({ readonlyPrevious: { summary: previous } });
-  prompt.postValidate(prompt.outputSchema.parse(value), { candidate, reviewContextJson });
+  prompt.postValidate(parseFreshStrict(value), { candidate, reviewContextJson });
   assert.equal(shared.mapSemanticAssessmentToQualityGate(value, "full_book_autopilot").canEnterExecution, true);
   value.progressionChecks[0].status = "effective";
   assert.throws(() => validate(value, candidate, reviewContextJson), /insufficient_context decision/);
@@ -138,7 +147,7 @@ test("no earlier prose yields explicit uncertainty without an automatic block or
 
 test("wire selects earlier prose IDs and restores exact persisted citations before strict validation", () => {
   const model = wire(assessment());
-  const parsed = prompt.outputSchema.parse(model);
+  const parsed = parseFreshStrict(model);
   const result = prompt.postValidate(parsed, { candidate, reviewContextJson: context });
   assert.deepEqual(result.progressionChecks, assessment().progressionChecks);
   assert.equal(shared.aiChapterTaskSheetQualityAssessmentSchema.safeParse(result).success, true);
@@ -150,12 +159,12 @@ test("wire selects earlier prose IDs and restores exact persisted citations befo
   assert.match(system, /从本次正文目录选择支持此判断的evidenceId/);
   assert.match(system, /所有占位内容必须按实际证据替换，不可照抄/);
   assert.match(system, /依据本维实际比较选择允许的status/);
-  assert.equal(prompt.version, "v18");
-  assert.equal(prompt.outputSchema.safeParse(assessment()).success, false);
+  assert.equal(prompt.version, "v19");
+  assert.equal(parseFresh(assessment()).success, false);
   for (const extra of [{ quote: previous }, { quote: "Invented summary." }, { sourcePath: "writtenEvidence.chapters[0].content" }]) {
     const invalid = structuredClone(model);
     Object.assign(invalid.progressionChecks[0].priorEvidence[0], extra);
-    assert.equal(prompt.outputSchema.safeParse(invalid).success, false);
+    assert.equal(parseFresh(invalid).success, false);
     assert.throws(() => prompt.postValidate(invalid, { candidate, reviewContextJson: context }));
   }
 });
@@ -198,9 +207,9 @@ test("citation IDs bind actual entire prose, identity, source path and offset, r
 test("ID resolution does not weaken exact candidate checks, prior-prose requirements or stalled admission guards", () => {
   const invalid = wire(assessment());
   invalid.progressionChecks[0].candidateEvidence[0].quote = "An invented candidate action";
-  assert.throws(() => prompt.postValidate(prompt.outputSchema.parse(invalid), { candidate, reviewContextJson: context }), /exact current/);
+  assert.throws(() => prompt.postValidate(parseFreshStrict(invalid), { candidate, reviewContextJson: context }), /exact current/);
   const noPrior = wire(assessment()); noPrior.progressionChecks[0].priorEvidence = [];
-  assert.throws(() => prompt.postValidate(prompt.outputSchema.parse(noPrior), { candidate, reviewContextJson: context }), /needs earlier prose/);
+  assert.throws(() => prompt.postValidate(parseFreshStrict(noPrior), { candidate, reviewContextJson: context }), /needs earlier prose/);
   const stalled = wire(assessment()); stalled.progressionChecks[0].status = "stalled";
-  assert.throws(() => prompt.postValidate(prompt.outputSchema.parse(stalled), { candidate, reviewContextJson: context }), /must link/);
+  assert.throws(() => prompt.postValidate(parseFreshStrict(stalled), { candidate, reviewContextJson: context }), /must link/);
 });

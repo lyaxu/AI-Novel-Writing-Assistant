@@ -5,6 +5,7 @@ import { projectProgressionAssessment } from "./progressionProjection";
 
 /** Both invocation and cache identity must use the same requested scene coverage. */
 export function buildAcceptancePromptInput(input: ChapterAcceptanceAssessmentInput): ChapterAcceptancePromptInput {
+  const plan = input.contextPackage.chapterReviewContext?.scenePlan;
   return {
     chapterId: input.chapterId,
     novelTitle: input.novelTitle,
@@ -14,6 +15,15 @@ export function buildAcceptancePromptInput(input: ChapterAcceptanceAssessmentInp
     content: input.content,
     expectedSceneKeys: input.contextPackage.chapterReviewContext?.scenePlan?.scenes
       .filter((scene) => scene.causality).map((scene) => scene.key) ?? [],
+    expectedStateClaims: plan?.stateClaims?.length ? plan.scenes.filter(scene => scene.causality).map(scene => {
+      const transition = scene.causality?.stateTransition;
+      const requiredClaimIds = [...new Set([
+        ...(transition?.beforeClaimIds ?? []), ...(transition?.actionClaimIds ?? []), ...(transition?.afterClaimIds ?? []),
+        ...(scene.causality?.prerequisites?.flatMap(item => item.claimIds ?? []) ?? []),
+      ])];
+      return { sceneKey: scene.key, requiredClaimIds,
+        claims: plan.stateClaims!.filter(claim => requiredClaimIds.includes(claim.id)) };
+    }) : [],
     establishedProse: input.contextPackage.chapterReviewContext?.writtenEvidence?.chapters
       .filter((chapter) => chapter.order < input.chapterOrder && chapter.chapterId !== input.chapterId)
       .map(({ chapterId, order, content }) => ({ chapterId, order, content })) ?? [],

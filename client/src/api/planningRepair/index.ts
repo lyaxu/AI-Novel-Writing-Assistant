@@ -1,5 +1,6 @@
 import type { ApiResponse } from "@ai-novel/shared/types/api";
 import type { PlanningRepairAdviceStatus } from "@ai-novel/shared/types/planningRepair/advice";
+import type { PlanningRepairRecoveryMode } from "@ai-novel/shared/types/planningRepair/recovery";
 export type { PlanningRepairAdviceStatus, PlanningRepairAdviceOption } from "@ai-novel/shared/types/planningRepair/advice";
 import { apiClient } from "../client";
 
@@ -9,7 +10,7 @@ export interface PlanningRepairStatus {
   status: string;
   pendingManualRecovery: boolean;
   cancelRequestedAt?: string | null;
-  recoveryRequest?: { idempotencyKey: string; guidance: string; executionMode?: "repair_then_review" | "review_existing"; affectedChapterIds?: string[] } | null;
+  recoveryRequest?: { idempotencyKey: string; guidance: string; executionMode?: PlanningRepairRecoveryMode; affectedChapterIds?: string[]; candidateRecoveryToken?: string } | null;
   planningRepair: {
     version: 1;
     key: string;
@@ -35,9 +36,19 @@ export const planningRepairQueryKey = (taskId: string) => ["planning-repair", "t
 export const novelPlanningRepairQueryKey = (novelId: string) => ["planning-repair", "novel", novelId] as const;
 export const planningRepairAdviceQueryKey = (taskId: string) => ["planning-repair", "advice", taskId] as const;
 export const planningReviewExistingQueryKey = (taskId: string) => ["planning-repair", "review-existing", taskId] as const;
+export const planningResumePolicyQueryKey = (taskId: string) => ["planning-repair", "resume-policy", taskId] as const;
 export type PlanningReviewExistingStatus = { available: false } | {
-  available: true; token: string; candidateVersionId: string; chapterOrder: number; startOrder: number; endOrder: number;
+  available: true; token: string; candidateVersionId: string; chapterOrder: number; startOrder: number; endOrder: number; remainingRounds: number;
+  requiresUnknownAcknowledgement: boolean;
 };
+export async function getPlanningResumePolicy(taskId: string) {
+  const { data } = await apiClient.get<ApiResponse<PlanningReviewExistingStatus>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/resume-policy`);
+  return data.data;
+}
+export async function resumeOriginalPlanningPolicy(taskId: string, payload: { repairKey: string; token: string; idempotencyKey: string }) {
+  const { data } = await apiClient.post<ApiResponse<unknown>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/resume-policy`, payload);
+  return data.data;
+}
 export async function getPlanningReviewExisting(taskId: string) {
   const { data } = await apiClient.get<ApiResponse<PlanningReviewExistingStatus>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/review-existing`);
   return data.data;

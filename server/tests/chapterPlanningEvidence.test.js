@@ -1,3 +1,5 @@
+// This suite isolates legacy evidence contracts; fresh state decisions have their own regression suite.
+function parseFresh(value) { return prompt.outputSchema.safeParse({ issueDecisions: [], stateChecks: [], ...value }); }
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -15,7 +17,7 @@ function load(file, imports) {
   return exports;
 }
 const evidence = load("../src/prompting/prompts/novel/volume/evidence/chapterEvidence.ts", {});
-const schema = load("../../shared/types/chapterTaskSheetQuality.ts", { zod: require("zod"), "./chapterLengthControl.js": require("../../shared/dist/types/chapterLengthControl.js") });
+const schema = load("../../shared/types/chapterTaskSheetQuality.ts", { zod: require("zod"), "./novel/planningReviewDecision.js": require("../../shared/dist/types/novel/planningReviewDecision.js"), "./chapterLengthControl.js": require("../../shared/dist/types/chapterLengthControl.js") });
 const promiseEvidence = load("../src/prompting/prompts/novel/volume/evidence/planningPromiseEvidence.ts", {
   "./chapterEvidence": evidence,
   "@ai-novel/shared/types/novel/planningPromises": load("../../shared/types/novel/planningPromises.ts", { zod: require("zod"),
@@ -29,6 +31,9 @@ const { chapterTaskSheetQualityPrompt: prompt } = load("../src/prompting/prompts
   "@ai-novel/shared/types/chapterTaskSheetQuality": schema, "./evidence/chapterEvidence": evidence,
   "./evidence/planningPromiseEvidence": promiseEvidence, "./evidence/issueCheckProjection": issueProjection,
   "./evidence/newIssueEvidence": load("../src/prompting/prompts/novel/volume/evidence/newIssueEvidence.ts", { "./chapterEvidence": evidence }),
+  "@ai-novel/shared/types/novel/planningReviewDecision": require("../../shared/dist/types/novel/planningReviewDecision.js"),
+  "./evidence/stateClaimBinding": require("../dist/prompting/prompts/novel/volume/evidence/stateClaimBinding.js"),
+  "./evidence/planningStateReview": require("../dist/prompting/prompts/novel/volume/evidence/planningStateReview.js"),
   "./evidence/primaryProseCitationCatalog": load("../src/prompting/prompts/novel/volume/evidence/primaryProseCitationCatalog.ts", { "node:crypto": require("node:crypto") }),
   "./evidence/narrativeProgressionEvidence": load("../src/prompting/prompts/novel/volume/evidence/narrativeProgressionEvidence.ts", { "./chapterEvidence": evidence }),
 });
@@ -48,8 +53,8 @@ test("fresh schema requires separate leaf path and quote; wrong field and old ca
   fresh.progressionChecks = ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"].map(dimension => ({ dimension, status: "insufficient_context",
     candidateEvidence: [{ sourcePath: "readerExperience.keyTurn", quote: index.leaves.get("readerExperience.keyTurn") }], priorEvidence: [], explanation: "未提供前文正文", issueId: null, repairHint: "" }));
   fresh.issueChecks = fresh.issueChecks.map((check) => ({ ...check, candidateEvidence: [{ sourcePath: "readerExperience.keyTurn", quote: index.leaves.get("readerExperience.keyTurn") }] }));
-  assert.equal(prompt.outputSchema.safeParse(fresh).success, true);
-  assert.equal(prompt.outputSchema.safeParse(output()).success, false);
+  assert.equal(parseFresh(fresh).success, true);
+  assert.equal(parseFresh(output()).success, false);
   prompt.postValidate(fresh, input());
   fresh.issueChecks[0].candidateEvidence[0].sourcePath = "smoke_wall.turn";
   assert.throws(() => prompt.postValidate(fresh, input()), /absent/);
@@ -76,10 +81,10 @@ test("coverage includes eight real issues plus synthetic overload without droppi
     issueChecks: issues.map((issue) => ({ issueId: issue.id, status: "unresolved", candidateEvidence: [], explanation: "仍缺少前提" })) };
   current.progressionChecks = ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"].map(dimension => ({ dimension, status: "insufficient_context",
     candidateEvidence: [{ sourcePath: "summary", quote: "完成交换" }], priorEvidence: [], explanation: "未提供前文正文", issueId: null, repairHint: "" }));
-  assert.equal(prompt.outputSchema.safeParse(current).success, true);
+  assert.equal(parseFresh(current).success, true);
   prompt.postValidate(current, { candidate: { summary: "完成交换" }, previousIssues: issues });
   assert.throws(() => prompt.postValidate({ ...current, issueChecks: current.issueChecks.slice(0, 8) }, { candidate: { summary: "完成交换" }, previousIssues: issues }), /exactly once/);
-  assert.equal(prompt.outputSchema.safeParse({ ...current, issues: issues.map((issue, i) => ({ ...issue, id: `new${i}` })) }).success, false);
+  assert.equal(parseFresh({ ...current, issues: issues.map((issue, i) => ({ ...issue, id: `new${i}` })) }).success, false);
 });
 test("render provides stable scene paths and legacy keyless scenes remain readable", () => {
   const rendered = prompt.render({ ...input(), mode: "ai_copilot" });
@@ -134,7 +139,7 @@ test("historical rejected review retains evidence projection without satisfying 
   const received = schema.aiChapterTaskSheetQualityAssessmentSchema.parse(rejected.output);
   // This capture predates basis/refinements. Do not invent evidence to certify it
   // under the fresh-output contract; verify its original historical projection.
-  assert.equal(prompt.outputSchema.safeParse(received).success, false);
+  assert.equal(parseFresh(received).success, false);
   assert.throws(() => prompt.postValidate(received, { candidate, previousIssues, reviewContextJson }), /requires an execution-impact basis/);
   promiseEvidence.validatePlanningPromiseEvidence(received.promiseChecks, candidate, reviewContextJson);
   const projected = issueProjection.projectValidatedIssueChecks(received, candidate, previousIssues);

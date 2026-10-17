@@ -17,6 +17,7 @@ const resultChange = canonicalFacts.shape.resultChange.unwrap().extend({ basis: 
 /** Omitted semantic findings reach the one full-context correction, not JSON-only repair. */
 export const semanticActionAssessmentSchema = z.object({
   sceneKey: z.string().trim().min(1),
+  claimIds: actionStateCheckSchema.shape.claimIds,
   actor: text,
   action: text,
   actionEvidence: references.min(1).max(1),
@@ -161,13 +162,15 @@ export function normalizeSemanticActions(rawChecks: RawAction[], catalog: Eviden
       : audits.some(item => item.contradiction) ? "contradicted"
         : audits.some(item => item.missing) ? "unearned"
           : audits.some(item => item.unknown) ? "insufficient_evidence" : "earned";
-    return { sceneKey: raw.sceneKey, actor: raw.actor, action: raw.action, actionEvidence,
+    return { sceneKey: raw.sceneKey, ...(raw.claimIds ? { claimIds: raw.claimIds } : {}), actor: raw.actor, action: raw.action, actionEvidence,
       states, verdict, explanation: raw.explanation };
   });
   return { checks, problems };
 }
 
 export const SEMANTIC_ACTION_RULES = [
+  "expectedStateClaims是按场景列出的计划声明清单，claimIds只填写本条动作及状态实际核验的声明ID；结合stateTransition核对行动前提、动作与后状态，不能选无关小动作或挂满ID冒充覆盖。区分事实、意图、尝试、结果，计划成功不代表正文成功。未发生/无法确认的声明如实保留未覆盖风险，不能伪造行动证据或强迫结果成功。旧场景没有声明时填[]。",
+  "资源须比较同一持有人、同一计量单位的收入、支出与余额；还款数额和剩余债务分开核对。先前未知余额不能凭摘要定数。正文中新决定或再次尝试可以改变先前未决定/尝试失败的状态，不能把未来打算误判成既有事实矛盾。声明ID不是证据ID，不能代替当前或前文正文目录引文。",
   `dimension的合法枚举由当前Schema生成，只能是：${actionStateDimensionCheckSchema.shape.dimension.options.join("|")}。不要创造resources、money等别名。body=身体部位的健康和可活动状态；item=物品、现金等资源的持有、数量和可用状态；ability=技能、能力的掌握与授权；knowledge=对一个具体命题的知情；location=位置与可达范围。`,
   "每个expectedSceneKey只选择一个实际发生的原子行动，actionEvidence只选1条本章目录证据，该句必须支持action所述全部行动。不要把隔开的告知、承诺、收款等并列事件合成一个行动，也不要只引用准备动作来定位后面的关键动作。判断始终相对此行动，不能换锚点躲开缺陷。",
   "每项state填写entity、dimension、requiredForAction、before、after、prerequisite、resultChange。before/after及两个basis都使用同一事实结构：{entity,dimension,claim,evidence:[{evidenceId}],storyTime,support,reason}。所有字段必须提供；解析允许缺项只为收集审查错误，不代表可省略。",

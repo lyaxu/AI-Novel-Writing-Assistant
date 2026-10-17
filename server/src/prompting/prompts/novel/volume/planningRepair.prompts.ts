@@ -1,7 +1,11 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { PromptAsset } from "../../../core/promptTypes";
+import type { z } from "zod";
+import { bindStateClaimContract } from "./evidence/stateClaimBinding";
+import { buildPrimaryProseCitationCatalog } from "./evidence/primaryProseCitationCatalog";
 import {
   planningRepairOutputSchema,
+  planningRepairWireOutputSchema,
   planningRepairReviewOutputSchema,
   type PlanningRepairOutput,
   type PlanningRepairReviewOutput,
@@ -36,37 +40,55 @@ const commonRules = [
 ].join("\n");
 
 // These assets do not resolve models; the coordinator must pass its explicit modelRoute to the runner.
-export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, PlanningRepairOutput> = {
+export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, PlanningRepairOutput, z.infer<typeof planningRepairWireOutputSchema>> = {
   id: "novel.volume.planning_repair",
-  version: "v12",
+  version: "v13",
   taskType: "replan",
   mode: "structured",
   language: "zh",
   contextPolicy: { maxTokensBudget: 24000 },
-  outputSchema: planningRepairOutputSchema,
+  outputSchema: planningRepairWireOutputSchema,
   render: (input) => [
     new SystemMessage([
       "你是网文规划修复器。只修复限定章节窗口的执行合同，不写正文，不重做全书规划。",
       commonRules,
       "逐项解决 assessment.current 中仍未解决的问题，参照issueHistoryByChapter保留此前有效修复；原始问题仅用于检查职责没有丢失。用具体的章节职责和场景变化解决真实缺口，不为可选润色反复改写。只能在允许窗口内保留、合并或移动职责；错误引用可按显式revise账本纠正表述，叙事功能仍须保留。",
-      "输出 {requiresUserDecision:boolean,reason:string,changes:[{chapterId,title,summary,purpose,exclusiveEvent,endingState,nextChapterEntryState,conflictLevel:number,revealLevel:number,taskSheet,mustAvoid,payoffRefs:string[],sceneCards:[],readerExperience:{},requiredElementRevisions?:[{original,replacement,reason,preservedFunction,sceneKeys:string[]}]}],obligationMoves:[{obligation,fromChapterId,toChapterId,action,replacement?,reason}]}。",
+      "输出 {requiresUserDecision:boolean,reason:string,changes:[{chapterId,title,summary,purpose,exclusiveEvent,endingState,nextChapterEntryState,conflictLevel:number,revealLevel:number,taskSheet,mustAvoid,payoffRefs:string[],stateClaims:[],sceneCards:[],readerExperience:{},requiredElementRevisions?:[{original,replacement,reason,preservedFunction,sceneKeys:string[]}]}],obligationMoves:[{obligation,fromChapterId,toChapterId,action,replacement?,reason}]}。",
       "changes 必须对每个 allowedChapterIds 恰好返回一次完整的允许字段，包括无需变化的字段。不返回完整替换文档，不新增其他字段。",
       "payoffRefs承载叙事义务，普通保留或迁移仍须保留原引用。若引用含与已写事实冲突的旧实现方式，或用户已确认纠正其表述，可在同一允许章用obligationMoves的revise显式修订：obligation逐字取自candidateChapters当前原引用（无候选才用originalChapters），replacement逐字对应changes里新引用，reason说明事实依据、保留的叙事功能及本章如何落实。新引用替代旧引用，不同时保留错误原句。不得只修改payoffRefs而漏记映射；也不得把旧错误句继续当作执行目标。只因近义润色不应重写引用。",
       "requiredElements不能只留旧条目而另改场景，也不能自由替换整份清单。确有错误或重复已写事件时，在该章requiredElementRevisions逐项修订：original逐字复制currentRequiredElements的当前原句（未提供该投影时读candidateChapters.sceneCards.requiredElements）；replacement给出同章可落实的修正义务；reason引用具体已写事实或本轮问题，说明为何需要改；preservedFunction明确保留的叙事功能与承诺；sceneKeys绑定本轮sceneCards中具体落实该功能的场景key。程序仅做精确映射，事实与功能是否成立仍由AI复核。",
       "requiredElementRevisions最多8项，每项original/replacement最多160字符，reason最多600，preservedFunction最多240，sceneKeys为1-8个唯一且存在的场景key。只支持同章一对一替换；不能删空、合并吞掉义务、制造无来源条目、降低承诺、改变时限或越出授权窗口。未列的原义务自动保留；无需变化时省略该字段或返回空数组，不输出自由requiredElements字段。历史A→B→C只追踪保留功能，本轮若改C就输出C→D，不能把已不存在的A当作新的来源或把旧实现重新加回。",
       "长度为严格执行合同：taskSheet、summary 各最多600字符；purpose、exclusiveEvent、endingState、nextChapterEntryState、mustAvoid 各最多240字符。taskSheet 只写执行摘要，不重复完整场景卡；具体动作及必达义务保留在 sceneCards 中，不得为压缩文字而删除职责。其他字段严格遵守输出 schema 的长度和数组上限。",
       "sceneCards 沿用章节细纲场景结构，每章 3-8 场；每场包含唯一 key、title、purpose、mustAdvance:string[]、mustPreserve:string[]、entryState、exitState、forbiddenExpansion:string[]、正整数 targetWordCount、resistance、turn、emotionalShift、readerValue。",
-      "每个修复场景还须包含 causality:{actor,choice,motive,prerequisites:[{condition,sourceKind,reference}],resistanceResponse,outcomeMechanism,resultingConstraints:[{constraint,persistence}]}。sourceKind 只用 established_in_context、establish_in_scene、unresolved。既有前提必须引用可核对的上下文；本场建立的条件要先获得再使用，缺失来源必须标 unresolved，不能虚构已完成事件。说明人物为何如此选择、阻力如何回应、结果为何发生、代价如何限制后续行动。允许失败、拒绝和安静变化；没有新增条件或代价时相应数组可为空。",
+      "每个changes项必须包含完整stateClaims声明表（旧候选缺少也须依据本次来源建立）：每项{id,subject,predicate,temporalScope:prior|planned,modality:fact|intention|attempt|outcome,source}。source只允许{kind:written_prose,evidenceIds:[本次目录ID]}、{kind:planned_scene,sceneKey,phase:entry|action|exit}、{kind:unknown,reason}，禁止输出evidence字段。保留仍正确的声明ID与事实，修复错误谓词/来源/时态时同步所有使用它的场景；不能删表而保留悬空引用。目录ID只证明原文出处，声明必须真正受该原文支持。",
+      "每个修复场景还须包含causality:{actor,choice,motive,prerequisites:[{claimIds:[]}],stateTransition:{beforeClaimIds:[],actionClaimIds:[],afterClaimIds:[]},resistanceResponse,outcomeMechanism,resultingConstraints:[{constraint,persistence}]}。前提最多6个不同声明，均列入beforeClaimIds；禁止另写condition/sourceKind/reference，程序由声明恢复兼容字段。actionClaimIds/afterClaimIds各至少1项、最多6项，含本场action/exit声明；beforeClaimIds最多6项，不能使用未来才建立的条件。入口、动作和离场描述沿用同一声明的主体、数值、时间、模态，不独立重写事实。",
+      "prior是已写历史，planned是待执行安排；人物意图不等于已经做到，尝试不等于成功，前文尚未决定不禁止本章作出新决定。修复必须保留有效新行动和叙事功能；不能以保留旧状态为由冻结人物选择，也不能把某次失败推成永久不可能。状态声明最多48项，subject最多64字符、predicate最多160字符。",
       "readerExperience 沿用现有结构：readerQuestion、promisedReward、rewardLevel（只能 setup|partial|major）、protagonistWant、primaryResistance、keyTurn、emotionalShift、informationReveal、netChange、inheritedHookResponsibilities（最多4项）、endingHook。",
       "obligationMoves 记录实际义务的去向并给出具体 reason。action只能retain|merge|move|revise：retain与revise的来源和目标必须是同章；move必须是窗口内不同章；merge允许同章、同一场景内合并职责或窗口内跨章合并。仅revise必须有replacement字段，其他动作不得携带replacement。revise只纠正义务表达与实现方式，不授权删掉义务、改变回报时限、挪到窗口外或降低用户承诺。账本必须与 changes 一致，不得凭空声称已保留职责。",
       "输出前逐条对比currentObligationReferences与changes.payoffRefs：任何被改写的原引用都要输出本轮revise映射，obligation逐字复制当前原引用，replacement逐字等于该章返回的新引用。即使只追加承接证据、解释、引用或改动标点，也不能漏记映射；不需要修改的引用原样保留。过去A→B后本轮只改B→C，就输出B→C，不把已不存在的A当本轮新来源；没有本轮变化时不要重复提交历史映射。",
       "修复首章的入口必须承接 readonlyPrevious 的结束态；修复末章的结束态必须保留 readonlyNext 的进入条件，不得提前占用下一章独占事件。",
       "若必须由作者决定或必须修改窗口外内容，requiresUserDecision=true，在 reason 说明具体决策点，changes 和 obligationMoves 返回空数组。普通可修复质量问题不应升级为用户决策。",
     ].join("\n")),
-    new HumanMessage(input.contextJson),
+    new HumanMessage((() => {
+      const context = JSON.parse(input.contextJson);
+      const chapters = context.candidateChapters ?? context.originalChapters ?? [];
+      const chapterOrder = Math.min(...chapters.map((chapter: { chapterOrder: number }) => chapter.chapterOrder));
+      const catalog = buildPrimaryProseCitationCatalog(input.contextJson, chapterOrder);
+      return `${catalog.reviewContextDisplayJson}\nprimaryProseCitationCatalog (stateClaims.source.evidenceIds only):\n${JSON.stringify(catalog.sources)}`;
+    })()),
   ],
-  postValidate: (output) => {
-    const parsed = planningRepairOutputSchema.parse(output);
+  postValidate: (output, input) => {
+    if (output.requiresUserDecision && (output.changes.length || output.obligationMoves.length)) {
+      throw new Error("A planning repair requiring user decision must not propose applicable changes.");
+    }
+    output = planningRepairWireOutputSchema.parse(output);
+    const context = JSON.parse(input.contextJson);
+    const chapters: Array<{ id: string; chapterOrder: number }> = context.candidateChapters ?? context.originalChapters ?? [];
+    const parsed = planningRepairOutputSchema.parse({ ...output, changes: output.changes.map(change => {
+      const chapter = chapters.find(chapter => chapter.id === change.chapterId);
+      if (!chapter || !Number.isFinite(chapter.chapterOrder)) throw new Error("State-bound repair requires the exact candidate chapter and order.");
+      return bindStateClaimContract(change, input.contextJson, chapter.chapterOrder);
+    }) });
     if (parsed.requiresUserDecision) {
       if (parsed.changes.length || parsed.obligationMoves.length) {
         throw new Error("A planning repair requiring user decision must not propose applicable changes.");

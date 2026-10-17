@@ -10,6 +10,7 @@ import { PlanningRepairStore, type RepairSession } from "./PlanningRepairStore";
 import { applyPlanningRepairCandidate, mergeAppliedPlanningRepairObligations, mergeAppliedPlanningRepairRequiredElements, planningRepairOutputSchema } from "./planningRepairDomain";
 import { projectPlanningHorizon } from "../planningPromises";
 import { buildReviewIssueHistory } from "./domain/reviewIssueHistory";
+import { nextPlanningRepairAction } from "@ai-novel/shared/types/planningRepair/recovery";
 
 const committedDocuments = new WeakSet<object>();
 const flights = new Map<string, { taskId: string; chapterId: string; promise: Promise<VolumePlanDocument> }>();
@@ -131,6 +132,9 @@ export class PlanningRepairCoordinator {
         if (savedRepair) await this.applyRepairOutput(input, session, savedRepair.output);
         else if (canReplayPendingOutput) return this.pause(session, "已保存的规划修正响应缺失，请确认后继续。");
       }
+      if (!session.candidate && ["review_existing", "resume_existing_policy"].includes(session.state.recoveryAction?.mode ?? "")) {
+        return this.pause(session, "保留候选已变化，请核对规划来源后重新确认；本次未重新生成。");
+      }
       if (!session.candidate) {
         // Reusing a persisted contract is local work, not an uncertain paid request.
         const generated = await input.generateInitial(() => this.beforeCall(
@@ -190,14 +194,17 @@ export class PlanningRepairCoordinator {
           committedDocuments.add(document);
           return document;
         }
-        if (session.state.recoveryAction?.mode === "review_existing") {
+        const nextAction = nextPlanningRepairAction({ mode: session.state.recoveryAction?.mode,
+          rounds: session.state.rounds, maxRounds: session.state.maxRounds,
+          requiresUserDecision: reviews.window?.requiresUserDecision === true });
+        if (nextAction === "pause_review_only") {
           await this.save(session, { recoveryAction: undefined });
           return this.pause(session, "原候选复核仍未通过，请选择具体修复方向或确认规划来源。");
         }
-        if (reviews.window?.requiresUserDecision) {
-          return this.pause(session, reviews.window.summary);
+        if (nextAction === "pause_user_decision") {
+          return this.pause(session, reviews.window?.summary ?? "当前规划需要确认创作方向。");
         }
-        if (session.state.rounds >= session.state.maxRounds) {
+        if (nextAction === "pause_budget") {
           return this.pause(session, `已完成${session.state.rounds}轮修正，规划仍未通过复核。${reviews.window?.summary ?? ""}`);
         }
         const useWindow = Object.values(reviews.chapters).some(r => r.recommendedHandling === "replan_window")

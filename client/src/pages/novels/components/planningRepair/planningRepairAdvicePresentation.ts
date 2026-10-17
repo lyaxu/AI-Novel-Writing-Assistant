@@ -19,6 +19,7 @@ export function canAdoptPlanningRepairAdvice(
 export function authorizedPlanningRepairPayload(status: PlanningRepairStatus) {
   const request = status.recoveryRequest;
   if (!request || !status.planningRepair) throw new Error("没有可继续的已授权修复。");
+  if (request.executionMode === "resume_existing_policy") throw new Error("请从原策略继续入口核对授权。");
   return {
     action: "retry" as const,
     repairKey: status.planningRepair.key,

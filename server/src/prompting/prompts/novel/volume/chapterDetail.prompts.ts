@@ -6,10 +6,13 @@ import {
   createChapterExecutionContractSchema,
   createChapterPurposeSchema,
   createChapterTaskSheetSchema,
+  createChapterExecutionContractWireSchema,
+  createChapterTaskSheetWireSchema,
 } from "../../../../services/novel/volume/volumeGenerationSchemas";
 import { type VolumeChapterDetailPromptInput } from "./shared";
 import { buildVolumeChapterDetailContextBlocks } from "./contextBlocks";
 import { NOVEL_PROMPT_BUDGETS } from "../promptBudgetProfiles";
+import { bindStateClaimContract } from "./evidence/stateClaimBinding";
 
 const selectedDirectionRule = "selectedPlanningDirection是用户确认的创作承诺，writtenEvidence的实际已写事实高于计划。细化必须承接原选卖点、人物路径、openingChain的关系变化与earlyPayoff；可改编动作或调整拆章，但须保留同等关系/回报价值，在purpose、mustAdvance、readerExperience或继承钩子写明具体承接。不能把关系建立或可见回报静默换成重复追逃/受压，也不能因后来生成的摘要遗漏而认定用户放弃。全书长期承诺不要求本章全部兑现；开篇承诺延期须有明确落点。来源缺失时标明未知，不编造原始选择；若与已写事实或受保护边界冲突，交由现有规划审查修复，不擅改事实。";
 
@@ -234,8 +237,11 @@ function validateAdjacentChapterBoundary<T extends {
 const intensityScaleRule = "conflictLevel 与 revealLevel 统一采用 0-100 整数尺度，不是 1-5 星级。0 表示无冲突或无新增揭示，20 表示低强度铺垫，50 表示中等阻力或实质线索，80 表示高压对抗或重大揭示，100 表示本书极限。按实际场景的阻力、代价和信息变化评分，不为曲线好看硬造高潮；用户已固定的数值必须保留。";
 
 const sceneCausalityRules = [
+  "本章顶层stateClaims是唯一状态声明表，先依据正文与本章计划建立，再让场景引用。每项包含id、subject、predicate、temporalScope（prior或planned）、modality（fact/intention/attempt/outcome）、source。区分已发生事实、人物打算、尝试和结果：打算不等于已做到，失败或尚未决定不禁止本章作出新决定。",
+  "source只能为{kind:written_prose,evidenceIds:[本次正文目录ID]}、{kind:planned_scene,sceneKey,phase:entry|action|exit}或{kind:unknown,reason}。prior声明引用真实更早正文，planned声明引用本章实际场景阶段；不知道就unknown，不以旧计划、概括、人物吹嘘替代既成事实。stateClaims最多48项，subject最多64字符、predicate最多160字符；每项只写一个状态命题，同一主体/时点/命题复用ID。禁止模型输出evidence原文字段。",
+  "每个causality增加stateTransition:{beforeClaimIds,actionClaimIds,afterClaimIds}。每组最多6项，行动与离场至少1项且必须含本场action/exit声明；入口只能引用前文、此前场景结果或本场entry先建立的状态，不能先消费稍后才获得的条件。各字段描述动作时必须沿用这些声明的主体、状态、数量及模态，不得独立改写事实。前提只输出prerequisites:[{claimIds:[...]}]，最多6个不同声明；每项ID必须列入beforeClaimIds，禁止另写condition/sourceKind/reference，程序从同一声明恢复这些兼容字段。",
   "每个 sceneCard 必须包含 causality：actor（作出关键选择的人）、choice（具体选择）、motive（为什么如此选择）、prerequisites、resistanceResponse（他人/环境如何回应）、outcomeMechanism（回应如何导致结果）、resultingConstraints。不能把目的或预定结果冒充发生机制。",
-  "prerequisites 每项包含 condition、sourceKind、reference。sourceKind 只能是 established_in_context（上下文已建立，reference 指向具体来源）、establish_in_scene（本章先建立再使用，reference 指明建立场景与动作）、unresolved（缺少支持，reference 说明缺口）。没有上下文证据不能声称前文已获得物品、信息、信任、能力或通行条件。",
+  "stateClaims中引用正文只证明出处，predicate还必须真正受该段支持；不能引用一个真实句子却声称相反数量、持有者、时间或已完成状态。没有上下文证据不能声称前文已获得物品、信息、信任、能力或通行条件。",
   "resultingConstraints 每项包含 constraint、persistence：写明行动带来的身体、资源、时间、关系或认知限制，以及持续至何时/什么可见事件才能解除；既有伤势或消耗必须实际限制可选行动，不能只作装饰。没有新增限制可返回空数组，不能强行添加伤亡。",
   "每个场景必须交付新信息：场景结束时，读者或主角至少在信息、处境、代价、可选项四项之一上发生变化。把已知情况换个说法再说一遍不算推进，这样的场景应当合并或删除。",
   "角色立场反转必须由具体新事实触发：若某角色先前明确表过态（例如「我帮不了」「这事我不管」「你走吧」），之后又做出相反举动，causality.motive 必须写明是哪一件新事实、新代价或新处境改变了他的算计，不能只写亏欠、情面或良心这类笼统理由——读者要能从文本里指出是哪一句让他改了主意。",
@@ -272,7 +278,8 @@ function createVolumeDetailSystemPrompt(detailMode: VolumeChapterDetailPromptInp
   return [
     "你是资深网文章节编辑。",
     "当前任务是生成可直接交给正文生成器的章节执行合同。",
-    "只输出严格 JSON，且只包含 requiredElements、taskSheet、readerExperience、sceneCards 四个字段。",
+    "只输出严格 JSON，且只包含 requiredElements、taskSheet、readerExperience、stateClaims、sceneCards、neighborEventUse、mustAvoidConflicts。",
+    "neighborEventUse逐项声明相邻previous/next的consumesExclusiveEvent与evidence；mustAvoidConflicts逐项声明当前合同禁止条文forbiddenClause、相反安排所在scheduledIn与reason，无冲突返回空数组。程序核对声明所引的实际合同，不用标题词猜测归属。",
     "requiredElements 是本章的最小事件清单，3-8 条，每一条都必须是正文里能被读者看见的具体专名、事件或动作。禁止写主题、意图、情绪或评价（「展现成长」「节奏更紧凑」这类无法验收）；清单要能说清这一章实际发生了什么。",
     "taskSheet 是给用户读的简洁执行摘要，需要覆盖情绪基调、冲突对象、关键推进和收尾要求。",
     selectedDirectionRule,
@@ -318,7 +325,7 @@ function createExecutionContractSystemPrompt(): string {
     selectedDirectionRule,
     progressionRule,
     intensityScaleRule,
-    "只输出严格 JSON，必须同时包含 purpose、exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、targetWordCount、mustAvoid、payoffRefs、requiredElements、taskSheet、readerExperience、sceneCards、neighborEventUse、mustAvoidConflicts。",
+    "只输出严格 JSON，必须同时包含 purpose、exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、targetWordCount、mustAvoid、payoffRefs、requiredElements、taskSheet、readerExperience、stateClaims、sceneCards、neighborEventUse、mustAvoidConflicts。",
     "requiredElements 是本章的最小事件清单，3-8 条，每一条都必须是正文里能被读者看见的具体专名、事件或动作，例如「假丘处机在城外验货时暴露口音破绽」。禁止写主题、意图、情绪或评价，例如「展现主角的成长」「节奏更紧凑」「体现江湖险恶」——这些无法被验收。清单合起来要能说清这一章实际发生了什么，而不是它想表达什么。",
     "purpose 用一句话说明本章到底要推进什么，不要写成摘要复述。",
     "exclusiveEvent / endingState / nextChapterEntryState 等字段不可缺失，它们是章节的硬边界合同。",
@@ -400,10 +407,11 @@ export const volumeChapterBoundaryPrompt: PromptAsset<
 
 export const volumeChapterTaskSheetPrompt: PromptAsset<
   VolumeChapterDetailPromptInput,
-  ReturnType<typeof createChapterTaskSheetSchema>["_output"]
+  ReturnType<typeof createChapterTaskSheetSchema>["_output"],
+  ReturnType<typeof createChapterTaskSheetWireSchema>["_output"]
 > = {
   id: "novel.volume.chapter_task_sheet",
-  version: "v11",
+  version: "v12",
   taskType: "planner",
   mode: "structured",
   language: "zh",
@@ -411,12 +419,14 @@ export const volumeChapterTaskSheetPrompt: PromptAsset<
   semanticRetryPolicy: {
     maxAttempts: 2,
   },
-  outputSchema: createChapterTaskSheetSchema(),
+  outputSchema: createChapterTaskSheetWireSchema(),
   render: (input, context) => [
     new SystemMessage(createVolumeDetailSystemPrompt("task_sheet")),
     new HumanMessage(buildChapterDetailPrompt(renderSelectedContextBlocks(context), input.detailMode)),
   ],
-  postValidate: (output, input) => {
+  postValidate: (wire, input) => {
+    const output = createChapterTaskSheetSchema().parse(bindStateClaimContract(createChapterTaskSheetWireSchema().parse(wire),
+      JSON.stringify({ writtenEvidence: input.writtenEvidence }), input.targetChapter.chapterOrder));
     validateDeclaredNeighborAndConflictUsage(output, input);
     return output;
   },
@@ -424,15 +434,16 @@ export const volumeChapterTaskSheetPrompt: PromptAsset<
 
 export const volumeChapterExecutionContractPrompt: PromptAsset<
   VolumeChapterDetailPromptInput,
-  ReturnType<typeof createChapterExecutionContractSchema>["_output"]
+  ReturnType<typeof createChapterExecutionContractSchema>["_output"],
+  ReturnType<typeof createChapterExecutionContractWireSchema>["_output"]
 > = {
   id: "novel.volume.chapter_execution_contract",
-  version: "v12",
+  version: "v13",
   taskType: "planner",
   mode: "structured",
   language: "zh",
   contextPolicy: baseContextPolicy,
-  outputSchema: createChapterExecutionContractSchema(),
+  outputSchema: createChapterExecutionContractWireSchema(),
   render: (input, context) => [
     new SystemMessage(createExecutionContractSystemPrompt()),
     new HumanMessage([
@@ -440,7 +451,9 @@ export const volumeChapterExecutionContractPrompt: PromptAsset<
       ...(input.contractRepairFeedback ? ["Contract repair feedback (required; retain valid parts of the previous candidate):", input.contractRepairFeedback] : []),
     ].join("\n\n")),
   ],
-  postValidate: (output, input) => {
+  postValidate: (wire, input) => {
+    const output = createChapterExecutionContractSchema().parse(bindStateClaimContract(createChapterExecutionContractWireSchema().parse(wire),
+      JSON.stringify({ writtenEvidence: input.writtenEvidence }), input.targetChapter.chapterOrder));
     validateDeclaredNeighborAndConflictUsage(output, input);
     validateBoundaryContract(output, input);
     validateAdjacentChapterBoundary(output, input);

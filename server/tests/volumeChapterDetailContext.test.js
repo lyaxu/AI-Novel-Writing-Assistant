@@ -15,6 +15,30 @@ const {
   volumeChapterTaskSheetPrompt,
 } = require("../dist/prompting/prompts/novel/volume/chapterDetail.prompts.js");
 
+// These tests isolate boundary declarations; fresh generation must still carry a complete state contract.
+function withStateBinding(output) {
+  const scenes = output.sceneCards.length >= 3 ? output.sceneCards
+    : [0, 1, 2].map(i => ({ ...output.sceneCards[0], key: `scene_${i + 1}` }));
+  const stateClaims = [];
+  const sceneCards = scenes.map(scene => {
+    for (const phase of ["entry", "action", "exit"]) stateClaims.push({
+      id: `${scene.key}_${phase}`, subject: "主角", predicate: phase === "entry" ? scene.entryState
+        : phase === "exit" ? scene.exitState : scene.mustAdvance[0], temporalScope: "planned",
+      modality: phase === "action" ? "attempt" : "fact", source: { kind: "planned_scene", sceneKey: scene.key, phase },
+    });
+    return { ...scene, targetWordCount: scene.targetWordCount ?? 900, resistance: "已有阻力", turn: "行动取得反馈",
+      emotionalShift: "谨慎转为行动", readerValue: "推动既有职责", causality: { actor: "主角", choice: scene.mustAdvance[0],
+        motive: scene.purpose, prerequisites: [{ claimIds: [`${scene.key}_entry`] }],
+        stateTransition: { beforeClaimIds: [`${scene.key}_entry`], actionClaimIds: [`${scene.key}_action`], afterClaimIds: [`${scene.key}_exit`] },
+        resistanceResponse: "阻力产生反馈", outcomeMechanism: "行动带来局面变化", resultingConstraints: [] } };
+  });
+  return { ...output, stateClaims, sceneCards, readerExperience: output.readerExperience ?? {
+    readerQuestion: "局面如何变化", promisedReward: "获得行动反馈", rewardLevel: "partial", protagonistWant: "推进当前目标",
+    primaryResistance: "既有阻力", keyTurn: "行动反馈", emotionalShift: "谨慎转为行动", informationReveal: "局面发生变化",
+    netChange: "行动取得反馈", inheritedHookResponsibilities: [], endingHook: "下一步如何应对",
+  } };
+}
+
 function createScenePlan(sceneTitles) {
   return JSON.stringify({
     targetWordCount: 3000,
@@ -329,7 +353,7 @@ test("task sheet post-validate rejects adjacent chapter event leakage", () => {
     mustAvoidConflicts: [],
   };
   assert.throws(
-    () => volumeChapterTaskSheetPrompt.postValidate(declaredLeak, input, context),
+    () => volumeChapterTaskSheetPrompt.postValidate(withStateBinding(declaredLeak), input, context),
     /独占事件/,
   );
 });
@@ -540,7 +564,7 @@ function createDeclarationInput() {
 }
 
 function createDeclarationContract() {
-  return {
+  return withStateBinding({
     purpose: "拍符封门背人冲楼。",
     exclusiveEvent: "背周婆冲出老楼并被咬下妖记",
     endingState: "带妖记回到出租屋",
@@ -575,7 +599,7 @@ function createDeclarationContract() {
       { relation: "next", consumesExclusiveEvent: false, evidence: "不占用下一章翻查通道的职责。" },
     ],
     mustAvoidConflicts: [],
-  };
+  });
 }
 
 const emptyContext = { blocks: [], selectedBlockIds: [], droppedBlockIds: [], summarizedBlockIds: [], estimatedInputTokens: 0 };

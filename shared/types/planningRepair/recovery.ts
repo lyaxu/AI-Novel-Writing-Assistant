@@ -1,4 +1,30 @@
 /** A legacy worker may retain running/queued while its explicit manual pause is set. */
+export type PlanningRepairRecoveryMode = "repair_then_review" | "review_existing" | "resume_existing_policy";
+export type PlanningCandidateRecoveryMode = Exclude<PlanningRepairRecoveryMode, "repair_then_review">;
+
+/** Uses saved authorization and counters, never infers intent from free-text errors. */
+export function canResumeOriginalPlanningPolicy(input: {
+  runMode?: unknown; autoExecution?: { enabled?: unknown; autoReview?: unknown; autoRepair?: unknown };
+  directorInput?: { runMode?: unknown; autoExecutionPlan?: { autoReview?: unknown; autoRepair?: unknown } };
+  rounds: number; maxRounds: number;
+}): boolean {
+  return (input.directorInput?.runMode ?? input.runMode) === "full_book_autopilot"
+    && input.autoExecution?.enabled === true && input.autoExecution.autoReview === true && input.autoExecution.autoRepair === true
+    && input.directorInput?.autoExecutionPlan?.autoReview !== false && input.directorInput?.autoExecutionPlan?.autoRepair !== false
+    && Number.isSafeInteger(input.rounds) && input.rounds >= 0 && Number.isSafeInteger(input.maxRounds) && input.rounds < input.maxRounds;
+}
+
+/** Normal execution and original-policy recovery consume the same persisted budget. */
+export function nextPlanningRepairAction(input: {
+  mode?: PlanningRepairRecoveryMode; rounds: number; maxRounds: number; requiresUserDecision: boolean;
+}): "repair" | "pause_review_only" | "pause_user_decision" | "pause_budget" {
+  if (input.mode === "review_existing") return "pause_review_only";
+  if (input.requiresUserDecision) return "pause_user_decision";
+  if (!Number.isSafeInteger(input.rounds) || input.rounds < 0 || !Number.isSafeInteger(input.maxRounds)
+    || input.rounds >= input.maxRounds) return "pause_budget";
+  return "repair";
+}
+
 export function isPlanningRepairTaskPaused(input: {
   status: string;
   pendingManualRecovery?: boolean | null;

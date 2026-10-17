@@ -18,7 +18,10 @@ function source(relative, mocks = {}) {
   return exports;
 }
 const sharedAction = source("../../shared/types/novel/sceneCausality/actionState.ts");
-const shared = source("../../shared/types/novel/sceneCausality.ts", { "./sceneCausality/actionState.js": sharedAction });
+const shared = source("../../shared/types/novel/sceneCausality.ts", {
+  "./sceneCausality/actionState.js": sharedAction,
+  "./sceneCausality/stateClaims.js": source("../../shared/types/novel/sceneCausality/stateClaims.ts"),
+});
 const evidenceCatalog = source("../src/prompting/prompts/novel/acceptance/evidenceCatalog.ts", {
   "node:crypto": require("node:crypto"),
 });
@@ -116,6 +119,79 @@ function assessment(checks = [check()]) {
     sceneCausalityVerdicts: [{ sceneKey: "s", outcomeObserved: true, verdict: "earned", prerequisiteEvidence: [],
       choiceAndResistanceEvidence: "人物行动", outcomeMechanismEvidence: "结果发生", constraintEvidence: [], explanation: "计划完成" }] };
 }
+
+function claimInput() {
+  const claim = id => ({ id, subject: "阿遥的煤", predicate: "剩余一块", temporalScope: "planned", modality: "outcome", source: { kind: "planned_scene", sceneKey: "s", phase: "exit" } });
+  return { chapterId: "c2", chapterOrder: 2, content: "双手反绑在背后。他把食物送进嘴里。", expectedSceneKeys: ["s"],
+    expectedStateClaims: [{ sceneKey: "s", requiredClaimIds: ["before", "action", "after"], claims: ["before", "action", "after"].map(claim) },
+      { sceneKey: "other", requiredClaimIds: ["foreign"], claims: [claim("foreign")] }] };
+}
+
+test("claim checklist keeps legacy records readable and preserves valid optional bindings", () => {
+  assert.equal(sharedAction.actionStateCheckSchema.safeParse(check()).success, true);
+  const input = claimInput();
+  const result = evidence.validateActionStateEvidence([check({ claimIds: ["before", "action", "after"] })], input);
+  assert.equal(result.claimCoverageIssues.some(code => code.startsWith("state_claim_coverage_missing:s:")), false);
+  assert.deepEqual(result.checks[0].claimIds, ["before", "action", "after"]);
+});
+
+test("omitted claim coverage is local uncertainty, never a forged repair or incomplete-review pause", () => {
+  const input = claimInput(); input.expectedStateClaims = input.expectedStateClaims.slice(0, 1);
+  const result = evidence.validateActionStateEvidence([check({ claimIds: ["action"] })], input);
+  assert.deepEqual(result.claimCoverageIssues, ["state_claim_coverage_missing:s:before", "state_claim_coverage_missing:s:after"]);
+  assert.deepEqual(result.coverageIssues, []);
+  const output = repairFindings.retainStateClaimCoverageDebt({ ...assessment([]), actionStateAuditIssues: [],
+    sceneCausalityVerdicts: [], reviewSemanticResponse: {}, reviewFindings: [] }, result.claimCoverageIssues);
+  const normalized = service.normalizeAssessment(output, input.content);
+  assert.equal(normalized.status, "continue_with_risk");
+  assert.equal(normalized.continuePolicy, "continue");
+  assert.equal(normalized.reviewQualityDebt.length, 2);
+  assert.ok(normalized.reviewQualityDebt.every(item => item.status === "uncertain" && item.repairScope === "none"));
+  assert.deepEqual(normalized.repairDirectives, []); assert.deepEqual(normalized.missingObligations, []);
+  assert.deepEqual(normalized.blockingIssues, []);
+  assert.doesNotThrow(() => source("../src/services/novel/runtime/acceptance/reviewCompletion.ts").assertReviewCompleted(normalized));
+  assert.equal(repairFindings.retainStateClaimCoverageDebt(output, result.claimCoverageIssues).reviewQualityDebt.length, 2);
+  const longest = repairFindings.retainStateClaimCoverageDebt(assessment([]), [`state_claim_coverage_missing:${"s".repeat(48)}:${"c".repeat(64)}`]);
+  assert.equal(repairFindings.reviewQualityDebtSchema.safeParse(longest.reviewQualityDebt[0]).success, true);
+});
+
+test("unknown, cross-scene and duplicate claim IDs remain review contract errors", () => {
+  for (const claimIds of [["not_present"], ["foreign"], ["action", "action"]]) {
+    const result = evidence.validateActionStateEvidence([check({ claimIds })], claimInput());
+    assert.ok(result.checks[0].validationIssues.some(code => code.startsWith("state_claim_binding_")), JSON.stringify(claimIds));
+    assert.equal(result.checks[0].verdict, "insufficient_evidence");
+  }
+});
+
+test("fresh semantic review preserves claim bindings and projects omissions through the production validator", () => {
+  const input = { chapterId: "refusal", chapterOrder: 1, expectedSceneKeys: ["s"], establishedProse: [],
+    content: "她读懂合同要求承担欠款后拒绝签字，仍然知道欠款条款，双方没有签约，合作仍未成立。",
+    expectedStateClaims: [{ sceneKey: "s", requiredClaimIds: ["decline"], claims: [{ id: "decline", subject: "她", predicate: "拒绝签字", temporalScope: "planned", modality: "outcome", source: { kind: "planned_scene", sceneKey: "s", phase: "exit" } }] }],
+  };
+  const catalog = evidenceCatalog.buildEvidenceCatalog(input);
+  const entry = catalog.entries.find(item => item.quote === input.content); assert.ok(entry);
+  const raw = JSON.parse(JSON.stringify(semanticReview.semanticExample(input)).replaceAll("从本次目录选择编号", entry.id));
+  for (const claimIds of [[], ["decline"]]) {
+    raw.actionStateChecks[0].claimIds = claimIds;
+    const output = semanticReview.validateSemanticAcceptance(rawPrompts.semanticChapterAcceptanceSchema.parse(raw), input);
+    assert.deepEqual(output.actionStateChecks[0].claimIds, claimIds);
+    assert.equal(output.reviewQualityDebt.length, claimIds.length ? 0 : 1);
+    assert.equal(output.status, claimIds.length ? "accepted" : "continue_with_risk");
+    assert.doesNotThrow(() => source("../src/services/novel/runtime/acceptance/reviewCompletion.ts").assertReviewCompleted(output));
+  }
+});
+
+test("prompt checklist binds all scene prerequisites and transitions but no unrelated claims", () => {
+  const claims = claimInput().expectedStateClaims.flatMap(item => item.claims);
+  const result = causal.buildAcceptancePromptInput({ chapterId: "c2", chapterOrder: 2, content: "正文", contextPackage: {
+    chapterReviewContext: { scenePlan: { stateClaims: claims, scenes: [{ key: "s", causality: {
+      prerequisites: [{ claimIds: ["before"] }], stateTransition: { beforeClaimIds: ["before"], actionClaimIds: ["action"], afterClaimIds: ["after"] },
+    } }] } },
+  } });
+  assert.deepEqual(result.expectedStateClaims[0].requiredClaimIds, ["before", "action", "after"]);
+  assert.deepEqual(result.expectedStateClaims[0].claims.map(item => item.id), ["before", "action", "after"]);
+  assert.deepEqual(result.establishedProse, [], "a planning claim cannot supply actual prose");
+});
 function evaluate(row, content, extra = {}) {
   const currentEvidence = [quote(content.slice(0, 180))];
   const modelAssessment = { ...assessment([row]), progressionChecks: progressionSchema.CHAPTER_PROGRESSION_DIMENSIONS.map((dimension) => ({

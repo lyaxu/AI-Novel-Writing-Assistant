@@ -3,13 +3,14 @@ const assert = require("node:assert/strict");
 require("./offlineBootstrap.cjs");
 const { loadRuntimeSource } = require("./sourceHarness.cjs");
 const reliability = require("../../dist/services/novel/production/reliability");
-const policy = require("@ai-novel/shared/types/planningRepair/recovery");
+const policy = loadRuntimeSource(require("node:path").resolve(__dirname,"../../../shared/types/planningRepair/recovery.ts"), {});
 class AppError extends Error { constructor(message, statusCode) { super(message); this.statusCode = statusCode; } }
 const seedTools = loadRuntimeSource("../director/recovery/planningRepair/planningRepairRecovery.ts", {
   "../../../../../middleware/errorHandler": { AppError }, "@ai-novel/shared/types/planningRepair/recovery": policy,
 });
 const boundary = loadRuntimeSource("../director/recovery/planningRepair/domain/reviewExistingAcknowledgement.ts", {
   "../../../../production/reliability": reliability,
+  "@ai-novel/shared/types/planningRepair/recovery": policy,
 });
 const imports = {
   "../../../../../../db/prisma": {}, "../../../../../../middleware/errorHandler": { AppError },
@@ -33,7 +34,7 @@ function matches(row, where) {
     return JSON.stringify(row[key]) === JSON.stringify(value);
   });
 }
-function fixture({ settled = false } = {}) {
+function fixture({ settled = false, policyRecovery = false, qualityPause = false } = {}) {
   const chapter = { id: "chapter-6", novelId: "novel", order: 6, title: "six", content: "", taskSheet: "saved", sceneCards: "[]", expectation: null, targetWordCount: 3000 };
   const repair = { version: 1, key: "repair", novelId: "novel", volumeId: "volume", chapterId: "plan-6", chapterOrder: 6,
     rounds: 0, maxRounds: 2, phase: "technical_failed", candidateVersionId: "candidate", history: [], affectedChapterIds: ["plan-6"],
@@ -55,6 +56,17 @@ function fixture({ settled = false } = {}) {
     directorInput: { autoExecutionPlan: { mode: "chapter_range", startOrder: 4, endOrder: 10 } },
     autoExecution: { enabled: true, mode: "chapter_range", startOrder: 4, endOrder: 10, nextChapterOrder: 6, pipelineJobId: "job",
       completionProfile: { targetChapterCount: 100 }, usageBudget: { taskTokenLimit: 9000000 } } };
+  if (policyRecovery) {
+    seed.directorInput.runMode = "full_book_autopilot";
+    seed.autoExecution.autoReview = true; seed.autoExecution.autoRepair = true;
+    seed.directorInput.autoExecutionPlan.autoReview = true; seed.directorInput.autoExecutionPlan.autoRepair = true;
+  }
+  if (qualityPause) {
+    repair.phase = "waiting_confirmation"; delete repair.pendingOperation;
+    repair.history = [{ kind: "assessment", round: 0, result: { chapters: { "plan-6": { status: "needs_confirmation", safeToSync: false } } } }];
+    Object.assign(journal.steps["prepare.execution_contract"], { status: "failed", planningPause: { version: 1,
+      repairKey: repair.key, round: 0, candidateVersionId: "candidate", outcome: "settled" } });
+  }
   let data = { task: { id: "task", novelId: "novel", lane: "auto_director", status: "waiting_approval", pendingManualRecovery: true,
     cancelRequestedAt: null, attemptCount: 1, startedAt: new Date(now - 900000), updatedAt: new Date(now - 600000), seedPayloadJson: JSON.stringify(seed) },
     job: { id: "job", novelId: "novel", status: "failed", pendingManualRecovery: true, cancelRequestedAt: null,
@@ -62,6 +74,7 @@ function fixture({ settled = false } = {}) {
       currentStage: "preparing", updatedAt: new Date(now - 600000), payload: JSON.stringify({ workflowTaskId: "task" }) },
     chapter, journals: [{ novelId: "novel", chapterId: chapter.id, contentHash: "active", artifactType: "production_execution", syncMode: "journal", status: "paused", metadataJson: JSON.stringify(journal) }],
     originalManuscripts: Array.from({ length: 5 }, (_, i) => `synthetic preserved chapter ${i + 1}`), source: "source", candidateHash: "candidate-hash" };
+  if (qualityPause) data.job.pendingManualRecovery = false;
   let failTable, activeCommand = false, otherJob = false, liveDirector = false, writes = 0, witnesses = 0;
   const update = (row, table, where, patch) => { if (failTable === table || !matches(row, where)) return { count: 0 }; writes++; Object.assign(row,patch); return { count: 1 }; };
   const tx = {
@@ -97,7 +110,7 @@ function fixture({ settled = false } = {}) {
     state: () => JSON.parse(data.task.seedPayloadJson), editSeed: fn => { const s = JSON.parse(data.task.seedPayloadJson); fn(s); data.task.seedPayloadJson = JSON.stringify(s); },
     editJournal: fn => { const j = JSON.parse(data.journals[0].metadataJson); fn(j); data.journals[0].metadataJson = JSON.stringify(j); },
     fail: table => { failTable = table; }, active: () => { activeCommand = true; }, other: () => { otherJob = true; }, liveDirector: () => { liveDirector = true; },
-    request: async () => { const status = await service.status("task"); assert.equal(status.available, true); return { repairKey: "repair", token: status.token, idempotencyKey: "explicit-review" }; } };
+    request: async (mode) => { const status = await service.status("task",mode); assert.equal(status.available, true); return { repairKey: "repair", token: status.token, idempotencyKey: "explicit-review" }; } };
 }
 
 for (const settled of [false,true]) test(`source review-existing ${settled ? "known rejected review" : "unknown preparation"} is read-only until explicit grant then reconnects original job`, async () => {
@@ -187,8 +200,8 @@ test("owner without lease expiry appearing after grant blocks original pipeline 
   assert.deepEqual(f.data,before);
 });
 
-test("HTTP preview is read-only; explicit POST and retry after enqueue failure preserve one grant and archive", async () => {
-  const f=fixture(), routes=[]; let attempts=0;
+for (const endpoint of ["review-existing", "resume-policy"]) test(`HTTP ${endpoint} preview is read-only; explicit POST and retry after enqueue failure preserve one grant and archive`, async () => {
+  const f=fixture({policyRecovery:true,qualityPause:endpoint==="resume-policy"}), routes=[]; let attempts=0;
   const { createPlanningRepairRouter } = loadRuntimeSource("../director/http/planningRepairRoutes.ts", {
     express:{Router:()=>({get:(...args)=>routes.push(["GET",...args]),post:(...args)=>routes.push(["POST",...args])})},
     zod:require("zod"), "../../../../middleware/validate":{validate:x=>x},
@@ -202,7 +215,7 @@ test("HTTP preview is read-only; explicit POST and retry after enqueue failure p
     if(attempts===1) throw new Error("command enqueue interrupted"); return {commandId:"one-command"};
   }}, {}, {}, f.service);
   async function invoke(method,body) {
-    const route=routes.find(r=>r[0]===method && r[1]==="/:id/planning-repair/review-existing");
+    const route=routes.find(r=>r[0]===method && r[1]===`/:id/planning-repair/${endpoint}`);
     if(body) route[2].body.parse(body);
     let result,error,status=200; const response={status:n=>{status=n;return response;},json:x=>{result=x;}};
     await route.at(-1)({params:{id:"task"},body},response,e=>{error=e;}); if(error) throw error; return {status,result};
@@ -214,4 +227,87 @@ test("HTTP preview is read-only; explicit POST and retry after enqueue failure p
   assert.equal(f.data.task.pendingManualRecovery,true); const granted=clone(f.data);
   const result=await invoke("POST",request); assert.equal(result.status,202); assert.equal(result.result.data.replayed,true);
   assert.equal(result.result.data.command.commandId,"one-command"); assert.deepEqual(f.data,granted); assert.equal(f.data.journals.length,2);
+  assert.equal(f.state().planningRepair.recoveryAction.mode,endpoint==="resume-policy"?"resume_existing_policy":"review_existing");
+  assert.equal(f.state().planningRepair.maxRounds,2);
+});
+
+for (const boundary of ["unknown", "rejected", "quality"]) test(`original policy ${boundary} keeps saved budget and source until explicit click then reconnects original pipeline`, async () => {
+  const mode="resume_existing_policy", f=fixture({policyRecovery:true,settled:boundary==="rejected",qualityPause:boundary==="quality"});
+  const before=clone(f.data), request=await f.request(mode);
+  assert.deepEqual(f.data,before); assert.equal(f.writes,0);
+  assert.equal((await f.service.status("task",mode)).remainingRounds,2);
+  await f.service.grant("task",request,mode);
+  assert.equal(f.state().planningRepair.rounds,0); assert.equal(f.state().planningRepair.maxRounds,2);
+  assert.equal(f.state().planningRepair.recoveryAction.mode,mode);
+  assert.deepEqual(f.state().autoExecution,JSON.parse(before.task.seedPayloadJson).autoExecution);
+  assert.deepEqual(f.data.originalManuscripts,before.originalManuscripts);
+  const granted=clone(f.data); await f.service.grant("task",request,mode); assert.deepEqual(f.data,granted);
+  const result=await f.pipeline.recover({taskId:"task",novelId:"novel",recoveryKey:request.idempotencyKey});
+  assert.equal(result.pipelineJobId,"job");
+  assert.equal(f.state().planningRepairPipelineRecovery.proof.executionMode,mode);
+});
+
+for (const reason of ["exhausted","disabled","review_disabled","repair_disabled","copilot","changed_policy","cross_mode","source","candidate","other_unknown","lease"]) test(`original policy rejects ${reason} without authorizing or extending budget`, async () => {
+  const mode="resume_existing_policy", f=fixture({policyRecovery:true}), request=await f.request(mode);
+  if(reason==="exhausted") f.editSeed(s=>{s.planningRepair.rounds=2;});
+  if(reason==="disabled") f.editSeed(s=>{s.autoExecution.enabled=false;});
+  if(reason==="review_disabled") f.editSeed(s=>{s.autoExecution.autoReview=false;});
+  if(reason==="repair_disabled") f.editSeed(s=>{s.autoExecution.autoRepair=false;});
+  if(reason==="copilot") f.editSeed(s=>{s.directorInput.runMode="ai_copilot";});
+  if(reason==="changed_policy") f.editSeed(s=>{s.directorInput.autoExecutionPlan.autoRepair=false;});
+  if(reason==="cross_mode") request.token=(await f.request()).token;
+  if(reason==="source") f.data.source="new";
+  if(reason==="candidate") f.data.candidateHash="new";
+  if(reason==="other_unknown") f.editJournal(j=>{j.steps.writer={status:"unknown",external:true};});
+  if(reason==="lease") f.data.job.executionOwner="worker";
+  const before=clone(f.data); await assert.rejects(f.service.grant("task",request,mode)); assert.deepEqual(f.data,before);
+  assert.equal(f.state().planningRepair.maxRounds,2);
+});
+
+test("original-policy authorization cannot replay as review-only or survive later policy drift",async()=>{
+  const mode="resume_existing_policy",f=fixture({policyRecovery:true}),request=await f.request(mode);
+  await f.service.grant("task",request,mode);
+  await assert.rejects(f.service.grant("task",request));
+  f.editSeed(s=>{s.autoExecution.autoRepair=false;}); const before=clone(f.data);
+  await assert.rejects(f.service.grant("task",request,mode));
+  await assert.rejects(f.pipeline.recover({taskId:"task",novelId:"novel",recoveryKey:request.idempotencyKey}));
+  assert.deepEqual(f.data,before);
+});
+
+for(const drift of ["repairBudget","usageBudget","range"]) test(`original-policy saved consent rejects ${drift} changes even if both current copies agree`,async()=>{
+  const f=fixture({policyRecovery:true}),mode="resume_existing_policy",request=await f.request(mode);
+  await f.service.grant("task",request,mode);
+  f.editSeed(s=>{
+    if(drift==="repairBudget") s.planningRepair.maxRounds=3;
+    if(drift==="usageBudget") s.autoExecution.usageBudget.taskTokenLimit++;
+    if(drift==="range") {s.autoExecution.endOrder=20;s.directorInput.autoExecutionPlan.endOrder=20;}
+  });
+  const before=clone(f.data);await assert.rejects(f.service.grant("task",request,mode));
+  await assert.rejects(f.pipeline.recover({taskId:"task",novelId:"novel",recoveryKey:request.idempotencyKey}));
+  assert.deepEqual(f.data,before);
+});
+
+test("status exposes the original consent token for enqueue retry without changing paused task",async()=>{
+  const f=fixture({policyRecovery:true}),mode="resume_existing_policy",request=await f.request(mode);
+  await f.service.grant("task",request,mode);
+  const {PlanningRepairRecoveryService}=loadRuntimeSource("../director/recovery/planningRepair/PlanningRepairRecoveryService.ts",{
+    "../../../../../db/prisma":{prisma:{novelWorkflowTask:{findUnique:async()=>f.data.task}}},
+    "../../../../../middleware/errorHandler":{AppError},"../../../workflow/NovelWorkflowService":{},
+    "../../../workflow/novelWorkflow.shared":{},"./planningRepairRecovery":seedTools,
+    "../../../volume/planningRepair/PlanningRepairStore":{},"@ai-novel/shared/types/planningRepair/recovery":policy,
+    "../pipelinePause":{readPipelinePauseProjection:async row=>row},
+  });
+  const before=clone(f.data),status=await new PlanningRepairRecoveryService({},{}).status("task");
+  assert.equal(status.recoveryRequest.executionMode,mode);assert.equal(status.recoveryRequest.candidateRecoveryToken,request.token);
+  assert.equal(status.pendingManualRecovery,true);assert.deepEqual(f.data,before);
+});
+
+for(const pipelineStatus of [undefined,"running","failed"]) test(`original-policy recovery tolerates its own pipeline status projection (${pipelineStatus}) while retaining consent`,async()=>{
+  const f=fixture({policyRecovery:true}),mode="resume_existing_policy";
+  f.editSeed(s=>{s.autoExecution.pipelineStatus=pipelineStatus;});
+  const request=await f.request(mode);await f.service.grant("task",request,mode);
+  const input={taskId:"task",novelId:"novel",recoveryKey:request.idempotencyKey};
+  await f.pipeline.recover(input);const before=clone(f.data);
+  await f.pipeline.recover(input);await f.service.grant("task",request,mode);
+  assert.deepEqual(f.data,before);assert.equal(f.state().planningRepair.maxRounds,2);
 });

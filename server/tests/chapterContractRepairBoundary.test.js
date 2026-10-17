@@ -16,7 +16,7 @@ function load(file, imports) {
 }
 const length = require("../../shared/dist/types/chapterLengthControl.js");
 const reliability = load("../src/services/novel/production/reliability/types.ts", { "node:crypto": require("node:crypto") });
-const schema = load("../../shared/types/chapterTaskSheetQuality.ts", { zod: require("zod"), "./chapterLengthControl.js": length });
+const schema = load("../../shared/types/chapterTaskSheetQuality.ts", { zod: require("zod"), "./novel/planningReviewDecision.js": require("../../shared/dist/types/novel/planningReviewDecision.js"), "./chapterLengthControl.js": length });
 const valid = { verdict: "usable", safeToSync: true, summary: "可执行", issues: [], repairGuidance: [], confidence: .9, loadRisk: "normal", recommendedHandling: "use_as_is" };
 const output = () => ({ purpose: "核对账目", exclusiveEvent: "取得收据", endingState: "收据已核实", nextChapterEntryState: "带收据询问店主", conflictLevel: 20, revealLevel: 20, targetWordCount: 2200, mustAvoid: "不要提前结案", payoffRefs: [], taskSheet: "完成本次核对，保留店主解释入口。", sceneCards: [1,2,3].map(n=>({key:`s${n}`,title:"核对",purpose:"发现差异",mustAdvance:["查账"],mustPreserve:["未结案"],entryState:"有疑点",exitState:"取得线索",forbiddenExpansion:["勿结案"],targetWordCount:n===3?734:733})) });
 function harness(responses) {
@@ -27,7 +27,7 @@ function harness(responses) {
     "@ai-novel/shared/types/chapterTaskSheetQuality":schema,
     "@ai-novel/shared/types/novel/planningPromises":{selectedPlanningPromiseIds:()=>[]},
     "../../../prompting/core/promptRunner":runner,
-    "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts":{chapterTaskSheetQualityPrompt:{id:"quality"}},
+    "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts":{chapterTaskSheetQualityPrompt:{id:"quality"},validatePlanningStateSources:()=>{}},
   });
   const generation=load("../src/services/novel/volume/chapterDetail/chapterExecutionContractGeneration.ts",{
     "@ai-novel/shared/types/chapterTaskSheetQuality":schema,"@ai-novel/shared/types/chapterLengthControl":length,
@@ -125,7 +125,8 @@ test("repair feedback remains in the contract prompt even when the context budge
   const assets=load("../src/prompting/prompts/novel/volume/chapterDetail.prompts.ts",{
     "@langchain/core/messages":require("@langchain/core/messages"),
     "../../../core/renderContextBlocks":{renderSelectedContextBlocks:()=>""},
-    "../../../../services/novel/volume/volumeGenerationSchemas":Object.fromEntries(["createChapterBoundarySchema","createChapterExecutionContractSchema","createChapterPurposeSchema","createChapterTaskSheetSchema"].map(k=>[k,()=>emptySchema])),
+    "../../../../services/novel/volume/volumeGenerationSchemas":Object.fromEntries(["createChapterBoundarySchema","createChapterExecutionContractSchema","createChapterPurposeSchema","createChapterTaskSheetSchema","createChapterExecutionContractWireSchema","createChapterTaskSheetWireSchema"].map(k=>[k,()=>emptySchema])),
+    "./evidence/stateClaimBinding":{},
     "./contextBlocks":{},"../promptBudgetProfiles":{NOVEL_PROMPT_BUDGETS:{}},
   });
   const feedback=JSON.stringify({previousCandidate:{taskSheet:"保留有效设计"},qualityResult:{issues:[{id:"i",repairHint:"修正因果"}]}});

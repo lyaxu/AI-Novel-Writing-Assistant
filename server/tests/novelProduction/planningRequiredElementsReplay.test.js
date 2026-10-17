@@ -9,11 +9,13 @@ const domain = loadRuntimeSource('../volume/planningRepair/planningRepairDomain.
   zod: require('zod'),
   '../../../../llm/generatedContentSchema': require('../../dist/llm/generatedContentSchema.js'),
   '@ai-novel/shared/types/chapterLengthControl': lengthControl,
+  '@ai-novel/shared/types/novel/sceneCausality': require('@ai-novel/shared/types/novel/sceneCausality'),
   '../chapterDetail/chapterDetailSchemas': require('../../dist/services/novel/volume/chapterDetail/chapterDetailSchemas.js'),
   './domain/requiredElementRevisions': revisions,
 });
 const { PlanningRepairCoordinator } = loadRuntimeSource('../volume/planningRepair/PlanningRepairCoordinator.ts', {
   '@ai-novel/shared/types/chapterLengthControl': lengthControl,
+  '@ai-novel/shared/types/planningRepair/recovery': require('@ai-novel/shared/types/planningRepair/recovery'),
   '../../../../prompting/core/promptRunner': { runStructuredPrompt: () => assert.fail('No live models') },
   '../../../../prompting/prompts/novel/volume/planningRepair.prompts': {
     planningRepairPrompt: { id: 'novel.volume.planning_repair' },

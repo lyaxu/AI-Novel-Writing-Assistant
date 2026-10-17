@@ -50,9 +50,15 @@ test("stale, failed, uncertain, running, missing and authorized recovery states 
   assert.equal(presentation.canAdoptPlanningRepairAdvice(ready, "recommended", true), false);
 });
 
-function renderActions(advice, repairStatus = status) {
+function renderActions(advice, repairStatus = status, recoveryPreview = { available: false }) {
   const calls = [], mutations = [], queries = [];
   const api = {
+    planningResumePolicyQueryKey: id => ["planning-repair", "resume-policy", id],
+    planningReviewExistingQueryKey: id => ["planning-repair", "review-existing", id],
+    getPlanningResumePolicy: async id => { calls.push(["get-policy",id]); return recoveryPreview; },
+    getPlanningReviewExisting: async id => { calls.push(["get-review",id]); return recoveryPreview; },
+    resumeOriginalPlanningPolicy: async (...args) => { calls.push(["policy",...args]); return {}; },
+    reviewExistingPlanningCandidate: async (...args) => { calls.push(["review",...args]); return {}; },
     planningRepairAdviceQueryKey: id => ["planning-repair", "advice", id],
     getPlanningRepairAdvice: async id => { calls.push(["get", id]); return advice; },
     requestPlanningRepairAdvice: async (...args) => { calls.push(["generate", ...args]); return { status: "running" }; },
@@ -66,7 +72,7 @@ function renderActions(advice, repairStatus = status) {
     "lucide-react": { Pause: () => null, RefreshCw: () => null, Sparkles: () => null },
     "@tanstack/react-query": {
       useQueryClient: () => ({ invalidateQueries: async () => {}, setQueryData: () => {} }),
-      useQuery: options => { queries.push(options); return { data: advice, isPending: false, refetch: options.queryFn }; },
+      useQuery: options => { queries.push(options); return { data: options.queryKey[1] === "advice" ? advice : recoveryPreview, isPending: false, refetch: options.queryFn }; },
       useMutation: options => { mutations.push(options); return { mutate: () => {}, isPending: false }; },
     },
   });
@@ -76,8 +82,8 @@ function renderActions(advice, repairStatus = status) {
 test("mount and status polling never request paid advice or resume the task", async () => {
   const view = renderActions({ status: "none" });
   assert.deepEqual(view.calls, []);
-  await view.queries[0].queryFn();
-  await view.queries[0].queryFn();
+  await view.queries.find(q=>q.queryKey[1]==="advice").queryFn();
+  await view.queries.find(q=>q.queryKey[1]==="advice").queryFn();
   assert.deepEqual(view.calls.map(call => call[0]), ["get", "get"]);
   assert.match(view.html, /让 AI 推荐修复方案/);
   assert.match(view.html, /生成与独立核验，最多调用模型 2 次并产生费用/);
@@ -127,7 +133,7 @@ test("existing authorization hides new grants and preserves its original directi
     executionMode: "repair_then_review", affectedChapterIds: ["c2", "c3"] } };
   const view = renderActions(ready, authorized);
   assert.equal(view.queries[0].enabled, false);
-  assert.match(view.html, /继续已授权修复/);
+  assert.match(view.html, /继续已确认的处理/);
   assert.doesNotMatch(view.html, /让 AI 推荐修复方案|采用此方案并修复|自定义修复方向/);
   await view.mutations[1].mutationFn("continue");
   assert.deepEqual(view.calls[0], ["action", "task-1", {
@@ -136,6 +142,28 @@ test("existing authorization hides new grants and preserves its original directi
   }]);
   await view.mutations[1].mutationFn("pause");
   assert.equal(view.calls[1][2].action, "pause");
+});
+
+test("original-policy entry explains remaining budget, cost and continuation while review-only remains optional",async()=>{
+  const view=renderActions({status:"none"},status,{available:true,token:"preview",remainingRounds:2,chapterOrder:6,startOrder:4,endOrder:10});
+  assert.deepEqual(view.calls,[]);
+  assert.match(view.html,/按原策略继续/); assert.match(view.html,/剩余 2 轮自动修复，不追加轮次/);
+  assert.match(view.html,/第 4–10 章继续写作/); assert.match(view.html,/修复和后续写作都会产生模型费用/);
+  assert.match(view.html,/重新复核保留候选/);
+  await assert.rejects(view.mutations[1].mutationFn("policy"),/请刷新并核对/);
+  await assert.rejects(view.mutations[1].mutationFn("review"),/请刷新并核对/);
+  assert.deepEqual(view.calls,[]);
+});
+
+test("authorized original-policy replay preserves its token and never falls into round-adding generic retry",async()=>{
+  const authorized={...status,recoveryRequest:{guidance:"按原策略",idempotencyKey:"grant",executionMode:"resume_existing_policy",candidateRecoveryToken:"frozen-token"}};
+  const view=renderActions(ready,authorized);
+  await view.mutations[1].mutationFn("continue");
+  assert.deepEqual(view.calls,[["policy","task-1",{repairKey:"repair-1",token:"frozen-token",idempotencyKey:"grant"}]]);
+  assert.throws(()=>presentation.authorizedPlanningRepairPayload(authorized),/原策略继续入口/);
+  const missing=renderActions(ready,{...authorized,recoveryRequest:{...authorized.recoveryRequest,candidateRecoveryToken:undefined}});
+  await assert.rejects(missing.mutations[1].mutationFn("continue"),/无法核对原策略授权/);
+  assert.deepEqual(missing.calls,[]);
 });
 
 test("expired and uncertain advice show recovery choices without an adoption button", () => {
@@ -164,4 +192,8 @@ test("advice GET remains separate from paid generation and selection API command
   await api.selectPlanningRepairAdvice("task/a", { repairKey: "r", adviceId: "a", optionId: "o", idempotencyKey: "grant-1" });
   assert.equal(calls[1][1], "/novel-workflows/task%2Fa/planning-repair/advice");
   assert.equal(calls[2][1], "/novel-workflows/task%2Fa/planning-repair/advice/select");
+  await api.getPlanningResumePolicy("task/a");
+  await api.resumeOriginalPlanningPolicy("task/a",{repairKey:"r",token:"proof",idempotencyKey:"grant-2"});
+  assert.deepEqual(calls.slice(3),[["get","/novel-workflows/task%2Fa/planning-repair/resume-policy"],
+    ["post","/novel-workflows/task%2Fa/planning-repair/resume-policy",{repairKey:"r",token:"proof",idempotencyKey:"grant-2"}]]);
 });

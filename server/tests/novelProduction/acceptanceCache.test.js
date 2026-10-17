@@ -175,4 +175,10 @@ test("cache identity renders effective context, overrides and model without vola
   assert.notEqual(await buildAcceptanceCacheIdentity({ ...input, contextPackage: {
     chapterReviewContext: { scenePlan: { scenes: [{ key: "s1", causality: {} }] } },
   } }), original, "requested causal coverage changes the cache identity");
+  const withClaim = predicate => ({ ...input, contextPackage: { chapterReviewContext: { scenePlan: {
+    stateClaims: [{ id: "cash", subject: "她", predicate, temporalScope: "planned", modality: "outcome", source: { kind: "planned_scene", sceneKey: "s1", phase: "exit" } }],
+    scenes: [{ key: "s1", causality: { prerequisites: [], stateTransition: { beforeClaimIds: [], actionClaimIds: ["cash"], afterClaimIds: ["cash"] } } }],
+  } } } });
+  assert.notEqual(await buildAcceptanceCacheIdentity(withClaim("剩五两")), await buildAcceptanceCacheIdentity(withClaim("剩三两")),
+    "identical prose with changed planned-state claims must not reuse the previous review");
 });

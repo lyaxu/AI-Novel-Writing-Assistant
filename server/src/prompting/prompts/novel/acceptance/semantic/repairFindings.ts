@@ -38,6 +38,31 @@ export const reviewQualityDebtSchema = reviewFindingRecordSchema.extend({
 });
 export type ReviewFinding = z.infer<typeof reviewFindingSchema>;
 export type ReviewFindingRecord = z.infer<typeof reviewFindingRecordSchema>;
+
+/** Checklist omissions do not authorize changing prose or stopping the book. */
+export function retainStateClaimCoverageDebt(
+  output: ChapterAcceptanceAssessmentOutput, missing: string[],
+): ChapterAcceptanceAssessmentOutput {
+  if (!missing.length) return output;
+  const existing = new Set((output.reviewQualityDebt ?? []).map(item => item.originalIssue.code));
+  const debt = [...new Set(missing)].filter(code => !existing.has(code)).map((code, index) => ({
+    // sceneKey<=48 and claimId<=64: stable identity stays within the 120-char contract.
+    issueId: `sc:${code.slice("state_claim_coverage_missing:".length)}`, issueIndex: output.blockingIssues.length + index,
+    status: "uncertain" as const, repairScope: "none" as const, nearbyEvidence: [],
+    reason: "本轮未覆盖此场景状态声明；尚不能据此认定正文有错。",
+    originalIssue: {
+      code, severity: "medium" as const, category: "continuity",
+      evidence: `状态核验清单尚缺：${code}`,
+      fixSuggestion: "对照最终保留正文复核该声明的事实、意图、尝试或结果；保留未核验风险，不凭计划补造正文事实。",
+    },
+  }));
+  return { ...output,
+    status: output.status === "accepted" ? "continue_with_risk" : output.status,
+    reviewQualityDebt: [...(output.reviewQualityDebt ?? []), ...debt],
+    riskTags: [...new Set([...output.riskTags, ...missing])],
+  };
+}
+
 export const REPAIR_FINDING_RULES = [
   '逐条复核blockingIssues，并在issueChecks恰好填写对应一项：{issueId:"本次回答内唯一编号",issueIndex:0,status:"unresolved|already_addressed|uncertain",repairScope:"none|local|chapter|replan",nearbyEvidence:[{evidenceId:"本次目录编号"}],reason:"说明相邻正文为何仍未解决或已解决该问题"}。issueIndex为blockingIssues的零起始下标；status与repairScope分别选一个值；nearbyEvidence最多4条；reason非空且360字以内。不得重复编号、漏项或指向不存在的问题。',
   '先读疑点前后完整过程，再判断原文是否已经解释、行动是否已经发生、时间是否真的冲突。nearbyEvidence选择能够支持或反驳缺陷的相邻正文，不只重复最初怀疑那一句。unresolved=核对后问题确实仍在；already_addressed=原文已处理或该指控并不成立；uncertain=无法确定是否缺陷。确定未解决或已处理时必须选择本章依据。引用存在不等于结论正确，不可为通过校验编造反证或遗漏已有过程。',

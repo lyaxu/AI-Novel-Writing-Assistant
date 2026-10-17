@@ -77,6 +77,8 @@ export const actionStateDimensionCheckSchema = z.object({
 
 export const actionStateCheckSchema = z.object({
   sceneKey: z.string().trim().min(1),
+  // Historical reviews predate the planned-state checklist.
+  claimIds: z.array(z.string().trim().min(1).max(64)).max(48).optional(),
   actor: stateText,
   action: stateText,
   actionEvidence: z.array(actionStateEvidenceSchema).min(1).max(2),

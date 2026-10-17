@@ -1,0 +1,186 @@
+"use strict";
+
+// Synthetic semantic acceptance data, deliberately independent of product schema.
+// `expected` is an answer key: never include it or pairId in a model challenge.
+// A quote match proves provenance, not the truth of the conclusion drawn from it.
+const cases = [
+  {
+    id: "ps-01", pairId: "cold-choice", genre: "寒灾", stage: "planning",
+    facts: ["昨夜柜锁结了冰，阿遥试了一次没能打开。睡前她还没决定先查烟道还是先开柜。"],
+    plan: "天亮后阿遥决定先查烟道，再借凿子尝试开柜；柜中物品仍未取出。",
+    expected: { verdict: "sound", distinctions: ["prior_attempt_failed", "new_intention", "future_attempt"], forbiddenInferences: ["前次失败禁止再次尝试", "未决定禁止下一章决定", "决定开柜等于已取得柜中燃料"] },
+  },
+  {
+    id: "ps-02", pairId: "cold-choice", genre: "寒灾", stage: "planning",
+    facts: ["昨夜柜锁结了冰，阿遥试了一次没能打开。睡前她还没决定先查烟道还是先开柜。"],
+    plan: "开篇阿遥立即烧掉昨夜已从柜中取出的煤，不交代再次开柜。",
+    expected: { verdict: "defect", issue: "unsupported_prior_result", missingBridge: "正文明确开柜成功并取得煤", forbiddenInferences: ["柜打不开意味着柜里一定有煤"] },
+  },
+  {
+    id: "ps-03", pairId: "cold-fuel", genre: "寒灾", stage: "planning",
+    facts: ["入夜时阿遥家还剩三块煤。此后没有人送煤，也没有购入。"],
+    plan: "她烧掉两块煤，清晨留下一块，决定明日设法找更多煤。",
+    expected: { verdict: "sound", resource: { owner: "阿遥", unit: "块煤", before: 3, acquired: 0, consumed: 2, after: 1 }, forbiddenInferences: ["决定找煤等于获得新煤"] },
+  },
+  {
+    id: "ps-04", pairId: "cold-fuel", genre: "寒灾", stage: "planning",
+    facts: ["入夜时阿遥家还剩三块煤。此后没有人送煤，也没有购入。"],
+    plan: "她烧掉两块煤，清晨清点自己剩下的煤仍是三块，不交代补入。",
+    expected: { verdict: "defect", issue: "resource_balance_conflict", resource: { owner: "阿遥", unit: "块煤", before: 3, consumed: 2, expectedAfter: 1, claimedAfter: 3 } },
+  },
+  {
+    id: "ps-05", pairId: "cold-attempt", genre: "寒灾", stage: "artifact_sync",
+    facts: ["药箱属于医师，交付前一直由医师保管。"],
+    plan: "阿遥争取借到药箱救邻居。",
+    draft: "阿遥开口借药箱，医师摇头。她空手离开，打算明天再来。",
+    expected: { verdict: "sound", observed: ["请求被拒", "明日再试的意图"], allowedResourceDeltas: [], forbiddenInferences: ["任务目标已完成", "药箱已转给阿遥", "药箱已被消耗"] },
+  },
+  {
+    id: "ps-06", pairId: "cold-attempt", genre: "寒灾", stage: "artifact_sync",
+    facts: ["药箱属于医师，交付前一直由医师保管。"],
+    plan: "阿遥争取借到药箱救邻居。",
+    draft: "医师同意借药箱，把箱子交到阿遥手上，约定明早归还。阿遥提着药箱离开。",
+    expected: { verdict: "sound", observed: ["药箱借用已交付"], allowedResourceDeltas: [{ resource: "药箱", holder: "阿遥", owner: "医师", status: "borrowed" }], forbiddenInferences: ["所有权转让", "已经使用箱内药品"] },
+  },
+  {
+    id: "ps-07", pairId: "cultivation-transition", genre: "修仙", stage: "planning",
+    facts: ["破关前，林岚的气海封闭，不能驱使飞剑。"],
+    plan: "本章先由师父解开封印，林岚运气验证气海畅通，再第一次驱使飞剑。",
+    expected: { verdict: "sound", distinctions: ["prior_constraint", "planned_transition", "conditional_future_result"], forbiddenInferences: ["前文不能御剑意味着未来永远不能", "计划解印等于前文已经解印"] },
+  },
+  {
+    id: "ps-08", pairId: "cultivation-transition", genre: "修仙", stage: "planning",
+    facts: ["破关前，林岚的气海封闭，不能驱使飞剑。"],
+    plan: "封印依旧未解，林岚凭早已畅通的气海直接御剑越谷，不交代例外机制。",
+    expected: { verdict: "defect", issue: "missing_precondition", missingBridge: "解除封印或已建立的替代御剑机制" },
+  },
+  {
+    id: "ps-09", pairId: "cultivation-income", genre: "修仙", stage: "planning",
+    facts: ["林岚结算前只有十七枚灵石；还欠丹房一百二十枚。"],
+    plan: "林岚交出灵草，验收后实收十三枚灵石；她付给丹房二十枚，余十枚，欠账降为一百枚。",
+    expected: { verdict: "sound", resource: { owner: "林岚", unit: "枚灵石", before: 17, acquired: 13, paid: 20, after: 10 }, debt: { before: 120, repaid: 20, after: 100 } },
+  },
+  {
+    id: "ps-10", pairId: "cultivation-income", genre: "修仙", stage: "planning",
+    facts: ["林岚结算前只有十七枚灵石；还欠丹房一百二十枚。"],
+    plan: "林岚打算卖灵草，但买家尚未见到；她先把早已攒好的三十枚中的二十枚付给丹房。",
+    expected: { verdict: "defect", issue: "intention_promoted_to_resource", missingBridge: "成交并收到至少三枚以完成付款；若坚持三十枚原有余额还需解释十三枚来源", forbiddenInferences: ["出售计划等于已收款"] },
+  },
+  {
+    id: "ps-11", pairId: "cultivation-consumption", genre: "修仙", stage: "acceptance",
+    facts: ["林岚只剩一颗回气丹。御剑试验前没有再购丹。"],
+    plan: "先服用唯一的回气丹，再以药力试飞；不保证试飞成功。",
+    draft: "林岚吞下最后一颗回气丹。飞剑晃了一下仍没离地，空药瓶被她收回袖中。",
+    expected: { verdict: "sound", observed: ["丹药消耗完成", "试飞失败"], resource: { before: 1, consumed: 1, after: 0 }, forbiddenInferences: ["飞行失败所以丹药没消耗", "消耗必需导致成功"] },
+  },
+  {
+    id: "ps-12", pairId: "cultivation-consumption", genre: "修仙", stage: "acceptance",
+    facts: ["林岚只剩一颗回气丹。御剑试验前没有再购丹。"],
+    plan: "先服用唯一的回气丹，再以药力试飞；不保证试飞成功。",
+    draft: "林岚吞下最后一颗回气丹。飞剑仍未离地，她又从同一药瓶取出另一颗回气丹吞下，全程无人补给。",
+    expected: { verdict: "defect", issue: "resource_overconsumption", resource: { before: 1, claimedConsumed: 2 }, forbiddenInferences: ["失败可以自动返还已消耗的丹药"] },
+  },
+  {
+    id: "ps-13", pairId: "wuxia-debt", genre: "武侠", stage: "planning",
+    facts: ["赵行欠客栈一百二十两，手中有十七两现银。"],
+    plan: "赵行先交十二两抵账，掌柜写明还欠一百零八两；赵行保留五两路费。",
+    expected: { verdict: "sound", resource: { owner: "赵行", unit: "两", before: 17, paid: 12, after: 5 }, debt: { before: 120, repaid: 12, after: 108 }, forbiddenInferences: ["本次付款十二两等于总债务十二两", "部分偿还不能推动剧情"] },
+  },
+  {
+    id: "ps-14", pairId: "wuxia-debt", genre: "武侠", stage: "planning",
+    facts: ["赵行欠客栈一百二十两，手中有十七两现银。"],
+    plan: "赵行交出十二两后宣称一百二十两欠账已经全部偿清；没有减免、代还或其他付款。",
+    expected: { verdict: "defect", issue: "partial_payment_promoted_to_settlement", debt: { before: 120, repaid: 12, expectedAfter: 108, claimedAfter: 0 } },
+  },
+  {
+    id: "ps-15", pairId: "wuxia-knowledge", genre: "武侠", stage: "planning",
+    facts: ["赵行亲耳听掌柜说柜里藏着一本账册，但没见过账册内容。"],
+    plan: "赵行知道账册存在，却不知道账上写了谁，决定找机会查阅。",
+    expected: { verdict: "sound", distinctions: ["存在已知", "内容未知", "将来查阅"], forbiddenInferences: ["未知内容等于不知道存在", "决定查阅等于已经掌握名单"] },
+  },
+  {
+    id: "ps-16", pairId: "wuxia-knowledge", genre: "武侠", stage: "planning",
+    facts: ["赵行亲耳听掌柜说柜里藏着一本账册，但没见过账册内容。"],
+    plan: "赵行凭昨夜已经读完的账册，点出其中的十名同谋；没有补充查阅经过。",
+    expected: { verdict: "defect", issue: "knowledge_scope_inflation", missingBridge: "阅读账册或另有可信信息来源" },
+  },
+  {
+    id: "ps-17", pairId: "wuxia-owner", genre: "武侠", stage: "artifact_sync",
+    facts: ["赵行与周舟各自的钱袋分别有五两和七两，从未共同结算。"],
+    plan: "赵行盘算向周舟借钱，但尚未开口。",
+    draft: "赵行摸着自己的五两银子，没有开口。周舟把自己的七两钱袋收好。",
+    expected: { verdict: "sound", resourceBalances: [{ owner: "赵行", amount: 5 }, { owner: "周舟", amount: 7 }], allowedResourceDeltas: [], forbiddenInferences: ["两人现金合并为赵行十二两", "盘算借钱等于已借到"] },
+  },
+  {
+    id: "ps-18", pairId: "wuxia-owner", genre: "武侠", stage: "artifact_sync",
+    facts: ["赵行与周舟各自的钱袋分别有五两和七两，从未共同结算。"],
+    plan: "赵行向周舟借三两。",
+    draft: "周舟把三两交给赵行，约定下月归还。赵行把借来的钱和原有五两一起收好，周舟留下四两。",
+    expected: { verdict: "sound", resourceBalances: [{ owner: "赵行", amount: 8 }, { owner: "周舟", amount: 4 }], debt: { borrower: "赵行", creditor: "周舟", after: 3 }, forbiddenInferences: ["借款是赠与", "钱袋属于同一人物"] },
+  },
+  {
+    id: "ps-19", pairId: "review-amount", genre: "寒灾", stage: "review_consistency",
+    facts: ["第三日阿遥还剩一百零七十元。第四日她付出九百元，手里只余一百七十元。"],
+    plan: "第五日未发生新收入，却称她已有一千七百元。",
+    review: { issue: "最新余额为170元，1700元缺来源。", issueRepair: "恢复到170元，或明确新增收入。", repairGuidance: "改成1070元，与第三日一致。", refinement: "已有现金1070元。" },
+    expected: { verdict: "incoherent_review", planIssue: "unsupported_prior_resource", inconsistentFields: ["repairGuidance", "refinement"], safeRepairPremise: "最新第四日余额170元；若新增收入必须在未来正文建立", forbiddenInferences: ["旧事实能覆盖更新事实", "正确引用170元能证明整份修复建议可靠"] },
+  },
+  {
+    id: "ps-20", pairId: "review-amount", genre: "寒灾", stage: "review_consistency",
+    facts: ["第三日阿遥还剩一百零七十元。第四日她付出九百元，手里只余一百七十元。"],
+    plan: "第五日未发生新收入，却称她已有一千七百元。",
+    review: { issue: "最新余额为170元，1700元缺来源。", issueRepair: "恢复到170元，或明确新增收入。", repairGuidance: "按170元安排支出；保留新收入方案时先完成收入事件。", refinement: "第五日开篇已有现金170元。" },
+    expected: { verdict: "coherent_review", planIssue: "unsupported_prior_resource", safeRepairPremise: "最新第四日余额170元" },
+  },
+  {
+    id: "ps-21", pairId: "review-choice", genre: "武侠", stage: "review_consistency",
+    facts: ["锁未撬开，赵行还没有决定先追人还是先撬锁。"],
+    plan: "赵行先查谣言来源，再找工具尝试撬锁，不预设撬锁成功。",
+    review: { issue: "上章未决定，因此本章不能决定先查谣言。", progression: "本章合理改变优先级，并执行新选择。", promise: "先查谣言再尝试撬锁体现谨慎路径。", repairGuidance: "删除选择，继续犹豫。" },
+    expected: { verdict: "incoherent_review", planIssue: null, inconsistentFields: ["issue", "repairGuidance"], forbiddenInferences: ["未来行动等于既有结果", "选择发生本身构成前后冲突"] },
+  },
+  {
+    id: "ps-22", pairId: "review-choice", genre: "武侠", stage: "review_consistency",
+    facts: ["锁未撬开，赵行还没有决定先追人还是先撬锁。"],
+    plan: "赵行先查谣言来源，再找工具尝试撬锁，不预设撬锁成功。",
+    review: { issue: null, progression: "本章形成新决定；锁仍未打开。", promise: "先查谣言再尝试撬锁体现谨慎路径。", repairGuidance: null },
+    expected: { verdict: "coherent_review", planIssue: null },
+  },
+  {
+    id: "ps-23", pairId: "retained-draft", genre: "修仙", stage: "final_selection",
+    facts: ["林岚只剩一颗回气丹。"],
+    plan: "用丹药试飞。",
+    originalDraft: "林岚把回气丹收好，因风太大决定明日再试。",
+    repairedDraft: "林岚服下回气丹，御剑越过了山谷。",
+    retainedDraft: "original",
+    expected: { verdict: "sound", resource: { before: 1, consumed: 0, after: 1 }, observed: ["推迟试飞"], forbiddenInferences: ["从未选中修稿同步丹药消耗", "从未选中修稿同步御剑能力确认"] },
+  },
+  {
+    id: "ps-24", pairId: "retained-draft", genre: "修仙", stage: "final_selection",
+    facts: ["林岚只剩一颗回气丹。"],
+    plan: "用丹药试飞。",
+    originalDraft: "林岚把回气丹收好，因风太大决定明日再试。",
+    repairedDraft: "林岚服下回气丹，御剑越过了山谷。",
+    retainedDraft: "repaired",
+    expected: { verdict: "sound", resource: { before: 1, consumed: 1, after: 0 }, observed: ["服丹完成", "本次御剑成功"], forbiddenInferences: ["本次成功等于永久无条件御剑", "同步旧稿未消耗状态"] },
+  },
+  {
+    id: "ps-25", pairId: "source-uncertainty", genre: "寒灾", stage: "planning",
+    facts: ["提供的正文只写阿遥揣着钱袋，没有清点金额。摘要称可能有七百元，但没有对应原文。"],
+    plan: "阿遥盘算明日花五百元买煤，但要先清点钱袋才能决定。",
+    expected: { verdict: "sound", distinctions: ["资源未知", "有条件的未来意图"], forbiddenInferences: ["摘要可能金额是正文确证", "未知余额自动判定资金不足", "盘算等于付款完成"] },
+  },
+  {
+    id: "ps-26", pairId: "source-uncertainty", genre: "寒灾", stage: "planning",
+    facts: ["提供的正文只写阿遥揣着钱袋，没有清点金额。摘要称可能有七百元，但没有对应原文。"],
+    plan: "阿遥确定袋里原有七百元，不清点也无需任何补充证据，立即照此安排全部现金。",
+    expected: { verdict: "insufficient_evidence", issue: "unproven_prior_amount", forbiddenInferences: ["没正文证据就宣布金额一定错误", "补写过去收入当成纠正事实", "摘要可能金额直接确证"] },
+  },
+];
+
+module.exports = {
+  version: "planning-semantic-cases-v1",
+  provenance: "独立合成场景，不含样本书正文；用于开发集验收，不代表文学质量或模型能力已获验证。",
+  dimensions: ["fact_intention_attempt_outcome", "resource_accounting", "partial_debt_payment", "knowledge_scope", "review_repair_consistency", "final_retained_prose", "unknown_evidence"],
+  cases,
+};

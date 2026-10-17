@@ -9,6 +9,7 @@ import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
 import { logMemoryUsage } from "../../../runtime/memoryTelemetry";
 import { createVolumeChapterListPrompt } from "../../../prompting/prompts/novel/volume/chapterList.prompts";
 import { buildVolumeChapterListContextBlocks } from "../../../prompting/prompts/novel/volume/contextBlocks";
+import { loadPlanningWrittenEvidence } from "./writtenEvidence";
 import {
   inferRequiredChapterCountFromBeatSheet,
   resolveTargetChapterCount,
@@ -43,6 +44,7 @@ interface BeatGenerationPlan {
   chapterCount: number;
   chapterStartOrder: number;
   chapterEndOrder: number;
+  globalOrder?: number;
 }
 
 interface FullVolumeResumeState {
@@ -238,7 +240,10 @@ async function generateBeatChapterBlock(params: {
   chapterBudgets: number[];
 }): Promise<GeneratedVolumeChapterBlock> {
   const targetIndex = params.document.volumes.findIndex((volume) => volume.id === params.targetVolume.id);
+  const evidenceChapterOrder = params.beatPlan.globalOrder
+    ?? params.chapterBudgets.slice(0, targetIndex).reduce((sum, count) => sum + count, 0) + params.beatPlan.chapterStartOrder;
   const promptInput = {
+    writtenEvidence: await loadPlanningWrittenEvidence(params.document.novelId, evidenceChapterOrder),
     novel: params.novel,
     workspace: params.workspace,
     storyMacroPlan: params.storyMacroPlan,

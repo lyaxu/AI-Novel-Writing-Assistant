@@ -1,3 +1,4 @@
+function parseFresh(value) { return chapterTaskSheetQualityPrompt.outputSchema.safeParse({ issueDecisions: [], stateChecks: [], ...value }); }
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
@@ -239,7 +240,7 @@ test("chapter execution contract shape gate blocks invalid task sheet artifacts"
   assert.match(formatChapterTaskSheetQualityFailure(result), /章节执行合同/);
 });
 
-test("chapter task sheet quality service lets full book mode continue with semantic warnings", async () => {
+test("chapter task sheet quality service repairs unapproved plans before full book writing", async () => {
   const service = new ChapterTaskSheetQualityGateService(async () => ({
     verdict: "repairable",
     safeToSync: false,
@@ -261,7 +262,7 @@ test("chapter task sheet quality service lets full book mode continue with seman
     mode: "full_book_autopilot",
   });
 
-  assert.equal(result.canEnterExecution, true);
+  assert.equal(result.canEnterExecution, false);
   assert.equal(result.status, "repairable");
   assert.equal(result.issues[0].id, "semantic_boundary_leak");
 });
@@ -321,7 +322,7 @@ test("chapter task sheet quality service marks overloaded contracts for window r
     mode: "full_book_autopilot",
   });
 
-  assert.equal(result.canEnterExecution, true);
+  assert.equal(result.canEnterExecution, false);
   assert.equal(result.status, "repairable");
   assert.ok(result.issues.some((issue) => issue.id === "contract_overloaded"));
 });
@@ -346,7 +347,7 @@ test("chapter task sheet quality service passes usable semantic assessments", as
 });
 
 test("chapter task sheet quality prompt is registered as a product prompt asset", () => {
-  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v18");
+  const registered = getRegisteredPromptAsset("novel.volume.chapter_task_sheet_quality", "v19");
   assert.equal(registered, chapterTaskSheetQualityPrompt);
 });
 
@@ -358,13 +359,13 @@ test("fresh review requires grounded blockers and keeps optional refinements out
     progressionChecks: ["event_repetition", "knowledge_repetition", "prior_goal_followthrough"].map(dimension => ({ dimension, status: "insufficient_context",
       candidateEvidence: [{ sourcePath: "purpose", quote: candidate.purpose }], priorEvidence: [], explanation: "未提供前文正文", issueId: null, repairHint: "" })),
   };
-  assert.equal(chapterTaskSheetQualityPrompt.outputSchema.safeParse(output).success, true);
+  assert.equal(parseFresh(output).success, true);
   const parsed = chapterTaskSheetQualityPrompt.postValidate(output, { candidate });
   assert.equal(parsed.safeToSync, true);
   assert.deepEqual(parsed.refinements, output.refinements);
   const unsupported = { id: "new", severity: "medium", target: "semantic", summary: "可能误写", repairHint: "再明确一点" };
   const rejected = { ...output, verdict: "repairable", safeToSync: false, recommendedHandling: "repair_contract", issues: [unsupported] };
-  assert.equal(chapterTaskSheetQualityPrompt.outputSchema.safeParse(rejected).success, false);
+  assert.equal(parseFresh(rejected).success, false);
   assert.throws(() => chapterTaskSheetQualityPrompt.postValidate(rejected, { candidate }), /execution-impact basis/);
   // Saved historical assessments are still readable, but cannot masquerade as fresh output.
   assert.equal(aiChapterTaskSheetQualityAssessmentSchema.safeParse(rejected).success, true);
@@ -407,7 +408,7 @@ test("planning re-review sees current evidence, book constraints and previous is
   const retained = chapterTaskSheetQualityPrompt.postValidate({ ...unresolved, issues: [] }, input);
   assert.equal(retained.issues[0].id, previousIssues[0].id);
   assert.equal(retained.safeToSync, false);
-  assert.equal(chapterTaskSheetQualityPrompt.outputSchema.safeParse({ ...output, issueChecks: undefined }).success, false);
+  assert.equal(parseFresh({ ...output, issueChecks: undefined }).success, false);
   // Existing persisted reviews remain readable while newly generated reviews require evidence.
   assert.equal(aiChapterTaskSheetQualityAssessmentSchema.safeParse({ ...output, issueChecks: undefined }).success, true);
 });

@@ -62,13 +62,15 @@ export class PlanningRepairRecoveryService {
     // Read without workflow healing: viewing a repair must never resume it.
     const row = await prisma.novelWorkflowTask.findUnique({ where: { id: taskId } });
     if (!row || row.lane !== "auto_director") throw new AppError("自动导演任务不存在。", 404);
-    const { repair, recovery } = readPlanningRepairSeed(row.seedPayloadJson);
+    const { repair, recovery, seed } = readPlanningRepairSeed(row.seedPayloadJson);
     const view = await readPipelinePauseProjection(row);
     const recoveryRequest = recovery?.idempotencyKey && recovery.guidance
       && repair && (recovery.pendingGrant || !["waiting_confirmation", "uncertain", "committed"].includes(repair.phase)
         || (view !== row && view.currentItemKey === "planning_repair_confirmation"))
       && isPlanningRepairTaskPaused(view)
-      ? { idempotencyKey: recovery.idempotencyKey, guidance: recovery.guidance, executionMode: recovery.executionMode, affectedChapterIds: recovery.affectedChapterIds } : null;
+      ? { idempotencyKey: recovery.idempotencyKey, guidance: recovery.guidance, executionMode: recovery.executionMode, affectedChapterIds: recovery.affectedChapterIds,
+        candidateRecoveryToken: (seed.planningReviewExistingAcknowledgement as { requestId?: string; token?: string } | undefined)?.requestId === recovery.idempotencyKey
+          ? (seed.planningReviewExistingAcknowledgement as { token?: string }).token : undefined } : null;
     return { taskId, novelId: row.novelId, status: view.status, pendingManualRecovery: view.pendingManualRecovery, cancelRequestedAt: row.cancelRequestedAt, planningRepair: repair, recoveryRequest };
   }
 

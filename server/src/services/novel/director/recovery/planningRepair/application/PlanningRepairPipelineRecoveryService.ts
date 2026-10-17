@@ -141,7 +141,7 @@ export class PlanningRepairPipelineRecoveryService {
           novelId_chapterId_contentHash_artifactType_syncMode: { ...identity, contentHash: String(acknowledgement.archiveId) },
         } });
         if (!archived?.metadataJson || acknowledgement.pipelineJobId !== jobId) conflict("找不到本次明确确认的原执行记录。");
-        proof = assertReviewExistingAcknowledgement({ acknowledgement, archive: parse(archived.metadataJson), repair, recovery, journal });
+        proof = assertReviewExistingAcknowledgement({ acknowledgement, archive: parse(archived.metadataJson), repair, recovery, journal, seed });
       } else {
         proof = assertSettledPlanningPreparation({ repair, recovery, journal });
       }

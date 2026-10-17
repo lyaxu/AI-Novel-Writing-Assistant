@@ -216,7 +216,7 @@ export function createVolumeChapterListPrompt(
 
   return {
     id: "novel.volume.chapter_list",
-    version: "v15",
+    version: "v16",
     taskType: "planner",
     mode: "structured",
     language: "zh",
@@ -331,6 +331,7 @@ export function createVolumeChapterListPrompt(
           "8. protagonistAction 与 chapterPayoff 必须逐章不同。相邻两章写同一个动作或同一个结果，等同于没有推进，会被判为失败并要求重排。",
           "9. 这两项是章节功能的正式声明，由你自己判断，不要为了通过检查而套用固定句式；它们必须与 summary 描述的是同一件事。",
           "10. 排章前必须先读 written_evidence（已写正文）：哪些事件已经发生过、哪些人已经知道了什么、上一章结尾具体决定去做什么。已经演过的场面不得再排一次；同一处境要再次出现时，必须写明这一次与上一次不同的阻力、不同的选择或不同的后果，并把增量写进 summary 与 chapterPayoff。",
+          "已写事实约束本章可用的资源、位置、人物知情和行动条件；节拍与旧摘要是待落实的意图，不是已发生事实。若旧路线动作缺少实际前提，调整本章实现方式或明确安排先建立条件，保留叙事功能，不凭空补造收入、持有物、能力或历史。证据覆盖之外保持未知。",
           "11. 典型错误：前文已经交过房租、已经被人当面追问过钱从哪来，就不要再排一章重新交租、重新被问一遍。读者会认为情节在原地打转。要接着演的是那件事之后的新局面。",
           "",
           "四、章节功能分配要求",
