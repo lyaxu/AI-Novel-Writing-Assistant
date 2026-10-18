@@ -246,3 +246,13 @@ A terminal post-validation failure carries a non-enumerable completed response f
 - 回归：定向覆盖容器内命中、跨字段拒绝和诊断中的真实叶路径，并用真实暂停现场的完整复核响应在本地只读数据库上回放；重新复核仍需用户明确点击，并产生模型费用。
 
 相关实现：`prompting/prompts/novel/volume/evidence/chapterEvidence.ts`、`planningPromiseEvidence.ts`、`chapterTaskSheetQuality.prompts.ts`。
+
+## 首章既定前提的状态复核
+
+首章没有已写正文时，合同生成协议允许顶层状态声明使用 `source.kind=unknown` 并写明原因（如“本章为全书第一章，无更早正文可引用；该事实来自书级构思，作为开篇既定前提”）。这类声明不是“审查无法判断的缺口”，而是协议授权的开篇既定前提。
+
+- 复核可以在本章场景入口实际呈现该前提时判 `established_in_plan`，并引用入口或声明原文；也可维持 `insufficient_context`，不得因此阻断执行。
+- 例外只适用于第一章：后续章节的 prior 声明仍必须有更早正文，或属于明确允许的书级规则；`supported` 仍只接受更早 primary prose。
+- 该规则只解决状态复核对协议授权的识别，不降低事实门禁；真正与已写事实冲突、或首章缺失设定支持的声明，仍应作为阻塞问题处理。
+
+相关实现：`prompting/prompts/novel/volume/evidence/planningStateReview.ts`。

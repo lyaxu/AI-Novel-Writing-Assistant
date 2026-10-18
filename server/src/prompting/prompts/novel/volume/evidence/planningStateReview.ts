@@ -32,6 +32,11 @@ export function projectPlanningStateReview(
     ...(scene.causality?.stateTransition?.beforeClaimIds ?? [])]));
   const claimIds = new Set(claims.map(claim => claim.id));
   if (claimIds.size !== claims.length) throw new Error("Duplicate state claim identity in candidate.");
+  // The generation protocol explicitly allows an unknown-source prior premise when a first chapter
+  // opens without earlier prose ("source: unknown" + reason). Such a declared opening premise can be
+  // accepted in-plan once the chapter entry establishes it; it is not an unresolved review verdict.
+  const isDeclaredOpeningPremise = (claim: Claim) => candidate.chapterOrder === 1
+    && claim.temporalScope === "prior" && claim.source.kind === "unknown";
   const decisions = new Map(output.issueDecisions.map(decision => [decision.issueId, decision]));
   const issueIds = new Set(output.issues.map(issue => issue.id));
   if (unresolvedPlanningPromises(output.promiseChecks).length && !issueIds.has("selected_direction_drift")) {
@@ -118,7 +123,9 @@ export function projectPlanningStateReview(
       }
     }
     if (check.status === "established_in_plan") {
-      if (claim.temporalScope !== "planned" || !check.evidence.length) throw new Error(`State ${claim.id}: planned transition needs current plan evidence.`);
+      if ((claim.temporalScope !== "planned" && !isDeclaredOpeningPremise(claim)) || !check.evidence.length) {
+        throw new Error(`State ${claim.id}: planned transition needs current plan evidence.`);
+      }
       assertCurrent(check.evidence, claim.id);
     }
     if (check.status === "contradicted" && !check.issueId) throw new Error(`State ${claim.id}: contradicted claim requires an issue.`);
@@ -129,7 +136,7 @@ export function projectPlanningStateReview(
       }
     }
     if (requiredClaimIds.has(claim.id) && check.status === "insufficient_context" && !check.issueId
-      && (output.safeToSync || output.verdict === "usable")) {
+      && (output.safeToSync || output.verdict === "usable") && !isDeclaredOpeningPremise(claim)) {
       throw new Error(`State ${claim.id}: unknown prerequisite cannot silently admit execution.`);
     }
   }
