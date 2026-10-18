@@ -126,6 +126,40 @@ test("actual scene-card aliases cannot collide with another indexed leaf", () =>
   }), /Ambiguous/);
 });
 
+test("a parsed JSON field may be cited as its own container, but only for text inside that field", () => {
+  const cards = {
+    stateClaims: [{ id: "SC1", predicate: "主角只拿到结构信息。" }],
+    scenes: [{ key: "scene1", turn: "甲，乙。", mustPreserve: ["金手指只给结构信息，不给物资信息。"] }],
+    readerExperience: { netChange: "从一无所有到站主。" },
+  };
+  const candidate = { taskSheet: "任务", sceneCards: JSON.stringify(cards) };
+  const index = evidence.buildChapterEvidenceIndex(candidate);
+  for (const quote of ["金手指只给结构信息，不给物资信息。", "主角只拿到结构信息。", "从一无所有到站主。"]) {
+    assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: "sceneCards", quote }), true, quote);
+  }
+  assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: "sceneCards", quote: "候选里不存在的句子" }), false);
+  assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: "taskSheet", quote: "金手指只给结构信息，不给物资信息。" }), false);
+  assert.deepEqual(evidence.findChapterEvidencePaths(index, "从一无所有到站主。"), ["readerExperience.netChange"]);
+});
+
+test("promise review diagnostics report where a rejected quote actually lives", () => {
+  const candidate = { summary: "摘要", sceneCards: JSON.stringify({ scenes: [{ key: "scene1", turn: "真实引文。" }] }) };
+  const direction = { status: "available", sourceTaskId: "task", fingerprint: "fingerprint",
+    candidate: { id: "candidate-1", sellingPoint: "卖点原文", coreConflict: "冲突原文", protagonistPath: "路径原文" } };
+  const reviewContextJson = JSON.stringify({ selectedPlanningDirection: direction });
+  const checks = ["sellingPoint", "coreConflict", "protagonistPath"].map((sourceId) => ({
+    sourceId, scope: "book_arc", status: "preserved", handoffStatus: "not_needed",
+    sourceEvidence: [{ sourcePath: `selectedPlanningDirection.candidate.${sourceId}`, quote: direction.candidate[sourceId] }],
+    candidateEvidence: sourceId === "sellingPoint" ? [{ sourcePath: "missingField", quote: "真实引文。" }] : [],
+    contextEvidence: [], explanation: "说明", repairHint: "",
+  }));
+  assert.throws(() => promiseEvidence.validatePlanningPromiseEvidence(checks, candidate, reviewContextJson), (error) => {
+    assert.match(error.message, /foundAtPaths/);
+    assert.match(error.message, /scene1\.turn/);
+    return true;
+  });
+});
+
 const followupCapturePaths = ["mining-followup-evidence.json", "mining-followup-candidate.json", "mining-followup-review-request.json"]
   .map(name => path.resolve(__dirname, "../../.codex-run", name));
 test("historical rejected review retains evidence projection without satisfying the newer fresh-output schema", {

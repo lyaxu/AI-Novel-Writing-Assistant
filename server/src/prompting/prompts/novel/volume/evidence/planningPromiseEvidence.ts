@@ -1,6 +1,6 @@
 import { isOpeningPlanningPromise, selectedPlanningPromiseIds, type SelectedPlanningDirection } from "@ai-novel/shared/types/novel/planningPromises";
 import type { ChapterPlanningPromiseCheck } from "@ai-novel/shared/types/chapterTaskSheetQuality";
-import { buildChapterEvidenceIndex, matchesChapterEvidence } from "./chapterEvidence";
+import { buildChapterEvidenceIndex, findChapterEvidencePaths, matchesChapterEvidence } from "./chapterEvidence";
 
 function invalidEvidenceDetails(
   index: ReturnType<typeof buildChapterEvidenceIndex>,
@@ -19,6 +19,7 @@ function invalidEvidenceDetails(
     actualSourcePath: text === undefined ? null : canonicalPath,
     actualSourceText: text === undefined ? null : text.slice(0, 1200),
     actualSourceTextTruncated: text !== undefined && text.length > 1200,
+    foundAtPaths: findChapterEvidencePaths(index, evidence.quote),
   };
 }
 
@@ -87,8 +88,12 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
         + `candidateEvidence 不合格 ${badCandidate.length}/${check.candidateEvidence.length} 条，`
         + `contextEvidence 不合格 ${badContext.length}/${check.contextEvidence.length} 条：`
         + JSON.stringify([
-          ...badCandidate.map(evidence => invalidEvidenceDetails(candidateIndex, evidence, "candidate")),
-          ...badContext.map(evidence => invalidEvidenceDetails(contextIndex, evidence, "context")),
+          ...badCandidate.map(evidence => ({ ...invalidEvidenceDetails(candidateIndex, evidence, "candidate"),
+            foundAtPathsInContext: findChapterEvidencePaths(contextIndex, evidence.quote),
+            foundAtPathsInSelectedSource: findChapterEvidencePaths(sourceIndex, evidence.quote) })),
+          ...badContext.map(evidence => ({ ...invalidEvidenceDetails(contextIndex, evidence, "context"),
+            foundAtPathsInCandidate: findChapterEvidencePaths(candidateIndex, evidence.quote),
+            foundAtPathsInSelectedSource: findChapterEvidencePaths(sourceIndex, evidence.quote) })),
         ]));
     }
     if (["preserved", "adapted"].includes(check.status) && !check.candidateEvidence.length && !check.contextEvidence.length) {

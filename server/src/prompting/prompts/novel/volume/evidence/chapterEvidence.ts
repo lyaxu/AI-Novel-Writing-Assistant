@@ -7,6 +7,10 @@ export function buildChapterEvidenceIndex(candidate: unknown) {
   const groups = new Map<string, string[]>();
   const prerequisites = new Map<string, Node[]>();
   const aliases = new Map<string, string>();
+  // A JSON string field is parsed so its children can be cited as leaves. The parsed-field
+  // membership is kept separately so a citation against the field container itself still proves
+  // that the quote belongs to that field, without accepting unrelated text from elsewhere.
+  const containerLeaves = new Map<string, string[]>();
   const aliasSubtree = (canonical: string, alias: string) => {
     for (const leaf of leaves.keys()) {
       if (leaf !== canonical && !leaf.startsWith(`${canonical}.`) && !leaf.startsWith(`${canonical}[`)) continue;
@@ -39,7 +43,9 @@ export function buildChapterEvidenceIndex(candidate: unknown) {
         groups.get(path)!.push(...[...leaves.keys()].filter((key) => !before.has(key)));
       });
     } else if (value && typeof value === "object") {
+      const before = new Set(leaves.keys());
       Object.entries(value).forEach(([key, child]) => add(path ? `${path}.${key}` : key, child));
+      containerLeaves.set(path, [...leaves.keys()].filter((key) => !before.has(key)));
     }
   };
   const root = candidate && typeof candidate === "object" ? candidate as Node : {};
@@ -47,6 +53,7 @@ export function buildChapterEvidenceIndex(candidate: unknown) {
   let cards = root.sceneCards;
   if (typeof cards === "string") { try { cards = JSON.parse(cards); } catch { add("sceneCards", cards); } }
   if (cards && typeof cards === "object") {
+    const before = new Set(leaves.keys());
     const object = cards as Node;
     for (const [key, value] of Object.entries(object)) if (key !== "scenes") add(key, value);
     if (Array.isArray(object.scenes)) for (const [position, item] of object.scenes.entries()) {
@@ -67,11 +74,25 @@ export function buildChapterEvidenceIndex(candidate: unknown) {
         }
       }
     }
+    containerLeaves.set("sceneCards", [...leaves.keys()].filter((key) => !before.has(key)));
   }
   for (const [alias, canonical] of aliases) {
     if (leaves.has(alias) && alias !== canonical) throw new Error(`Ambiguous evidence source path: ${alias}`);
   }
-  return { leaves, groups, prerequisites, aliases };
+  return { leaves, groups, prerequisites, aliases, containerLeaves };
+}
+
+/** Bounded local diagnostics: where the quote actually lives inside this source, never a guess. */
+export function findChapterEvidencePaths(index: ReturnType<typeof buildChapterEvidenceIndex>, quote: string, limit = 3): string[] {
+  const normalized = normalize(quote);
+  if (!normalized || !Number.isSafeInteger(limit) || limit < 1) return [];
+  const found: string[] = [];
+  for (const [path, text] of index.leaves) {
+    if (!normalize(text).includes(normalized)) continue;
+    found.push(path);
+    if (found.length >= limit) break;
+  }
+  return found;
 }
 
 export function matchesChapterEvidence(index: ReturnType<typeof buildChapterEvidenceIndex>, evidence: string | EvidenceQuote): boolean {
@@ -79,7 +100,21 @@ export function matchesChapterEvidence(index: ReturnType<typeof buildChapterEvid
     const text = index.leaves.get(index.aliases.get(path) ?? path);
     return Boolean(normalize(quote) && text !== undefined && normalize(text).includes(normalize(quote)));
   };
-  if (typeof evidence !== "string") return exactAt(evidence.sourcePath, evidence.quote);
+  // A parsed JSON field may be cited as its own container (for example "sceneCards"). The quote
+  // must still appear inside that field, so an imprecise-but-correct field name cannot smuggle
+  // in unrelated text, while a merely coarse path no longer discards an otherwise valid answer.
+  const containerAt = (path: string, quote: string) => {
+    const normalized = normalize(quote);
+    const members = index.containerLeaves.get(path);
+    if (!normalized || !members) return false;
+    return members.some((member) => {
+      const text = index.leaves.get(member);
+      return text !== undefined && normalize(text).includes(normalized);
+    });
+  };
+  if (typeof evidence !== "string") {
+    return exactAt(evidence.sourcePath, evidence.quote) || containerAt(evidence.sourcePath, evidence.quote);
+  }
   if (!normalize(evidence)) return false;
   // Historical bare quotes remain valid. Structured fresh output always specifies its leaf path.
   if ([...index.leaves.values()].some((text) => normalize(text).includes(normalize(evidence)))) return true;
