@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { generatedChapterSceneCardSchema } from "@ai-novel/shared/types/chapterLengthControl";
 import { generatedReaderExperienceContractSchema } from "@ai-novel/shared/types/novel/readerExperience";
-import { chapterStateClaimsSchema, chapterStateClaimsWireSchema, sceneCausalitySchema,
-  sceneStateTransitionSchema, stateClaimPrerequisiteWireSchema } from "@ai-novel/shared/types/novel/sceneCausality";
+import { chapterStateClaimsSchema, contextStateClaimsWireSchema, sceneCausalitySchema,
+  sceneOwnedStateTransitionWireSchema, stateClaimPrerequisiteWireSchema } from "@ai-novel/shared/types/novel/sceneCausality";
 
 const conciseRequiredText = z.string().trim().min(1).max(240);
 const conciseTextList = z.array(z.string().trim().min(1).max(160)).max(8).default([]);
@@ -243,25 +243,25 @@ export function createChapterExecutionContractSchema() {
 }
 
 /** Fresh model output binds prerequisites by ID; legacy saved contracts keep their readable fields. */
-export const stateBoundSceneCardWireSchema = boundedSceneCardSchema.extend({
+export const stateBoundSceneCardWireSchema = boundedSceneCardSchema.omit({ entryState: true, exitState: true }).extend({
   causality: sceneCausalitySchema.extend({
     prerequisites: z.array(stateClaimPrerequisiteWireSchema).max(6),
-    stateTransition: sceneStateTransitionSchema,
-  }),
-});
+    stateTransition: sceneOwnedStateTransitionWireSchema,
+  }).strict(),
+}).strict();
 export function createChapterExecutionContractWireSchema() {
   return z.preprocess(raw => normalizeScenePlanPayload(normalizeBoundaryPayload(normalizeObjectAlias(raw, {
     purpose: ["章节目标", "chapterGoal", "goal", "objective"],
     requiredElements: ["requiredBeats", "mustHappen", "chapterRequiredElements", "必须落实"],
   }))),
     createChapterExecutionContractSchema().out.extend({
-      stateClaims: chapterStateClaimsWireSchema,
+      stateClaims: contextStateClaimsWireSchema,
       sceneCards: z.array(stateBoundSceneCardWireSchema).min(3).max(8),
     }));
 }
 export function createChapterTaskSheetWireSchema() {
   return z.preprocess(normalizeScenePlanPayload, createChapterTaskSheetSchema().out.extend({
-    stateClaims: chapterStateClaimsWireSchema,
+    stateClaims: contextStateClaimsWireSchema,
     sceneCards: z.array(stateBoundSceneCardWireSchema).min(3).max(8),
   }));
 }

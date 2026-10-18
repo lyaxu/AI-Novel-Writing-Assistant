@@ -22,7 +22,7 @@ function load(relative, overrides = {}, cache = new Map()) {
     if (name in overrides) return overrides[name];
     if (name.startsWith(".")) {
       const basename = path.resolve(path.dirname(filename), name);
-      const extension = name.endsWith("RepairAdviceOptions") ? ".tsx" : ".ts";
+      const extension = ["RepairAdviceOptions","InitialContractActions"].some(suffix=>name.endsWith(suffix)) ? ".tsx" : ".ts";
       return load(basename + extension, overrides, cache);
     }
     return require(name);
@@ -53,6 +53,9 @@ test("stale, failed, uncertain, running, missing and authorized recovery states 
 function renderActions(advice, repairStatus = status, recoveryPreview = { available: false }) {
   const calls = [], mutations = [], queries = [];
   const api = {
+    planningInitialContractQueryKey: id=>["planning-repair","initial-contract",id],
+    getPlanningInitialContract: async id=>{calls.push(["get-initial",id]);return recoveryPreview;},
+    correctInitialPlanningContract: async (...args)=>{calls.push(["initial",...args]);return{};},
     planningResumePolicyQueryKey: id => ["planning-repair", "resume-policy", id],
     planningReviewExistingQueryKey: id => ["planning-repair", "review-existing", id],
     getPlanningResumePolicy: async id => { calls.push(["get-policy",id]); return recoveryPreview; },
@@ -196,4 +199,17 @@ test("advice GET remains separate from paid generation and selection API command
   await api.resumeOriginalPlanningPolicy("task/a",{repairKey:"r",token:"proof",idempotencyKey:"grant-2"});
   assert.deepEqual(calls.slice(3),[["get","/novel-workflows/task%2Fa/planning-repair/resume-policy"],
     ["post","/novel-workflows/task%2Fa/planning-repair/resume-policy",{repairKey:"r",token:"proof",idempotencyKey:"grant-2"}]]);
+});
+
+test("initial rejection offers one explicit correction and never paid candidate advice",async()=>{
+ const initial={...status,planningRepair:{key:"repair-1",rounds:0,maxRounds:2,chapterOrder:1,history:[{kind:"rejected_response",promptId:"novel.volume.chapter_execution_contract"}]}};
+ const view=renderActions(ready,initial,{available:true,token:"one",initialGenerationAttempts:null,correctionAttempts:0,remainingRounds:2,startOrder:1,endOrder:3});
+ assert.match(view.html,/纠正初始规划并继续/);assert.match(view.html,/纠正 1 次/);assert.match(view.html,/历史初始生成次数未单独记录/);
+ assert.match(view.html,/第 1–3 章继续写作/);assert.doesNotMatch(view.html,/让 AI 推荐|自定义修复|追加 1 轮/);
+ assert.equal(view.queries.length,1);assert.deepEqual(view.calls,[]);await view.queries[0].queryFn();assert.deepEqual(view.calls.map(x=>x[0]),["get-initial"]);
+ await assert.rejects(async()=>view.mutations[0].mutationFn(),/确认本次纠正费用/);
+ const authorized={...initial,recoveryRequest:{executionMode:"retry_initial_contract",initialContractToken:"frozen",idempotencyKey:"one",guidance:"纠正一次"}};
+ const replay=renderActions(ready,authorized);await replay.mutations[0].mutationFn();
+ assert.deepEqual(replay.calls,[["initial","task-1",{repairKey:"repair-1",token:"frozen",idempotencyKey:"one"}]]);
+ assert.throws(()=>presentation.authorizedPlanningRepairPayload(authorized),/初始规划纠正入口/);
 });

@@ -1,8 +1,11 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { PromptAsset } from "../../../core/promptTypes";
-import type { z } from "zod";
+import { z } from "zod";
+import { preserveGeneratedContentConstraints } from "../../../../llm/generatedContentSchema";
 import { bindStateClaimContract } from "./evidence/stateClaimBinding";
 import { buildPrimaryProseCitationCatalog } from "./evidence/primaryProseCitationCatalog";
+import { sceneOwnershipRules, sceneOwnershipCorrectionRule, sceneOwnershipExampleNote,
+  createExecutionContractWireExample } from "./contracts/sceneOwnershipProtocol";
 import {
   planningRepairOutputSchema,
   planningRepairWireOutputSchema,
@@ -40,14 +43,20 @@ const commonRules = [
 ].join("\n");
 
 // These assets do not resolve models; the coordinator must pass its explicit modelRoute to the runner.
-export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, PlanningRepairOutput, z.infer<typeof planningRepairWireOutputSchema>> = {
+export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, PlanningRepairOutput, unknown> = {
   id: "novel.volume.planning_repair",
-  version: "v13",
+  version: "v14",
   taskType: "replan",
   mode: "structured",
   language: "zh",
   contextPolicy: { maxTokensBudget: 24000 },
-  outputSchema: planningRepairWireOutputSchema,
+  outputSchema: preserveGeneratedContentConstraints(z.unknown()),
+  repairPolicy: { maxAttempts: 0 },
+  structuredOutputHint: { example: () => {
+    const { targetWordCount, requiredElements, neighborEventUse, mustAvoidConflicts, ...change } = createExecutionContractWireExample();
+    return { requiresUserDecision: false, reason: "<针对本轮问题的修复理由>",
+      changes: [{ chapterId: "<当前授权chapterId>", summary: "<修订后的章节摘要>", ...change }], obligationMoves: [] };
+  }, note: sceneOwnershipExampleNote },
   render: (input) => [
     new SystemMessage([
       "你是网文规划修复器。只修复限定章节窗口的执行合同，不写正文，不重做全书规划。",
@@ -59,10 +68,10 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
       "requiredElements不能只留旧条目而另改场景，也不能自由替换整份清单。确有错误或重复已写事件时，在该章requiredElementRevisions逐项修订：original逐字复制currentRequiredElements的当前原句（未提供该投影时读candidateChapters.sceneCards.requiredElements）；replacement给出同章可落实的修正义务；reason引用具体已写事实或本轮问题，说明为何需要改；preservedFunction明确保留的叙事功能与承诺；sceneKeys绑定本轮sceneCards中具体落实该功能的场景key。程序仅做精确映射，事实与功能是否成立仍由AI复核。",
       "requiredElementRevisions最多8项，每项original/replacement最多160字符，reason最多600，preservedFunction最多240，sceneKeys为1-8个唯一且存在的场景key。只支持同章一对一替换；不能删空、合并吞掉义务、制造无来源条目、降低承诺、改变时限或越出授权窗口。未列的原义务自动保留；无需变化时省略该字段或返回空数组，不输出自由requiredElements字段。历史A→B→C只追踪保留功能，本轮若改C就输出C→D，不能把已不存在的A当作新的来源或把旧实现重新加回。",
       "长度为严格执行合同：taskSheet、summary 各最多600字符；purpose、exclusiveEvent、endingState、nextChapterEntryState、mustAvoid 各最多240字符。taskSheet 只写执行摘要，不重复完整场景卡；具体动作及必达义务保留在 sceneCards 中，不得为压缩文字而删除职责。其他字段严格遵守输出 schema 的长度和数组上限。",
-      "sceneCards 沿用章节细纲场景结构，每章 3-8 场；每场包含唯一 key、title、purpose、mustAdvance:string[]、mustPreserve:string[]、entryState、exitState、forbiddenExpansion:string[]、正整数 targetWordCount、resistance、turn、emotionalShift、readerValue。",
-      "每个changes项必须包含完整stateClaims声明表（旧候选缺少也须依据本次来源建立）：每项{id,subject,predicate,temporalScope:prior|planned,modality:fact|intention|attempt|outcome,source}。source只允许{kind:written_prose,evidenceIds:[本次目录ID]}、{kind:planned_scene,sceneKey,phase:entry|action|exit}、{kind:unknown,reason}，禁止输出evidence字段。保留仍正确的声明ID与事实，修复错误谓词/来源/时态时同步所有使用它的场景；不能删表而保留悬空引用。目录ID只证明原文出处，声明必须真正受该原文支持。",
-      "每个修复场景还须包含causality:{actor,choice,motive,prerequisites:[{claimIds:[]}],stateTransition:{beforeClaimIds:[],actionClaimIds:[],afterClaimIds:[]},resistanceResponse,outcomeMechanism,resultingConstraints:[{constraint,persistence}]}。前提最多6个不同声明，均列入beforeClaimIds；禁止另写condition/sourceKind/reference，程序由声明恢复兼容字段。actionClaimIds/afterClaimIds各至少1项、最多6项，含本场action/exit声明；beforeClaimIds最多6项，不能使用未来才建立的条件。入口、动作和离场描述沿用同一声明的主体、数值、时间、模态，不独立重写事实。",
-      "prior是已写历史，planned是待执行安排；人物意图不等于已经做到，尝试不等于成功，前文尚未决定不禁止本章作出新决定。修复必须保留有效新行动和叙事功能；不能以保留旧状态为由冻结人物选择，也不能把某次失败推成永久不可能。状态声明最多48项，subject最多64字符、predicate最多160字符。",
+      "sceneCards每章3-8场；每场包含唯一key、title、purpose、mustAdvance:string[]、mustPreserve:string[]、forbiddenExpansion:string[]、正整数targetWordCount、resistance、turn、emotionalShift、readerValue、causality。不输出entryState/exitState，程序从归属声明投影。",
+      ...sceneOwnershipRules,
+      sceneOwnershipCorrectionRule,
+      "每个changes项返回完整上下文声明和场景归属声明。保留仍正确的声明ID与事实；旧候选stateClaims中的planned声明移入对应场景阶段数组，程序重建保存格式。修复错误命题、来源或时态时同步引用，不能删表而保留悬空引用。每个causality包含actor、choice、motive、prerequisites、stateTransition、resistanceResponse、outcomeMechanism、resultingConstraints:[{constraint,persistence}]。",
       "readerExperience 沿用现有结构：readerQuestion、promisedReward、rewardLevel（只能 setup|partial|major）、protagonistWant、primaryResistance、keyTurn、emotionalShift、informationReveal、netChange、inheritedHookResponsibilities（最多4项）、endingHook。",
       "obligationMoves 记录实际义务的去向并给出具体 reason。action只能retain|merge|move|revise：retain与revise的来源和目标必须是同章；move必须是窗口内不同章；merge允许同章、同一场景内合并职责或窗口内跨章合并。仅revise必须有replacement字段，其他动作不得携带replacement。revise只纠正义务表达与实现方式，不授权删掉义务、改变回报时限、挪到窗口外或降低用户承诺。账本必须与 changes 一致，不得凭空声称已保留职责。",
       "输出前逐条对比currentObligationReferences与changes.payoffRefs：任何被改写的原引用都要输出本轮revise映射，obligation逐字复制当前原引用，replacement逐字等于该章返回的新引用。即使只追加承接证据、解释、引用或改动标点，也不能漏记映射；不需要修改的引用原样保留。过去A→B后本轮只改B→C，就输出B→C，不把已不存在的A当本轮新来源；没有本轮变化时不要重复提交历史映射。",
@@ -78,13 +87,14 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
     })()),
   ],
   postValidate: (output, input) => {
-    if (output.requiresUserDecision && (output.changes.length || output.obligationMoves.length)) {
+    const raw = output as Partial<PlanningRepairOutput> | null;
+    if (raw?.requiresUserDecision && ((Array.isArray(raw.changes) && raw.changes.length) || (Array.isArray(raw.obligationMoves) && raw.obligationMoves.length))) {
       throw new Error("A planning repair requiring user decision must not propose applicable changes.");
     }
-    output = planningRepairWireOutputSchema.parse(output);
+    const wire = planningRepairWireOutputSchema.parse(output);
     const context = JSON.parse(input.contextJson);
     const chapters: Array<{ id: string; chapterOrder: number }> = context.candidateChapters ?? context.originalChapters ?? [];
-    const parsed = planningRepairOutputSchema.parse({ ...output, changes: output.changes.map(change => {
+    const parsed = planningRepairOutputSchema.parse({ ...wire, changes: wire.changes.map(change => {
       const chapter = chapters.find(chapter => chapter.id === change.chapterId);
       if (!chapter || !Number.isFinite(chapter.chapterOrder)) throw new Error("State-bound repair requires the exact candidate chapter and order.");
       return bindStateClaimContract(change, input.contextJson, chapter.chapterOrder);

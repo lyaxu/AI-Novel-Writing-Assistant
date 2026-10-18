@@ -4,7 +4,7 @@ import type { VolumeChapterPlan, VolumePlanDocument } from "@ai-novel/shared/typ
 import { normalizeChapterScenePlan, parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
 import { createChapterTaskSheetSchema, stateBoundSceneCardWireSchema } from "../chapterDetail/chapterDetailSchemas";
 import { requiredElementRevisionSchema, applyRequiredElementRevisions } from "./domain/requiredElementRevisions";
-import { chapterStateClaimsSchema, chapterStateClaimsWireSchema } from "@ai-novel/shared/types/novel/sceneCausality";
+import { chapterStateClaimsSchema, contextStateClaimsWireSchema } from "@ai-novel/shared/types/novel/sceneCausality";
 export { mergeAppliedPlanningRepairRequiredElements } from "./domain/requiredElementRevisions";
 
 const requiredText = z.string().trim().min(1);
@@ -67,7 +67,7 @@ export const planningRepairReviewOutputSchema = z.object({
 
 export const planningRepairWireOutputSchema = preserveGeneratedContentConstraints(planningRepairOutputSchema.extend({
   changes: z.array(planningRepairChangeSchema.extend({
-    stateClaims: chapterStateClaimsWireSchema,
+    stateClaims: contextStateClaimsWireSchema,
     sceneCards: z.array(stateBoundSceneCardWireSchema).min(3).max(8),
   })),
 }));

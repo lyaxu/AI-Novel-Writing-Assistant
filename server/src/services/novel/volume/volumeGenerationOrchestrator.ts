@@ -627,8 +627,9 @@ async function generateChapterDetail(params: {
       document, volumeId: targetVolume.id, chapterId: targetChapter.id,
       options: { ...options, taskId: options.taskId },
       context: { novel, storyMacroPlan }, writtenEvidence,
-        generateInitial: (beforeModelCall) => generateChapterTaskSheetDetail({
+        generateInitial: (beforeModelCall, recoverySeed) => generateChapterTaskSheetDetail({
           onBeforeModelCall: beforeModelCall,
+          initialRejectedResponse: recoverySeed,
           promptInput: { ...promptInput, detailMode: "task_sheet", targetChapter: {
             ...targetChapter,
             targetWordCount: targetChapter.targetWordCount ?? novel.defaultChapterLength ?? 2800,

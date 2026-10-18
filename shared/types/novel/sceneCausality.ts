@@ -3,7 +3,9 @@ import { sceneStateTransitionSchema } from "./sceneCausality/stateClaims.js";
 export {
   chapterStateClaimSchema, chapterStateClaimWireSchema, chapterStateClaimsSchema, chapterStateClaimsWireSchema,
   sceneStateTransitionSchema, stateClaimPrerequisiteWireSchema,
+  contextStateClaimWireSchema, contextStateClaimsWireSchema, sceneOwnedStateClaimWireSchema, sceneOwnedStateTransitionWireSchema,
   type ChapterStateClaim, type ChapterStateClaimWire, type SceneStateTransition,
+  type SceneOwnedStateTransitionWire,
 } from "./sceneCausality/stateClaims.js";
 export {
   actionStateEvidenceSchema, actionStateDimensionCheckSchema, actionStateCheckSchema,

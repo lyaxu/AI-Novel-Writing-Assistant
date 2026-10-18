@@ -151,6 +151,10 @@ export class PlanningRepairAdviceService {
     try {
     const reservation = await prisma.$transaction(async (tx) => {
       const source = await readAdviceSource(tx, taskId);
+      if (!source.repair.candidateVersionId && source.repair.history.some(value => (value as { kind?: string; promptId?: string })?.kind === "rejected_response"
+        && (value as { promptId?: string }).promptId === "novel.volume.chapter_execution_contract")) {
+        throw new AppError("请先从初始规划纠正入口处理保留响应，无需购买候选修复建议。", 409);
+      }
       if (source.repair.key !== input.repairKey) throw new AppError("修复记录已变化，请刷新。", 409);
       const previous = saved(source);
       if (previous?.requestId === input.idempotencyKey) return { source, advice: previous, run: false };

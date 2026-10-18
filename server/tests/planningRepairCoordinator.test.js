@@ -9,6 +9,7 @@ const ts = require("typescript");
 // Block every DB/model boundary before loading the coordinator; all execution below is in-memory.
 const coordinatorSource = path.resolve(__dirname, "../src/services/novel/volume/planningRepair/PlanningRepairCoordinator.ts");
 const imports = {
+  "node:crypto": require("node:crypto"),
   "@ai-novel/shared/types/planningRepair/recovery": require("./novelProduction/sourceHarness.cjs").loadRuntimeSource(path.resolve(__dirname,"../../shared/types/planningRepair/recovery.ts"), {}),
   "@ai-novel/shared/types/chapterLengthControl": require("@ai-novel/shared/types/chapterLengthControl"),
   "../planningPromises": { projectPlanningHorizon: () => ({ readonlyOpeningRoutes: [], readonlyPlanningHorizon: {} }) },
@@ -206,7 +207,7 @@ function output(ids) {
 
 function harness({ alwaysReject = false, local = false, windowReject = false } = {}) {
   const doc = document();
-  const session = { document: doc, inputFingerprint: "source-1", eligibleChapterIds: ["c3", "c4", "c5"], state: { version: 1, key: "key", novelId: "n", volumeId: "v", chapterId: "c3", chapterOrder: 3, rounds: 0, maxRounds: 2, phase: "assessing", history: [] } };
+  const session = { document: doc, inputFingerprint: "source-1", eligibleChapterIds: ["c3", "c4", "c5"], state: { version: 1, key: "key", novelId: "n", volumeId: "v", chapterId: "c3", chapterOrder: 3, rounds: 0, maxRounds: 2, initialGenerationAttempts: 0, phase: "assessing", history: [] } };
   const calls = [];
   let commits = 0;
   const store = { begin: async () => session, save: async (s, state, candidate) => {
@@ -676,4 +677,25 @@ test("a later repair keeps persisted revision lineage and distinguishes current 
   await new PlanningRepairCoordinator(h.store, h.gate, invoke).run(h.input);
   assert.deepEqual(h.session.state.obligationMoves, [prior]);
   assert.equal(h.session.state.phase, "committed");
+});
+
+test("initial outer calls are persisted before spending and stop at two across retries",async()=>{
+ const h=harness({local:true});const observed=[];
+ h.input.generateInitial=async(before)=>{await before();observed.push(h.session.state.initialGenerationAttempts);await before();observed.push(h.session.state.initialGenerationAttempts);await before();};
+ await assert.rejects(h.coordinator.run(h.input),/次数已用完/);assert.deepEqual(observed,[1,2]);assert.equal(h.session.state.rounds,0);
+});
+test("legacy unknown initial count is never treated as a free retry",async()=>{
+ const h=harness({local:true});delete h.session.state.initialGenerationAttempts;let paid=false;
+ h.input.generateInitial=async(before)=>{await before();paid=true;};await assert.rejects(h.coordinator.run(h.input),/无法确认/);assert.equal(paid,false);
+});
+test("explicit initial correction sends complete saved response and consumes its one-shot grant before model call",async()=>{
+ const h=harness({local:true}),output={complete:"rejected response"};let paid=0;
+ Object.assign(h.session.state,{initialGenerationAttempts:undefined,technicalError:"broken scene",history:[{kind:"rejected_response",promptId:"novel.volume.chapter_execution_contract",output}],
+  recoveryAction:{requestId:"one",mode:"retry_initial_contract"},initialContractCorrection:{requestId:"one",attempts:0,allowedAttempts:1,historyIndex:0,
+   rejectedResponseFingerprint:require("node:crypto").createHash("sha256").update(JSON.stringify(output)).digest("hex")}});
+ h.input.generateInitial=async(before,seed)=>{assert.deepEqual(seed,{output,validationError:"broken scene"});await before();paid++;assert.equal(h.session.state.initialContractCorrection.attempts,1);
+  throw Object.assign(new Error("still invalid"),{completedPromptResponse:{promptId:"novel.volume.chapter_execution_contract",output:{second:"rejection"}}});};
+ await assert.rejects(h.coordinator.run(h.input),/模型已返回/);assert.equal(paid,1);assert.equal(h.session.candidate,undefined);assert.equal(h.session.state.phase,"waiting_confirmation");
+ assert.equal(h.session.state.pendingOperation,undefined);assert.equal(h.session.state.initialGenerationAttempts,undefined);assert.equal(h.session.state.rounds,0);assert.equal(h.session.state.maxRounds,2);
+ await assert.rejects(h.coordinator.run(h.input));assert.equal(paid,1);
 });

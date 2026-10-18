@@ -36,3 +36,17 @@
 授权同时将原执行策略、范围、费用预算及修复上限指纹写入归档；派发前重新比对，防止两份当前范围同时扩大绕过原确认。已结算质量暂停的原 job 可以是 pendingManualRecovery=false，授权事务只将它标回人工恢复等待，导演保持暂停，真正执行仍由原命令和原 job 接回。未知调用仍要求原 job 的暂停标记为 true，且仅允许执行合同准备复核这一未知步骤。
 
 派发失败后，状态返回同次候选 token 和请求键，客户端继续走对应专用端点；不得退入会追加轮次的普通 retry。候选、源、预算、归档或策略漂移时旧授权不能重放。这个边界恢复已有策略，不替用户选择新的创作方向，也不以一次重核保证候选必然通过。
+
+## 初始响应拒收与单次纠正
+
+初始执行合同的 `rejected_response` 是已返回但未通过校验的模型响应，不是候选。无 `candidateVersionId` 时不得伪造候选、复用候选重核证明，也不能先收取修复建议费用再在候选前置检查处失败。源页独立的 `GET/POST /planning-repair/initial-contract` 固定 `retry_initial_contract`；通用建议和追加轮次入口拒绝这一边界。
+
+`PlanningRepairInitialContractService` 只读预检绑定完整拒收响应/历史、原来源快照和已选方向、原 job 和 settled 准备回执、原范围和策略。必须无正文、无 prepared/partial、无 pendingOperation、无未知步骤、无活跃执行权或其他请求。`PlanningRepairStore.assertInitialContractRecoverySnapshot` 独立验证无候选的来源，不削弱候选恢复保护。授权和归档在事务内 CAS，原任务保持暂停；提交命令后仍接回原 job。普通继续不能替代专用恢复键。
+
+每次明确确认只增加一次初始响应纠正授权；`initialContractCorrection` 持久记录累计次数、允许上限、拒收响应指纹及历史位置，Coordinator 在模型调用前消费。一次纠正失败保存新响应并暂停，下一次必须获得新 token 和新的明确确认；HTTP 重放、enqueue 失败和进程重启不增加额度。未知响应不能走此入口。纠正成功后才建立真实候选，进入正常语义/窗口复核和原策略修复，全部通过才能提交和按原章节范围继续。
+
+新 session 的 `initialGenerationAttempts` 记录正常初始生成的外层调用，最多两次并跨重启保留；历史缺字段不推断为零。它与初始单次授权纠正、候选语义修复 `rounds/maxRounds` 分开。更早的格式纠正等底层调用以 LLM 用量记录为准，不能用候选 `0/2` 表示此前无消费。UI 明确一次纠正、后续复核/必要修复和写作的费用与范围，并将勾选绑定当前 token。状态轮询不会自动确认或发送模型请求。
+
+服务单进程并发、事务 CAS 和执行租约防重复，并不提供跨进程崩溃后未知外部结果的 exactly-once 保证；该情况保留暂停，禁止自动再送。聚焦离线证据见 `planningInitialContractRecovery.test.js`、`planningRepairCoordinator.test.js` 及源页 `planningRepairAdvice.test.mjs`，不替代真实模型或页面验收。
+
+初始纠正确认还绑定任务顶层模型、温度、指导方向、写法、问题策略、完成目标及启动输入，与 Store 的稳定生成输入权限保持一致；运行进度和 pipelineStatus 不属于这类输入。确认后改变这些输入必须重新预检和明确确认，不能沿用旧 token。已存在但格式损坏的初始调用计数拒绝授权；仅历史缺字段显示未知，不伪造成零。

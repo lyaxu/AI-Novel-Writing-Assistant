@@ -6,7 +6,9 @@
 
 `planningStateReview` 负责声明逐项覆盖、原子命题比较、历史来源权限与统一修复方向。fresh wire 的状态到问题关联只写 `stateChecks.issueId`，反向 `claimIds` 由程序生成；`repairGuidance`、问题和推进检查的修复建议都从唯一决定投影。`established_in_plan` 是前提有效的计划，不是“计划提到过”；不能同时关联阻塞问题。旧历史问题仍按ID保留，分类与证据可根据本轮有效决定更新，避免锁死错误判断。来源过期由质量门返回候选修复需要，不能用重复审查调用掩盖。
 
-`stateClaimBinding` 负责新规划合同的声明来源与场景引用绑定。`resolveChapterStateClaims` 可由生成后处理和质量审查共同调用，将本次正文 ID 恢复为原始路径和原文；旧 ID、当前章/未来章或非正文来源不能冒充前史。`bindStateClaimContract` 只接受结构化的场景顺序和声明引用，按已解析声明产生兼容前提文本。它不证明声明的语义成立：例如原文只说计划尝试，模型却声明已成功，来源可能有效而命题仍错误，必须由逐声明语义复核指出。
+`stateClaimBinding` 负责新规划合同的声明来源与场景归属投影。`resolveChapterStateClaims` 可由生成后处理和质量审查共同调用，将本次正文 ID 恢复为原始路径和原文；旧 ID、当前章/未来章或非正文来源不能冒充前史。`bindStateClaimContract` 只接受新 wire：本章声明位于场景 entry/action/after 数组，归属只表达一次。它生成兼容声明表、阶段引用、入口/离场及前提文本，聚合跨图错误供完整响应纠正，不按剧情词补边或选一个近似 ID。它不证明声明的语义成立：例如原文只说计划尝试，模型却声明已成功，来源可能有效而命题仍错误，必须由逐声明语义复核指出。
+
+生成投影只执行一次。质量门的 `validatePlanningStateSources` 接收已持久化的 canonical 合同，必须调用 `validateCanonicalStateClaims`，不能再调用 fresh-wire binder：canonical 顶层声明表合法包含 `planned_scene`，而 wire 顶层只允许 prior context。canonical 校验核对正文来源、声明唯一性、归属场景和阶段、跨场景顺序与前提引用，不重写入口、离场或前提文本。结构和来源无效使用 `ContractRelationshipError`；意外实现异常直接上抛，不能把工程错误包装成需付费修改的小说规划问题。测试须覆盖实际 prompt 后处理 → scene-plan 序列化 → 质量门来源校验这一完整格式边界，包括无前文的首章。
 
 声明 ID 在章内稳定，正文 evidenceId 绑定本次来源。修复保留仍正确的声明 ID，更新错误命题、时态或来源并同步场景引用；禁止把未来选择升级为已知事实，也不能把前章尚未做的事当作本章不得尝试的永久限制。来源变化时重新引用本次目录，不复用旧原文快照，不自动寻找近似替代。
 

@@ -115,6 +115,9 @@ export class ChapterTaskSheetQualityGateService {
     try {
       validatePlanningStateSources(candidate, options.reviewContextJson);
     } catch (error) {
+      // A programming/adapter failure is not a model-authored planning defect. Only an
+      // explicit contract diagnostic may purchase a repair of the candidate.
+      if ((error as { code?: string } | null)?.code !== "CHAPTER_CONTRACT_RELATIONSHIP_INVALID") throw error;
       const repairHint = "根据本次提供的正文重新绑定状态声明及其证据，保留有效场景；缺少来源时明确标记未知，不能沿用过期事实。";
       return { status: "repairable", canEnterExecution: false, verdict: "repairable", safeToSync: false,
         recommendedHandling: "repair_contract", loadRisk: "normal", confidence: 1,

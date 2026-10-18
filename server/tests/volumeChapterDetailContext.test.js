@@ -21,15 +21,14 @@ function withStateBinding(output) {
     : [0, 1, 2].map(i => ({ ...output.sceneCards[0], key: `scene_${i + 1}` }));
   const stateClaims = [];
   const sceneCards = scenes.map(scene => {
-    for (const phase of ["entry", "action", "exit"]) stateClaims.push({
-      id: `${scene.key}_${phase}`, subject: "主角", predicate: phase === "entry" ? scene.entryState
-        : phase === "exit" ? scene.exitState : scene.mustAdvance[0], temporalScope: "planned",
-      modality: phase === "action" ? "attempt" : "fact", source: { kind: "planned_scene", sceneKey: scene.key, phase },
-    });
-    return { ...scene, targetWordCount: scene.targetWordCount ?? 900, resistance: "已有阻力", turn: "行动取得反馈",
+    const { entryState, exitState, ...wireScene } = scene;
+    return { ...wireScene, targetWordCount: scene.targetWordCount ?? 900, resistance: "已有阻力", turn: "行动取得反馈",
       emotionalShift: "谨慎转为行动", readerValue: "推动既有职责", causality: { actor: "主角", choice: scene.mustAdvance[0],
         motive: scene.purpose, prerequisites: [{ claimIds: [`${scene.key}_entry`] }],
-        stateTransition: { beforeClaimIds: [`${scene.key}_entry`], actionClaimIds: [`${scene.key}_action`], afterClaimIds: [`${scene.key}_exit`] },
+        stateTransition: { beforeClaimIds: [],
+          entryClaims: [{ id: `${scene.key}_entry`, subject: "主角", predicate: entryState, modality: "fact" }],
+          actionClaims: [{ id: `${scene.key}_action`, subject: "主角", predicate: scene.mustAdvance[0], modality: "attempt" }],
+          afterClaims: [{ id: `${scene.key}_exit`, subject: "主角", predicate: exitState, modality: "outcome" }] },
         resistanceResponse: "阻力产生反馈", outcomeMechanism: "行动带来局面变化", resultingConstraints: [] } };
   });
   return { ...output, stateClaims, sceneCards, readerExperience: output.readerExperience ?? {

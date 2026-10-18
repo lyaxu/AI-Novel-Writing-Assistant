@@ -12,12 +12,16 @@ const boundary = loadRuntimeSource("../director/recovery/planningRepair/domain/r
   "../../../../production/reliability": reliability,
   "@ai-novel/shared/types/planningRepair/recovery": policy,
 });
+const initialBoundary = loadRuntimeSource("../director/recovery/planningRepair/domain/initialContractAcknowledgement.ts", {
+  "node:crypto": require("node:crypto"), "../../../../production/reliability": reliability,
+  "./reviewExistingAcknowledgement": boundary,
+});
 const imports = {
   "../../../../../../db/prisma": {}, "../../../../../../middleware/errorHandler": { AppError },
   "@ai-novel/shared/types/planningRepair/recovery": policy, "../../../../production/reliability": reliability,
   "../../../../production/recovery": require("../../dist/services/novel/production/recovery"),
   "../../../../volume/planningRepair/PlanningRepairStore": {}, "../planningRepairRecovery": seedTools,
-  "../domain/reviewExistingAcknowledgement": boundary,
+  "../domain/reviewExistingAcknowledgement": boundary, "../domain/initialContractAcknowledgement": initialBoundary,
 };
 const { PlanningRepairReviewExistingService } = loadRuntimeSource("../director/recovery/planningRepair/application/PlanningRepairReviewExistingService.ts", imports);
 const { PlanningRepairPipelineRecoveryService } = loadRuntimeSource("../director/recovery/planningRepair/application/PlanningRepairPipelineRecoveryService.ts", {
@@ -208,7 +212,7 @@ for (const endpoint of ["review-existing", "resume-policy"]) test(`HTTP ${endpoi
     "../recovery/planningRepair/PlanningRepairRecoveryService":{}, "../commands/DirectorCommandService":{},
     "../../../../middleware/errorHandler":{AppError}, "../recovery/planningRepair/planningRepairRecovery":seedTools,
     "../recovery/planningRepair/advice/PlanningRepairAdviceService":{},
-    "../../volume/planningRepair/PlanningRepairStore":{}, "../recovery/planningRepair":{PlanningRepairReviewExistingService},
+    "../../volume/planningRepair/PlanningRepairStore":{}, "../recovery/planningRepair":{PlanningRepairReviewExistingService,PlanningRepairInitialContractService:class{}},
   });
   createPlanningRepairRouter({}, {enqueuePlanningRepairRecoveryCommand:async (...args)=>{
     assert.deepEqual(args,["task","repair","explicit-review"]); attempts++;

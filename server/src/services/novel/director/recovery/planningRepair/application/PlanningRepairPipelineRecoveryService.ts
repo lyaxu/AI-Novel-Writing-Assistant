@@ -9,6 +9,7 @@ import { PlanningRepairStore } from "../../../../volume/planningRepair/PlanningR
 import { readPlanningRepairSeed } from "../planningRepairRecovery";
 import { assertSettledPlanningPreparation } from "../domain/settledPipelinePause";
 import { assertReviewExistingAcknowledgement } from "../domain/reviewExistingAcknowledgement";
+import { assertInitialContractAcknowledgement } from "../domain/initialContractAcknowledgement";
 
 export interface PlanningPipelineRecoveryInput { taskId: string; novelId: string; recoveryKey: string }
 export interface PlanningPipelineRecoveryResult {
@@ -16,7 +17,7 @@ export interface PlanningPipelineRecoveryResult {
 }
 interface Dependencies {
   db?: Pick<PrismaClient, "$transaction">;
-  store?: Pick<PlanningRepairStore, "assertPipelineRecoverySnapshot">;
+  store?: Pick<PlanningRepairStore, "assertPipelineRecoverySnapshot"> & Partial<Pick<PlanningRepairStore, "assertInitialContractRecoverySnapshot">>;
   now?: () => number;
 }
 function conflict(message: string): never {
@@ -133,16 +134,21 @@ export class PlanningRepairPipelineRecoveryService {
           return typeof saved.operationId === "string" && saved.operationId.startsWith(`pipeline:${boundId}:`);
         })) conflict("当前关联任务已有章节执行记录，不能接替其所有权。");
       }
-      await store.assertPipelineRecoverySnapshot(tx, task);
-      const acknowledgement = seed.planningReviewExistingAcknowledgement as Record<string, any> | undefined;
+      const initial = recovery.executionMode === "retry_initial_contract";
+      if (initial) {
+        if (!store.assertInitialContractRecoverySnapshot) conflict("初始规划恢复来源校验不可用。");
+        await store.assertInitialContractRecoverySnapshot(tx, task);
+      } else await store.assertPipelineRecoverySnapshot(tx, task);
+      const acknowledgement = (initial ? seed.planningInitialContractAcknowledgement : seed.planningReviewExistingAcknowledgement) as Record<string, any> | undefined;
       let proof;
       if (acknowledgement?.requestId === input.recoveryKey) {
         const archived = await tx.chapterArtifactSyncCheckpoint.findUnique({ where: {
           novelId_chapterId_contentHash_artifactType_syncMode: { ...identity, contentHash: String(acknowledgement.archiveId) },
         } });
         if (!archived?.metadataJson || acknowledgement.pipelineJobId !== jobId) conflict("找不到本次明确确认的原执行记录。");
-        proof = assertReviewExistingAcknowledgement({ acknowledgement, archive: parse(archived.metadataJson), repair, recovery, journal, seed });
+        proof = (initial ? assertInitialContractAcknowledgement : assertReviewExistingAcknowledgement)({ acknowledgement, archive: parse(archived.metadataJson), repair, recovery, journal, seed });
       } else {
+        if (initial) conflict("缺少初始规划单次纠正授权。");
         proof = assertSettledPlanningPreparation({ repair, recovery, journal });
       }
       if (proof.source === "history" && job.error !== repair.summary) {

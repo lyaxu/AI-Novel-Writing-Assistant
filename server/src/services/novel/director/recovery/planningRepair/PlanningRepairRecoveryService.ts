@@ -70,7 +70,9 @@ export class PlanningRepairRecoveryService {
       && isPlanningRepairTaskPaused(view)
       ? { idempotencyKey: recovery.idempotencyKey, guidance: recovery.guidance, executionMode: recovery.executionMode, affectedChapterIds: recovery.affectedChapterIds,
         candidateRecoveryToken: (seed.planningReviewExistingAcknowledgement as { requestId?: string; token?: string } | undefined)?.requestId === recovery.idempotencyKey
-          ? (seed.planningReviewExistingAcknowledgement as { token?: string }).token : undefined } : null;
+          ? (seed.planningReviewExistingAcknowledgement as { token?: string }).token : undefined,
+        initialContractToken: (seed.planningInitialContractAcknowledgement as { requestId?: string } | undefined)?.requestId === recovery.idempotencyKey
+          ? (seed.planningInitialContractAcknowledgement as { token?: string }).token : undefined } : null;
     return { taskId, novelId: row.novelId, status: view.status, pendingManualRecovery: view.pendingManualRecovery, cancelRequestedAt: row.cancelRequestedAt, planningRepair: repair, recoveryRequest };
   }
 
@@ -120,6 +122,10 @@ export class PlanningRepairRecoveryService {
       return { granted: false, replayed: false, taskId };
     }
     const guidance = input.guidance?.trim();
+    if (!repair.candidateVersionId && repair.history.some(value => (value as { kind?: string; promptId?: string })?.kind === "rejected_response"
+      && (value as { promptId?: string }).promptId === "novel.volume.chapter_execution_contract")) {
+      throw new AppError("请使用初始规划纠正入口，核对保留响应并授权一次纠正。", 409);
+    }
     const idempotencyKey = input.idempotencyKey?.trim();
     if (!guidance || !idempotencyKey) throw new AppError("请填写修复方向并提供本次请求标识。", 400);
     const requests = Array.isArray(seed.planningRepairRecoveryRequests)

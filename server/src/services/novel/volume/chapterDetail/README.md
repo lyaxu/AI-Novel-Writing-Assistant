@@ -13,11 +13,13 @@
 
 ## 可复用的状态声明
 
-新生成的任务单、完整执行合同和规划修复共用 `stateClaims`。声明包含主体、命题、`prior/planned` 时序、`fact/intention/attempt/outcome` 模态和来源。已写来源只选当前正文目录的 ID；本章建立的状态必须绑定具体场景及 entry/action/exit；未知状态必须显式说明未知。决定、尝试和既成结果不能相互替代，已有事实也不能禁止人物在本章作出不同的新选择。
+保存的任务单、完整执行合同和规划修复共用 `stateClaims`。声明包含主体、命题、`prior/planned` 时序、`fact/intention/attempt/outcome` 模态和来源。已写来源只选当前正文目录的 ID；本章建立的状态绑定具体场景及 entry/action/exit；未知状态必须显式说明未知。决定、尝试和既成结果不能相互替代，已有事实也不能禁止人物在本章作出不同的新选择。
 
-场景前提在模型输出中只引用 `claimIds`；程序从同一声明投影兼容的 condition/sourceKind/reference，避免前提处独立改写一套事实。`stateTransition` 引用同表的 before/action/after IDs，禁止先使用后场景才建立的状态，并要求每场动作和结果绑定本场阶段。场景的自由叙述仍需 AI 检查是否符合声明，ID 有效不等于命题受正文支持。
+模型 wire 与保存结构分开：顶层 `stateClaims` 只放前文上下文；本章声明只出现在所属场景 `stateTransition.entryClaims/actionClaims/afterClaims`，不再重复填写 `sceneKey/phase` 及反向 action/after ID。`beforeClaimIds` 引用上下文或此前场景声明；本场 entry 声明自动进入 before。程序由归属生成统一声明表与阶段 ID，投影兼容的 entryState/exitState 及前提 condition/sourceKind/reference。投影不截断，入口/离场合并文本各不超过240字符，超限作为明确结构问题交回纠正。阶段引用禁止提前使用本场动作、离场或后场景的条件。
 
-保存的 scenePlan 同时保留声明和引用。旧合同没有声明仍可读取；新 Prompt wire schema 强制包含完整声明表及阶段绑定，禁止模型伪写恢复后的原文引用。修复替换场景时必须同时交回已有声明表，不能静默删除或沿用一份失去场景对应关系的旧表。已写证据的来源校验与语义支持审查分层，失效引用需显式修复，不通过相似文本猜测来补证。
+首章没有前文仍可通过本场 entry 声明建立符合书级设定的初始处境；它是计划呈现，不是历史已证事实。声明放到 entry 不能成为绕过证据的办法：不存在的既得资源、权限、能力或未知旧史仍须由语义复核识别。所有自由叙述仍需 AI 检查是否符合声明，结构有效不等于命题正确。
+
+保存的 scenePlan 同时保留声明和引用，旧合同读取格式不变。新 Prompt 使用保真 JSON 接收层，在 postValidate 执行严格 wire schema 和关系校验；接收层不是放宽准入，也不调用只看到局部字段的 JSON 修复。完整拒收响应保留给既有有界纠正，关系错误聚合 path、claimId、expected、actual，避免每轮只发现一个图错误。实际发送的完整骨架来自共享连贯占位示例，测试必须执行追加骨架→严格 schema→关系绑定，不以手写正确 fixture 替代模型协议覆盖。修复旧候选须把其 planned 声明迁回场景归属位置再生成，不照抄旧 wire。
 
 章节列表在服务装配阶段读取真实 `writtenEvidence`，细化继续读取同一权威来源。跨卷列表的读取边界使用全书章序，不能把节奏段的卷内序号传给正文查询。已写事实限制计划可行性；旧节奏、标题和摘要只提供叙事职责，冲突时保留职责并重新安排可实现的动作。
 

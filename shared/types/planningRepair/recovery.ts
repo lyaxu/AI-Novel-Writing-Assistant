@@ -1,6 +1,14 @@
 /** A legacy worker may retain running/queued while its explicit manual pause is set. */
-export type PlanningRepairRecoveryMode = "repair_then_review" | "review_existing" | "resume_existing_policy";
-export type PlanningCandidateRecoveryMode = Exclude<PlanningRepairRecoveryMode, "repair_then_review">;
+export type PlanningRepairRecoveryMode = "repair_then_review" | "review_existing" | "resume_existing_policy" | "retry_initial_contract";
+export type PlanningCandidateRecoveryMode = "review_existing" | "resume_existing_policy";
+
+export interface InitialContractCorrection {
+  requestId: string;
+  attempts: number;
+  allowedAttempts: number;
+  historyIndex: number;
+  rejectedResponseFingerprint: string;
+}
 
 /** Uses saved authorization and counters, never infers intent from free-text errors. */
 export function canResumeOriginalPlanningPolicy(input: {

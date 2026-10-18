@@ -50,6 +50,10 @@ export function buildPrimaryProseCitationCatalog(reviewContextJson?: string, pri
   return { sources, reviewContextDisplayJson: sources.length ? JSON.stringify(context) : fallback.reviewContextDisplayJson };
 }
 
+export class InvalidPrimaryProseCitationError extends Error {
+  readonly code = "INVALID_PRIMARY_PROSE_CITATION";
+}
+
 /** Restore only IDs offered for this input's earlier prose; never search or repair model-authored quotes. */
 export function restorePrimaryProseCitations(
   references: Array<{ evidenceId: string }>, reviewContextJson?: string, chapterOrder?: number,
@@ -59,7 +63,7 @@ export function restorePrimaryProseCitations(
       ? [[excerpt.evidenceId, { sourcePath: source.sourcePath, quote: excerpt.quote }] as const] : [])));
   return references.map(reference => {
     const citation = citations.get(reference.evidenceId);
-    if (!citation) throw new Error(`Unknown or stale earlier-prose evidenceId: ${reference.evidenceId}. Select an ID from the current primaryProseCitationCatalog; do not invent a quote.`);
+    if (!citation) throw new InvalidPrimaryProseCitationError(`Unknown or stale earlier-prose evidenceId: ${reference.evidenceId}. Select an ID from the current primaryProseCitationCatalog; do not invent a quote.`);
     return { ...citation };
   });
 }

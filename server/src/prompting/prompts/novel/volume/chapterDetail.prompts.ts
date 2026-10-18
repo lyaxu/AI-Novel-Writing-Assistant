@@ -1,4 +1,5 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { z } from "zod";
 import type { PromptAsset } from "../../../core/promptTypes";
 import { renderSelectedContextBlocks } from "../../../core/renderContextBlocks";
 import {
@@ -13,6 +14,9 @@ import { type VolumeChapterDetailPromptInput } from "./shared";
 import { buildVolumeChapterDetailContextBlocks } from "./contextBlocks";
 import { NOVEL_PROMPT_BUDGETS } from "../promptBudgetProfiles";
 import { bindStateClaimContract } from "./evidence/stateClaimBinding";
+import { preserveGeneratedContentConstraints } from "../../../../llm/generatedContentSchema";
+import { sceneOwnershipRules, sceneOwnershipCorrectionRule, sceneOwnershipExampleNote,
+  createTaskSheetWireExample, createExecutionContractWireExample } from "./contracts/sceneOwnershipProtocol";
 
 const selectedDirectionRule = "selectedPlanningDirection是用户确认的创作承诺，writtenEvidence的实际已写事实高于计划。细化必须承接原选卖点、人物路径、openingChain的关系变化与earlyPayoff；可改编动作或调整拆章，但须保留同等关系/回报价值，在purpose、mustAdvance、readerExperience或继承钩子写明具体承接。不能把关系建立或可见回报静默换成重复追逃/受压，也不能因后来生成的摘要遗漏而认定用户放弃。全书长期承诺不要求本章全部兑现；开篇承诺延期须有明确落点。来源缺失时标明未知，不编造原始选择；若与已写事实或受保护边界冲突，交由现有规划审查修复，不擅改事实。";
 
@@ -237,9 +241,7 @@ function validateAdjacentChapterBoundary<T extends {
 const intensityScaleRule = "conflictLevel 与 revealLevel 统一采用 0-100 整数尺度，不是 1-5 星级。0 表示无冲突或无新增揭示，20 表示低强度铺垫，50 表示中等阻力或实质线索，80 表示高压对抗或重大揭示，100 表示本书极限。按实际场景的阻力、代价和信息变化评分，不为曲线好看硬造高潮；用户已固定的数值必须保留。";
 
 const sceneCausalityRules = [
-  "本章顶层stateClaims是唯一状态声明表，先依据正文与本章计划建立，再让场景引用。每项包含id、subject、predicate、temporalScope（prior或planned）、modality（fact/intention/attempt/outcome）、source。区分已发生事实、人物打算、尝试和结果：打算不等于已做到，失败或尚未决定不禁止本章作出新决定。",
-  "source只能为{kind:written_prose,evidenceIds:[本次正文目录ID]}、{kind:planned_scene,sceneKey,phase:entry|action|exit}或{kind:unknown,reason}。prior声明引用真实更早正文，planned声明引用本章实际场景阶段；不知道就unknown，不以旧计划、概括、人物吹嘘替代既成事实。stateClaims最多48项，subject最多64字符、predicate最多160字符；每项只写一个状态命题，同一主体/时点/命题复用ID。禁止模型输出evidence原文字段。",
-  "每个causality增加stateTransition:{beforeClaimIds,actionClaimIds,afterClaimIds}。每组最多6项，行动与离场至少1项且必须含本场action/exit声明；入口只能引用前文、此前场景结果或本场entry先建立的状态，不能先消费稍后才获得的条件。各字段描述动作时必须沿用这些声明的主体、状态、数量及模态，不得独立改写事实。前提只输出prerequisites:[{claimIds:[...]}]，最多6个不同声明；每项ID必须列入beforeClaimIds，禁止另写condition/sourceKind/reference，程序从同一声明恢复这些兼容字段。",
+  ...sceneOwnershipRules,
   "每个 sceneCard 必须包含 causality：actor（作出关键选择的人）、choice（具体选择）、motive（为什么如此选择）、prerequisites、resistanceResponse（他人/环境如何回应）、outcomeMechanism（回应如何导致结果）、resultingConstraints。不能把目的或预定结果冒充发生机制。",
   "stateClaims中引用正文只证明出处，predicate还必须真正受该段支持；不能引用一个真实句子却声称相反数量、持有者、时间或已完成状态。没有上下文证据不能声称前文已获得物品、信息、信任、能力或通行条件。",
   "resultingConstraints 每项包含 constraint、persistence：写明行动带来的身体、资源、时间、关系或认知限制，以及持续至何时/什么可见事件才能解除；既有伤势或消耗必须实际限制可选行动，不能只作装饰。没有新增限制可返回空数组，不能强行添加伤亡。",
@@ -288,7 +290,7 @@ function createVolumeDetailSystemPrompt(detailMode: VolumeChapterDetailPromptInp
     "rewardLevel 只能是 setup、partial、major；由本章在卷节奏中的职责决定，不要每章都写成 major。",
     "inheritedHookResponsibilities 必须优先承接相邻章已经提出的问题；没有明确旧钩子时返回空数组，不要编造。",
     "promisedReward 与 netChange 必须是读者在正文中能看见的回报和变化，不能写成作者意图或抽象主题。",
-    "sceneCards 必须是 3-8 个场景卡数组，每个场景卡都必须包含 key、title、purpose、mustAdvance、mustPreserve、entryState、exitState、forbiddenExpansion、targetWordCount、resistance、turn、emotionalShift、readerValue。",
+    "sceneCards 必须是 3-8 个场景卡数组，每场包含 key、title、purpose、mustAdvance、mustPreserve、forbiddenExpansion、targetWordCount、resistance、turn、emotionalShift、readerValue、causality。入口和离场由归属声明投影，不输出entryState/exitState。",
     "每个场景都必须有具体阻力和转折；readerValue 要说明该场景给读者带来的推进、揭示、情绪或关系价值。",
     ...sceneCausalityRules,
     "sceneCards 必须完整覆盖整章推进和结尾 hook，不要把整章压成一个场景。",
@@ -299,7 +301,7 @@ function createVolumeDetailSystemPrompt(detailMode: VolumeChapterDetailPromptInp
     "你必须优先识别最近章节执行合同与当前章节之间的叙事重复风险，重点检查开场方式、推进方式、状态变化和结尾钩子是否连续复用。",
     "如果最近章节已经连续使用同类开场或同类推进，本章必须主动切换，不得继续沿用同一路数。",
     "差异化要求必须落实到 taskSheet 和 sceneCards 里，而不是停留在抽象提醒。",
-    "首个 sceneCard 必须通过 purpose、entryState 或 forbiddenExpansion 明确避开最近章节的重复开场。",
+    "首个 sceneCard 必须通过 purpose、入口声明或 forbiddenExpansion 明确避开最近章节的重复开场。",
     "至少一个中段 sceneCard 的 mustAdvance 必须明确要求不同于最近章节的推进结果，例如主动试探、关系建立、资源获得、规则认知或计划转向。",
     "如果最近章节已经连续写成外部压迫或被动逃离，本章不得继续只靠同类压迫推进，必须给出新的推进机制。",
   ].join("\n");
@@ -332,10 +334,11 @@ function createExecutionContractSystemPrompt(): string {
     "taskSheet 是给正文写作器的简洁执行指令，sceneCards 是 3-8 个场景卡的执行拆解。",
     "readerExperience 是本章唯一的读者体验合同，必须完整包含 readerQuestion、promisedReward、rewardLevel、protagonistWant、primaryResistance、keyTurn、emotionalShift、informationReveal、netChange、inheritedHookResponsibilities、endingHook。",
     "rewardLevel 只能使用 setup、partial、major；promisedReward 和 netChange 必须能在正文中被读者直接感知。",
-    "sceneCards 除原字段外还必须包含 resistance、turn、emotionalShift、readerValue，确保每个场景都有阻力、转折和读者价值。",
-    "neighborEventUse 必填：分别为上一章和下一章各输出一项，relation 只能是 previous 或 next。consumesExclusiveEvent 表示本章是否已经承担了该章的一次性独占事件（第一次激活、第一笔资源入手、身份暴露、关键查账、正式请缨、确认某条关键真相等）。默认应为 false；本章只能承接邻章已发生的状态并产生新结果，不能把邻章的首次事件再做一遍。若确实要承担，必须在 evidence 写明理由。",
+    "sceneCards每场必须完整包含key、title、purpose、mustAdvance:string[]、mustPreserve:string[]、forbiddenExpansion:string[]、targetWordCount正整数、resistance、turn、emotionalShift、readerValue、causality。不输出entryState/exitState，入口和离场由归属声明投影。",
+    "neighborEventUse 必填数组：仅为实际存在的上一章/下一章各输出一项，缺失的邻章不编造；relation只能是previous或next。consumesExclusiveEvent表示本章是否承担该章的一次性独占事件，默认false；本章只能承接邻章状态并产生新结果。若确实承担，须在evidence说明理由。",
     "mustAvoidConflicts 必填：逐条自查 mustAvoid 与 taskSheet、requiredElements、sceneCards 是否冲突——凡 mustAvoid 禁止发生的事，又被写成必做内容的，都必须列出来。forbiddenClause 必须逐字复制 mustAvoid 中用「；」分隔的某一条，scheduledIn 写明它出现在 taskSheet / requiredElements[n] / sceneCards[n] 哪一项，reason 写明为什么冲突。确实没有冲突就返回空数组。禁止漏报：一边禁止一边安排执行是最严重的合同错误。",
     ...sceneCausalityRules,
+    sceneOwnershipCorrectionRule,
     "taskSheet 和 sceneCards 只能执行当前章的合同，不得提前占用相邻章的一次性事件，也不得重写上一章已经完成的里程碑。",
     "payoff_cadence 列出本章到期的账本承诺。每一条都必须在本章合同里有明确落点：purpose、mustAdvance 或 readerExperience 要写出它这一章向前动了哪一步、由谁在什么处境下推动、带来什么可见后果。只写「记得这件事」「准备去办」不算推进。推进不等于兑现，长期承诺不要求本章全部兑现；确实推不动时说明具体阻力或取舍，并不要为凑清单新造能力、道具、人物或提前兑现远期安排。",
     "如果 conflict_level_curve 标出用户锚定的 conflictLevel，该数值是硬约束，不得改写。",
@@ -408,18 +411,20 @@ export const volumeChapterBoundaryPrompt: PromptAsset<
 export const volumeChapterTaskSheetPrompt: PromptAsset<
   VolumeChapterDetailPromptInput,
   ReturnType<typeof createChapterTaskSheetSchema>["_output"],
-  ReturnType<typeof createChapterTaskSheetWireSchema>["_output"]
+  unknown
 > = {
   id: "novel.volume.chapter_task_sheet",
-  version: "v12",
+  version: "v13",
   taskType: "planner",
   mode: "structured",
   language: "zh",
   contextPolicy: baseContextPolicy,
   semanticRetryPolicy: {
-    maxAttempts: 2,
+    maxAttempts: 1,
   },
-  outputSchema: createChapterTaskSheetWireSchema(),
+  outputSchema: preserveGeneratedContentConstraints(z.unknown()),
+  repairPolicy: { maxAttempts: 0 },
+  structuredOutputHint: { example: createTaskSheetWireExample(), note: sceneOwnershipExampleNote },
   render: (input, context) => [
     new SystemMessage(createVolumeDetailSystemPrompt("task_sheet")),
     new HumanMessage(buildChapterDetailPrompt(renderSelectedContextBlocks(context), input.detailMode)),
@@ -435,15 +440,17 @@ export const volumeChapterTaskSheetPrompt: PromptAsset<
 export const volumeChapterExecutionContractPrompt: PromptAsset<
   VolumeChapterDetailPromptInput,
   ReturnType<typeof createChapterExecutionContractSchema>["_output"],
-  ReturnType<typeof createChapterExecutionContractWireSchema>["_output"]
+  unknown
 > = {
   id: "novel.volume.chapter_execution_contract",
-  version: "v13",
+  version: "v14",
   taskType: "planner",
   mode: "structured",
   language: "zh",
   contextPolicy: baseContextPolicy,
-  outputSchema: createChapterExecutionContractWireSchema(),
+  outputSchema: preserveGeneratedContentConstraints(z.unknown()),
+  repairPolicy: { maxAttempts: 0 },
+  structuredOutputHint: { example: createExecutionContractWireExample(), note: sceneOwnershipExampleNote },
   render: (input, context) => [
     new SystemMessage(createExecutionContractSystemPrompt()),
     new HumanMessage([

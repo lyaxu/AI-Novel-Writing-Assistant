@@ -26,12 +26,12 @@ import { buildPrimaryProseCitationCatalog, restorePrimaryProseCitations } from "
 import { narrativeProgressionPriorEvidenceIndex, validateNarrativeProgressionEvidence } from "./evidence/narrativeProgressionEvidence";
 import { planningIssueDecisionSchema, planningStateCheckSchema } from "@ai-novel/shared/types/novel/planningReviewDecision";
 import { projectPlanningStateReview } from "./evidence/planningStateReview";
-import { bindStateClaimContract } from "./evidence/stateClaimBinding";
+import { validateCanonicalStateClaims } from "./evidence/stateClaimBinding";
 
 /** A stale source is a candidate repair need, not a reason to repeatedly retry the reviewer. */
 export function validatePlanningStateSources(candidate: ChapterExecutionContractQualityCandidate, reviewContextJson?: string): void {
   const cards = JSON.parse(candidate.sceneCards || "{}");
-  if (cards.stateClaims !== undefined) bindStateClaimContract({ stateClaims: cards.stateClaims, sceneCards: cards.scenes },
+  if (cards.stateClaims !== undefined) validateCanonicalStateClaims({ stateClaims: cards.stateClaims, sceneCards: cards.scenes },
     reviewContextJson, candidate.chapterOrder);
 }
 

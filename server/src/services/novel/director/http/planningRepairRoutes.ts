@@ -7,7 +7,7 @@ import { AppError } from "../../../../middleware/errorHandler";
 import { isPlanningRepairConfirmationError } from "../recovery/planningRepair/planningRepairRecovery";
 import { PlanningRepairAdviceService } from "../recovery/planningRepair/advice/PlanningRepairAdviceService";
 import { planningRepairStore, type PlanningRepairStore } from "../../volume/planningRepair/PlanningRepairStore";
-import { PlanningRepairReviewExistingService } from "../recovery/planningRepair";
+import { PlanningRepairReviewExistingService, PlanningRepairInitialContractService } from "../recovery/planningRepair";
 
 const params = z.object({ id: z.string().trim().min(1) });
 const abandonBody = z.object({ reason: z.string().trim().max(400).optional() }).strict().optional();
@@ -30,8 +30,23 @@ export function createPlanningRepairRouter(
   advice: Pick<PlanningRepairAdviceService, "status" | "request" | "select"> = new PlanningRepairAdviceService(recovery),
   store: Pick<PlanningRepairStore, "abandon"> = planningRepairStore,
   reviewExisting: Pick<PlanningRepairReviewExistingService, "status" | "grant"> = new PlanningRepairReviewExistingService(),
+  initialContract: Pick<PlanningRepairInitialContractService, "status" | "grant"> = new PlanningRepairInitialContractService(),
 ) {
   const router = Router();
+  router.get("/:id/planning-repair/initial-contract", validate({ params }), async (req, res, next) => {
+    try { res.json({ success: true, data: await initialContract.status(String(req.params.id)) }); }
+    catch (error) { next(error); }
+  });
+  router.post("/:id/planning-repair/initial-contract", validate({ params, body: reviewExistingRequest }), async (req, res, next) => {
+    try {
+      const taskId = String(req.params.id), input = req.body as z.infer<typeof reviewExistingRequest>;
+      const grant = await initialContract.grant(taskId, input);
+      const command = await commands.enqueuePlanningRepairRecoveryCommand(taskId, input.repairKey, input.idempotencyKey);
+      res.status(202).json({ success: true, data: { ...grant, command } });
+    } catch (error) {
+      next(isPlanningRepairConfirmationError(error) ? new AppError(error instanceof Error ? error.message : "保留响应已变化，请刷新核对。", 409) : error);
+    }
+  });
   router.get("/:id/planning-repair/resume-policy", validate({ params }), async (req, res, next) => {
     try { res.json({ success: true, data: await reviewExisting.status(String(req.params.id), "resume_existing_policy") }); }
     catch (error) { next(error); }

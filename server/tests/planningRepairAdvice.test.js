@@ -34,7 +34,7 @@ const output = () => ({ summary: "复核后给出可执行方向", recommendedOp
   guidance: { intent: "补齐因果", actions: ["使用已有线索"], preserve: ["核心冲突"], verification: ["验证行动前提"] },
 }] });
 function fixture(useDefaultGenerator = false, promptRun) {
-  let source = { row: { id: "t", seedPayloadJson: "old", updatedAt: "time" }, seed: {}, repair: { key: "r", novelId: "n", chapterId: "c1" },
+  let source = { row: { id: "t", seedPayloadJson: "old", updatedAt: "time" }, seed: {}, repair: { key: "r", novelId: "n", chapterId: "c1", candidateVersionId: "candidate-v1", history: [] },
     fingerprint: "f", sourceToken: "s", eligibleChapterIds: ["c1", "c2", "c3"], context: { userIntent: "保留设定", candidateAuthority: { versionId: "candidate-v1" }, candidateWindow: [{ chapters: [{ id: "c1", taskSheet: "先核对已经交付的记录，再检查箱内仍存在的痕迹。" }] }] } };
   let writes = 0, calls = 0, reviews = 0, rejectCas = false, pending;
   let reviewResult = async (_source, advice) => ({ advice, checks: advice.options.map(option => ({
@@ -663,4 +663,11 @@ test("captured failed advice rebuild keeps real candidate plain and historical p
   assert.ok(contextModule.adviceCandidateEvidenceError({ executionMode: "review_existing", candidateVersionId: candidate.id,
     affectedChapterIds: [chapter.id], candidateEvidence: [{ sourcePath: `candidateWindow[0].chapters[${context.candidateWindow[0].chapters.indexOf(chapter)}].taskSheet`, quote: "箱底残留暗红印痕与薄绢碎屑" }] }, context));
   t.diagnostic(`captured input=${messages.at(-1).content.length}; rebuilt input=${prepared.length}; candidate paths=${context.candidateEvidencePaths.length}`);
+});
+
+test("initial rejected response cannot purchase candidate repair advice",async()=>{
+ const f=fixture();delete f.source.repair.candidateVersionId;
+ f.source.repair.history=[{kind:"rejected_response",promptId:"novel.volume.chapter_execution_contract",output:{saved:true}}];
+ await assert.rejects(f.service.request("t",{repairKey:"r",idempotencyKey:"initial"}),/初始规划纠正入口/);
+ assert.equal(f.calls(),0);assert.equal(f.reviews(),0);assert.equal(f.writes(),0);
 });

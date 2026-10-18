@@ -41,3 +41,7 @@
 导演恢复模块在用户显式确认后可保存 `resume_existing_policy`，仅允许尚有预算的原自动复核/修复策略。协调器先复核保存候选，之后与正常执行共用 `nextPlanningRepairAction` 的预算和用户决定边界，不能因为来自恢复入口而增加一轮或忽略人工决定。`review_existing` 仍只复核，不通过即暂停；`repair_then_review` 是用户另行确认方向后的修复操作。
 
 两个候选恢复模式都拒绝缺失候选，不能悄悄重新生成。技术失败保留已有不确定调用保护，确定不通过可在当前剩余预算内进入修复；调用失败不会转成对旧不可信建议的执行授权。来源变化与任务取消仍由保存和提交 CAS 拦截。
+
+### 初始合同调用预算
+
+正常初始调用通过 `generateInitial(beforeModelCall, recoverySeed?)` 进入；每个模型调用前必须先执行 callback。新 session 用 `initialGenerationAttempts` 持久记录最多两次外层调用，历史未知次数不自动补零。专用初始拒收恢复提供完整 `output` 和 `validationError`，仅调用一次定向纠正；`initialContractCorrection` 在调用前消费该用户授权，不能重新赠送正常两次包。纠正次数不占用或增加候选语义修复轮次；付费后校验拒绝保存完整新响应并形成 settled 暂停，网络未知保留 pendingOperation。只有合法输出保存成真实候选后才能进入原语义和窗口复核。授权恢复证明及 source/job/lease 保护归 director/recovery/planningRepair 管理。

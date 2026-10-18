@@ -23,13 +23,15 @@ function load(relative) {
   return module.exports;
 }
 const prefix = 'server/src/prompting/prompts/novel/volume/';
-const { bindStateClaimContract, resolveChapterStateClaims } = load(`${prefix}evidence/stateClaimBinding.ts`);
+const { bindStateClaimContract, resolveChapterStateClaims, validateCanonicalStateClaims, ContractRelationshipError } = load(`${prefix}evidence/stateClaimBinding.ts`);
+const { validatePlanningStateSources } = load(`${prefix}chapterTaskSheetQuality.prompts.ts`);
 const { buildPrimaryProseCitationCatalog } = load(`${prefix}evidence/primaryProseCitationCatalog.ts`);
-const { volumeChapterExecutionContractPrompt: prompt } = load(`${prefix}chapterDetail.prompts.ts`);
+const { volumeChapterExecutionContractPrompt: prompt, volumeChapterTaskSheetPrompt: taskPrompt } = load(`${prefix}chapterDetail.prompts.ts`);
 const { planningRepairPrompt: repair } = load(`${prefix}planningRepair.prompts.ts`);
 const blocks = load(`${prefix}contextBlocks.ts`);
 const { normalizeChapterScenePlan, parseChapterScenePlan, serializeChapterScenePlan } = load('shared/types/chapterLengthControl.ts');
-const { createChapterExecutionContractSchema } = load('server/src/services/novel/volume/chapterDetail/chapterDetailSchemas.ts');
+const { createChapterExecutionContractSchema, createChapterExecutionContractWireSchema, createChapterTaskSheetWireSchema } = load('server/src/services/novel/volume/chapterDetail/chapterDetailSchemas.ts');
+const { appendStructuredOutputHintMessages } = load('server/src/prompting/core/structuredOutputHint.ts');
 const { applyPlanningRepairCandidate } = load('server/src/services/novel/volume/planningRepair/planningRepairDomain.ts');
 const prose = '她保管着两份证明，还没有决定是否向委员会提出申请。';
 const writtenEvidence = { chapters: [{ chapterId: 'earlier', order: 1, content: prose }] };
@@ -39,12 +41,12 @@ function fixture() {
   const stateClaims = [{ id: 'held', subject: '她', predicate: '保管两份证明', temporalScope: 'prior', modality: 'fact', source: { kind: 'written_prose', evidenceIds: [evidenceId] } }];
   const sceneCards = [1, 2, 3].map(i => {
     const key = `s${i}`, before = i === 1 ? 'held' : `result${i - 1}`;
-    stateClaims.push({ id: `choice${i}`, subject: '她', predicate: `作出第${i}步选择`, temporalScope: 'planned', modality: 'intention', source: { kind: 'planned_scene', sceneKey: key, phase: 'action' } },
-      { id: `result${i}`, subject: '她', predicate: `取得第${i}步反馈`, temporalScope: 'planned', modality: 'outcome', source: { kind: 'planned_scene', sceneKey: key, phase: 'exit' } });
-    return { key, title: '申请', purpose: '核实下一步', mustAdvance: ['作出选择'], mustPreserve: [], entryState: '已持有证明', exitState: '取得反馈', forbiddenExpansion: [], targetWordCount: 800,
+    return { key, title: '申请', purpose: '核实下一步', mustAdvance: ['作出选择'], mustPreserve: [], forbiddenExpansion: [], targetWordCount: 800,
       resistance: '审查需要时间', turn: '收到回应', emotionalShift: '焦虑转为谨慎', readerValue: '申请向前推进',
       causality: { actor: '她', choice: '提出申请', motive: '希望弄清办理条件', prerequisites: [{ claimIds: [before] }],
-        stateTransition: { beforeClaimIds: [before], actionClaimIds: [`choice${i}`], afterClaimIds: [`result${i}`] },
+        stateTransition: { beforeClaimIds: [before], entryClaims: [],
+          actionClaims: [{ id: `choice${i}`, subject: '她', predicate: `作出第${i}步选择`, modality: 'intention' }],
+          afterClaims: [{ id: `result${i}`, subject: '她', predicate: `取得第${i}步反馈`, modality: 'outcome' }] },
         resistanceResponse: '委员会核对材料', outcomeMechanism: '核对后给出下一步指引', resultingConstraints: [] } };
   });
   return { purpose: '提交申请并取得反馈', exclusiveEvent: '首次提交申请', endingState: '已得知下一步', nextChapterEntryState: '带着反馈准备补件', conflictLevel: 30, revealLevel: 20,
@@ -72,7 +74,10 @@ test('fresh contract IDs restore readable prerequisites and survive scene-plan p
   const plan = normalizeChapterScenePlan({ scenes: result.sceneCards, stateClaims: result.stateClaims }, 2400);
   const restored = parseChapterScenePlan(serializeChapterScenePlan(plan), { targetWordCount: 2400 });
   assert.deepEqual(restored.stateClaims, result.stateClaims);
-  assert.deepEqual(restored.scenes[0].causality.stateTransition, wire.sceneCards[0].causality.stateTransition);
+  assert.deepEqual(restored.scenes[0].causality.stateTransition, { beforeClaimIds: ['held'], actionClaimIds: ['choice1'], afterClaimIds: ['result1'] });
+  assert.equal(restored.scenes[0].entryState, '她：保管两份证明');
+  assert.equal(restored.scenes[0].exitState, '她：取得第1步反馈');
+  assert.deepEqual(result.stateClaims[1].source, { kind: 'planned_scene', sceneKey: 's1', phase: 'action' });
   assert.equal(wire.stateClaims[0].source.evidence, undefined);
 });
 
@@ -81,33 +86,36 @@ test('legacy contracts remain readable but fresh generation requires state bindi
   const old = structuredClone(canonical); delete old.stateClaims;
   old.sceneCards.forEach(scene => { delete scene.causality.stateTransition; scene.causality.prerequisites.forEach(item => delete item.claimIds); });
   assert.equal(createChapterExecutionContractSchema().safeParse(old).success, true);
-  assert.equal(prompt.outputSchema.safeParse(old).success, false);
+  assert.equal(createChapterExecutionContractWireSchema().safeParse(old).success, false);
+  assert.deepEqual(prompt.outputSchema.parse(old), old, 'raw envelope preserves rejected JSON for contextual correction');
   for (const mutate of [
     value => { value.stateClaims[0].source.evidence = [{ sourcePath: 'fake', quote: prose }]; },
     value => { value.sceneCards[0].causality.prerequisites[0].condition = '另一项被改写的状态'; },
     value => { delete value.sceneCards[0].causality.stateTransition; },
-  ]) { const value = fixture(); mutate(value); assert.equal(prompt.outputSchema.safeParse(value).success, false); assert.throws(() => prompt.postValidate(value, input(), {})); }
+    value => { value.sceneCards[0].entryState = '另一份入口文本'; },
+    value => { value.sceneCards[0].causality.stateTransition.actionClaims[0].source = { kind: 'planned_scene', sceneKey: 'other', phase: 'entry' }; },
+    value => { value.sceneCards[0].causality.stateTransition.actionClaimIds = ['held']; },
+  ]) { const value = fixture(); mutate(value); assert.equal(createChapterExecutionContractWireSchema().safeParse(value).success, false); assert.throws(() => prompt.postValidate(value, input(), {})); }
 });
 
 test('claims reject stale provenance, forged history, duplicate IDs and invalid scene dependencies', () => {
   assert.throws(() => resolveChapterStateClaims(fixture().stateClaims, review.replace(prose, `${prose}新内容`), 2), /Unknown or stale/);
   for (const mutate of [
     v => { v.stateClaims[0].temporalScope = 'planned'; },
-    v => { v.stateClaims[1].temporalScope = 'prior'; },
-    v => { v.stateClaims[1].id = 'held'; },
-    v => { v.stateClaims[1].source.sceneKey = 'absent'; },
+    v => { v.sceneCards[0].causality.stateTransition.actionClaims[0].id = 'held'; },
     v => { v.sceneCards[0].causality.stateTransition.beforeClaimIds = ['result3']; },
     v => { v.sceneCards[0].causality.stateTransition.beforeClaimIds = ['choice1']; },
-    v => { v.sceneCards[0].causality.stateTransition.actionClaimIds = ['held']; },
+    v => { v.sceneCards[0].causality.stateTransition.actionClaims = []; },
     v => { v.sceneCards[0].causality.prerequisites[0].claimIds = ['result1']; },
-    v => { v.sceneCards[0].causality.stateTransition.afterClaimIds = ['missing']; },
+    v => { v.sceneCards[0].causality.stateTransition.beforeClaimIds = ['missing']; },
   ]) { const value = fixture(); mutate(value); assert.throws(() => bindStateClaimContract(value, review, 2)); }
 });
 
 test('new planned intentions and attempts are not mistaken for already achieved results', () => {
   const value = fixture();
-  value.stateClaims[1].predicate = '决定提出申请'; value.stateClaims[1].modality = 'intention';
-  value.stateClaims[2].predicate = '尝试递交后被要求补件'; value.stateClaims[2].modality = 'attempt';
+  const transition = value.sceneCards[0].causality.stateTransition;
+  transition.actionClaims[0].predicate = '决定提出申请'; transition.actionClaims[0].modality = 'intention';
+  transition.afterClaims[0].predicate = '尝试递交后被要求补件'; transition.afterClaims[0].modality = 'attempt';
   assert.doesNotThrow(() => prompt.postValidate(value, input(), {}));
   // Citation validity does not certify predicate semantics: the independent state review must catch this.
   value.stateClaims[0].predicate = '保管二十份证明';
@@ -144,4 +152,125 @@ test('planning repair uses the same bound output and preserves its resolved clai
   const missingClaims = structuredClone(result); delete missingClaims.changes[0].stateClaims;
   assert.throws(() => applyPlanningRepairCandidate(document, 'v', ['c'], missingClaims), /must return its state claims/);
   assert.throws(() => repair.postValidate(proposal, { contextJson: JSON.stringify({ writtenEvidence, candidateChapters: [] }) }, {}), /exact candidate/);
+});
+
+test('actual appended hints contain complete connected examples accepted by the strict ownership contract', () => {
+  const context = { blocks: [], selectedBlockIds: [], droppedBlockIds: [], summarizedBlockIds: [], estimatedInputTokens: 0 };
+  for (const asset of [prompt, taskPrompt, repair]) {
+    const fixtureInput = asset === repair ? { contextJson: '{}' } : input();
+    const rendered = asset.render(fixtureInput, context);
+    const messages = appendStructuredOutputHintMessages({ asset, promptInput: fixtureInput, context, messages: rendered });
+    assert.equal(messages.length, rendered.length + 1);
+    const actualHint = messages.at(-1).content;
+    const example = JSON.parse(actualHint.split('示例：\n')[1]);
+    assert.equal(asset.repairPolicy.maxAttempts, 0);
+    if (asset === repair) {
+      const contextJson = JSON.stringify({ candidateChapters: [{ id: example.changes[0].chapterId, chapterOrder: 1 }] });
+      assert.doesNotThrow(() => asset.postValidate(example, { contextJson }, context));
+    } else {
+      const first = input(); first.targetChapter.chapterOrder = 1; first.writtenEvidence = { chapters: [] };
+      (asset === prompt ? createChapterExecutionContractWireSchema() : createChapterTaskSheetWireSchema()).parse(example);
+      assert.doesNotThrow(() => asset.postValidate(example, first, context));
+    }
+    const scenes = asset === repair ? example.changes[0].sceneCards : example.sceneCards;
+    assert.equal(scenes[0].entryState, undefined); assert.equal(scenes[0].exitState, undefined);
+    assert.equal(scenes[0].causality.stateTransition.actionClaimIds, undefined);
+    assert.equal(scenes[0].causality.stateTransition.actionClaims[0].source, undefined);
+  }
+});
+
+test('an unwritten opening is established in its scene instead of inventing prior prose or upgrading unknown history', () => {
+  const first = input(); first.targetChapter.chapterOrder = 1; first.writtenEvidence = { chapters: [] };
+  const wire = structuredClone(prompt.structuredOutputHint.example);
+  const result = prompt.postValidate(wire, first, {});
+  assert.ok(result.stateClaims.every(claim => claim.temporalScope === 'planned'));
+  assert.deepEqual(result.stateClaims[0].source, { kind: 'planned_scene', sceneKey: 'scene_1', phase: 'entry' });
+  assert.deepEqual(result.sceneCards[0].causality.stateTransition.beforeClaimIds, ['opening']);
+  wire.stateClaims.push({ id: 'unverified', subject: '人物', predicate: '过去取得某项资格', temporalScope: 'prior', modality: 'fact', source: { kind: 'unknown', reason: '现有资料没有给出' } });
+  const unresolved = prompt.postValidate(wire, first, {}).stateClaims.find(claim => claim.id === 'unverified');
+  assert.deepEqual(unresolved, wire.stateClaims[0], 'structural projection never fabricates evidence or approves an unknown premise');
+});
+
+test('relationship diagnostics report all independent broken edges and ID collisions in one response', () => {
+  const value = fixture();
+  value.sceneCards[0].causality.stateTransition.beforeClaimIds = ['missing', 'result3'];
+  value.sceneCards[1].causality.stateTransition.actionClaims[0].id = 'choice1';
+  value.sceneCards[2].causality.prerequisites = [{ claimIds: ['another_missing'] }];
+  assert.throws(() => prompt.postValidate(value, input(), {}), error => {
+    assert.ok(error instanceof ContractRelationshipError);
+    assert.equal(error.code, 'CHAPTER_CONTRACT_RELATIONSHIP_INVALID');
+    for (const id of ['missing', 'result3', 'choice1', 'another_missing']) assert.ok(error.issues.some(issue => issue.claimId === id));
+    assert.ok(error.issues.every(issue => issue.path && issue.expected && issue.actual !== undefined));
+    return true;
+  });
+});
+
+test('state projection preserves complete declared text and rejects overflow instead of clipping it', () => {
+  const value = fixture(), stage = value.sceneCards[0].causality.stateTransition;
+  stage.afterClaims.push({ id: 'extra', subject: '另一主体', predicate: '同步获得明确反馈', modality: 'outcome' });
+  const result = prompt.postValidate(value, input(), {});
+  assert.equal(result.sceneCards[0].exitState, '她：取得第1步反馈；另一主体：同步获得明确反馈');
+  stage.afterClaims[0].predicate = '甲'.repeat(160);
+  stage.afterClaims[1].predicate = '乙'.repeat(160);
+  assert.throws(() => prompt.postValidate(value, input(), {}), error => {
+    assert.ok(error.issues.some(issue => issue.path === 'sceneCards[0].exitState' && issue.actual.length > 240)); return true;
+  });
+  assert.equal(stage.afterClaims[0].predicate.length, 160);
+});
+
+test('raw receipt keeps missing fields and unknown additions intact while strict post-validation rejects them', () => {
+  const raw = fixture(); delete raw.sceneCards[0].causality.stateTransition.actionClaims;
+  raw.sceneCards[0].unexpected = { retainForCorrection: true };
+  const original = JSON.stringify(raw);
+  const envelope = prompt.outputSchema.parse(raw);
+  assert.equal(JSON.stringify(envelope), original);
+  assert.throws(() => prompt.postValidate(envelope, input(), {}));
+  assert.equal(JSON.stringify(raw), original);
+  const correction = { kind: 'rejected_contract_correction', rejectedResponse: raw,
+    validationError: 'missing actionClaims', relationshipIssues: [{ path: 'sceneCards[0]', expected: 'owned action', actual: 'missing' }] };
+  const messages = prompt.render({ ...input(), contractRepairFeedback: JSON.stringify(correction) }, { blocks: [] });
+  assert.ok(messages.some(message => message.content.includes(JSON.stringify(correction))));
+  assert.ok(messages[0].content.includes('旧canonical结构'));
+});
+
+test('fresh wire projects once and the actual quality precheck accepts canonical planned scenes without mutation', () => {
+  for (const firstChapter of [false, true]) {
+    const settings = input();
+    if (firstChapter) { settings.targetChapter.chapterOrder = 1; settings.writtenEvidence = { chapters: [] }; }
+    const result = prompt.postValidate(firstChapter ? structuredClone(prompt.structuredOutputHint.example) : fixture(), settings, {});
+    const plan = normalizeChapterScenePlan({ scenes: result.sceneCards, stateClaims: result.stateClaims }, result.targetWordCount);
+    const candidate = { chapterOrder: settings.targetChapter.chapterOrder, sceneCards: serializeChapterScenePlan(plan) };
+    const saved = candidate.sceneCards;
+    assert.ok(plan.stateClaims.some(claim => claim.source.kind === 'planned_scene'));
+    assert.doesNotThrow(() => validatePlanningStateSources(candidate, JSON.stringify({ writtenEvidence: settings.writtenEvidence })));
+    assert.equal(candidate.sceneCards, saved, 'canonical checking never reprojects or rewrites stored states');
+    assert.throws(() => bindStateClaimContract({ stateClaims: plan.stateClaims, sceneCards: plan.scenes }, review, candidate.chapterOrder),
+      'fresh ownership binder deliberately does not accept canonical state claims');
+  }
+  assert.doesNotThrow(() => validatePlanningStateSources({ chapterOrder: 1, sceneCards: JSON.stringify({ scenes: [] }) }, '{}'),
+    'legacy contracts without state claims retain their existing read path');
+});
+
+test('canonical quality precheck rejects invalid sources and graph edges with typed diagnostics', () => {
+  const base = prompt.postValidate(fixture(), input(), {});
+  for (const mutate of [
+    value => { value.stateClaims[0].source.evidenceIds = ['prose_' + 'f'.repeat(64)]; },
+    value => { value.stateClaims[1].source.sceneKey = 'absent'; },
+    value => { value.sceneCards[0].causality.stateTransition.actionClaimIds = ['choice2']; },
+    value => { value.sceneCards[0].causality.stateTransition.beforeClaimIds = ['result3']; },
+    value => { value.sceneCards[1].causality.prerequisites[0].claimIds = ['missing']; },
+    value => { value.stateClaims[1].temporalScope = 'prior'; },
+    value => { value.stateClaims[1].id = 'held'; },
+    value => { delete value.sceneCards[0].causality.stateTransition; },
+    value => { value.stateClaims[0].modality = 'invented'; },
+  ]) {
+    const value = structuredClone(base); mutate(value);
+    assert.throws(() => validateCanonicalStateClaims(value, review, 2), error => {
+      assert.ok(error instanceof ContractRelationshipError);
+      assert.equal(error.code, 'CHAPTER_CONTRACT_RELATIONSHIP_INVALID');
+      assert.ok(error.issues.every(issue => issue.path && issue.expected));
+      return true;
+    });
+  }
+  assert.throws(() => validateCanonicalStateClaims(base, review.replace(prose, prose + '新内容'), 2), ContractRelationshipError);
 });

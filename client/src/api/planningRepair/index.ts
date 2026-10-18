@@ -10,7 +10,7 @@ export interface PlanningRepairStatus {
   status: string;
   pendingManualRecovery: boolean;
   cancelRequestedAt?: string | null;
-  recoveryRequest?: { idempotencyKey: string; guidance: string; executionMode?: PlanningRepairRecoveryMode; affectedChapterIds?: string[]; candidateRecoveryToken?: string } | null;
+  recoveryRequest?: { idempotencyKey: string; guidance: string; executionMode?: PlanningRepairRecoveryMode; affectedChapterIds?: string[]; candidateRecoveryToken?: string; initialContractToken?: string } | null;
   planningRepair: {
     version: 1;
     key: string;
@@ -26,6 +26,7 @@ export interface PlanningRepairStatus {
     history: unknown[];
     guidance?: string;
     candidateVersionId?: string;
+    initialGenerationAttempts?: number;
     affectedChapterIds?: string[];
     technicalError?: string;
     pendingOperation?: { kind: string; startedAt: string };
@@ -37,6 +38,19 @@ export const novelPlanningRepairQueryKey = (novelId: string) => ["planning-repai
 export const planningRepairAdviceQueryKey = (taskId: string) => ["planning-repair", "advice", taskId] as const;
 export const planningReviewExistingQueryKey = (taskId: string) => ["planning-repair", "review-existing", taskId] as const;
 export const planningResumePolicyQueryKey = (taskId: string) => ["planning-repair", "resume-policy", taskId] as const;
+export const planningInitialContractQueryKey = (taskId: string) => ["planning-repair", "initial-contract", taskId] as const;
+export type PlanningInitialContractStatus = { available: false; reason?: string } | {
+  available: true; token: string; initialGenerationAttempts: number | null; correctionAttempts: number;
+  chapterOrder: number; startOrder: number; endOrder: number; remainingRounds: number; correctionCalls: 1;
+};
+export async function getPlanningInitialContract(taskId: string) {
+  const { data } = await apiClient.get<ApiResponse<PlanningInitialContractStatus>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/initial-contract`);
+  return data.data;
+}
+export async function correctInitialPlanningContract(taskId: string, payload: { repairKey: string; token: string; idempotencyKey: string }) {
+  const { data } = await apiClient.post<ApiResponse<unknown>>(`/novel-workflows/${encodeURIComponent(taskId)}/planning-repair/initial-contract`, payload);
+  return data.data;
+}
 export type PlanningReviewExistingStatus = { available: false } | {
   available: true; token: string; candidateVersionId: string; chapterOrder: number; startOrder: number; endOrder: number; remainingRounds: number;
   requiresUnknownAcknowledgement: boolean;

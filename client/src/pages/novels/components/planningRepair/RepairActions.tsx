@@ -10,6 +10,7 @@ import {
 import { queryKeys } from "@/api/queryKeys";
 import { Button } from "@/components/ui/button";
 import { RepairAdviceOptions } from "./RepairAdviceOptions";
+import { InitialContractActions } from "./InitialContractActions";
 import { authorizedPlanningRepairPayload, canAdoptPlanningRepairAdvice, selectedPlanningRepairAdvice } from "./planningRepairAdvicePresentation";
 
 function errorText(error: unknown) {
@@ -17,6 +18,15 @@ function errorText(error: unknown) {
 }
 
 export function RepairActions({ status }: { status: PlanningRepairStatus }) {
+  const repair = status.planningRepair!;
+  const initialRejected = !repair.candidateVersionId && (repair.history ?? []).some(value => {
+    const item = value as { kind?: string; promptId?: string };
+    return item?.kind === "rejected_response" && item.promptId === "novel.volume.chapter_execution_contract";
+  });
+  return initialRejected ? <InitialContractActions status={status} /> : <CandidateRepairActions status={status} />;
+}
+
+function CandidateRepairActions({ status }: { status: PlanningRepairStatus }) {
   const repair = status.planningRepair!;
   const client = useQueryClient();
   const [guidance, setGuidance] = useState("");

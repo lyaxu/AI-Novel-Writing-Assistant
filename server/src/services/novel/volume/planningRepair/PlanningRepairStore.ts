@@ -33,6 +33,9 @@ export interface PlanningRepairState {
   phase: "assessing" | "repairing" | "reviewing" | "ready" | "committed"
     | "waiting_confirmation" | "uncertain" | "technical_failed" | "abandoned";
   candidateVersionId?: string;
+  /** Known outer generation calls only; undefined on legacy sessions, never inferred as zero. */
+  initialGenerationAttempts?: number;
+  initialContractCorrection?: import("@ai-novel/shared/types/planningRepair/recovery").InitialContractCorrection;
   affectedChapterIds?: string[];
   pendingOperation?: { kind: string; startedAt: string };
   repairOutputPending?: { inputFingerprint: string; round: number };
@@ -604,6 +607,20 @@ export class PlanningRepairStore {
     if (!planned || planned.chapterOrder !== state.chapterOrder) conflict("Planning recovery chapter mapping changed.");
   }
 
+  /** Initial rejected responses have no candidate; keep this witness separate from candidate recovery. */
+  async assertInitialContractRecoverySnapshot(tx: Prisma.TransactionClient, task: NovelWorkflowTask): Promise<void> {
+    const seed = parseSeed(task.seedPayloadJson), state = readState(seed), snapshot = readSnapshot(seed, task.id);
+    if (!state || state.novelId !== task.novelId || snapshot.committed || snapshot.candidateHash
+      || state.candidateVersionId || state.pendingOperation || state.repairOutputPending
+      || !snapshot.eligibleChapterIds.includes(state.chapterId)) conflict("Initial recovery has no settled source snapshot.");
+    if (snapshot.selectedCandidateFingerprint !== hash(seed.candidate ?? null)) conflict("Selected planning direction changed before initial recovery.");
+    const source = await readSource(tx, state.novelId, task);
+    if (![source.token, source.legacyToken].includes(snapshot.snapshotToken)) conflict("Planning source changed before initial recovery.");
+    const planned = snapshot.baselineDocument.volumes.find(v => v.id === state.volumeId)?.chapters.find(c => c.id === state.chapterId);
+    const { eligible } = eligibleWindow(source.document, state.volumeId, state.chapterId, source);
+    if (!planned || planned.chapterOrder !== state.chapterOrder || !eligible.includes(state.chapterId)) conflict("Initial recovery chapter mapping changed.");
+  }
+
   /** Persist a verified, already returned initial contract after cancellation; never calls AI or grants rounds. */
   async recoverCompletedInitialGeneration(input: {
     novelId: string; taskId: string; expectedSeedPayloadJson: string;
@@ -910,7 +927,7 @@ export class PlanningRepairStore {
       const state: PlanningRepairState = {
         version: 1, key: `${input.novelId}:${input.volumeId}:${chapter.id}`,
         novelId: input.novelId, volumeId: input.volumeId, chapterId: chapter.id,
-        chapterOrder: chapter.chapterOrder, rounds: 0, maxRounds: 2,
+        chapterOrder: chapter.chapterOrder, rounds: 0, maxRounds: 2, initialGenerationAttempts: 0,
         phase: stale || !eligible.length ? "waiting_confirmation" : "assessing",
         // A task holds one repair slot, so this new attempt replaces the given-up session. Carry a
         // record of it forward: without this, giving up would erase exactly the evidence the abandon

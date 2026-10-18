@@ -14,6 +14,7 @@ const domain = loadRuntimeSource('../volume/planningRepair/planningRepairDomain.
   './domain/requiredElementRevisions': revisions,
 });
 const { PlanningRepairCoordinator } = loadRuntimeSource('../volume/planningRepair/PlanningRepairCoordinator.ts', {
+  'node:crypto': require('node:crypto'),
   '@ai-novel/shared/types/chapterLengthControl': lengthControl,
   '@ai-novel/shared/types/planningRepair/recovery': require('@ai-novel/shared/types/planningRepair/recovery'),
   '../../../../prompting/core/promptRunner': { runStructuredPrompt: () => assert.fail('No live models') },

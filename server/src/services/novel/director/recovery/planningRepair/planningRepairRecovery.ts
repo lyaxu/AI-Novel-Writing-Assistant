@@ -16,6 +16,8 @@ export interface PlanningRepairState extends Record<string, unknown> {
   guidance?: string;
   recoveryAction?: { requestId: string; mode: PlanningRepairRecoveryMode; paidRound?: number; affectedChapterIds?: string[] };
   candidateVersionId?: string;
+  initialGenerationAttempts?: number;
+  initialContractCorrection?: import("@ai-novel/shared/types/planningRepair/recovery").InitialContractCorrection;
 }
 
 export interface PlanningRepairRecovery {
@@ -58,6 +60,9 @@ export function isPlanningRepairConfirmationError(error: unknown): boolean {
 export function assertPlanningRepairResumeAllowed(json: string | null | undefined, recoveryKey?: string): void {
   const { repair, recovery } = readPlanningRepairSeed(json);
   if (!repair || isTerminalPlanningRepairPhase(repair.phase)) return;
+  if (recovery?.executionMode === "retry_initial_contract" && (!recoveryKey || recovery.idempotencyKey !== recoveryKey)) {
+    throw new AppError("请从初始规划纠正入口继续本次明确授权。", 409);
+  }
   const blocked = isPlanningRepairConfirmationPhase(repair.phase)
     || Boolean(repair.pendingOperation) || recovery?.pendingGrant;
   if (!blocked && ["assessing", "repairing", "reviewing", "ready"].includes(repair.phase)

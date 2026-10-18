@@ -19,7 +19,7 @@ const reliability = load("../src/services/novel/production/reliability/types.ts"
 const schema = load("../../shared/types/chapterTaskSheetQuality.ts", { zod: require("zod"), "./novel/planningReviewDecision.js": require("../../shared/dist/types/novel/planningReviewDecision.js"), "./chapterLengthControl.js": length });
 const valid = { verdict: "usable", safeToSync: true, summary: "可执行", issues: [], repairGuidance: [], confidence: .9, loadRisk: "normal", recommendedHandling: "use_as_is" };
 const output = () => ({ purpose: "核对账目", exclusiveEvent: "取得收据", endingState: "收据已核实", nextChapterEntryState: "带收据询问店主", conflictLevel: 20, revealLevel: 20, targetWordCount: 2200, mustAvoid: "不要提前结案", payoffRefs: [], taskSheet: "完成本次核对，保留店主解释入口。", sceneCards: [1,2,3].map(n=>({key:`s${n}`,title:"核对",purpose:"发现差异",mustAdvance:["查账"],mustPreserve:["未结案"],entryState:"有疑点",exitState:"取得线索",forbiddenExpansion:["勿结案"],targetWordCount:n===3?734:733})) });
-function harness(responses) {
+function harness(responses, validatePlanningStateSources=()=>{}) {
   const calls=[];
   const runner={runStructuredPrompt:async (input)=>{ calls.push(input); const response=responses.shift(); if(response instanceof Error)throw response; return {output:response}; }};
   const service=load("../src/services/novel/volume/ChapterTaskSheetQualityGateService.ts",{
@@ -27,7 +27,7 @@ function harness(responses) {
     "@ai-novel/shared/types/chapterTaskSheetQuality":schema,
     "@ai-novel/shared/types/novel/planningPromises":{selectedPlanningPromiseIds:()=>[]},
     "../../../prompting/core/promptRunner":runner,
-    "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts":{chapterTaskSheetQualityPrompt:{id:"quality"},validatePlanningStateSources:()=>{}},
+    "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts":{chapterTaskSheetQualityPrompt:{id:"quality"},validatePlanningStateSources},
   });
   const generation=load("../src/services/novel/volume/chapterDetail/chapterExecutionContractGeneration.ts",{
     "@ai-novel/shared/types/chapterTaskSheetQuality":schema,"@ai-novel/shared/types/chapterLengthControl":length,
@@ -100,6 +100,58 @@ test("managed director repair retains its external review and persisted budget o
   await h.generation.generateChapterTaskSheetDetail(h.params);
   assert.deepEqual(h.calls.map(c=>c.asset.id),["contract"]);
 });
+test("unexpected source-validator failures do not buy candidate repair or masquerade as quality findings",async()=>{
+  const programmingError=new TypeError("unexpected canonical adapter failure");
+  const h=harness([output(),output()],()=>{throw programmingError;});
+  await assert.rejects(h.generation.generateChapterTaskSheetDetail(h.params),error=>error===programmingError);
+  assert.equal(h.calls.length,1);
+  const invalidSource=Object.assign(new Error("prior evidence ID is stale"),{code:"CHAPTER_CONTRACT_RELATIONSHIP_INVALID"});
+  const known=harness([output(),output()],()=>{throw invalidSource;});
+  await assert.rejects(known.generation.generateChapterTaskSheetDetail(known.params),error=>{
+    assert.equal(error.result.issues[0].id,"state_claim_source_invalid");return true;
+  });
+  assert.equal(known.calls.length,2);
+});
+test("contract relationship correction includes the complete rejected response and structured diagnostics",async()=>{
+  const rejected={sceneCards:[{key:"s1",causality:{stateTransition:{actionClaimIds:["wrong"]}}}],stateClaims:[{id:"wrong",source:{phase:"entry"}}]};
+  const issues=[{path:"sceneCards[0].causality.stateTransition.actionClaimIds",expected:"action",actual:"entry"}];
+  const failure=Object.assign(malformed(),{completedPromptResponse:{output:rejected,validationError:"wrong phase"},cause:{issues}});
+  const h=harness([failure,output()]);h.params.options.planningRepairManaged=true;
+  let reserved=0;h.params.onBeforeModelCall=async()=>{reserved++;};
+  await h.generation.generateChapterTaskSheetDetail(h.params);
+  const feedback=JSON.parse(h.calls[1].promptInput.contractRepairFeedback);
+  assert.deepEqual(feedback.rejectedResponse,rejected);assert.deepEqual(feedback.relationshipIssues,issues);
+  assert.equal(reserved,2);assert.equal(h.calls.length,2);
+});
+test("initial rejected-response recovery buys one correction and cannot silently regenerate",async()=>{
+  const seed={output:{sceneCards:[{key:"retained-scene"}],taskSheet:"保留全部有效设计"},validationError:"invalid relationship"};
+  const failure=Object.assign(malformed(),{completedPromptResponse:{output:{sceneCards:[]},validationError:"still invalid"}});
+  const h=harness([failure,output()]);h.params.options.planningRepairManaged=true;h.params.initialRejectedResponse=seed;
+  let reserved=0;h.params.onBeforeModelCall=async()=>{reserved++;};
+  await assert.rejects(h.generation.generateChapterTaskSheetDetail(h.params),error=>error===failure);
+  assert.deepEqual(JSON.parse(h.calls[0].promptInput.contractRepairFeedback).rejectedResponse,seed.output);
+  assert.equal(reserved,1);assert.equal(h.calls.length,1);
+  const success=harness([output()]);success.params.options.planningRepairManaged=true;success.params.initialRejectedResponse=seed;
+  await success.generation.generateChapterTaskSheetDetail(success.params);assert.equal(success.calls.length,1);
+});
+test("missing completed response and output-limit errors never purchase a blind contract retry",async()=>{
+  for(const failure of [malformed(),Object.assign(malformed(),{code:"LLM_OUTPUT_LIMIT",completedPromptResponse:{output:{},validationError:"truncated"}})]){
+    const h=harness([failure,output()]);h.params.options.planningRepairManaged=true;
+    await assert.rejects(h.generation.generateChapterTaskSheetDetail(h.params),error=>error===failure);
+    assert.equal(h.calls.length,1);
+  }
+});
+test("definitely completed malformed JSON retains full text for one contextual correction",async()=>{
+  const failure=Object.assign(new Error("malformed JSON"),{name:"StructuredOutputError",category:"malformed_json",rejectedOutput:{rawContent:'{"purpose":"保留原始完整输出", BROKEN}',finishReason:"stop"}});
+  const h=harness([failure,output()]);h.params.options.planningRepairManaged=true;
+  await h.generation.generateChapterTaskSheetDetail(h.params);
+  assert.equal(JSON.parse(h.calls[1].promptInput.contractRepairFeedback).rejectedResponse,failure.rejectedOutput.rawContent);
+  assert.equal(h.calls[0].options.disableFallbackModel,true);assert.equal(h.calls[0].options.transportRetryCount,0);
+  for(const item of [ {...failure,category:"output_limit"}, {...failure,rejectedOutput:{...failure.rejectedOutput,finishReason:"length"}}, {...failure,category:"transport_error"} ]){
+    const original=Object.assign(new Error("not a completed contract"),item);
+    assert.strictEqual(h.generation.preserveCompletedContractParseFailure(original),original);
+  }
+});
 test("replan and transport failures cannot start local semantic repair",async()=>{
   const h=harness([output(),{...valid,verdict:"unusable",safeToSync:false,recommendedHandling:"replan_window",issues:[],repairGuidance:["需跨卷调整"]}]);
   await assert.rejects(h.generation.generateChapterTaskSheetDetail(h.params),h.service.ChapterTaskSheetQualityGateError);
@@ -123,6 +175,9 @@ test("current revision replaces only duplicate current plan slots, preserving or
 test("repair feedback remains in the contract prompt even when the context budget selects no optional blocks",()=>{
   const emptySchema={};
   const assets=load("../src/prompting/prompts/novel/volume/chapterDetail.prompts.ts",{
+    zod:require("zod"),
+    "../../../../llm/generatedContentSchema":{preserveGeneratedContentConstraints:x=>x},
+    "./contracts/sceneOwnershipProtocol":{sceneOwnershipRules:[],sceneOwnershipCorrectionRule:"",sceneOwnershipExampleNote:"",createTaskSheetWireExample:()=>({}),createExecutionContractWireExample:()=>({})},
     "@langchain/core/messages":require("@langchain/core/messages"),
     "../../../core/renderContextBlocks":{renderSelectedContextBlocks:()=>""},
     "../../../../services/novel/volume/volumeGenerationSchemas":Object.fromEntries(["createChapterBoundarySchema","createChapterExecutionContractSchema","createChapterPurposeSchema","createChapterTaskSheetSchema","createChapterExecutionContractWireSchema","createChapterTaskSheetWireSchema"].map(k=>[k,()=>emptySchema])),

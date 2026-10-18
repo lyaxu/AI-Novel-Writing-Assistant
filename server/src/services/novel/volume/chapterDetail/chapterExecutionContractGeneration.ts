@@ -57,7 +57,8 @@ export async function reviewExistingExecutionContract(input: {
 type StoryMacroPlanResult = Awaited<ReturnType<StoryMacroPlanService["getPlan"]>> | null;
 
 export function shouldRetryChapterExecutionContract(error: unknown, attempt: number): boolean {
-  if (attempt > 0) {
+  if (attempt > 0 || (error as { code?: string } | null)?.code === "LLM_OUTPUT_LIMIT"
+    || (error as { category?: string } | null)?.category === "output_limit") {
     return false;
   }
   if (error instanceof ChapterScenePlanNormalizationError) {
@@ -71,6 +72,41 @@ export function shouldRetryChapterExecutionContract(error: unknown, attempt: num
     && typeof error === "object"
     && (error as { promptQualityFailureKind?: unknown }).promptQualityFailureKind === "post_validate_failed"
   );
+}
+
+/** A rejected answer is correction material, never a usable or approved candidate. */
+export interface InitialRejectedContractResponse {
+  output: unknown;
+  validationError: string;
+}
+
+export function buildRejectedContractFeedback(input: InitialRejectedContractResponse, error?: unknown): string {
+  const cause = (error as { cause?: { issues?: unknown } } | undefined)?.cause;
+  return JSON.stringify({
+    kind: "rejected_contract_correction",
+    rejectedResponse: input.output,
+    validationError: input.validationError,
+    relationshipIssues: cause?.issues ?? (error as { issues?: unknown } | undefined)?.issues ?? [],
+  });
+}
+
+/** The parser only attaches this private receipt after a definite stop, never on truncation. */
+export function preserveCompletedContractParseFailure(error: unknown): unknown {
+  const failure = error as { name?: string; category?: string; rejectedOutput?: { rawContent?: unknown; finishReason?: string } };
+  if (!(error instanceof Error) || failure.name !== "StructuredOutputError"
+    || !["schema_mismatch", "malformed_json", "incomplete_json", "thinking_pollution"].includes(failure.category ?? "")
+    || failure.rejectedOutput?.finishReason !== "stop" || typeof failure.rejectedOutput.rawContent !== "string") return error;
+  const preserved = Object.assign(new Error(error.message, { cause: error }), {
+    name: "ContractResponseValidationError", code: "PROMPT_POST_VALIDATION_FAILED",
+    promptQualityFailureKind: "post_validate_failed",
+  });
+  Object.defineProperty(preserved, "completedPromptResponse", { value: {
+    promptId: volumeChapterExecutionContractPrompt.id, promptVersion: volumeChapterExecutionContractPrompt.version,
+    output: failure.rejectedOutput.rawContent, validationError: error.message,
+    // This asset's raw envelope does not buy parser repair or runner semantic retries.
+    repairAttempts: 0, semanticRetryAttempts: 0, maxSemanticRetryAttempts: 0,
+  } });
+  return preserved;
 }
 
 export function canReuseChapterExecutionContract(input: {
@@ -114,6 +150,8 @@ export async function generateChapterTaskSheetDetail(params: {
   };
   options: VolumeGenerateOptions;
   onBeforeModelCall?: () => Promise<void>;
+  /** An explicit recovery grant buys exactly one correction, not a fresh two-attempt bundle. */
+  initialRejectedResponse?: InitialRejectedContractResponse;
 }): Promise<{
   purpose: string;
   exclusiveEvent: string;
@@ -131,7 +169,8 @@ export async function generateChapterTaskSheetDetail(params: {
 }> {
   const existingChapter = params.promptInput.targetChapter;
   if (
-    !params.promptInput.guidance?.trim()
+    !params.initialRejectedResponse
+    && !params.promptInput.guidance?.trim()
     && canReuseChapterExecutionContract({
       novelId: params.promptInput.workspace.novelId,
       volumeId: params.promptInput.targetVolume.id,
@@ -166,11 +205,14 @@ export async function generateChapterTaskSheetDetail(params: {
   }
 
   let lastError: Error | null = null;
-  let qualityFeedback: string | null = null;
+  let qualityFeedback: string | null = params.initialRejectedResponse
+    ? buildRejectedContractFeedback(params.initialRejectedResponse) : null;
   let previousCandidate: ChapterExecutionContractQualityCandidate | null = null;
   const qualityGate = new ChapterTaskSheetQualityGateService();
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  const maxAttempts = params.initialRejectedResponse ? 1 : 2;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    let receivedOutput: unknown;
     try {
       const promptInput: VolumeChapterDetailPromptInput = qualityFeedback
         ? {
@@ -193,6 +235,11 @@ export async function generateChapterTaskSheetDetail(params: {
           temperature: params.options.temperature ?? 0.35,
           // The contract includes all scene cards, not just the task-sheet summary.
           maxTokens: 8_192,
+          // The coordinator reserves each attempt durably. Hidden provider/strategy retries
+          // would spend outside that reservation and erase the uncertainty boundary.
+          disableFallbackModel: true,
+          disableStrategyFallback: true,
+          transportRetryCount: 0,
           taskId: params.options.taskId,
           entrypoint: params.options.entrypoint,
           novelId: promptInput.workspace.novelId,
@@ -205,6 +252,7 @@ export async function generateChapterTaskSheetDetail(params: {
           signal: params.options.signal,
         },
       });
+      receivedOutput = generated.output;
       if (params.options.planningRepairManaged && promptInput.targetChapter.targetWordCount) {
         generated.output.targetWordCount = promptInput.targetChapter.targetWordCount;
       }
@@ -278,7 +326,8 @@ export async function generateChapterTaskSheetDetail(params: {
         taskSheet: generated.output.taskSheet.trim(),
         sceneCards: serializeChapterScenePlan(scenePlan),
       };
-    } catch (error) {
+    } catch (caught) {
+      const error = preserveCompletedContractParseFailure(caught);
       lastError = error instanceof Error ? error : new Error("章节执行合同生成失败。");
       // The contract guard is otherwise invisible after the fact: the prompt runner only keeps
       // `semantic_retry_start` in an in-process Map that dies with the server. Recording the
@@ -290,16 +339,22 @@ export async function generateChapterTaskSheetDetail(params: {
         reason: lastError.message,
         attempt: attempt + 1,
       }).catch(() => { /* Telemetry must never fail contract generation. */ });
-      if (!shouldRetryChapterExecutionContract(error, attempt)) {
+      const completed = (error as { completedPromptResponse?: InitialRejectedContractResponse })?.completedPromptResponse;
+      const rejectedResponse = completed ?? (receivedOutput === undefined ? undefined : {
+        output: receivedOutput, validationError: lastError.message,
+      });
+      if (attempt + 1 >= maxAttempts || !shouldRetryChapterExecutionContract(error, attempt)) {
         throw lastError;
       }
+      // Transport/unknown output must never become a new generation disguised as correction.
+      if (!(error instanceof ChapterTaskSheetQualityGateError) && !rejectedResponse) throw lastError;
       qualityFeedback = error instanceof ChapterTaskSheetQualityGateError
         ? JSON.stringify({
           instruction: "修复上一候选的已核验问题，保留其有效设计；只返回完整修订合同，仍须重新通过写前审查。",
           previousCandidate,
           qualityResult: error.result,
         })
-        : lastError.message;
+        : buildRejectedContractFeedback(rejectedResponse!, error);
     }
   }
 

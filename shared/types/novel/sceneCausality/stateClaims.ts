@@ -27,6 +27,21 @@ export const chapterStateClaimWireSchema = chapterStateClaimSchema.extend({
 });
 export const chapterStateClaimsSchema = z.array(chapterStateClaimSchema).max(48);
 export const chapterStateClaimsWireSchema = z.array(chapterStateClaimWireSchema).min(1).max(48);
+/** Generation-only ownership protocol. Scene declarations do not repeat their parent scene/phase. */
+export const contextStateClaimWireSchema = chapterStateClaimSchema.extend({
+  temporalScope: z.literal("prior"),
+  source: z.discriminatedUnion("kind", [writtenSource.omit({ evidence: true }).strict(), unknownSource]),
+});
+export const contextStateClaimsWireSchema = z.array(contextStateClaimWireSchema).max(48);
+export const sceneOwnedStateClaimWireSchema = chapterStateClaimSchema.pick({
+  id: true, subject: true, predicate: true, modality: true,
+}).strict();
+export const sceneOwnedStateTransitionWireSchema = z.object({
+  beforeClaimIds: z.array(claimId).max(6),
+  entryClaims: z.array(sceneOwnedStateClaimWireSchema).max(6),
+  actionClaims: z.array(sceneOwnedStateClaimWireSchema).min(1).max(6),
+  afterClaims: z.array(sceneOwnedStateClaimWireSchema).min(1).max(6),
+}).strict();
 export const sceneStateTransitionSchema = z.object({
   beforeClaimIds: z.array(claimId).max(6),
   actionClaimIds: z.array(claimId).min(1).max(6),
@@ -37,3 +52,4 @@ export const stateClaimPrerequisiteWireSchema = z.object({ claimIds: z.array(cla
 export type ChapterStateClaim = z.infer<typeof chapterStateClaimSchema>;
 export type ChapterStateClaimWire = z.infer<typeof chapterStateClaimWireSchema>;
 export type SceneStateTransition = z.infer<typeof sceneStateTransitionSchema>;
+export type SceneOwnedStateTransitionWire = z.infer<typeof sceneOwnedStateTransitionWireSchema>;

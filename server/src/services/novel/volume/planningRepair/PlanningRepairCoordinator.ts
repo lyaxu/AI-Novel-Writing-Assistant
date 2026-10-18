@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { VolumeChapterPlan, VolumePlanDocument } from "@ai-novel/shared/types/novel";
 import type { ChapterTaskSheetQualityGateResult } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import { parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
@@ -46,7 +47,7 @@ export interface PlanningRepairInput {
   chapterId: string;
   options: VolumeGenerateOptions & { taskId: string };
   context: unknown;
-  generateInitial: (beforeModelCall: () => Promise<void>) => Promise<Partial<VolumeChapterPlan>>;
+  generateInitial: (beforeModelCall: () => Promise<void>, recoverySeed?: { output: unknown; validationError: string }) => Promise<Partial<VolumeChapterPlan>>;
 }
 
 export function passedPlanningReview(result: ChapterTaskSheetQualityGateResult): boolean {
@@ -136,10 +137,33 @@ export class PlanningRepairCoordinator {
         return this.pause(session, "保留候选已变化，请核对规划来源后重新确认；本次未重新生成。");
       }
       if (!session.candidate) {
+        const correction = session.state.initialContractCorrection;
+        const isCorrection = session.state.recoveryAction?.mode === "retry_initial_contract";
+        const rejected = correction && session.state.history[correction.historyIndex] as { kind?: string; promptId?: string; output?: unknown } | undefined;
+        if (isCorrection && (!correction || correction.requestId !== session.state.recoveryAction?.requestId
+          || correction.historyIndex !== session.state.history.length - 1 || rejected?.kind !== "rejected_response"
+          || rejected.promptId !== "novel.volume.chapter_execution_contract" || rejected.output === undefined
+          || createHash("sha256").update(JSON.stringify(rejected.output)).digest("hex") !== correction.rejectedResponseFingerprint)) {
+          return this.pause(session, "初始规划纠正的保留响应或授权已变化，请重新核对。");
+        }
         // Reusing a persisted contract is local work, not an uncertain paid request.
-        const generated = await input.generateInitial(() => this.beforeCall(
-          session, "initial_generation", "正在准备待复核的章节任务单",
-        ));
+        const generated = await input.generateInitial(async () => {
+          if (isCorrection) {
+            const budget = session.state.initialContractCorrection!;
+            if (!Number.isSafeInteger(budget.attempts) || budget.attempts < 0 || budget.allowedAttempts !== budget.attempts + 1) {
+              return this.pause(session, "本次授权的一次初始规划纠正已用完，请确认后再尝试。");
+            }
+            await this.save(session, { initialContractCorrection: { ...budget, attempts: budget.attempts + 1 },
+              pendingOperation: { kind: "initial_generation", startedAt: new Date().toISOString() } });
+          } else {
+            const attempts = session.state.initialGenerationAttempts;
+            if (!Number.isSafeInteger(attempts) || attempts! < 0 || attempts! >= 2) {
+              return this.pause(session, "初始规划生成次数已用完或无法确认，请核对保留响应后授权一次纠正。");
+            }
+            await this.save(session, { initialGenerationAttempts: attempts! + 1,
+              pendingOperation: { kind: "initial_generation", startedAt: new Date().toISOString() } });
+          }
+        }, isCorrection ? { output: rejected!.output, validationError: session.state.technicalError ?? "初始规划未通过合同校验。" } : undefined);
         const candidate = structuredClone(input.document);
         const chapter = chaptersOf(candidate, input.volumeId).find(c => c.id === input.chapterId)!;
         // Generation must not purchase more space by changing the agreed chapter length.
@@ -149,7 +173,7 @@ export class PlanningRepairCoordinator {
           : {};
         Object.assign(chapter, generated, { targetWordCount: originalTarget ?? generated.targetWordCount }, userConflict);
         await this.save(session, {
-          phase: "reviewing", pendingOperation: undefined,
+          phase: "reviewing", pendingOperation: undefined, ...(isCorrection ? { recoveryAction: undefined } : {}),
           affectedChapterIds: [input.chapterId], quality: { chapters: {} },
           summary: `正在复核第${chapter.chapterOrder}章任务单`,
         }, refreshDerived(candidate));
