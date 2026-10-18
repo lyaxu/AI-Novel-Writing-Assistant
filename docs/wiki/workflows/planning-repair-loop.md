@@ -256,3 +256,13 @@ A terminal post-validation failure carries a non-enumerable completed response f
 - 该规则只解决状态复核对协议授权的识别，不降低事实门禁；真正与已写事实冲突、或首章缺失设定支持的声明，仍应作为阻塞问题处理。
 
 相关实现：`prompting/prompts/novel/volume/evidence/planningStateReview.ts`。
+
+## 规划修复暂停必须同步父任务与流水线 job 的人工恢复边界
+
+流水线因规划修复确认而暂停时，父 `NovelWorkflowTask` 会进入 `waiting_approval + pendingManualRecovery`，但源页“继续自动导演”的预检读取的是原 `GenerationJob` 的 `pendingManualRecovery`。两边必须同时落同一人工恢复边界；只暂停任务、不标记 job 时，用户在章节“稿件与恢复”核对并确认了未完成调用后，恢复预检仍会报“请先核对原任务、保留稿和未确认的调用结果”，形成无法自行解除的死锁。
+
+- 执行器在 `PLANNING_REPAIR_CONFIRMATION_REQUIRED` / `PLANNING_REPAIR_CONFLICT` 收尾时必须把 job 标记为 `pendingManualRecovery=true`，与任务暂停保持同一边界；不得只写失败状态。
+- 恢复顺序仍是：源页章节“稿件与恢复”核对保留稿与未知调用 → 明确接受可能重复调用 → 再继续自动导演。恢复复用原 job、原范围和已保存步骤，不新建任务替代保留稿。
+- 历史现场若已出现“任务暂停但 job 未标记”，属于状态不一致，需要一次受控修复把 job 边界补齐；该修复不改变正文、计划或调用结果，只恢复暂停事实。
+
+相关实现：`services/novel/production/NovelPipelineExecutor.ts`、`services/novel/production/recovery/ChapterPipelineRecoveryService.ts`、`services/novel/director/commands/DirectorCommandService.ts`。

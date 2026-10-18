@@ -924,8 +924,13 @@ export class NovelPipelineExecutor {
         });
       }
       if (error && typeof error === "object" && "code" in error && ["LLM_OUTPUT_LIMIT", "PLANNING_REPAIR_CONFLICT", "PLANNING_REPAIR_CONFIRMATION_REQUIRED"].includes(String(error.code))) {
+        // A planning-repair pause is a manual-recovery boundary for the parent task. The job must
+        // carry the same flag, otherwise the source-page resume preflight cannot find this saved
+        // boundary and the task is stuck even after the user acknowledges the retained call.
+        const pausedForPlanningRepair = isPlanningRepairConfirmationError(error);
         await this.updateJobSafe(jobId, {
-          status: "failed", error: message, finishedAt: new Date(),
+          status: "failed", ...(pausedForPlanningRepair ? { pendingManualRecovery: true } : {}),
+          error: message, finishedAt: new Date(),
           payload: this.stringifyPipelinePayload({ ...runtimePayload, qualityAlertDetails, replanAlertDetails, recoverableRepairDetails }),
         });
         void novelEventBus.emit({ type: "pipeline:completed", payload: { novelId, jobId, status: "failed" } }).catch(() => {});

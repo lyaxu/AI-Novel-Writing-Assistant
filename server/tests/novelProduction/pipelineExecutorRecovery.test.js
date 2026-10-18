@@ -481,6 +481,9 @@ for (const code of ["PLANNING_REPAIR_CONFLICT", "PLANNING_REPAIR_CONFIRMATION_RE
       assert.equal(harness.chapterCalls, 1);
       assert.deepEqual(harness.claims, []);
       assert.equal(harness.jobState.status, "failed");
+      // The parent task pause and the failed job must carry the same manual-recovery boundary,
+      // otherwise the source-page resume can never find it after the user acknowledges a call.
+      assert.equal(harness.jobState.pendingManualRecovery, true);
     } finally { harness.restore(); pipelineIssueGovernance.reportPipelineIssue = original; }
   });
 }
