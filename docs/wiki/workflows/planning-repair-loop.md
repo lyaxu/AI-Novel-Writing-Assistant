@@ -266,3 +266,14 @@ A terminal post-validation failure carries a non-enumerable completed response f
 - 历史现场若已出现“任务暂停但 job 未标记”，属于状态不一致，需要一次受控修复把 job 边界补齐；该修复不改变正文、计划或调用结果，只恢复暂停事实。
 
 相关实现：`services/novel/production/NovelPipelineExecutor.ts`、`services/novel/production/recovery/ChapterPipelineRecoveryService.ts`、`services/novel/director/commands/DirectorCommandService.ts`。
+
+## 空待生成章节的准备写入属于规划身份记账
+
+规划修复会话以 `VolumePlan`、工作区版本和“真正推进过”的 `Chapter` 行构成来源身份，用来发现外部规划改动。`chapterStatus=pending_generation` 且正文为空的章节仍属于执行准备阶段：流水线会从计划派生并写入该行的 taskSheet、sceneCards、hook、expectation 等字段。这些写入是本轮执行自己的记账，不得让同一会话判为“规划来源变化”。
+
+- 章节纳入身份的条件：有正文、`generationState` 已离开 `planned`，或状态已进入 `generating` 等实际开工状态。
+- `unplanned`、`pending_generation` 的空章节不纳入；准备写入（任务单、场景卡、钩子）不改变身份。
+- 有正文或实际开工的章节仍整行纳入，保留“提交前发现他人写入/锁定”的保护。
+- 回归覆盖：空待生成章节写入准备字段后身份不变；状态进入 `generating`、正文出现或 `generationState` 离开 `planned` 时仍失效。
+
+相关实现：`services/novel/volume/planningRepair/PlanningRepairStore.ts`；回归 `tests/planningSourceTokenVolatile.test.js`。

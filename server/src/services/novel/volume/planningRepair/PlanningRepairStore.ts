@@ -293,6 +293,9 @@ async function readSource(tx: Prisma.TransactionClient, novelId: string, task: N
   //
   // So: timestamps are dropped, and a chapter contributes to the identity only once it has
   // actually been worked on. An empty, still-planned row is the run's own bookkeeping.
+  // `pending_generation` is the same bookkeeping state: chapter execution preparation writes the
+  // derived task sheet / scene cards into the empty row, and hashing that row made the run's own
+  // preparation look like an external planning edit (observed on chapter 2's second attempt).
   //
   // A chapter that has gained a body, left the planned state, or been picked up by a run is
   // still hashed in full: that is what tells a commit that the chapter it is about to write
@@ -309,7 +312,7 @@ async function readSource(tx: Prisma.TransactionClient, novelId: string, task: N
   }): boolean => Boolean(
     (chapter.content ?? "").trim()
     || (chapter.generationState && chapter.generationState !== "planned")
-    || (chapter.chapterStatus && chapter.chapterStatus !== "unplanned"),
+    || (chapter.chapterStatus && !["unplanned", "pending_generation"].includes(chapter.chapterStatus)),
   );
   const planningIdentity = {
     novel: novelPlanningSource,

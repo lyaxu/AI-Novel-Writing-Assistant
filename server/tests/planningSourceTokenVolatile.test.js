@@ -83,7 +83,7 @@ function identityOf({ novel, volumes, versions, chapters, macro }) {
   const chapterHasProgress = (c) => Boolean(
     (c.content ?? "").trim()
     || (c.generationState && c.generationState !== "planned")
-    || (c.chapterStatus && c.chapterStatus !== "unplanned"),
+    || (c.chapterStatus && !["unplanned", "pending_generation"].includes(c.chapterStatus)),
   );
   return hash({
     novel: stripVolatile(novel),
@@ -105,6 +105,24 @@ test("materialising an empty planned chapter does NOT change the identity", () =
     riskFlags: null, updatedAt: "T+8s",
   };
   assert.equal(identityOf(materialised), before, "an empty planned row is the run's own bookkeeping");
+});
+
+test("preparing an empty pending-generation chapter does NOT change the identity", () => {
+  // Chapter execution preparation writes the derived task sheet / scene cards into the empty
+  // pending-generation row. Hashing that row made the run's own preparation look like an
+  // external planning edit, so the repair session refused itself right after preparing chapter 2.
+  const before = identityOf(base());
+  const prepared = base();
+  prepared.chapters[0] = {
+    ...prepared.chapters[0],
+    chapterStatus: "pending_generation", taskSheet: "新合同", sceneCards: "{}",
+    hook: "钩子", expectation: "期待", updatedAt: "T+8s",
+  };
+  assert.equal(identityOf(prepared), before, "empty pending-generation preparation is bookkeeping");
+
+  const generating = JSON.parse(JSON.stringify(prepared));
+  generating.chapters[0].chapterStatus = "generating";
+  assert.notEqual(identityOf(generating), before, "a chapter a run is actually writing must invalidate");
 });
 
 test("a chapter that gains a body or leaves the planned state STILL changes the identity", () => {
