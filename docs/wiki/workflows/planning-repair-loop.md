@@ -286,5 +286,6 @@ A terminal post-validation failure carries a non-enumerable completed response f
 - 适配层在进入领域校验前，把原计划已存在的强度投影回原值；修复输出只提供其余变更。
 - 领域层仍保留受保护字段校验，直接或程序化尝试改写既定强度仍然失败；原值为空时仍要求模型补齐。
 - 该投影不改变修复目标、轮次、候选或费用边界，也不把模型对强度值的回声当成新决策。
+- 场景字数总和超过章节原有 `targetWordCount` 时同理：适配层按原预算比例归一（保留每个场景至少 1 字），修复只能重新分配既有预算，不能扩大章节；领域层仍拒绝真正越过预算的输入。
 
 相关实现：`services/novel/volume/planningRepair/planningRepairDomain.ts`、`PlanningRepairCoordinator.ts`；回归 `tests/planningRepairDomain.test.js`。

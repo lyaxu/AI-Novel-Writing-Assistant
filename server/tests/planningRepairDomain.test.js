@@ -7,6 +7,7 @@ const {
   planningRepairOutputSchema,
   planningRepairReviewOutputSchema,
   projectPlanningRepairEstablishedStrengths,
+  projectPlanningRepairSceneBudgets,
 } = require("../dist/services/novel/volume/planningRepair/planningRepairDomain.js");
 const {
   planningRepairPrompt,
@@ -186,6 +187,20 @@ test("established strengths are projected back before domain validation", () => 
   assert.equal(candidate.volumes[0].chapters[1].revealLevel, established.revealLevel);
   // The raw proposal still cannot slip through the protected-field guard.
   assert.throws(() => apply(doc, proposal), /established/);
+});
+
+test("scene word budgets over the chapter target are normalized proportionally", () => {
+  const doc = document();
+  const volumeId = doc.volumes[0].id;
+  const established = doc.volumes[0].chapters[1];
+  const proposal = output();
+  for (const scene of proposal.changes[0].sceneCards) scene.targetWordCount *= 2;
+  const projected = projectPlanningRepairSceneBudgets(doc, volumeId, proposal);
+  const total = projected.changes[0].sceneCards.reduce((sum, scene) => sum + scene.targetWordCount, 0);
+  assert.equal(total, established.targetWordCount);
+  assert.ok(projected.changes[0].sceneCards.every((scene) => scene.targetWordCount >= 1));
+  // The raw output still cannot exceed the protected chapter budget through the domain guard.
+  assert.throws(() => apply(doc, proposal), /exceeds its original word count budget/);
 });
 
 test("requires the exact allowed chapter set once, using planning IDs not persisted IDs", () => {

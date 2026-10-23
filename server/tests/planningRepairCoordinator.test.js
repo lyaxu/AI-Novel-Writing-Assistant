@@ -516,8 +516,10 @@ test("saved output requiring a decision pauses without reviewing or spending", a
 
 test("invalid persisted output fails closed before any review or new model call", async () => {
   for (const proposal of [{ invalid: true }, output(["outside"]), (() => {
+    // Over-budget scene allocation is normalized by the adapter; a repeated ending/entry state
+    // is not a derived scalar, so it must still fail closed before any review or new call.
     const result = output(["c3", "c4", "c5"]);
-    result.changes[0].sceneCards[0].targetWordCount = 4000;
+    result.changes[0].nextChapterEntryState = result.changes[0].endingState;
     return result;
   })()]) {
     const h = savedResponseHarness(proposal);

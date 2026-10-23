@@ -156,6 +156,54 @@ export function projectPlanningRepairEstablishedStrengths(
   };
 }
 
+function apportionSceneWordCounts(counts: number[], target: number): number[] {
+  const total = counts.reduce((sum, value) => sum + value, 0);
+  if (total <= target || !counts.length) return counts;
+  const values = counts.map((value) => Math.max(1, Math.floor((value * target) / total)));
+  let sum = values.reduce((left, value) => left + value, 0);
+  // Min-one floors can overshoot on very small scenes; trim the largest allocations first.
+  while (sum > target) {
+    const index = values.reduce((best, value, at) => (value > values[best] ? at : best), 0);
+    if (values[index] <= 1) break;
+    values[index] -= 1;
+    sum -= 1;
+  }
+  // Distribute the remaining words by largest fractional remainder.
+  const remainders = counts.map((value, index) => ({ index, remainder: (value * target) / total - Math.floor((value * target) / total) }))
+    .sort((left, right) => right.remainder - left.remainder);
+  for (let cursor = 0; sum < target; cursor = (cursor + 1) % remainders.length) {
+    values[remainders[cursor].index] += 1;
+    sum += 1;
+  }
+  return values;
+}
+
+/**
+ * Scene word counts must fit the chapter's original target. A repair suggestion may redistribute
+ * words between scenes but cannot enlarge the chapter, so normalize an over-budget allocation
+ * proportionally instead of rejecting the entire otherwise valid repair.
+ */
+export function projectPlanningRepairSceneBudgets(
+  document: VolumePlanDocument,
+  volumeId: string,
+  output: PlanningRepairOutput,
+): PlanningRepairOutput {
+  const volume = document.volumes.find((item) => item.id === volumeId);
+  if (!volume) return output;
+  const byId = new Map(volume.chapters.map((chapter) => [chapter.id, chapter]));
+  return {
+    ...output,
+    changes: output.changes.map((change) => {
+      const target = byId.get(change.chapterId)?.targetWordCount;
+      if (!Number.isSafeInteger(target) || (target ?? 0) < 1 || !Array.isArray(change.sceneCards) || !change.sceneCards.length) return change;
+      const requested = change.sceneCards.reduce((sum, scene) => sum + (Number.isSafeInteger(scene.targetWordCount) ? scene.targetWordCount : 0), 0);
+      if (requested <= target!) return change;
+      const counts = apportionSceneWordCounts(change.sceneCards.map((scene) => Number.isSafeInteger(scene.targetWordCount) ? scene.targetWordCount : 0), target!);
+      return { ...change, sceneCards: change.sceneCards.map((scene, index) => ({ ...scene, targetWordCount: counts[index] })) };
+    }),
+  };
+}
+
 /** Pure candidate construction only; aggregate review and persistence belong to the coordinator. */
 export function applyPlanningRepairCandidate(
   document: VolumePlanDocument,
