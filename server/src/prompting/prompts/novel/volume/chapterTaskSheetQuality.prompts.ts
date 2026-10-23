@@ -21,7 +21,7 @@ import type { PromptAsset } from "../../../core/promptTypes";
 import { buildChapterEvidenceIndex } from "./evidence/chapterEvidence";
 import { projectValidatedIssueChecks } from "./evidence/issueCheckProjection";
 import { newIssueContextEvidenceIndex, validateNewIssueEvidence } from "./evidence/newIssueEvidence";
-import { planningPromiseEvidenceContext, validatePlanningPromiseEvidence } from "./evidence/planningPromiseEvidence";
+import { planningPromiseEvidenceContext, projectPromiseHandoffStatus, validatePlanningPromiseEvidence } from "./evidence/planningPromiseEvidence";
 import { buildPrimaryProseCitationCatalog, restorePrimaryProseCitations } from "./evidence/primaryProseCitationCatalog";
 import { narrativeProgressionPriorEvidenceIndex, validateNarrativeProgressionEvidence } from "./evidence/narrativeProgressionEvidence";
 import { planningIssueDecisionSchema, planningStateCheckSchema } from "@ai-novel/shared/types/novel/planningReviewDecision";
@@ -268,6 +268,8 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
           input.reviewContextJson, input.candidate.chapterOrder),
       })) } : {}),
     };
+    // `handoffStatus` is a projection for non-deferred promises, not a second semantic choice.
+    if (output.promiseChecks) output.promiseChecks = projectPromiseHandoffStatus(output.promiseChecks);
     validatePlanningPromiseEvidence(output.promiseChecks ?? [], input.candidate, input.reviewContextJson);
     const projected = projectPlanningStateReview(projectValidatedIssueChecks(output, input.candidate, input.previousIssues),
       input.candidate, input.reviewContextJson,

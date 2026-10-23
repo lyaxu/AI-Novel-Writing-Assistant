@@ -43,6 +43,15 @@ export function planningPromiseEvidenceContext(reviewContextJson?: string, chapt
   return { direction, sourceIndex, contextIndex, sourceIds: selectedPlanningPromiseIds(direction, chapterOrder) };
 }
 
+/**
+ * `handoffStatus` only carries meaning for deferred promises. For every other status the wire
+ * contract already forbids `not_needed` being absent, so project it deterministically instead
+ * of rejecting an otherwise valid review over a derived field the model has no real choice about.
+ */
+export function projectPromiseHandoffStatus(checks: ChapterPlanningPromiseCheck[]): ChapterPlanningPromiseCheck[] {
+  return checks.map(check => check.status === "deferred" ? check : { ...check, handoffStatus: "not_needed" });
+}
+
 export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCheck[], candidate: unknown, reviewContextJson?: string) {
   const { sourceIds, sourceIndex, contextIndex } = planningPromiseEvidenceContext(reviewContextJson, (candidate as { chapterOrder?: number })?.chapterOrder);
   if (checks.length !== sourceIds.length || new Set(checks.map(check => check.sourceId)).size !== checks.length
@@ -58,7 +67,7 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
   const candidateIndex = buildChapterEvidenceIndex(candidate);
   for (const check of checks) {
     if (check.handoffStatus !== undefined && (check.status === "deferred" ? check.handoffStatus === "not_needed" : check.handoffStatus !== "not_needed")) {
-      throw new Error(`Promise ${check.sourceId} has an incompatible handoffStatus. 实际 status=${JSON.stringify(check.status)}，handoffStatus=${JSON.stringify(check.handoffStatus)}：deferred 时 handoffStatus 必须是 not_needed，其他状态则不能是 not_needed。`);
+      throw new Error(`Promise ${check.sourceId} has an incompatible handoffStatus. 实际 status=${JSON.stringify(check.status)}，handoffStatus=${JSON.stringify(check.handoffStatus)}：deferred 时 handoffStatus 必须是 covered / partial / missing / conflicting 之一（不能是 not_needed）；非 deferred 时必须是 not_needed。`);
     }
     if (isOpeningPlanningPromise(check.sourceId) && check.scope === "book_arc") throw new Error(`Opening promise ${check.sourceId} cannot be reclassified as a book arc. 实际 scope=${JSON.stringify(check.scope)}：开篇承诺必须留在开篇范围内。`);
     if (!check.sourceEvidence.length || check.sourceEvidence.some(evidence => {

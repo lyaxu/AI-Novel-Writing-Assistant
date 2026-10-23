@@ -244,6 +244,7 @@ A terminal post-validation failure carries a non-enumerable completed response f
 - 拒收诊断：复核答案被拒收时，有界重试的反馈必须包含引文实际所在的叶路径，并说明同一引文是否存在于候选、上下文或原选来源；不能只返回 `source_path_not_found`。这样一次重试可以修正路径、移动证据类别，或删除确实不存在的引文。
 - 边界：容器放宽只解决“路径写得粗”，不放宽引文真实性，也不改变规划内容、修复轮次、暂停和费用确认。被拒收的复核答案仍是 `rejected_response`，不会因为路径可解析就变成候选或通过结论。
 - 回归：定向覆盖容器内命中、跨字段拒绝和诊断中的真实叶路径，并用真实暂停现场的完整复核响应在本地只读数据库上回放；重新复核仍需用户明确点击，并产生模型费用。
+- 承接状态（`handoffStatus`）是投影字段：只有 `deferred` 承诺需要填写 `covered` / `partial` / `missing` / `conflicting` 之一；其他状态一律由程序归一为 `not_needed`，不因为模型多填或少填这个派生字段整包拒收。真正需要判断的是承诺 `status` 与问题决定是否一致；`deferred + not_needed` 仍判无效，且错误提示必须与合同语义一致，避免误导下一次有界重试。
 
 相关实现：`prompting/prompts/novel/volume/evidence/chapterEvidence.ts`、`planningPromiseEvidence.ts`、`chapterTaskSheetQuality.prompts.ts`。
 

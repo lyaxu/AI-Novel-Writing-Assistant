@@ -160,6 +160,27 @@ test("promise review diagnostics report where a rejected quote actually lives", 
   });
 });
 
+test("handoffStatus is projected for non-deferred promises while deferred keeps its own handoff", () => {
+  const direction = { status: "available", sourceTaskId: "task", fingerprint: "fingerprint",
+    candidate: { id: "candidate-1", sellingPoint: "卖点原文" } };
+  const reviewContextJson = JSON.stringify({ selectedPlanningDirection: direction });
+  const candidate = { sceneCards: JSON.stringify({ scenes: [{ key: "scene1", turn: "正文。" }] }) };
+  const base = {
+    sourceId: "sellingPoint", scope: "book_arc",
+    sourceEvidence: [{ sourcePath: "selectedPlanningDirection.candidate.sellingPoint", quote: "卖点原文" }],
+    candidateEvidence: [{ sourcePath: "scene1.turn", quote: "正文。" }], contextEvidence: [],
+    explanation: "说明", repairHint: "",
+  };
+  const projected = promiseEvidence.projectPromiseHandoffStatus([{ ...base, status: "dropped", handoffStatus: "missing" }]);
+  assert.equal(projected[0].handoffStatus, "not_needed");
+  assert.doesNotThrow(() => promiseEvidence.validatePlanningPromiseEvidence(projected, candidate, reviewContextJson));
+  assert.doesNotThrow(() => promiseEvidence.validatePlanningPromiseEvidence(
+    [{ ...projected[0], status: "deferred", handoffStatus: "covered" }], candidate, reviewContextJson));
+  assert.throws(() => promiseEvidence.validatePlanningPromiseEvidence(
+    [{ ...projected[0], status: "deferred", handoffStatus: "not_needed" }], candidate, reviewContextJson),
+  /不能是 not_needed/);
+});
+
 const followupCapturePaths = ["mining-followup-evidence.json", "mining-followup-candidate.json", "mining-followup-review-request.json"]
   .map(name => path.resolve(__dirname, "../../.codex-run", name));
 test("historical rejected review retains evidence projection without satisfying the newer fresh-output schema", {
