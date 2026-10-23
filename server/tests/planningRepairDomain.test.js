@@ -15,6 +15,10 @@ const {
 } = require("../dist/prompting/prompts/novel/volume/planningRepair.prompts.js");
 const { getRegisteredPromptAsset } = require("../dist/prompting/registry.js");
 const { createChapterTaskSheetSchema } = require("../dist/services/novel/volume/chapterDetail/chapterDetailSchemas.js");
+const {
+  mergeAppliedPlanningRepairRequiredElements,
+  projectPlanningRepairRequiredElementRevisions,
+} = require("../dist/services/novel/volume/planningRepair/domain/requiredElementRevisions.js");
 
 function change(id = "plan-1") {
   return {
@@ -216,6 +220,22 @@ test("requires the exact allowed chapter set once, using planning IDs not persis
   const duplicate = document();
   duplicate.volumes[1].chapters.push(chapter("plan-1", "volume-2", 9));
   assert.throws(() => apply(duplicate), /ambiguous/);
+});
+
+test("repair required-element revisions drop no-op and branched bookkeeping entries", () => {
+  const revision = (original, replacement) => ({ original, replacement, reason: "理由", preservedFunction: "职责", sceneKeys: ["scene-1"] });
+  const proposal = output();
+  proposal.changes[0].requiredElementRevisions = [
+    revision("A", "A"), revision("B", "C"), revision("B", "D"),
+  ];
+  const projected = projectPlanningRepairRequiredElementRevisions(proposal, []);
+  assert.deepEqual(projected.changes[0].requiredElementRevisions.map((item) => [item.original, item.replacement]), [["B", "D"]]);
+  const prior = [{ ...revision("B", "X"), chapterId: proposal.changes[0].chapterId }];
+  const withPrior = projectPlanningRepairRequiredElementRevisions(proposal, prior);
+  assert.deepEqual(withPrior.changes[0].requiredElementRevisions, []);
+  // The sanitized ledger no longer branches against previously saved mappings.
+  assert.doesNotThrow(() => mergeAppliedPlanningRepairRequiredElements([], projected.changes));
+  assert.doesNotThrow(() => mergeAppliedPlanningRepairRequiredElements(prior, withPrior.changes));
 });
 
 test("repair output clamps program-owned scalar values before validation", () => {

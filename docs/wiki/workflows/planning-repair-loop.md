@@ -288,5 +288,7 @@ A terminal post-validation failure carries a non-enumerable completed response f
 - 该投影不改变修复目标、轮次、候选或费用边界，也不把模型对强度值的回声当成新决策。
 - 场景字数总和超过章节原有 `targetWordCount` 时同理：适配层按原预算比例归一（保留每个场景至少 1 字），修复只能重新分配既有预算，不能扩大章节；领域层仍拒绝真正越过预算的输入。
 - 这类程序自管数值在**请求 schema 解析层**就先归一：单个场景 `targetWordCount=0` 会被抬到 1，`conflictLevel`/`revealLevel` 越界会被夹到 0—100，避免一个派生数值让整包修复答案在格式校验阶段就被丢掉、连适配层都到不了。归一后仍执行既定强度投影与预算投影。
+- 必需元素修订账本同样是程序记账：同一条原始职责映射到自己（未变化）、同一来源在一轮里映射到多个目标（分支）、或来源已被历史轮次解决时重复映射，都在适配层清理后再进入拓扑校验；历史已生效映射优先，真正的环仍报错。
+- 处理原则是“入参边界归一程序自管字段，领域层只保留语义/事实校验”，避免继续按单条报错逐条打补丁。
 
 相关实现：`services/novel/volume/planningRepair/planningRepairDomain.ts`、`PlanningRepairCoordinator.ts`；回归 `tests/planningRepairDomain.test.js`。

@@ -19,6 +19,7 @@ const imports = {
   "../volumeWorkspaceDocument": require("../dist/services/novel/volume/volumeWorkspaceDocument.js"),
   "./PlanningRepairStore": { PlanningRepairStore: class { constructor() { throw new Error("Unexpected DB store"); } } },
   "./planningRepairDomain": require("../dist/services/novel/volume/planningRepair/planningRepairDomain.js"),
+  "./domain/requiredElementRevisions": require("../dist/services/novel/volume/planningRepair/domain/requiredElementRevisions.js"),
   "./domain/reviewIssueHistory": require("../dist/services/novel/volume/planningRepair/domain/reviewIssueHistory.js"),
 };
 const coordinatorExports = {};

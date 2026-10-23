@@ -39,6 +39,35 @@ function validateLedger(revisions: AppliedRevision[]): void {
   }
 }
 
+/**
+ * The revision ledger is program-managed bookkeeping: it records which saved duty text was renamed
+ * by previous accepted rounds. A repair suggestion may echo no-op entries or branch the same source
+ * twice. Normalize those away instead of failing the whole repair on a ledger-technicality; a
+ * source already resolved by an earlier accepted round must not be re-mapped from the same original.
+ */
+export function projectPlanningRepairRequiredElementRevisions<T extends { changes: Array<Change> }>(
+  output: T,
+  previouslyApplied: readonly unknown[],
+): T {
+  const prior = z.array(appliedRevisionSchema).parse(previouslyApplied);
+  const resolved = new Set(prior.map((item) => JSON.stringify([item.chapterId, item.original])));
+  return {
+    ...output,
+    changes: output.changes.map((change) => {
+      const byOriginal = new Map<string, Revision>();
+      for (const revision of change.requiredElementRevisions ?? []) {
+        // No-op echoes and already-saved sources are bookkeeping noise, not requested edits.
+        if (revision.original === revision.replacement) continue;
+        if (resolved.has(JSON.stringify([change.chapterId, revision.original]))) continue;
+        // Branched duplicates for one source: keep the last proposal; the topology guard still
+        // protects the persisted ledger from cycles or cross-round contradictions.
+        byOriginal.set(revision.original, revision);
+      }
+      return { ...change, requiredElementRevisions: [...byOriginal.values()] };
+    }),
+  };
+}
+
 /** Call only after candidate construction succeeds and persist together with that candidate. */
 export function mergeAppliedPlanningRepairRequiredElements(prior: readonly unknown[], changes: readonly Change[]): AppliedRevision[] {
   const saved = z.array(appliedRevisionSchema).parse(prior);
