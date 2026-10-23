@@ -166,6 +166,7 @@ Open-source AI novel writing assistant and long-form production studio.
 #### 修复
 
 - 规划复核的“承接状态”在非延期承诺上由程序按合同统一，不再因为模型把只适用于延期承诺的值填错而整包拒收；延期承诺的承接状态仍按原规则核对。
+- 规划修复若在修改建议里带回与当前计划不同的冲突/揭示强度，系统按当前计划强度归一后继续，不再因此整包退回；真正试图改写受保护字段的程序调用仍会被拒绝。
 
 完整更新历史见 [版本更新说明](docs/releases/release-notes.md)。
 

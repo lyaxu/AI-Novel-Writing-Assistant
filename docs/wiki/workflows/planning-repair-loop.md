@@ -278,3 +278,13 @@ A terminal post-validation failure carries a non-enumerable completed response f
 - 回归覆盖：空待生成章节写入准备字段后身份不变；状态进入 `generating`、正文出现或 `generationState` 离开 `planned` 时仍失效。
 
 相关实现：`services/novel/volume/planningRepair/PlanningRepairStore.ts`；回归 `tests/planningSourceTokenVolatile.test.js`。
+
+## 规划修复输出中的既定强度
+
+`conflictLevel` / `revealLevel` 属于当前计划，不由修复模型决定。模型常在有效的 `changes` 里回声一个不同的强度值；如果让领域层直接比较，一个派生标量就会让整包候选修复被退回并暂停。
+
+- 适配层在进入领域校验前，把原计划已存在的强度投影回原值；修复输出只提供其余变更。
+- 领域层仍保留受保护字段校验，直接或程序化尝试改写既定强度仍然失败；原值为空时仍要求模型补齐。
+- 该投影不改变修复目标、轮次、候选或费用边界，也不把模型对强度值的回声当成新决策。
+
+相关实现：`services/novel/volume/planningRepair/planningRepairDomain.ts`、`PlanningRepairCoordinator.ts`；回归 `tests/planningRepairDomain.test.js`。

@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 import { preserveGeneratedContentConstraints } from "../../../../llm/generatedContentSchema";
 import type { VolumeChapterPlan, VolumePlanDocument } from "@ai-novel/shared/types/novel";
 import { normalizeChapterScenePlan, parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
@@ -126,6 +126,34 @@ function appliedRevisionEndpoint(revision: ObligationMove, prior: readonly Oblig
     reference = comparable(next[0].replacement);
   }
   return null;
+}
+
+/**
+ * Established conflict/reveal strengths belong to the current plan, not to a repair suggestion.
+ * A model often echoes a different scalar in an otherwise valid change; project the established
+ * value back before domain validation. The protected-field guard below keeps rejecting direct
+ * programmatic attempts, so this only normalizes the accepted wire output.
+ */
+export function projectPlanningRepairEstablishedStrengths(
+  document: VolumePlanDocument,
+  volumeId: string,
+  output: PlanningRepairOutput,
+): PlanningRepairOutput {
+  const volume = document.volumes.find((item) => item.id === volumeId);
+  if (!volume) return output;
+  const byId = new Map(volume.chapters.map((chapter) => [chapter.id, chapter]));
+  return {
+    ...output,
+    changes: output.changes.map((change) => {
+      const chapter = byId.get(change.chapterId);
+      if (!chapter) return change;
+      return {
+        ...change,
+        ...(chapter.conflictLevel != null ? { conflictLevel: chapter.conflictLevel } : {}),
+        ...(chapter.revealLevel != null ? { revealLevel: chapter.revealLevel } : {}),
+      };
+    }),
+  };
 }
 
 /** Pure candidate construction only; aggregate review and persistence belong to the coordinator. */

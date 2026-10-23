@@ -8,7 +8,7 @@ import { ChapterTaskSheetQualityGateService } from "../ChapterTaskSheetQualityGa
 import { buildVolumeWorkspaceDocument } from "../volumeWorkspaceDocument";
 import type { VolumeGenerateOptions } from "../volumeModels";
 import { PlanningRepairStore, type RepairSession } from "./PlanningRepairStore";
-import { applyPlanningRepairCandidate, mergeAppliedPlanningRepairObligations, mergeAppliedPlanningRepairRequiredElements, planningRepairOutputSchema } from "./planningRepairDomain";
+import { applyPlanningRepairCandidate, mergeAppliedPlanningRepairObligations, mergeAppliedPlanningRepairRequiredElements, planningRepairOutputSchema, projectPlanningRepairEstablishedStrengths } from "./planningRepairDomain";
 import { projectPlanningHorizon } from "../planningPromises";
 import { buildReviewIssueHistory } from "./domain/reviewIssueHistory";
 import { nextPlanningRepairAction } from "@ai-novel/shared/types/planningRepair/recovery";
@@ -301,10 +301,13 @@ export class PlanningRepairCoordinator {
     if (!parsed.success) return this.rejectRepairOutput(session, "已保存的规划修正输出无效，请确认后继续。");
     if (parsed.data.requiresUserDecision) return this.rejectRepairOutput(session, parsed.data.reason);
     if (!session.candidate) return this.rejectRepairOutput(session, "已保存的规划修正缺少原候选方案，请确认后继续。");
+    // Established strengths are program-owned; normalize the accepted wire output before the
+    // protected-field domain guard so an echoed scalar cannot reject the whole repair.
+    const repair = projectPlanningRepairEstablishedStrengths(session.candidate, input.volumeId, parsed.data);
     let candidate: VolumePlanDocument;
     try {
       candidate = applyPlanningRepairCandidate(session.candidate, input.volumeId,
-        session.state.affectedChapterIds ?? [input.chapterId], parsed.data, session.state.obligationMoves ?? [],
+        session.state.affectedChapterIds ?? [input.chapterId], repair, session.state.obligationMoves ?? [],
         session.state.requiredElementRevisions ?? []);
     } catch (error) {
       return this.rejectRepairOutput(session, error instanceof Error ? error.message : "候选规划未通过边界校验。");
@@ -314,8 +317,8 @@ export class PlanningRepairCoordinator {
       repairOutputPending: { inputFingerprint: session.inputFingerprint, round: session.state.rounds },
     });
     await this.save(session, {
-      phase: "reviewing", repairOutputPending: undefined, quality: { chapters: {} }, obligationMoves: mergeAppliedPlanningRepairObligations(session.state.obligationMoves ?? [], parsed.data.obligationMoves),
-      requiredElementRevisions: mergeAppliedPlanningRepairRequiredElements(session.state.requiredElementRevisions ?? [], parsed.data.changes),
+      phase: "reviewing", repairOutputPending: undefined, quality: { chapters: {} }, obligationMoves: mergeAppliedPlanningRepairObligations(session.state.obligationMoves ?? [], repair.obligationMoves),
+      requiredElementRevisions: mergeAppliedPlanningRepairRequiredElements(session.state.requiredElementRevisions ?? [], repair.changes),
       ...(session.state.recoveryAction?.paidRound === session.state.rounds ? { recoveryAction: undefined } : {}),
       summary: `正在复核第${session.state.chapterOrder}章起的规划，第${session.state.rounds}/${session.state.maxRounds}轮`,
     }, refreshDerived(candidate));

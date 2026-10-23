@@ -6,6 +6,7 @@ const {
   mergeAppliedPlanningRepairObligations,
   planningRepairOutputSchema,
   planningRepairReviewOutputSchema,
+  projectPlanningRepairEstablishedStrengths,
 } = require("../dist/services/novel/volume/planningRepair/planningRepairDomain.js");
 const {
   planningRepairPrompt,
@@ -168,6 +169,23 @@ test("existing user or AI strengths cannot be overwritten, legacy responses may 
     }
     assert.equal(apply(doc).volumes[0].chapters[1].conflictLevel, 55);
   }
+});
+
+test("established strengths are projected back before domain validation", () => {
+  const doc = document();
+  const volumeId = doc.volumes[0].id;
+  const established = doc.volumes[0].chapters[1];
+  const proposal = output();
+  proposal.changes[0].conflictLevel = 99;
+  proposal.changes[0].revealLevel = 88;
+  const projected = projectPlanningRepairEstablishedStrengths(doc, volumeId, proposal);
+  assert.equal(projected.changes[0].conflictLevel, established.conflictLevel);
+  assert.equal(projected.changes[0].revealLevel, established.revealLevel);
+  const candidate = apply(doc, projected);
+  assert.equal(candidate.volumes[0].chapters[1].conflictLevel, established.conflictLevel);
+  assert.equal(candidate.volumes[0].chapters[1].revealLevel, established.revealLevel);
+  // The raw proposal still cannot slip through the protected-field guard.
+  assert.throws(() => apply(doc, proposal), /established/);
 });
 
 test("requires the exact allowed chapter set once, using planning IDs not persisted IDs", () => {
