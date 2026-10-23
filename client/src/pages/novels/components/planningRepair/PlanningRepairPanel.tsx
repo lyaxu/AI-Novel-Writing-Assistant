@@ -52,6 +52,16 @@ export default function PlanningRepairPanel({ novelId }: { novelId: string }) {
       <p className="mt-1 break-words text-muted-foreground">{repair.technicalError}</p>
     </details> : null}
     <p className="text-xs text-muted-foreground">起始章：第 {repair.chapterOrder} 章{repair.affectedChapterIds?.length ? ` · 涉及 ${repair.affectedChapterIds.length} 章` : ""}</p>
+    <details className="rounded-md bg-background/50 px-3 py-2 text-sm">
+      <summary className="cursor-pointer font-medium">不知道该选哪个？</summary>
+      <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+        <li>候选方案可用、只是格式、引用或合同校验没过：先选“重新复核保留候选”或“按原策略继续”，复用已有候选更省模型费用；同一份答案复核两次仍失败时，再考虑放弃。</li>
+        <li>需要改剧情或计划、但拿不准修改方向：选“让 AI 推荐修复方案”，看过建议再决定；这个选项会产生模型费用。</li>
+        <li>已有明确修改方向：展开“高级：自定义修复方向”，写清要保留和要改的部分。</li>
+        <li>规划来源或执行状态发生变化、或不想继续这一步：选“放弃这次修复”，回到源页继续；章节计划与正文不受影响。</li>
+        <li>只是稍后再处理：选“保持暂停”，候选和剩余轮次会保留。</li>
+      </ul>
+    </details>
     {issues.length ? <ul aria-label="待处理问题" className="list-disc space-y-1 pl-5 text-sm">
       {issues.map((issue) => <li key={issue} className="break-words">{issue}</li>)}
     </ul> : null}

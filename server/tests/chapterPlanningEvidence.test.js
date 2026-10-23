@@ -205,6 +205,25 @@ test("historical rejected review retains evidence projection without satisfying 
   assert.equal(schema.mapSemanticAssessmentToQualityGate(projected, "full_book_autopilot").canEnterExecution, false);
 });
 
+test("resolved historical issues drop their stale decisions before current-issue coverage", () => {
+  const index = evidence.buildChapterEvidenceIndex(fixture.candidate);
+  const quote = index.leaves.get("readerExperience.keyTurn");
+  const previousIssues = [{ id: "selected_direction_drift", repairHint: "补充开篇承接" }];
+  const makeOutput = (status) => ({
+    verdict: "usable", safeToSync: true, recommendedHandling: "use_as_is", issues: [],
+    issueDecisions: [{ issueId: "selected_direction_drift" }], repairGuidance: [],
+    issueChecks: [{ issueId: "selected_direction_drift", status, explanation: "本轮结论",
+      candidateEvidence: [{ sourcePath: "readerExperience.keyTurn", quote }] }],
+    stateChecks: [], promiseChecks: [],
+  });
+  const resolved = issueProjection.projectValidatedIssueChecks(makeOutput("resolved"), fixture.candidate, previousIssues);
+  assert.deepEqual(resolved.issueDecisions, []);
+  assert.equal(resolved.issues.length, 0);
+  const unresolved = issueProjection.projectValidatedIssueChecks(makeOutput("unresolved"), fixture.candidate, previousIssues);
+  assert.deepEqual(unresolved.issueDecisions.map((decision) => decision.issueId), ["selected_direction_drift"]);
+  assert.ok(unresolved.issues.some((issue) => issue.id === "selected_direction_drift"));
+});
+
 test("a field carried by both the chapter and its scene plan is not ambiguous when the text matches", () => {
   // requiredElements is part of the chapter contract and is also carried inside the scene plan, and
   // both are projected into one root namespace. That used to throw "Ambiguous evidence source path:

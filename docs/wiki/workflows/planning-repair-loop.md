@@ -290,5 +290,17 @@ A terminal post-validation failure carries a non-enumerable completed response f
 - 这类程序自管数值在**请求 schema 解析层**就先归一：单个场景 `targetWordCount=0` 会被抬到 1，`conflictLevel`/`revealLevel` 越界会被夹到 0—100，避免一个派生数值让整包修复答案在格式校验阶段就被丢掉、连适配层都到不了。归一后仍执行既定强度投影与预算投影。
 - 必需元素修订账本同样是程序记账：同一条原始职责映射到自己（未变化）、同一来源在一轮里映射到多个目标（分支）、或来源已被历史轮次解决时重复映射，都在适配层清理后再进入拓扑校验；历史已生效映射优先，真正的环仍报错。
 - 处理原则是“入参边界归一程序自管字段，领域层只保留语义/事实校验”，避免继续按单条报错逐条打补丁。
+- 历史问题的 `issueChecks` 判为 resolved 后，该问题离开当前 `issues`；它的 `issueDecisions` 属于过期记账，由投影一并清除，否则“决策覆盖当前问题”的校验会误拒一份语义可用的复核答案。
+
+## 规划修复恢复选项的选择边界（用户视角）
+
+规划修复面板不能只列出按钮，还要让新手判断该点哪个。稳定规则：
+
+- 候选仍可用、失败属于格式/引用/合同/账本等技术校验：优先“重新复核保留候选”或“按原策略继续”，复用候选最省模型费用；同一份答案复核两次仍失败再考虑放弃。
+- 需要改剧情或计划但方向不明：选“让 AI 推荐修复方案”，看过建议再决定，会产生咨询费用；方向明确时用“高级：自定义修复方向”。
+- 规划来源/执行状态变化，或不想继续这一步：选“放弃这次修复”，回到源页继续；计划与正文不受影响。
+- 只想稍后再处理：选“保持暂停”，候选与剩余轮次保留。
+
+面板需直接展示这份判断（实现：`client/src/pages/novels/components/planningRepair/PlanningRepairPanel.tsx`），避免用户靠外部聊天解释才能决定。
 
 相关实现：`services/novel/volume/planningRepair/planningRepairDomain.ts`、`PlanningRepairCoordinator.ts`；回归 `tests/planningRepairDomain.test.js`。

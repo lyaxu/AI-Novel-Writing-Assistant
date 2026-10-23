@@ -43,15 +43,23 @@ export function projectValidatedIssueChecks(
     }
   }
   const unresolved = checks.filter(check => check.status !== "resolved");
-  if (!unresolved.length) return output;
   const issues = [...output.issues];
   for (const check of unresolved) {
     if (issues.some(issue => issue.id === check.issueId)) continue;
     const original = expected.get(check.issueId)!;
     issues.push({ ...original, summary: check.explanation });
   }
+  // Decisions belong only to issues that remain unresolved after this projection. A resolved
+  // historical issue leaves no current issue, so its decision is stale bookkeeping and must not
+  // fail the whole review on coverage mismatch.
+  const projectedIssueDecisions = output.issueDecisions
+    ? output.issueDecisions.filter(decision => issues.some(issue => issue.id === decision.issueId))
+    : output.issueDecisions;
+  if (!unresolved.length) return projectedIssueDecisions === output.issueDecisions
+    ? output : { ...output, issueDecisions: projectedIssueDecisions };
   return {
-    ...output, issues, verdict: output.verdict === "unusable" ? "unusable" : "repairable", safeToSync: false,
+    ...output, issues, ...(projectedIssueDecisions !== undefined ? { issueDecisions: projectedIssueDecisions } : {}),
+    verdict: output.verdict === "unusable" ? "unusable" : "repairable", safeToSync: false,
     recommendedHandling: output.recommendedHandling === "replan_window" ? "replan_window" : "repair_contract",
     repairGuidance: [output.repairGuidance.join("；"), unresolved.map(check => {
       const original = expected.get(check.issueId)!;
