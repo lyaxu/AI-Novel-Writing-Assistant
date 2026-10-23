@@ -218,6 +218,17 @@ test("requires the exact allowed chapter set once, using planning IDs not persis
   assert.throws(() => apply(duplicate), /ambiguous/);
 });
 
+test("repair output clamps program-owned scalar values before validation", () => {
+  const proposal = output();
+  proposal.changes[0].sceneCards[0].targetWordCount = 0;
+  proposal.changes[0].conflictLevel = 150;
+  proposal.changes[0].revealLevel = -5;
+  const parsed = planningRepairOutputSchema.parse(proposal);
+  assert.equal(parsed.changes[0].sceneCards[0].targetWordCount, 1);
+  assert.equal(parsed.changes[0].conflictLevel, 100);
+  assert.equal(parsed.changes[0].revealLevel, 0);
+});
+
 test("scene and reader schemas are the existing chapterDetail schemas", () => {
   const proposal = change();
   assert.equal(createChapterTaskSheetSchema().safeParse(proposal).success, true);

@@ -287,5 +287,6 @@ A terminal post-validation failure carries a non-enumerable completed response f
 - 领域层仍保留受保护字段校验，直接或程序化尝试改写既定强度仍然失败；原值为空时仍要求模型补齐。
 - 该投影不改变修复目标、轮次、候选或费用边界，也不把模型对强度值的回声当成新决策。
 - 场景字数总和超过章节原有 `targetWordCount` 时同理：适配层按原预算比例归一（保留每个场景至少 1 字），修复只能重新分配既有预算，不能扩大章节；领域层仍拒绝真正越过预算的输入。
+- 这类程序自管数值在**请求 schema 解析层**就先归一：单个场景 `targetWordCount=0` 会被抬到 1，`conflictLevel`/`revealLevel` 越界会被夹到 0—100，避免一个派生数值让整包修复答案在格式校验阶段就被丢掉、连适配层都到不了。归一后仍执行既定强度投影与预算投影。
 
 相关实现：`services/novel/volume/planningRepair/planningRepairDomain.ts`、`PlanningRepairCoordinator.ts`；回归 `tests/planningRepairDomain.test.js`。

@@ -10,6 +10,20 @@ export { mergeAppliedPlanningRepairRequiredElements } from "./domain/requiredEle
 const requiredText = z.string().trim().min(1);
 const contractText = requiredText.max(240);
 const taskSheetShape = createChapterTaskSheetSchema().out.shape;
+// Program-owned scalars in a repair suggestion are normalized deterministically: strengths are
+// later projected back to the current plan, and scene budgets are projected to the chapter target.
+// Doing this in the wire schema prevents a single echoed zero/overflow from discarding the answer.
+const clampRepairLevel = (value: unknown) => typeof value === "number" && Number.isFinite(value)
+  ? Math.min(100, Math.max(0, Math.round(value))) : value;
+const clampRepairWordCount = (value: unknown) => typeof value === "number" && Number.isFinite(value)
+  ? Math.max(1, Math.round(value)) : value;
+const repairLevelSchema = z.preprocess(clampRepairLevel, z.number().int().min(0).max(100).optional());
+const normalizeRepairSceneWordCount = (value: unknown) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  const normalized = clampRepairWordCount(record.targetWordCount);
+  return normalized === record.targetWordCount ? value : { ...record, targetWordCount: normalized };
+};
 
 export const planningRepairChangeSchema = z.object({
   chapterId: requiredText,
@@ -21,12 +35,12 @@ export const planningRepairChangeSchema = z.object({
   exclusiveEvent: contractText,
   endingState: contractText,
   nextChapterEntryState: contractText,
-  conflictLevel: z.number().int().min(0).max(100).optional(),
-  revealLevel: z.number().int().min(0).max(100).optional(),
+  conflictLevel: repairLevelSchema,
+  revealLevel: repairLevelSchema,
   taskSheet: taskSheetShape.taskSheet,
   mustAvoid: contractText,
   payoffRefs: z.array(requiredText.max(160)).max(8),
-  sceneCards: taskSheetShape.sceneCards,
+  sceneCards: z.array(z.preprocess(normalizeRepairSceneWordCount, taskSheetShape.sceneCards.element)),
   stateClaims: chapterStateClaimsSchema.optional(),
   readerExperience: taskSheetShape.readerExperience,
   requiredElementRevisions: z.array(requiredElementRevisionSchema).max(8).optional(),
@@ -68,7 +82,7 @@ export const planningRepairReviewOutputSchema = z.object({
 export const planningRepairWireOutputSchema = preserveGeneratedContentConstraints(planningRepairOutputSchema.extend({
   changes: z.array(planningRepairChangeSchema.extend({
     stateClaims: contextStateClaimsWireSchema,
-    sceneCards: z.array(stateBoundSceneCardWireSchema).min(3).max(8),
+    sceneCards: z.array(z.preprocess(normalizeRepairSceneWordCount, stateBoundSceneCardWireSchema)).min(3).max(8),
   })),
 }));
 
