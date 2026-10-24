@@ -6,6 +6,7 @@ import type {
   DirectorLLMOptions,
   DirectorTaskNotice,
 } from "@ai-novel/shared/types/novelDirector";
+import { isDirectorAutoExecutionCompletedBatchAwaitingNextScope } from "@ai-novel/shared/types/novelDirector";
 import type { ResourceRef } from "@ai-novel/shared/types/agent";
 import type { TaskStatus, UnifiedTaskDetail, UnifiedTaskSummary } from "@ai-novel/shared/types/task";
 import { prisma } from "../../../db/prisma";
@@ -279,6 +280,8 @@ function mapSummary(row: {
     : row.status) as TaskStatus;
   const checkpointType = row.checkpointType as NovelWorkflowCheckpoint | null;
   const autoExecution = parseAutoExecutionState(row.seedPayloadJson);
+  const awaitingNextChapterScope = checkpointType === "chapter_batch_ready"
+    && isDirectorAutoExecutionCompletedBatchAwaitingNextScope(autoExecution);
   const isRecoveryInProgress = isAutoDirectorRecoveryInProgress({
     status,
     lastError: row.lastError,
@@ -320,6 +323,7 @@ function mapSummary(row: {
     checkpointType,
     lastError: row.lastError,
     executionScopeLabel: autoExecution?.scopeLabel ?? null,
+    autoExecution,
   });
   const blockingReason = isSkippableReviewBlockedFailure
     ? buildSkippableAutoExecutionReviewBlockingReason(autoExecution)
@@ -367,12 +371,14 @@ function mapSummary(row: {
     sourceRoute,
     checkpointType,
     checkpointSummary,
+    awaitingNextChapterScope,
     resumeTarget,
     nextActionLabel: buildNovelWorkflowNextActionLabel(
       status,
       checkpointType,
       autoExecution?.scopeLabel ?? null,
       pendingManualRecovery,
+      autoExecution,
     ),
     noticeCode: taskNotice?.code ?? null,
     noticeSummary: taskNotice?.summary ?? null,

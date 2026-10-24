@@ -8,6 +8,10 @@ import type {
   DirectorWorkerHealthSummary,
 } from "@ai-novel/shared/types/directorRuntime";
 import { getDirectorNodeDisplayLabel } from "@ai-novel/shared/types/directorRuntime";
+import {
+  isDirectorAutoExecutionCompletedBatchAwaitingNextScope,
+  type DirectorAutoExecutionBatchCompletionState,
+} from "@ai-novel/shared/types/novelDirector";
 import { prisma } from "../../../../db/prisma";
 import { loadPersistentDirectorRuntimeProjection } from "./novelDirectorRuntimeProjection";
 import { directorArtifactLedgerQueryService } from "../runtime/DirectorArtifactLedgerQueryService";
@@ -402,6 +406,11 @@ export class DirectorBookAutomationProjectionService {
       ?? parseJsonOrNull<{ mode?: DirectorPolicyMode }>(latestRun?.policyJson)?.mode
       ?? null;
     const circuitBreaker = extractCircuitBreaker(latestTask?.seedPayloadJson);
+    const latestAutoExecution = parseJsonOrNull<{ autoExecution?: DirectorAutoExecutionBatchCompletionState }>(
+      latestTask?.seedPayloadJson,
+    )?.autoExecution;
+    const awaitingNextChapterScope = latestTask?.checkpointType === "chapter_batch_ready"
+      && isDirectorAutoExecutionCompletedBatchAwaitingNextScope(latestAutoExecution);
     const taskStatus = latestTask?.pendingManualRecovery
       ? "waiting_recovery"
       : workflowStatusToBookStatus(latestTask?.status);
@@ -474,7 +483,7 @@ export class DirectorBookAutomationProjectionService {
     const detail = (status === "queued" || status === "running") && workerHealth.message
       ? workerHealth.message
       : baseDetail;
-    const userHeadline = buildUserHeadline({ status, task: latestTask });
+    const userHeadline = buildUserHeadline({ status, task: latestTask, awaitingNextChapterScope });
     const userReason = dashboardView?.userActionReason ?? buildUserReason({
       status,
       runtimeProjection: displayRuntimeProjection,
@@ -492,6 +501,7 @@ export class DirectorBookAutomationProjectionService {
       novelId,
       status,
       task: latestTask ? { id: latestTask.id, checkpointType: latestTask.checkpointType } : null,
+      awaitingNextChapterScope,
     });
     const secondaryActions = buildSecondaryActions({
       novelId,

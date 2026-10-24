@@ -272,6 +272,7 @@ function buildNovelHref(
     tab?: DirectorBookAutomationAction["target"]["tab"];
     taskId?: string | null;
     taskPanel?: boolean;
+    continuation?: boolean;
   },
 ): string {
   const params = new URLSearchParams();
@@ -283,6 +284,9 @@ function buildNovelHref(
   }
   if (options?.taskPanel) {
     params.set("taskPanel", "1");
+  }
+  if (options?.continuation) {
+    params.set("continuation", "1");
   }
   const query = params.toString();
   return `/novels/${novelId}/edit${query ? `?${query}` : ""}`;
@@ -328,6 +332,8 @@ export function buildUserHeadline(input: {
     currentItemLabel?: string | null;
     checkpointType?: string | null;
   } | null;
+  /** The written window is complete and the next segment awaits a confirmed endpoint. */
+  awaitingNextChapterScope?: boolean;
 }): string {
   if (input.status === "queued") {
     return "AI 已接到这本书的推进任务";
@@ -337,7 +343,9 @@ export function buildUserHeadline(input: {
     return label ? `AI 正在处理：${label}` : "AI 正在推进这本书";
   }
   if (input.status === "waiting_approval") {
-    return "等你确认后继续";
+    return input.awaitingNextChapterScope
+      ? "本轮正文已完成，可以继续写后续章节"
+      : "等你确认后继续";
   }
   if (input.status === "waiting_recovery" || input.status === "blocked") {
     return "AI 已暂停在可处理的位置";
@@ -420,6 +428,8 @@ export function buildPrimaryAction(input: {
     id: string;
     checkpointType?: string | null;
   } | null;
+  /** The saved execution window is fully written; the next segment still needs planning. */
+  awaitingNextChapterScope?: boolean;
 }): DirectorBookAutomationAction | null {
   const taskId = input.task?.id ?? null;
   if (!taskId) {
@@ -471,6 +481,21 @@ export function buildPrimaryAction(input: {
       });
     }
     if (input.task?.checkpointType === "chapter_batch_ready") {
+      if (input.awaitingNextChapterScope) {
+        // Continuing means confirming the continuation endpoint where the range is
+        // visible; the in-task continue command cannot plan beyond the written window.
+        return action({
+          type: "open_novel",
+          label: "继续写后续章节",
+          target: {
+            novelId: input.novelId,
+            taskId,
+            tab: "chapter",
+            href: buildNovelHref(input.novelId, { tab: "chapter", taskId, continuation: true }),
+          },
+          emphasis: "primary",
+        });
+      }
       return action({
         type: "auto_execute_range",
         label: "继续自动执行章节",

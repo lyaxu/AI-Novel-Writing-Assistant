@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   AutoDirectorAction,
 } from "@ai-novel/shared/types/autoDirectorFollowUp";
 import type { TaskKind, TaskStatus, UnifiedTaskSummary } from "@ai-novel/shared/types/task";
@@ -158,7 +158,11 @@ export function formatKind(kind: TaskKind): string {
   return "图片生成";
 }
 
-export function formatCheckpoint(checkpoint: NovelWorkflowMilestoneType | null | undefined, scopeLabel?: string | null): string {
+export function formatCheckpoint(
+  checkpoint: NovelWorkflowMilestoneType | null | undefined,
+  scopeLabel?: string | null,
+  awaitingNextChapterScope?: boolean,
+): string {
   const resolvedScopeLabel = scopeLabel?.trim() || "前 10 章";
   if (checkpoint === "rewrite_snapshot_created") {
     return "重写前备份已创建";
@@ -176,7 +180,9 @@ export function formatCheckpoint(checkpoint: NovelWorkflowMilestoneType | null |
     return "卷战略已就绪";
   }
   if (checkpoint === "chapter_batch_ready") {
-    return `${resolvedScopeLabel}自动执行已暂停`;
+    return awaitingNextChapterScope
+      ? `${resolvedScopeLabel}正文已完成，可继续写后续章节`
+      : `${resolvedScopeLabel}自动执行已暂停`;
   }
   if (checkpoint === "step_review_required") {
     return "当前步骤待检查";

@@ -2,6 +2,7 @@ import { prisma } from "../../../db/prisma";
 import { withSqliteRetry } from "../../../db/sqliteRetry";
 import type { DirectorWorkflowSeedPayload } from "../director/runtime/novelDirectorHelpers";
 import type { DirectorAutoExecutionState } from "@ai-novel/shared/types/novelDirector";
+import { resolveDirectorAutoExecutionNextChapterOrder } from "@ai-novel/shared/types/novelDirector";
 import {
   buildDirectorAutoExecutionCompletedLabel,
   buildDirectorAutoExecutionCompletedSummary,
@@ -247,11 +248,14 @@ export function reconcileAutoDirectorChapterBatchState(input: {
 
   if ((autoExecution.remainingChapterCount ?? 0) === 0) {
     if (autoExecution.volumeChapterListComplete === false) {
+      const scopeLabel = buildDirectorAutoExecutionScopeLabelFromState(autoExecution, range.totalChapterCount);
+      const nextChapterOrder = resolveDirectorAutoExecutionNextChapterOrder(autoExecution);
+      const nextSegmentLabel = nextChapterOrder ? `第 ${nextChapterOrder} 章起的` : "后续章节的";
       return {
         autoExecution,
         checkpointType: "chapter_batch_ready",
-        checkpointSummary: `《${input.title.trim() || "当前项目"}》已完成${buildDirectorAutoExecutionScopeLabelFromState(autoExecution, range.totalChapterCount)}正文。继续后会补齐下一段章节规划并进入后续写作。`,
-        itemLabel: `${buildDirectorAutoExecutionScopeLabelFromState(autoExecution, range.totalChapterCount)}正文已完成，等待续拆下一段`,
+        checkpointSummary: `《${input.title.trim() || "当前项目"}》${scopeLabel}正文已完成并保留。继续写后续章节时会先确认续写终点，再补齐下一段章节规划并审查，然后生成${nextSegmentLabel}正文，不会重写已完成章节。`,
+        itemLabel: `${scopeLabel}正文已完成，等待续写后续章节`,
         chapterId: autoExecution.firstChapterId ?? range.firstChapterId,
         progress: 0.98,
       };

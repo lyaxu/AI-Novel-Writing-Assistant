@@ -18,7 +18,7 @@ import {
   deriveAutoDirectorFollowUpState,
   type AutoDirectorEventWorkflowSnapshot,
 } from "./autoDirectorFollowUpEventBuilder";
-import { resolveAutoDirectorFollowUpReason } from "./autoDirectorFollowUpReasonResolver";
+import { parseAutoExecutionBatchCompletionState, resolveAutoDirectorFollowUpReason } from "./autoDirectorFollowUpReasonResolver";
 import { extractBlockedAutoDirectorValidationResult } from "./autoDirectorFollowUpValidationResult";
 
 function isMissingTableError(error: unknown): boolean {
@@ -93,6 +93,7 @@ function resolveReasonInput(input: AutoDirectorEventWorkflowSnapshot) {
     checkpointType: input.checkpointType,
     pendingManualRecovery: input.pendingManualRecovery,
     executionScopeLabel: parseExecutionScopeLabel(input.seedPayloadJson),
+    autoExecution: parseAutoExecutionBatchCompletionState(input.seedPayloadJson),
     replacementTaskId: parseReplacementTaskId(input.seedPayloadJson),
     validationResult: extractBlockedAutoDirectorValidationResult(input.seedPayloadJson),
   };

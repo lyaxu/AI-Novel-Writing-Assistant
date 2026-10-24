@@ -8,6 +8,7 @@ import {
   canContinueDirector,
   canEnterChapterExecution,
   getWorkflowDescription,
+  isAwaitingNextChapterScope,
   isWorkflowRunningInBackground,
   requiresCandidateSelection,
 } from "@/lib/novelWorkflowTaskUi";
@@ -195,6 +196,9 @@ export function getPrimaryActionLabel(novel: NovelListItem): string {
     return "打开作品";
   }
   const task = getNovelWorkflowTask(novel);
+  if (isAwaitingNextChapterScope(task)) {
+    return "继续写后续章节";
+  }
   if (canContinueChapterBatchAutoExecution(task)) {
     return task?.resumeAction ?? `继续自动执行${task?.executionScopeLabel ?? "当前章节范围"}`;
   }

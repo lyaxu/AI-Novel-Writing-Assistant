@@ -1,4 +1,4 @@
-﻿import type { UnifiedTaskDetail } from "@ai-novel/shared/types/task";
+import type { UnifiedTaskDetail } from "@ai-novel/shared/types/task";
 import type { DirectorLockScope } from "@ai-novel/shared/types/novelDirector";
 import type { NovelEditTakeoverState } from "./components/NovelEditView.types";
 
@@ -17,9 +17,22 @@ export function resolveAutoExecutionScopeLabel(task: UnifiedTaskDetail | null): 
   return `第 1-${fallbackCount} 章`;
 }
 
+/** The written window is complete and the following segment still needs a confirmed endpoint. */
+export function isTaskAwaitingNextChapterScope(
+  task: Pick<UnifiedTaskDetail, "status" | "checkpointType" | "awaitingNextChapterScope"> | null | undefined,
+): boolean {
+  return Boolean(
+    task
+      && task.status === "waiting_approval"
+      && task.checkpointType === "chapter_batch_ready"
+      && task.awaitingNextChapterScope,
+  );
+}
+
 export function formatTakeoverCheckpoint(
   checkpoint: string | null | undefined,
   task: UnifiedTaskDetail | null,
+  awaitingNextChapterScope = false,
 ): string {
   if (checkpoint === "candidate_selection_required") {
     return "等待确认书级方向";
@@ -34,7 +47,9 @@ export function formatTakeoverCheckpoint(
     return "卷战略 / 卷骨架待审核";
   }
   if (checkpoint === "chapter_batch_ready") {
-    return `${resolveAutoExecutionScopeLabel(task)}自动执行已暂停`;
+    return awaitingNextChapterScope
+      ? `${resolveAutoExecutionScopeLabel(task)}正文已完成`
+      : `${resolveAutoExecutionScopeLabel(task)}自动执行已暂停`;
   }
   if (checkpoint === "replan_required") {
     return "等待处理重规划建议";
@@ -50,6 +65,7 @@ export function buildTakeoverTitle(input: {
   novelTitle: string;
   checkpointType: string | null | undefined;
   scopeLabel: string;
+  awaitingNextChapterScope?: boolean;
 }): string {
   if (input.mode === "completed") {
     return `《${input.novelTitle}》本轮自动导演已完成`;
@@ -63,6 +79,9 @@ export function buildTakeoverTitle(input: {
   if (input.mode === "waiting" || input.mode === "action_required") {
     if (input.checkpointType === "candidate_selection_required") {
       return `《${input.novelTitle}》等待确认书级方向`;
+    }
+    if (input.checkpointType === "chapter_batch_ready" && input.awaitingNextChapterScope) {
+      return `《${input.novelTitle}》${input.scopeLabel}正文已完成`;
     }
     if (input.checkpointType === "character_setup_required") {
       return `《${input.novelTitle}》等待审核角色准备`;
@@ -94,6 +113,7 @@ export function buildTakeoverDescription(input: {
   checkpointType: string | null | undefined;
   reviewScope: DirectorLockScope | null | undefined;
   scopeLabel: string;
+  awaitingNextChapterScope?: boolean;
 }): string {
   if (input.mode === "completed") {
     return `本轮${input.scopeLabel}任务完成。可以查看正文与质量检查结果，或点击“完成并收起”收起提醒；继续写作需另选后续章节范围。`;
@@ -107,6 +127,9 @@ export function buildTakeoverDescription(input: {
   if (input.mode === "waiting" || input.mode === "action_required") {
     if (input.checkpointType === "candidate_selection_required") {
       return "书级方向候选已经生成。请先回到书级方向确认页选定或修正方案，自动导演才能继续推进后续主链。";
+    }
+    if (input.checkpointType === "chapter_batch_ready" && input.awaitingNextChapterScope) {
+      return `${input.scopeLabel}正文已完成并保留。继续写后续章节时会先确认续写终点，再补齐下一段章节规划并审查，然后生成后续章节正文，不会重写已完成章节。`;
     }
     if (input.checkpointType === "character_setup_required") {
       return "角色准备已经生成。你可以先检查核心角色、关系和当前目标，确认后再继续自动导演。";
@@ -136,7 +159,14 @@ export function buildTakeoverDescription(input: {
   return "AI 正在后台接管这本书的开书流程。你可以继续手动操作当前项目；如果与自动导演同时改同一块内容，以最新写入结果为准。";
 }
 
-export function buildContinueAutoExecutionActionLabel(scopeLabel: string, isPending: boolean): string {
+export function buildContinueAutoExecutionActionLabel(
+  scopeLabel: string,
+  isPending: boolean,
+  awaitingNextChapterScope = false,
+): string {
+  if (awaitingNextChapterScope) {
+    return isPending ? "准备中..." : "继续写后续章节";
+  }
   return isPending ? "继续执行中..." : `继续自动执行${scopeLabel}`;
 }
 

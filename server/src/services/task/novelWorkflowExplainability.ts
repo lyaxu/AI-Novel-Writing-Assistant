@@ -3,6 +3,11 @@ import type {
   NovelWorkflowStage,
 } from "@ai-novel/shared/types/novelWorkflow";
 import type { TaskStatus } from "@ai-novel/shared/types/task";
+import {
+  isDirectorAutoExecutionCompletedBatchAwaitingNextScope,
+  resolveDirectorAutoExecutionNextChapterOrder,
+  type DirectorAutoExecutionBatchCompletionState,
+} from "@ai-novel/shared/types/novelDirector";
 import { isAutoDirectorRecoveryInProgress } from "../novel/workflow/novelWorkflowRecoveryHeuristics";
 import { normalizeFailureSummary } from "./taskSupport";
 import { NOVEL_WORKFLOW_STAGE_LABELS } from "../novel/workflow/novelWorkflow.shared";
@@ -15,6 +20,8 @@ interface WorkflowExplainabilityInput {
   checkpointType?: NovelWorkflowCheckpoint | null;
   lastError?: string | null;
   executionScopeLabel?: string | null;
+  /** Persisted auto-execution state; the completed-batch stop is derived from it, never from copy. */
+  autoExecution?: DirectorAutoExecutionBatchCompletionState;
 }
 
 export interface WorkflowExplainabilitySummary {
@@ -88,7 +95,24 @@ function getExecutionScopeLabel(input: WorkflowExplainabilityInput, fallback = "
   return input.executionScopeLabel?.trim() || fallback;
 }
 
+/**
+ * The authorized window is written out, but its volume still has unplanned beats.
+ * Continue therefore confirms the continuation endpoint before planning the next segment.
+ */
+function isAwaitingNextChapterScope(input: WorkflowExplainabilityInput): boolean {
+  return input.checkpointType === "chapter_batch_ready"
+    && isDirectorAutoExecutionCompletedBatchAwaitingNextScope(input.autoExecution);
+}
+
+function buildNextChapterStartLabel(input: WorkflowExplainabilityInput): string {
+  const nextChapterOrder = resolveDirectorAutoExecutionNextChapterOrder(input.autoExecution);
+  return nextChapterOrder ? `第 ${nextChapterOrder} 章起的` : "后续章节的";
+}
+
 function buildAutoExecutionPreparedStatus(input: WorkflowExplainabilityInput): string {
+  if (isAwaitingNextChapterScope(input)) {
+    return `${getExecutionScopeLabel(input)}已完成，可继续写后续章节`;
+  }
   return `${getExecutionScopeLabel(input)}已可进入章节执行`;
 }
 
@@ -105,11 +129,17 @@ function buildAutoExecutionCancelledStatus(input: WorkflowExplainabilityInput): 
 }
 
 function buildAutoExecutionResumeAction(input: WorkflowExplainabilityInput): string {
+  if (isAwaitingNextChapterScope(input)) {
+    return "继续写后续章节";
+  }
   return `继续自动执行${getExecutionScopeLabel(input)}`;
 }
 
 function buildAutoExecutionPreparedReason(input: WorkflowExplainabilityInput): string {
   const scopeLabel = getExecutionScopeLabel(input);
+  if (isAwaitingNextChapterScope(input)) {
+    return `${scopeLabel}正文已完成并保留。继续写后续章节时会先确认续写终点，再补齐下一段章节规划并审查，然后生成${buildNextChapterStartLabel(input)}正文，不会重写已完成章节。`;
+  }
   return `${scopeLabel}细化已准备完成，你可以进入章节执行，或继续让系统自动执行${scopeLabel}。`;
 }
 
@@ -131,6 +161,9 @@ function getStageLabel(stage: NovelWorkflowStage | null | undefined): string | n
 }
 
 function getLastHealthyStage(input: WorkflowExplainabilityInput): string | null {
+  if (isAwaitingNextChapterScope(input)) {
+    return getStageLabel("chapter_execution");
+  }
   if (isPreparedChapterBatchCheckpoint(input)) {
     return getStageLabel("structured_outline");
   }
@@ -163,12 +196,14 @@ export function buildWorkflowResumeAction(
   checkpointType: NovelWorkflowCheckpoint | null,
   executionScopeLabel?: string | null,
   pendingManualRecovery?: boolean | null,
+  autoExecution?: DirectorAutoExecutionBatchCompletionState,
 ): string | null {
   const explainabilityInput = {
     status,
     checkpointType,
     executionScopeLabel,
     pendingManualRecovery,
+    autoExecution,
   } satisfies WorkflowExplainabilityInput;
   if (status === "waiting_approval") {
     if (checkpointType === "candidate_selection_required") {
@@ -311,6 +346,7 @@ export function buildWorkflowExplainability(input: WorkflowExplainabilityInput):
       input.checkpointType ?? null,
       input.executionScopeLabel,
       input.pendingManualRecovery,
+      input.autoExecution,
     ),
     lastHealthyStage: getLastHealthyStage(input),
   };

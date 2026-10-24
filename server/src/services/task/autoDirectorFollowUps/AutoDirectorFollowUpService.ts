@@ -45,6 +45,17 @@ function isMissingTableError(error: unknown): boolean {
     && (error as { code?: string }).code === "P2021";
 }
 
+/** Append intent parameters without dropping the existing director task identity. */
+function appendQueryParams(route: string, params: Record<string, string>): string {
+  const [base, query = ""] = route.split("?", 2);
+  const search = new URLSearchParams(query);
+  for (const [key, value] of Object.entries(params)) {
+    search.set(key, value);
+  }
+  const nextQuery = search.toString();
+  return nextQuery ? `${base}?${nextQuery}` : base;
+}
+
 function isDbUnavailableError(error: unknown): boolean {
   if (!error || typeof error !== "object") {
     return false;
@@ -168,6 +179,11 @@ export class AutoDirectorFollowUpService {
     const replanUrl = item.availableActions.some((action) => action.code === "go_replan")
       ? task.sourceRoute
       : null;
+    // Opening the source workspace with this hint opens the saved continuation-range
+    // confirmation instead of starting a continue command whose range is already written.
+    const continuationUrl = item.availableActions.some((action) => action.code === "go_continuation")
+      ? appendQueryParams(task.sourceRoute, { continuation: "1" })
+      : null;
 
     return {
       directorTaskId: taskId,
@@ -189,6 +205,7 @@ export class AutoDirectorFollowUpService {
         originDetailUrl,
         candidateSelectionUrl,
         replanUrl,
+        continuationUrl,
       }),
       milestones: buildMilestones(row),
       channelDeliveries: await this.getRecentChannelDeliveries(taskId),

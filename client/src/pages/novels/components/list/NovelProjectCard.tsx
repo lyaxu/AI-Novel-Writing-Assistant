@@ -12,6 +12,7 @@ import {
   canEnterChapterExecution,
   getCandidateSelectionLink,
   getWorkflowBadge,
+  isAwaitingNextChapterScope,
   requiresCandidateSelection,
 } from "@/lib/novelWorkflowTaskUi";
 import {
@@ -239,6 +240,20 @@ function renderPrimaryAction(input: {
       <Button asChild size="sm">
         <Link to={`/novels/${input.novel.id}/story`} onClick={input.onStopCardClick}>
           打开作品
+        </Link>
+      </Button>
+    );
+  }
+  if (isAwaitingNextChapterScope(input.task)) {
+    // The written window cannot be extended in place; open the source workspace with the
+    // continuation-range confirmation prepared instead of starting a no-op continue command.
+    return (
+      <Button asChild size="sm">
+        <Link
+          to={`/novels/${input.novel.id}/edit?directorTaskId=${encodeURIComponent(input.task!.id)}&continuation=1`}
+          onClick={input.onStopCardClick}
+        >
+          {input.label}
         </Link>
       </Button>
     );

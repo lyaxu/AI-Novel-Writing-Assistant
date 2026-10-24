@@ -56,6 +56,10 @@ interface NovelExistingProjectTakeoverDialogProps {
   triggerVariant?: "default" | "outline" | "secondary";
   defaultEntryStep?: DirectorTakeoverEntryStep;
   workflowTaskId?: string | null;
+  /** Controlled opening lets a status card send the user straight into range confirmation. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
 }
 
 const RUN_MODE_OPTIONS: Array<{ value: DirectorRunMode; label: string; description: string }> = [
@@ -100,11 +104,21 @@ export default function NovelExistingProjectTakeoverDialog({
   triggerVariant = "outline",
   defaultEntryStep = "basic",
   workflowTaskId,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
 }: NovelExistingProjectTakeoverDialogProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const llm = useLLMStore();
-  const [open, setOpen] = useState(false);
+  const [innerOpen, setInnerOpen] = useState(false);
+  const open = controlledOpen ?? innerOpen;
+  const setOpen = (next: boolean) => {
+    if (controlledOpen === undefined) {
+      setInnerOpen(next);
+    }
+    onOpenChange?.(next);
+  };
   const [runMode, setRunMode] = useState<DirectorRunMode>("auto_to_ready");
   const [selectedEntryStep, setSelectedEntryStep] = useState<DirectorTakeoverEntryStep>(defaultEntryStep);
   const [selectedStrategy, setSelectedStrategy] = useState<DirectorTakeoverStrategy>("continue_existing");
@@ -344,9 +358,11 @@ export default function NovelExistingProjectTakeoverDialog({
 
   return (
     <>
-      <Button type="button" variant={triggerVariant} size="sm" onClick={() => setOpen(true)}>
-        AI 自动导演接管
-      </Button>
+      {hideTrigger ? null : (
+        <Button type="button" variant={triggerVariant} size="sm" onClick={() => setOpen(true)}>
+          AI 自动导演接管
+        </Button>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className={AUTO_DIRECTOR_MOBILE_CLASSES.takeoverDialogContent}>
           <DialogHeader className="shrink-0 border-b bg-gradient-to-r from-primary/[0.06] via-primary/[0.025] to-transparent px-4 pb-4 pr-12 pt-5 text-left sm:px-6 sm:pt-6">

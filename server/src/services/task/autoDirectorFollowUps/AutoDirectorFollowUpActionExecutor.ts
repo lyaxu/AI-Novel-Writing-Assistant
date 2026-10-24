@@ -16,7 +16,7 @@ import type { DirectorWorkflowSeedPayload } from "../../novel/director/runtime/n
 import { NovelWorkflowService } from "../../novel/workflow/NovelWorkflowService";
 import { parseSeedPayload } from "../../novel/workflow/novelWorkflow.shared";
 import { NovelWorkflowTaskAdapter } from "../adapters/NovelWorkflowTaskAdapter";
-import { resolveAutoDirectorFollowUpReason } from "./autoDirectorFollowUpReasonResolver";
+import { parseAutoExecutionBatchCompletionState, resolveAutoDirectorFollowUpReason } from "./autoDirectorFollowUpReasonResolver";
 import { resolveAutoDirectorFollowUpSection } from "../../novel/director/runtime/autoDirectorValidationService";
 import { extractBlockedAutoDirectorValidationResult } from "./autoDirectorFollowUpValidationResult";
 import {
@@ -394,6 +394,7 @@ export class AutoDirectorFollowUpActionExecutor {
       checkpointType: toCheckpointType(row.checkpointType),
       pendingManualRecovery: row.pendingManualRecovery,
       executionScopeLabel: getExecutionScopeLabel(row.seedPayloadJson),
+      autoExecution: parseAutoExecutionBatchCompletionState(row.seedPayloadJson),
       replacementTaskId: null,
       validationResult: extractBlockedAutoDirectorValidationResult(row.seedPayloadJson),
     });

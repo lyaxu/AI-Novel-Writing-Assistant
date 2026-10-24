@@ -8,7 +8,7 @@ import type {
 } from "@ai-novel/shared/types/autoDirectorFollowUp";
 import type { NovelWorkflowCheckpoint } from "@ai-novel/shared/types/novelWorkflow";
 import type { TaskStatus } from "@ai-novel/shared/types/task";
-import { resolveAutoDirectorFollowUpReason } from "./autoDirectorFollowUpReasonResolver";
+import { parseAutoExecutionBatchCompletionState, resolveAutoDirectorFollowUpReason } from "./autoDirectorFollowUpReasonResolver";
 import { extractBlockedAutoDirectorValidationResult } from "./autoDirectorFollowUpValidationResult";
 
 export interface AutoDirectorEventWorkflowSnapshot {
@@ -107,6 +107,7 @@ export function deriveAutoDirectorFollowUpState(
     checkpointType: row.checkpointType,
     pendingManualRecovery: row.pendingManualRecovery,
     executionScopeLabel,
+    autoExecution: parseAutoExecutionBatchCompletionState(row.seedPayloadJson),
     replacementTaskId: parseReplacementTaskId(row.seedPayloadJson),
     validationResult: extractBlockedAutoDirectorValidationResult(row.seedPayloadJson),
   });

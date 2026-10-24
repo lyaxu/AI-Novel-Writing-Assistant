@@ -3,7 +3,7 @@ import type {
   DirectorConfirmRequest,
   DirectorQualityRepairRisk,
 } from "@ai-novel/shared/types/novelDirector";
-import { isDirectorAutoExecutionRunMode, isFullBookAutopilotRunMode } from "@ai-novel/shared/types/novelDirector";
+import { isDirectorAutoExecutionRunMode, isFullBookAutopilotRunMode, resolveDirectorAutoExecutionNextChapterOrder } from "@ai-novel/shared/types/novelDirector";
 import type { PipelineJobStatus } from "@ai-novel/shared/types/novel";
 import type { NovelWorkflowCheckpoint } from "@ai-novel/shared/types/novelWorkflow";
 import { buildNovelEditResumeTarget } from "../../workflow/novelWorkflow.shared";
@@ -119,11 +119,13 @@ export async function recordCompletedCheckpoint(
   };
   const scopeLabel = buildDirectorAutoExecutionScopeLabelFromState(completedState, input.range.totalChapterCount);
   if (completedState.mode === "volume" && completedState.volumeChapterListComplete === false) {
+    const nextChapterOrder = resolveDirectorAutoExecutionNextChapterOrder(completedState);
+    const nextSegmentLabel = nextChapterOrder ? `第 ${nextChapterOrder} 章起的` : "后续章节的";
     await deps.workflowService.recordCheckpoint(input.taskId, {
       stage: "quality_repair",
       checkpointType: "chapter_batch_ready",
-      checkpointSummary: `《${input.request.candidate.workingTitle.trim() || input.request.title?.trim() || "当前项目"}》已完成${scopeLabel}正文。继续后会补齐下一段章节规划并进入后续写作。`,
-      itemLabel: `${scopeLabel}正文已完成，等待续拆下一段`,
+      checkpointSummary: `《${input.request.candidate.workingTitle.trim() || input.request.title?.trim() || "当前项目"}》${scopeLabel}正文已完成并保留。继续写后续章节时会先确认续写终点，再补齐下一段章节规划并审查，然后生成${nextSegmentLabel}正文，不会重写已完成章节。`,
+      itemLabel: `${scopeLabel}正文已完成，等待续写后续章节`,
       progress: 0.98,
       chapterId: completedState.firstChapterId ?? input.range.firstChapterId,
       seedPayload: deps.buildDirectorSeedPayload(input.request, input.novelId, {

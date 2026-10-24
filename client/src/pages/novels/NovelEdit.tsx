@@ -1,5 +1,5 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BOOK_ANALYSIS_SECTIONS } from "@ai-novel/shared/types/bookAnalysis";
 import type { DirectorContinuationMode, DirectorLockScope, DirectorSessionState, DirectorStepCalibrationAction } from "@ai-novel/shared/types/novelDirector";
@@ -95,6 +95,7 @@ import {
   buildTakeoverDescription,
   buildTakeoverTitle,
   formatTakeoverCheckpoint,
+  isTaskAwaitingNextChapterScope,
   resolveAutoExecutionScopeLabel,
 } from "./novelEditTakeover.shared";
 import {
@@ -236,8 +237,11 @@ function resolveActiveStructuredOutlineChapterId(snapshot: DirectorTaskSnapshot 
 export default function NovelEdit() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const llm = useLLMStore();
   const queryClient = useQueryClient();
+  const [isContinuationTakeoverOpen, setIsContinuationTakeoverOpen] = useState(false);
+  const continuationFlowStartedTaskIdRef = useRef("");
   const {
     activeTab,
     setActiveTab,
@@ -700,6 +704,23 @@ export default function NovelEdit() {
     [activeAutoDirectorTask, bookAutomationProjection, directorTaskId, requestedDirectorTask, taskPanelOpen],
   );
   const displayAutoDirectorTask = visibleDirectorTask;
+  const continuationRequested = searchParams.get("continuation") === "1";
+  useEffect(() => {
+    if (!continuationRequested || !displayAutoDirectorTask) {
+      return;
+    }
+    if (isTaskAwaitingNextChapterScope(displayAutoDirectorTask)) {
+      if (continuationFlowStartedTaskIdRef.current === displayAutoDirectorTask.id) {
+        return;
+      }
+      continuationFlowStartedTaskIdRef.current = displayAutoDirectorTask.id;
+      startContinuationFlow(displayAutoDirectorTask);
+      return;
+    }
+    if (displayAutoDirectorTask.status === "succeeded") {
+      setIsContinuationTakeoverOpen(true);
+    }
+  }, [continuationRequested, displayAutoDirectorTask]);
   const actionTargetDirectorTaskId = visibleDirectorTask?.id ?? "";
   const selectedDirectorTaskId = visibleDirectorTask?.id ?? requestedDirectorTaskId;
   useEffect(() => {
@@ -1116,6 +1137,46 @@ export default function NovelEdit() {
       toast.error(message);
     },
   });
+  // The saved window is already written, so the in-task continue only closes this range.
+  // After that boundary syncs, the range-confirmation dialog opens for the continuation.
+  const openContinuationFlowMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      await continueNovelWorkflow(taskId, { continuationMode: "auto_execute_range" });
+      const deadline = Date.now() + 60_000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const response = await getTaskDetail("novel_workflow", taskId).catch(() => null);
+        const next = response?.data ?? null;
+        if (!next) {
+          continue;
+        }
+        if (next.status === "succeeded" || next.status === "failed" || next.status === "cancelled") {
+          return next;
+        }
+      }
+      return null;
+    },
+    onSuccess: async (closedTask, taskId) => {
+      await invalidateAutoDirectorTaskState(taskId);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.novels.autoDirectorTakeoverReadiness(id) });
+      if (closedTask?.status === "succeeded") {
+        setIsContinuationTakeoverOpen(true);
+        toast.success("本轮正文已完成，请选择续写终点。");
+        return;
+      }
+      toast.error("本轮范围的完成状态还没有同步完成，请刷新工作区后再继续写后续章节。");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "继续写后续章节失败。");
+    },
+  });
+  const startContinuationFlow = (task: NonNullable<typeof displayAutoDirectorTask>) => {
+    if (isTaskAwaitingNextChapterScope(task)) {
+      openContinuationFlowMutation.mutate(task.id);
+      return;
+    }
+    setIsContinuationTakeoverOpen(true);
+  };
   const continueProjectedDirectorActionMutation = useMutation({
     mutationFn: async (input: {
       taskId: string;
@@ -1452,6 +1513,7 @@ export default function NovelEdit() {
     const novelTitle = novelDetailQuery.data?.data?.title?.trim() || task.title?.trim() || "当前项目";
     const reviewScope = activeDirectorSession?.reviewScope ?? null;
     const autoExecutionScopeLabel = resolveAutoExecutionScopeLabel(task);
+    const awaitingNextChapterScope = isTaskAwaitingNextChapterScope(task);
     const actions: NonNullable<NovelEditTakeoverState["actions"]> = [];
     if (activeChapterTitleWarning) {
       actions.push({
@@ -1558,22 +1620,43 @@ export default function NovelEdit() {
         disabled: acceptManualChangesAndContinueMutation.isPending,
       });
     } else if (mode === "waiting" && task.checkpointType === "chapter_batch_ready") {
-      actions.push({
-        label: buildContinueAutoExecutionActionLabel(autoExecutionScopeLabel, continueAutoExecutionMutation.isPending),
-        onClick: () => continueAutoExecutionMutation.mutate({ directorTaskId: task.id }),
-        variant: "default",
-        disabled: continueAutoExecutionMutation.isPending,
-      });
-      actions.push({
-        label: "进入章节执行",
-        onClick: () => {
-          if (task.resumeTarget?.chapterId) {
-            setSelectedChapterId(task.resumeTarget.chapterId);
-          }
-          setActiveTab("chapter");
-        },
-        variant: "outline",
-      });
+      if (awaitingNextChapterScope) {
+        // The written window is complete. Continuing opens the range confirmation so the
+        // user picks the continuation endpoint before any new planning starts.
+        actions.push({
+          label: openContinuationFlowMutation.isPending ? "准备中..." : buildContinueAutoExecutionActionLabel(autoExecutionScopeLabel, false, true),
+          onClick: () => startContinuationFlow(task),
+          variant: "default",
+          disabled: openContinuationFlowMutation.isPending,
+        });
+        actions.push({
+          label: "查看已完成章节",
+          onClick: () => {
+            if (task.resumeTarget?.chapterId) {
+              setSelectedChapterId(task.resumeTarget.chapterId);
+            }
+            setActiveTab("chapter");
+          },
+          variant: "outline",
+        });
+      } else {
+        actions.push({
+          label: buildContinueAutoExecutionActionLabel(autoExecutionScopeLabel, continueAutoExecutionMutation.isPending),
+          onClick: () => continueAutoExecutionMutation.mutate({ directorTaskId: task.id }),
+          variant: "default",
+          disabled: continueAutoExecutionMutation.isPending,
+        });
+        actions.push({
+          label: "进入章节执行",
+          onClick: () => {
+            if (task.resumeTarget?.chapterId) {
+              setSelectedChapterId(task.resumeTarget.chapterId);
+            }
+            setActiveTab("chapter");
+          },
+          variant: "outline",
+        });
+      }
     } else if (mode === "completed" || (mode === "waiting" && task.checkpointType === "workflow_completed")) {
       actions.push({
         label: "进入章节执行",
@@ -1721,6 +1804,7 @@ export default function NovelEdit() {
             novelTitle,
             checkpointType: task.checkpointType,
             scopeLabel: autoExecutionScopeLabel,
+            awaitingNextChapterScope,
           }),
       description: consistencyIssue === "missing_characters"
         ? "任务记录显示已完成开书交接，但当前项目里还没有角色资产，所以角色准备和章节执行都不完整。可以直接补齐导演产物，系统会继续修复。"
@@ -1734,6 +1818,7 @@ export default function NovelEdit() {
             checkpointType: task.checkpointType,
             reviewScope,
             scopeLabel: autoExecutionScopeLabel,
+            awaitingNextChapterScope,
           }),
       progress: mode === "completed" ? 100 : typeof dashboardView?.progressPercent === "number"
         ? dashboardView.progressPercent
@@ -1766,7 +1851,7 @@ export default function NovelEdit() {
           ? "等待恢复"
         : mode === "running" && task.checkpointType === "chapter_batch_ready"
           ? `${autoExecutionScopeLabel}自动执行中`
-          : formatTakeoverCheckpoint(task.checkpointType, task),
+          : formatTakeoverCheckpoint(task.checkpointType, task, awaitingNextChapterScope),
       taskId: task.id,
       actions,
     };
@@ -1785,6 +1870,7 @@ export default function NovelEdit() {
     cancelAutoDirectorMutation,
     continueAutoDirectorMutation,
     continueAutoExecutionMutation,
+    openContinuationFlowMutation,
     dismissTakeover,
     hasUnsavedVolumeDraft,
     isDirectorExitActionExpanded,
@@ -1864,17 +1950,31 @@ export default function NovelEdit() {
       && task.checkpointType === "chapter_batch_ready"
     ) {
       const autoExecutionScopeLabel = resolveAutoExecutionScopeLabel(task);
-      actions.push({
-        label: buildContinueAutoExecutionActionLabel(autoExecutionScopeLabel, continueAutoExecutionMutation.isPending),
-        onClick: () => continueAutoExecutionMutation.mutate({ directorTaskId: task.id }),
-        variant: "default",
-        disabled: continueAutoExecutionMutation.isPending,
-      });
-      actions.push({
-        label: "进入章节执行",
-        onClick: () => openChapterExecution(task),
-        variant: "outline",
-      });
+      if (isTaskAwaitingNextChapterScope(task)) {
+        actions.push({
+          label: openContinuationFlowMutation.isPending ? "准备中..." : buildContinueAutoExecutionActionLabel(autoExecutionScopeLabel, false, true),
+          onClick: () => startContinuationFlow(task),
+          variant: "default",
+          disabled: openContinuationFlowMutation.isPending,
+        });
+        actions.push({
+          label: "查看已完成章节",
+          onClick: () => openChapterExecution(task),
+          variant: "outline",
+        });
+      } else {
+        actions.push({
+          label: buildContinueAutoExecutionActionLabel(autoExecutionScopeLabel, continueAutoExecutionMutation.isPending),
+          onClick: () => continueAutoExecutionMutation.mutate({ directorTaskId: task.id }),
+          variant: "default",
+          disabled: continueAutoExecutionMutation.isPending,
+        });
+        actions.push({
+          label: "进入章节执行",
+          onClick: () => openChapterExecution(task),
+          variant: "outline",
+        });
+      }
     } else if (task.status === "waiting_approval" && task.checkpointType === "candidate_selection_required") {
       actions.push({
         label: "去确认书级方向",
@@ -1936,6 +2036,7 @@ export default function NovelEdit() {
     consistencyIssue,
     continueAutoDirectorMutation,
     continueAutoExecutionMutation,
+    openContinuationFlowMutation,
     displayAutoDirectorTask,
     hasUnsavedVolumeDraft,
     openCandidateSelection,
@@ -2757,7 +2858,8 @@ export default function NovelEdit() {
   }
 
   return (
-    <NovelEditView
+    <>
+      <NovelEditView
       id={id}
       activeTab={activeTab}
       workflowCurrentTab={workflowCurrentTab}
@@ -2859,6 +2961,20 @@ export default function NovelEdit() {
           : "",
         onOpenFullTaskCenter: openAutoDirectorTaskCenter,
       }}
-    />
+      />
+      <NovelExistingProjectTakeoverDialog
+        novelId={id}
+        basicForm={basicForm}
+        defaultEntryStep="chapter"
+        workflowTaskId={resolveTakeoverDialogContextTaskId({
+          directorTaskId,
+          activeAutoDirectorTask,
+          projection: bookAutomationProjection,
+        })}
+        open={isContinuationTakeoverOpen}
+        onOpenChange={setIsContinuationTakeoverOpen}
+        hideTrigger
+      />
+    </>
   );
 }

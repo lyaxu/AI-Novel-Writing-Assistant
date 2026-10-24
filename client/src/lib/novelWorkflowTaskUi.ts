@@ -1,4 +1,4 @@
-﻿import type { NovelAutoDirectorTaskSummary } from "@ai-novel/shared/types/novel";
+import type { NovelAutoDirectorTaskSummary } from "@ai-novel/shared/types/novel";
 import type { NovelWorkflowCheckpoint } from "@ai-novel/shared/types/novelWorkflow";
 import type { TaskStatus } from "@ai-novel/shared/types/task";
 
@@ -79,6 +79,12 @@ export function getWorkflowBadge(task?: NovelAutoDirectorTaskSummary | null): {
         ? buildAutoExecutionPausedLabel(task.executionScopeLabel)
         : buildAutoExecutionCancelledLabel(task.executionScopeLabel)),
       variant: task.status === "failed" ? "destructive" : "outline",
+    };
+  }
+  if (isAwaitingNextChapterScope(task)) {
+    return {
+      label: displayStatus || `${getExecutionScopeLabel(task.executionScopeLabel)}已完成，可继续写后续章节`,
+      variant: "secondary",
     };
   }
   if (task.status === "waiting_approval") {
@@ -183,6 +189,19 @@ export function canContinueChapterBatchAutoExecution(task?: NovelAutoDirectorTas
     return false;
   }
   return (task.status === "failed" || task.status === "cancelled") && task.checkpointType === "chapter_batch_ready";
+}
+
+/** The saved window is fully written; the next segment needs an explicit continuation scope. */
+export function isAwaitingNextChapterScope(task?: Pick<
+  NovelAutoDirectorTaskSummary,
+  "status" | "checkpointType" | "awaitingNextChapterScope"
+> | null): boolean {
+  return Boolean(
+    task
+      && task.status === "waiting_approval"
+      && task.checkpointType === "chapter_batch_ready"
+      && task.awaitingNextChapterScope,
+  );
 }
 
 export function canEnterChapterExecution(task?: NovelAutoDirectorTaskSummary | null): boolean {

@@ -154,6 +154,16 @@ hard 卷锁定前期承诺、卖点、推进秩序和节奏稳定性；soft 卷�
 
 `resolveStructuredOutlineRecoveryCursor` 需要识别第一个未完成 beat，并在允许 partial ready 的自动执行路径中只选择已完成 beat 覆盖的章节。checkpoint 修复和继续运行逻辑必须保留 `volumeChapterListComplete = false` 的事实，避免把当前 beat 执行完误判为整卷 / 全书 workflow completed。
 
+### Completed Window Awaiting Next Scope
+
+当已授权执行窗口全部写完（`remainingChapterCount = 0`、`completedChapterCount = totalChapterCount`）而本卷章节列表仍未完整（`volumeChapterListComplete = false`）时，任务停在“本段已完成、等待续写后续范围”：
+
+- 该状态只由持久化的 `autoExecution` 结构化字段判定，不解析 `checkpointSummary` 或 `currentItemLabel` 文案；现有历史任务行无需迁移。
+- 任务投影显示“已完成，可继续写后续章节”，主按钮和下一步建议为“继续写后续章节”。它不能复用“继续自动执行本段”的文案，也不能把用户引到初始批次已准备但尚未执行的状态。
+- 该状态下继续不是原地重跑或静默标记完成，而是先打开源工作区的续写范围确认入口（`AI 自动导演接管`：选择续写终点），确认后再补齐下一段规划、审查并生成后续章节；已写正文不重写。
+- 跟进中心的同一状态应返回打开续写范围确认的导航动作，而不是提交 `continue_auto_execution` 变更动作，避免用户以为会直接写后续章节。
+- 初始 `chapter_batch_ready`（当前窗口尚未执行完）的“进入已准备章节 / 继续自动执行当前范围”文案保持不变；只有上面的已完成窗口状态使用续写文案。
+
 ### Change Impact Scope
 
 角色注入、局部修订和卖点调整遵守“未写范围最小扰动”：

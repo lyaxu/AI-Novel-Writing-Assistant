@@ -6,6 +6,8 @@ import type {
   AutoDirectorMutationActionCode,
   AutoDirectorResolvedFollowUpReason,
 } from "@ai-novel/shared/types/autoDirectorFollowUp";
+import type { DirectorAutoExecutionBatchCompletionState } from "@ai-novel/shared/types/novelDirector";
+import { isDirectorAutoExecutionCompletedBatchAwaitingNextScope } from "@ai-novel/shared/types/novelDirector";
 import { buildWorkflowResumeAction } from "../novelWorkflowExplainability";
 
 const CHANNEL_ACTION_CODES = new Set<AutoDirectorActionCode>([
@@ -45,7 +47,7 @@ function mutationAction(input: {
 }
 
 function navigationAction(input: {
-  code: Extract<AutoDirectorActionCode, "go_replan" | "go_candidate_selection" | "open_detail" | "open_follow_up_center">;
+  code: Extract<AutoDirectorActionCode, "go_replan" | "go_candidate_selection" | "go_continuation" | "open_detail" | "open_follow_up_center">;
   label: string;
   riskLevel?: AutoDirectorAction["riskLevel"];
   requiresConfirm?: boolean;
@@ -59,8 +61,30 @@ function navigationAction(input: {
   };
 }
 
+export function parseAutoExecutionBatchCompletionState(
+  seedPayloadJson: string | null | undefined,
+): DirectorAutoExecutionBatchCompletionState {
+  if (!seedPayloadJson?.trim()) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(seedPayloadJson) as {
+      autoExecution?: DirectorAutoExecutionBatchCompletionState;
+    };
+    return parsed.autoExecution ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function getContinueLabel(input: AutoDirectorFollowUpResolverInput, fallback: string): string {
-  return buildWorkflowResumeAction(input.status, input.checkpointType ?? null, input.executionScopeLabel) ?? fallback;
+  return buildWorkflowResumeAction(
+    input.status,
+    input.checkpointType ?? null,
+    input.executionScopeLabel,
+    undefined,
+    input.autoExecution,
+  ) ?? fallback;
 }
 
 function finalizeResolvedReason(input: {
@@ -268,6 +292,24 @@ export function resolveAutoDirectorFollowUpReason(
   }
 
   if (input.checkpointType === "chapter_batch_ready" && input.status === "waiting_approval") {
+    // The saved window is fully written. Continuing means confirming the continuation
+    // endpoint in the source workspace, then planning the next segment there.
+    if (isDirectorAutoExecutionCompletedBatchAwaitingNextScope(input.autoExecution)) {
+      return finalizeResolvedReason({
+        reason: "chapter_batch_execution_pending",
+        priority: "P2",
+        availableActions: [
+          navigationAction({
+            code: "go_continuation",
+            label: "继续写后续章节",
+          }),
+          navigationAction({
+            code: "open_detail",
+            label: "查看详情",
+          }),
+        ],
+      });
+    }
     return finalizeResolvedReason({
       reason: "chapter_batch_execution_pending",
       priority: "P2",

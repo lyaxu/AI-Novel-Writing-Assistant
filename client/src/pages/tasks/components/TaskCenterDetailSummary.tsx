@@ -85,7 +85,7 @@ export default function TaskCenterDetailSummary({
             </div>
             <div>
               <div className="text-[11px] text-muted-foreground">最近检查点</div>
-              <div className="mt-1 leading-5 text-foreground/90">{formatCheckpoint(task.checkpointType, task.executionScopeLabel)}</div>
+              <div className="mt-1 leading-5 text-foreground/90">{formatCheckpoint(task.checkpointType, task.executionScopeLabel, task.awaitingNextChapterScope)}</div>
             </div>
           </>
         ) : null}

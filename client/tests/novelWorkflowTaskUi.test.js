@@ -5,6 +5,9 @@ import {
   canContinueChapterBatchAutoExecution,
   canContinueDirector,
   getCandidateSelectionLink,
+  getWorkflowBadge,
+  getWorkflowDescription,
+  isAwaitingNextChapterScope,
 } from "../src/lib/novelWorkflowTaskUi.ts";
 
 function buildTask(overrides = {}) {
@@ -59,4 +62,34 @@ test("completed tasks are not cancelable", () => {
 
 test("candidate selection links use the auto-director route taskId parameter", () => {
   assert.equal(getCandidateSelectionLink("task-1"), "/novels/auto-director?taskId=task-1");
+});
+
+test("a fully written window offers continuation scope instead of the batch continue action", () => {
+  const task = buildTask({ status: "waiting_approval", awaitingNextChapterScope: true });
+
+  assert.equal(isAwaitingNextChapterScope(task), true);
+  assert.equal(canContinueChapterBatchAutoExecution(task), false);
+  assert.equal(canContinueDirector(task), false);
+});
+
+test("continuation copy only applies to the waiting chapter-batch completion state", () => {
+  assert.equal(isAwaitingNextChapterScope(buildTask({ status: "running", awaitingNextChapterScope: true })), false);
+  assert.equal(isAwaitingNextChapterScope(buildTask({
+    status: "waiting_approval",
+    checkpointType: "workflow_completed",
+    awaitingNextChapterScope: true,
+  })), false);
+  assert.equal(isAwaitingNextChapterScope(buildTask()), false);
+});
+
+test("workflow badge and description use the completed-window copy from the projection", () => {
+  const task = {
+    ...buildTask({ awaitingNextChapterScope: true }),
+    executionScopeLabel: "第 1-3 章",
+    displayStatus: "第 1-3 章已完成，可继续写后续章节",
+    blockingReason: "第 1-3 章正文已完成并保留。继续写后续章节时会先确认续写终点，再补齐下一段章节规划并审查，然后生成第 4 章起的正文，不会重写已完成章节。",
+  };
+
+  assert.equal(getWorkflowBadge(task)?.label, "第 1-3 章已完成，可继续写后续章节");
+  assert.match(getWorkflowDescription(task) ?? "", /会先确认续写终点/);
 });

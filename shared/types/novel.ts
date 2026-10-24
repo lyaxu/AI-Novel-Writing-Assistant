@@ -209,6 +209,8 @@ export interface NovelAutoDirectorTaskSummary {
   lastHealthyStage?: string | null;
   checkpointType?: NovelWorkflowCheckpoint | null;
   checkpointSummary?: string | null;
+  /** The saved execution window is fully written; the next chapter segment still needs planning. */
+  awaitingNextChapterScope?: boolean;
   nextActionLabel?: string | null;
   updatedAt: string;
 }

@@ -79,6 +79,36 @@ test("follow-up resolver keeps waiting chapter batches in auto-execution continu
   assert.deepEqual(actionCodes(result), ["continue_auto_execution", "open_detail"]);
 });
 
+test("follow-up resolver routes a fully written window to continuation scope confirmation", () => {
+  const result = resolveAutoDirectorFollowUpReason({
+    status: "waiting_approval",
+    checkpointType: "chapter_batch_ready",
+    executionScopeLabel: "第 1-3 章",
+    autoExecution: {
+      enabled: true,
+      mode: "chapter_range",
+      startOrder: 1,
+      endOrder: 3,
+      totalChapterCount: 3,
+      completedChapterCount: 3,
+      remainingChapterCount: 0,
+      volumeChapterListComplete: false,
+      pipelineJobId: "job-3",
+      pipelineStatus: "succeeded",
+    },
+  });
+
+  assert.ok(result);
+  assert.equal(result.reason, "chapter_batch_execution_pending");
+  assert.deepEqual(actionCodes(result), ["go_continuation", "open_detail"]);
+  const continuation = result.availableActions[0];
+  assert.equal(continuation.kind, "navigation");
+  assert.equal(continuation.label, "继续写后续章节");
+  assert.equal(continuation.riskLevel, "low");
+  assert.deepEqual(result.batchActionCodes, []);
+  assert.equal(result.supportsBatch, false);
+});
+
 test("follow-up resolver exposes retry metadata for failed tasks", () => {
   const result = resolveAutoDirectorFollowUpReason({
     status: "failed",

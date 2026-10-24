@@ -38,6 +38,7 @@ export type AutoDirectorMutationActionCode =
 export type AutoDirectorNavigationActionCode =
   | "go_replan"
   | "go_candidate_selection"
+  | "go_continuation"
   | "open_detail"
   | "open_follow_up_center";
 
@@ -64,6 +65,8 @@ export interface AutoDirectorFollowUpResolverInput {
   checkpointType?: NovelWorkflowCheckpoint | null;
   pendingManualRecovery?: boolean;
   executionScopeLabel?: string | null;
+  /** Persisted auto-execution state; the completed-batch stop is derived from it, never from copy. */
+  autoExecution?: import("./novelDirector").DirectorAutoExecutionBatchCompletionState;
   replacementTaskId?: string | null;
   validationResult?: AutoDirectorValidationResult | null;
 }

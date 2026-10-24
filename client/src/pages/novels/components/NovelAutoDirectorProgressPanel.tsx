@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   NovelWorkflowMilestone,
   NovelWorkflowMilestoneType,
 } from "@ai-novel/shared/types/novelWorkflow";
@@ -148,7 +148,9 @@ function formatCheckpoint(
     return "已可开写，等待选择生产方式";
   }
   if (checkpoint === "chapter_batch_ready") {
-    return `${resolveAutoExecutionScopeLabel(task)}自动执行已暂停`;
+    return task?.awaitingNextChapterScope
+      ? `${resolveAutoExecutionScopeLabel(task)}正文已完成，可继续写后续章节`
+      : `${resolveAutoExecutionScopeLabel(task)}自动执行已暂停`;
   }
   if (checkpoint === "step_review_required") {
     return "当前步骤待检查";

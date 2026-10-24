@@ -1,6 +1,10 @@
 import type { NovelAutoDirectorTaskSummary } from "@ai-novel/shared/types/novel";
 import type { NovelWorkflowCheckpoint } from "@ai-novel/shared/types/novelWorkflow";
 import type { TaskStatus } from "@ai-novel/shared/types/task";
+import {
+  isDirectorAutoExecutionCompletedBatchAwaitingNextScope,
+  type DirectorAutoExecutionBatchCompletionState,
+} from "@ai-novel/shared/types/novelDirector";
 import { buildWorkflowExplainability, buildWorkflowResumeAction } from "./novelWorkflowExplainability";
 import type { DirectorWorkflowSeedPayload } from "../novel/director/runtime/novelDirectorHelpers";
 import { parseSeedPayload } from "../novel/workflow/novelWorkflow.shared";
@@ -10,18 +14,22 @@ export function buildNovelWorkflowNextActionLabel(
   checkpointType: NovelWorkflowCheckpoint | null,
   executionScopeLabel?: string | null,
   pendingManualRecovery?: boolean | null,
+  autoExecution?: DirectorAutoExecutionBatchCompletionState,
 ): string | null {
   const resumeAction = buildWorkflowResumeAction(
     status,
     checkpointType,
     executionScopeLabel,
     pendingManualRecovery,
+    autoExecution,
   );
   if (!resumeAction) {
     return null;
   }
   if (status === "waiting_approval" && checkpointType === "chapter_batch_ready") {
-    return "进入已准备章节";
+    return isDirectorAutoExecutionCompletedBatchAwaitingNextScope(autoExecution)
+      ? "继续写后续章节"
+      : "进入已准备章节";
   }
   return resumeAction;
 }
@@ -50,7 +58,10 @@ export function mapNovelAutoDirectorTaskSummary(
     ? "queued"
     : row.status) as TaskStatus;
   const seedPayload = parseSeedPayload<DirectorWorkflowSeedPayload>(row.seedPayloadJson);
-  const executionScopeLabel = seedPayload?.autoExecution?.scopeLabel?.trim() || null;
+  const autoExecution = seedPayload?.autoExecution ?? null;
+  const executionScopeLabel = autoExecution?.scopeLabel?.trim() || null;
+  const awaitingNextChapterScope = checkpointType === "chapter_batch_ready"
+    && isDirectorAutoExecutionCompletedBatchAwaitingNextScope(autoExecution);
   const explainability = buildWorkflowExplainability({
     status,
     pendingManualRecovery,
@@ -59,6 +70,7 @@ export function mapNovelAutoDirectorTaskSummary(
     checkpointType,
     lastError: row.lastError,
     executionScopeLabel,
+    autoExecution,
   });
   return {
     id: row.id,
@@ -75,11 +87,13 @@ export function mapNovelAutoDirectorTaskSummary(
     lastHealthyStage: explainability.lastHealthyStage,
     checkpointType,
     checkpointSummary: row.checkpointSummary,
+    awaitingNextChapterScope,
     nextActionLabel: buildNovelWorkflowNextActionLabel(
       status,
       checkpointType,
       executionScopeLabel,
       pendingManualRecovery,
+      autoExecution,
     ),
     updatedAt: row.updatedAt.toISOString(),
   };

@@ -57,6 +57,8 @@ export interface UnifiedTaskSummary {
   sourceRoute: string;
   checkpointType?: NovelWorkflowCheckpoint | null;
   checkpointSummary?: string | null;
+  /** Auto-director only: current window is fully written and the next segment still needs planning. */
+  awaitingNextChapterScope?: boolean;
   resumeTarget?: NovelWorkflowResumeTarget | null;
   nextActionLabel?: string | null;
   noticeCode?: string | null;

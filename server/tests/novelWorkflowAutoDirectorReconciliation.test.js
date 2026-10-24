@@ -183,8 +183,9 @@ test("syncAutoDirectorChapterBatchCheckpoint keeps partial beat completion as a 
 
     assert.equal(patch.status, undefined);
     assert.equal(patch.checkpointType, undefined);
-    assert.match(patch.checkpointSummary, /补齐下一段章节规划/);
-    assert.equal(patch.currentItemLabel, "全书正文已完成，等待续拆下一段");
+    assert.match(patch.checkpointSummary, /会先确认续写终点/);
+    assert.match(patch.checkpointSummary, /不会重写已完成章节/);
+    assert.equal(patch.currentItemLabel, "全书正文已完成，等待续写后续章节");
     assert.equal(seedPayload.autoExecution.remainingChapterCount, 0);
     assert.equal(seedPayload.autoExecution.volumeChapterListComplete, false);
   } finally {

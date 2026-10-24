@@ -32,7 +32,10 @@ import {
 } from "../../novel/workflow/novelWorkflow.shared";
 import type { getAutoDirectorChannelSettings } from "../../settings/AutoDirectorChannelSettingsService";
 import { buildWorkflowExplainability } from "../novelWorkflowExplainability";
-import { resolveAutoDirectorFollowUpReason } from "./autoDirectorFollowUpReasonResolver";
+import {
+  parseAutoExecutionBatchCompletionState,
+  resolveAutoDirectorFollowUpReason,
+} from "./autoDirectorFollowUpReasonResolver";
 import {
   extractBlockedAutoDirectorValidationResult,
   summarizeAutoDirectorValidationResult,
@@ -260,6 +263,7 @@ function buildBlockingReason(row: FollowUpWorkflowRow): string | null {
     checkpointType: row.checkpointType,
     lastError: row.lastError,
     executionScopeLabel: getExecutionScopeLabel(row.seedPayloadJson),
+    autoExecution: parseAutoExecutionBatchCompletionState(row.seedPayloadJson),
   }).blockingReason;
 }
 
@@ -298,6 +302,7 @@ export function projectFollowUpItem(
     checkpointType: row.checkpointType,
     pendingManualRecovery: row.pendingManualRecovery,
     executionScopeLabel,
+    autoExecution: parseAutoExecutionBatchCompletionState(row.seedPayloadJson),
     replacementTaskId,
     validationResult,
   });
@@ -527,6 +532,7 @@ export function decorateDetailActions(input: {
   originDetailUrl: string;
   candidateSelectionUrl: string | null;
   replanUrl: string | null;
+  continuationUrl: string | null;
 }): AutoDirectorAction[] {
   return input.actions.map((action) => {
     if (action.kind !== "navigation") {
@@ -542,6 +548,12 @@ export function decorateDetailActions(input: {
       return {
         ...action,
         targetUrl: input.candidateSelectionUrl,
+      };
+    }
+    if (action.code === "go_continuation" && input.continuationUrl) {
+      return {
+        ...action,
+        targetUrl: input.continuationUrl,
       };
     }
     if (action.code === "go_replan" && input.replanUrl) {

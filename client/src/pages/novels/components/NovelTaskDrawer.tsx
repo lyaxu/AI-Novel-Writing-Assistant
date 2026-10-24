@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   NovelWorkflowMilestone,
   NovelWorkflowMilestoneType,
 } from "@ai-novel/shared/types/novelWorkflow";
@@ -71,7 +71,11 @@ function toTaskStatusVariant(task: DrawerTask): "default" | "outline" | "seconda
   return toStatusVariant(task.status);
 }
 
-function formatCheckpoint(checkpoint: NovelWorkflowMilestoneType | null | undefined, scopeLabel?: string | null): string {
+function formatCheckpoint(
+  checkpoint: NovelWorkflowMilestoneType | null | undefined,
+  scopeLabel?: string | null,
+  awaitingNextChapterScope?: boolean,
+): string {
   const resolvedScopeLabel = scopeLabel?.trim() || "前 10 章";
   if (checkpoint === "rewrite_snapshot_created") {
     return "重写前备份已创建";
@@ -92,7 +96,9 @@ function formatCheckpoint(checkpoint: NovelWorkflowMilestoneType | null | undefi
     return "已可开写，等待选择生产方式";
   }
   if (checkpoint === "chapter_batch_ready") {
-    return `${resolvedScopeLabel}自动执行已暂停`;
+    return awaitingNextChapterScope
+      ? `${resolvedScopeLabel}正文已完成，可继续写后续章节`
+      : `${resolvedScopeLabel}自动执行已暂停`;
   }
   if (checkpoint === "step_review_required") {
     return "当前步骤待检查";
@@ -417,7 +423,7 @@ export default function NovelTaskDrawer({
                   </div>
                   <div className="rounded-xl border bg-background/80 p-3">
                     <div className="text-xs text-muted-foreground">最近检查点</div>
-                    <div className="mt-1 text-sm font-medium text-foreground">{displayState?.checkpointLabel ?? formatCheckpoint(task.checkpointType, task.executionScopeLabel)}</div>
+                    <div className="mt-1 text-sm font-medium text-foreground">{displayState?.checkpointLabel ?? formatCheckpoint(task.checkpointType, task.executionScopeLabel, task.awaitingNextChapterScope)}</div>
                   </div>
                   <div className="rounded-xl border bg-background/80 p-3">
                     <div className="text-xs text-muted-foreground">最近心跳</div>

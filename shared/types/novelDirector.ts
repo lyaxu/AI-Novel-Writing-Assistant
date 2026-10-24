@@ -310,6 +310,61 @@ export interface DirectorAutoExecutionState extends DirectorAutoExecutionPlan {
   circuitBreaker?: DirectorCircuitBreakerState | null;
 }
 
+/**
+ * Structured batch-completion state: the authorized execution window is fully written,
+ * while the beat-level chapter list of the volume still has unwritten segments.
+ *
+ * This is derived from persisted auto-execution state only (no checkpoint text parsing),
+ * so historical task rows carry the same meaning without a data migration. Continuing
+ * from this stop first confirms the continuation endpoint, then plans the next segment.
+ */
+export type DirectorAutoExecutionBatchCompletionState = {
+  enabled?: boolean | null;
+  startOrder?: number | null;
+  endOrder?: number | null;
+  totalChapterCount?: number | null;
+  completedChapterCount?: number | null;
+  remainingChapterCount?: number | null;
+  volumeChapterListComplete?: boolean | null;
+} | null | undefined;
+
+export function isDirectorAutoExecutionCompletedBatchAwaitingNextScope(
+  state: DirectorAutoExecutionBatchCompletionState,
+): boolean {
+  if (!state || state.enabled !== true) {
+    return false;
+  }
+  const totalChapterCount = state.totalChapterCount;
+  if (typeof totalChapterCount !== "number" || !Number.isFinite(totalChapterCount) || totalChapterCount <= 0) {
+    return false;
+  }
+  if ((state.remainingChapterCount ?? null) !== 0) {
+    return false;
+  }
+  if (typeof state.completedChapterCount === "number" && state.completedChapterCount !== totalChapterCount) {
+    return false;
+  }
+  return state.volumeChapterListComplete === false;
+}
+
+/** First chapter order that belongs to the not-yet-planned next segment. */
+export function resolveDirectorAutoExecutionNextChapterOrder(
+  state: DirectorAutoExecutionBatchCompletionState,
+): number | null {
+  if (!state) {
+    return null;
+  }
+  if (typeof state.endOrder === "number" && Number.isSafeInteger(state.endOrder) && state.endOrder > 0) {
+    return state.endOrder + 1;
+  }
+  if (typeof state.startOrder === "number" && typeof state.totalChapterCount === "number"
+    && Number.isSafeInteger(state.startOrder) && Number.isSafeInteger(state.totalChapterCount)
+    && state.totalChapterCount > 0) {
+    return state.startOrder + state.totalChapterCount;
+  }
+  return null;
+}
+
 export type DirectorQualityRepairRiskLevel = "low" | "large_scope" | "replan";
 
 export interface DirectorQualityRepairRisk {
