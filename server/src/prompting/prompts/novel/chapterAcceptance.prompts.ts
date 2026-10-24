@@ -289,6 +289,8 @@ export const generatedChapterAcceptanceAssessmentSchema = chapterAcceptanceAsses
 
 const evidenceReferenceSchema = z.object({ evidenceId: z.string().trim().min(1) }).strict();
 const referenceArray = z.array(evidenceReferenceSchema).max(2);
+/** Wire tolerance: a few valid extra citations are real material, not a review failure. */
+const tolerantReferenceArray = z.array(evidenceReferenceSchema).max(6);
 /** Only IDs cross the new model boundary; canonical quotations are server-owned. */
 export const referenceChapterAcceptanceAssessmentSchema = generatedChapterAcceptanceAssessmentSchema.omit({
   evidenceCatalogSnapshotId: true, evidenceReferenceIssues: true, reviewContractIssues: true, reviewCorrectionHints: true, reviewRawResponse: true,
@@ -323,6 +325,8 @@ export const semanticChapterAcceptanceSchema = unifiedChapterAcceptanceAssessmen
   issueChecks: z.array(reviewFindingSchema).optional(),
   progressionChecks: z.array(unifiedChapterAcceptanceAssessmentSchema.shape.progressionChecks.element.extend({
     findingIssueId: z.string().trim().min(1).optional(),
+    previousEvidence: tolerantReferenceArray,
+    currentEvidence: tolerantReferenceArray,
   })).length(3),
 });
 export type SemanticChapterAcceptanceOutput = z.infer<typeof semanticChapterAcceptanceSchema>;
@@ -595,8 +599,8 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       ...SEMANTIC_ACTION_RULES,
       ...SEMANTIC_SCENE_RULES,
       ...REPAIR_FINDING_RULES,
-      "actionStateChecks或sceneCausalityVerdicts有确证缺前提/矛盾（最终unearned/contradicted）时，同项findingIssueId必须绑定issueChecks中unresolved问题；先核对邻近正文是否已解决，防止重复建议。未知只保留风险。",
-      "progressionChecks的previousEvidence/currentEvidence与blockingIssues.sourceEvidence只用目录{evidenceId}。问题来源至少包含本章，跨章冲突另附前章。",
+      "actionStateChecks或sceneCausalityVerdicts有确证缺前提/矛盾（最终unearned/contradicted）时，只有你据此声称正文缺陷并要修稿，才用findingIssueId绑定issueChecks中同一unresolved问题；先核对邻近正文是否已解决，防止重复建议。故事内本就发生的失败、资金不足等真实负面事实可以保留判断而不绑定问题，程序只记录风险，不生成修文指令。未知只保留风险。",
+      "progressionChecks的previousEvidence/currentEvidence与blockingIssues.sourceEvidence只用目录{evidenceId}。previousEvidence/currentEvidence各选1—2条最能支持结论的片段；多选的有效编号由程序取前2条保留，不构成审查失败。问题来源至少包含本章，跨章冲突另附前章。",
       ...REFERENCE_AUDIT_RULES.slice(10),
       "progressionChecks.status=stalled时findingIssueId必须指向已核实unresolved的问题，先核实已有推进为何不够再建议补文；不能让独立repairSuggestion绕开问题核验。",
       "前后章实际推进审查：",

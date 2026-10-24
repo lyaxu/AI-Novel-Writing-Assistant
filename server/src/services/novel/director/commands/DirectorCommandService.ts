@@ -46,6 +46,11 @@ import { acceptIncompleteCompletedRangeCommand } from "../recovery/rangeCompleti
 import { DIRECTOR_EXECUTION_STEP_IDS } from "../workflowStepRuntime/directorWorkflowStepIds";
 
 const ACTIVE_COMMAND_STATUSES: DirectorRunCommandStatus[] = ["queued", "leased", "running"];
+/** Commands whose explicit intent is to resume from the current manual-recovery pause. */
+const RESUME_GATE_COMMAND_TYPES: DirectorRunCommandType[] = ["approve_gate", "continue", "resume_from_checkpoint"];
+const SETTLED_COMMAND_STATUSES: DirectorRunCommandStatus[] = ["succeeded", "failed", "cancelled"];
+/** How long an identical repeat resume is treated as a duplicate click instead of a new attempt. */
+const RESUME_DUPLICATE_WINDOW_MS = 3 * 60_000;
 const EXECUTION_COMMAND_TYPES: DirectorRunCommandType[] = [
   "generate_candidates",
   "refine_candidates",
@@ -769,6 +774,15 @@ export class DirectorCommandService {
       return toAcceptedResponse(reusableCommand, null);
     }
 
+    const resumeGate = this.isResumeGateCommand(input.commandType, input.payload);
+    // Two clicks on "继续自动导演" while the pipeline keeps returning to the same paused step
+    // would each spend another full model round. Reject the repeat inside a short window and
+    // let the user inspect the fresh failure; a deliberate retry after the window still runs.
+    const resumeSignature = resumeGate ? await this.readPausedCheckpointSignature(row) : null;
+    if (resumeSignature) {
+      await this.assertResumeNotRepeated(row.id, resumeSignature);
+    }
+
     // Confirm saved chapter execution before any command can clear the task's manual pause.
     const pausedSeed = parseSeedPayload<Parameters<typeof assertUnchangedPipelineRecoveryScope>[0] & {
       autoExecution?: { pipelineJobId?: string };
@@ -785,7 +799,10 @@ export class DirectorCommandService {
       }) : null;
 
     const normalizedPayload = Object.fromEntries(
-      Object.entries(input.payload).filter(([, value]) => value !== undefined),
+      Object.entries({
+        ...input.payload,
+        ...(resumeSignature ? { resumePauseSignature: resumeSignature } : {}),
+      }).filter(([, value]) => value !== undefined),
     );
     const idempotencyKey = input.idempotencyKey ?? `${input.commandType}:${row.updatedAt.getTime()}:${hashPayload(normalizedPayload)}`;
     const payloadJson = stableJson(normalizedPayload);
@@ -844,6 +861,65 @@ export class DirectorCommandService {
       }
       return toAcceptedResponse(existing, null);
     }
+  }
+
+  private isResumeGateCommand(commandType: DirectorRunCommandType, payload: DirectorCommandPayload): boolean {
+    if (commandType === "approve_gate") return true;
+    return (commandType === "continue" || commandType === "resume_from_checkpoint") && payload.forceResume === true;
+  }
+
+  /** Identity of the current manual-recovery pause; volatile timestamps, leases and token counters are excluded. */
+  private async readPausedCheckpointSignature(row: {
+    id: string;
+    pendingManualRecovery?: boolean | null;
+    checkpointType?: string | null;
+    currentItemKey?: string | null;
+    lastError?: string | null;
+    seedPayloadJson?: string | null;
+  }): Promise<string | null> {
+    if (!row.pendingManualRecovery) return null;
+    try {
+      const seed = parseSeedPayload<{ autoExecution?: { pipelineJobId?: string } }>(row.seedPayloadJson);
+      const jobId = seed?.autoExecution?.pipelineJobId;
+      const job = jobId ? await prisma.generationJob.findUnique({
+        where: { id: jobId },
+        select: { id: true, status: true, currentStage: true, currentItemKey: true, error: true },
+      }) : null;
+      return hashPayload({
+        taskId: row.id,
+        checkpointType: row.checkpointType,
+        currentItemKey: row.currentItemKey,
+        lastError: row.lastError,
+        job: job ? { id: job.id, status: job.status, stage: job.currentStage, itemKey: job.currentItemKey, error: job.error } : null,
+      });
+    } catch {
+      // Bookkeeping reads must never strand a legitimate recovery. Concurrent duplicates are
+      // already reused through the active-command check above.
+      return null;
+    }
+  }
+
+  /** A resume that just returned to the identical pause is a repeat click, not new work. */
+  private async assertResumeNotRepeated(taskId: string, signature: string): Promise<void> {
+    let recent: Awaited<ReturnType<typeof prisma.directorRunCommand.findMany>>;
+    try {
+      recent = await prisma.directorRunCommand.findMany({
+        where: { taskId, commandType: { in: RESUME_GATE_COMMAND_TYPES }, status: { in: SETTLED_COMMAND_STATUSES } },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: 5,
+      });
+    } catch {
+      // Fail open: resume bookkeeping must never block an explicit recovery on its own.
+      return;
+    }
+    const now = Date.now();
+    const repeated = recent.some((command) => {
+      if (parsePayload(command.payloadJson).resumePauseSignature !== signature) return false;
+      const settledAt = command.finishedAt ?? command.updatedAt ?? command.createdAt;
+      return now - new Date(settledAt).getTime() < RESUME_DUPLICATE_WINDOW_MS;
+    });
+    if (!repeated) return;
+    throw new AppError("这一步恢复刚刚执行过，并再次停在同一检查点。请先查看最新失败详情；确认要重新尝试时，稍后再恢复一次。", 409);
   }
 
   private async markCommandAcceptedOnTask(taskId: string, commandType: DirectorRunCommandType, options: {

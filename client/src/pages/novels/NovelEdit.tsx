@@ -81,7 +81,7 @@ import { syncNovelWorkflowStageSilently, workflowStageFromTab } from "./novelWor
 import { isNovelWorkspaceFlowTab, scopeFromWorkspaceTab, tabFromDirectorDisplayStage, tabFromDirectorProgress, tabFromScope, type NovelWorkspaceFlowTab } from "./novelWorkspaceNavigation";
 import { resolveChapterTitleWarning } from "@/lib/directorTaskNotice";
 import { resolveInternalNavigationTarget } from "@/lib/internalNavigation";
-import { resolveDirectorContinueMode, resolveWorkflowContinuationFeedback } from "@/lib/novelWorkflowContinuation";
+import { resolveDirectorContinueMode, resolvePendingRecoveryGuidance, resolveWorkflowContinuationFeedback } from "@/lib/novelWorkflowContinuation";
 import {
   getDirectorCockpitActionHref,
   getDirectorCockpitContinuationMode,
@@ -1492,8 +1492,11 @@ export default function NovelEdit() {
       });
     }
     if (task.pendingManualRecovery) {
+      const pendingRecovery = resolvePendingRecoveryGuidance(task);
       actions.push({
-        label: continueAutoDirectorMutation.isPending ? "继续中..." : "继续自动导演",
+        label: continueAutoDirectorMutation.isPending
+          ? "恢复中..."
+          : pendingRecovery?.actionLabel ?? "继续自动导演",
         onClick: () => continueAutoDirectorMutation.mutate({ directorTaskId: task.id }),
         variant: "default",
         disabled: continueAutoDirectorMutation.isPending,
@@ -1724,7 +1727,8 @@ export default function NovelEdit() {
         : consistencyIssue === "missing_chapters"
           ? "任务记录显示前几章已经可开写，但当前章节执行区还是空的，说明导演产物还没有完整落库。可以直接补齐导演产物继续修复。"
           : task.pendingManualRecovery
-            ? "任务已停在当前进度。你可以查看执行详情，再从最近进度点继续。"
+            ? (resolvePendingRecoveryGuidance(task)?.description
+              ?? "任务已停在当前进度。你可以查看执行详情，再从最近进度点继续。")
           : buildTakeoverDescription({
             mode,
             checkpointType: task.checkpointType,

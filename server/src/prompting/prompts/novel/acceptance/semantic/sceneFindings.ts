@@ -4,7 +4,9 @@ import { resolveEvidenceReference, type EvidenceCatalog } from "../evidenceCatal
 
 const finding = z.object({
   claim: z.string().trim().min(1).max(180),
-  evidence: z.array(z.object({ evidenceId: z.string().trim().min(1) }).strict()).max(2),
+  // A scene finding may need to cite a few adjacent excerpts to support one claim. The cap keeps
+  // the answer bounded; a valid extra citation is real material, not a review failure.
+  evidence: z.array(z.object({ evidenceId: z.string().trim().min(1) }).strict()).max(4),
   support: z.enum(["supported", "missing", "contradicted", "unknown"]),
   reason: z.string().trim().min(1).max(180),
 }).strict();
@@ -56,7 +58,7 @@ export function normalizeSemanticScenes(raw: SemanticScene[], actions: ActionSta
 }
 
 export const SEMANTIC_SCENE_RULES = [
-  `scene finding.support只用当前Schema枚举：${finding.shape.support.options.join("|")}。finding对象结构为{claim,evidence:[{evidenceId}],support,reason}。`,
+  `scene finding.support只用当前Schema枚举：${finding.shape.support.options.join("|")}。finding对象结构为{claim,evidence:[{evidenceId}],support,reason}；每个finding的evidence选1—4条直接支持该claim的本次目录编号，不用无关片段凑数。`,
   "sceneCausalityVerdicts是对象数组，逐一覆盖expectedSceneKeys；无指定场景时为[]。每行含sceneKey、outcomeObserved、choiceAndResistance、constraints。choiceAndResistance是一个finding对象；constraints始终是finding对象数组，即[{claim,evidence:[{evidenceId}],support,reason}]，只有一项也必须带方括号，没有实际后续限制则填[]，绝不能填单个对象。",
   "选择与阻力要检查双方动机、能力、利益与实际回应，不能只检查结果发生。按本章实际叙事顺序和故事时间解释因果；先发生的披露不能写成后续事件促成，也不能用后来形成的约束倒填先前动机。计划里的场景安排不能替代正文。",
   "constraints保留真实且持续的后果，包括伤势、消耗、约束和未解风险；每个claim须由所选编号支持，程度和数量须一致。它们不必都成为动作必要前提，不要为了state前后同维而隐藏这些后果，也不要为了覆盖计划而编造正文未发生的限制。",

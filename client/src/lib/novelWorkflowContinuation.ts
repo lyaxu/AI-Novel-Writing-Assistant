@@ -59,3 +59,37 @@ export function resolveDirectorContinueMode(task: Pick<
   }
   return "resume";
 }
+
+export interface PendingRecoveryGuidance {
+  actionLabel: string;
+  description: string;
+}
+
+/**
+ * One explicit next step for a paused auto-director task. Review pauses only lose the review;
+ * the saved chapter prose is kept, so the guidance must say what resume does and does not touch.
+ */
+export function resolvePendingRecoveryGuidance(task: Pick<
+  UnifiedTaskDetail,
+  "checkpointType" | "currentItemKey" | "pendingManualRecovery"
+> | null | undefined): PendingRecoveryGuidance | null {
+  if (!task?.pendingManualRecovery) {
+    return null;
+  }
+  if (task.checkpointType === "chapter_batch_ready" && task.currentItemKey === "quality_repair") {
+    return {
+      actionLabel: "从最近检查点恢复审查",
+      description: "会从已保存的本章正文继续，重新完成章节检查与审查；不会重写已保存的正文。",
+    };
+  }
+  if (task.checkpointType === "chapter_batch_ready") {
+    return {
+      actionLabel: "从最近检查点恢复",
+      description: "会从最近保存的进度继续；已经保存的章节正文不会重写。",
+    };
+  }
+  return {
+    actionLabel: "继续自动导演",
+    description: "任务已停在当前进度，可从最近检查点继续。",
+  };
+}

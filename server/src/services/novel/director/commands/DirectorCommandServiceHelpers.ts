@@ -42,6 +42,8 @@ export interface DirectorCommandPayload {
   stepCalibrationRequest?: DirectorStepCalibrationRequest;
   acceptManualChanges?: boolean;
   volumeId?: string | null;
+  /** Stable identity of the paused checkpoint this command resumes; written by the command service. */
+  resumePauseSignature?: string;
 }
 
 export function stableJson(value: unknown): string {

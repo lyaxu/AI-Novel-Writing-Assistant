@@ -24,7 +24,12 @@ function inspect(raw: SemanticChapterAcceptanceOutput, input: ChapterAcceptanceP
   for (const [kind, rows] of [["actionStateChecks", actions.checks], ["sceneCausalityVerdicts", scenes.scenes]] as const) {
     for (const [index, row] of rows.entries()) {
       const issueId = raw[kind][index]?.findingIssueId;
-      if (["unearned", "contradicted"].includes(row.verdict)
+      // A negative story fact (a failed attempt, an unmet cost) is a completed observation unless
+      // the review also claims a prose defect by binding it to an issue. Requiring a binding for
+      // every contradicted/unearned row forces the model to invent defects for intentional
+      // in-story failures and can never pass for a correct review. Repairs stay guarded by
+      // normalizeRepairFindings: a directive without a verified unresolved issue is suppressed.
+      if (issueId && ["unearned", "contradicted"].includes(row.verdict)
         && !raw.issueChecks?.some(finding => finding.issueId === issueId && finding.status === "unresolved")) {
         links.push(`${kind}[${index}].findingIssueId:negative_finding_requires_verified_issue`);
       }

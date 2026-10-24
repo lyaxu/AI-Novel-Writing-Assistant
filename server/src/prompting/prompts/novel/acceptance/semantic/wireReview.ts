@@ -22,6 +22,9 @@ function atPath(raw: unknown, path: PropertyKey[]): unknown {
 /** An incomplete projection is diagnostic data, never a review eligible for execution. */
 function inspectableFields(raw: Record<string, unknown>) {
   const indexes: Record<string, number[]> = {};
+  // Rows dropped for their own shape error must not also be reported as missing coverage:
+  // that cascade tells the model to add scenes it already wrote and invites duplicates.
+  const dropped = { sceneKeys: [] as string[], progressionDimensions: [] as string[] };
   const fields: Record<string, unknown> = {
     score: { coherence: 0, pacing: 0, repetition: 0, engagement: 0, voice: 0, overall: 0 },
     summary: "审查回答结构尚未核实。", decisionReason: "等待完整上下文纠正审查回答。",
@@ -44,6 +47,13 @@ function inspectableFields(raw: Record<string, unknown>) {
     fields[key] = raw[key].flatMap((row, index) => {
       const parsed = element.safeParse(row);
       if (parsed.success) indexes[key]!.push(index);
+      else if (key === "sceneCausalityVerdicts") {
+        const sceneKey = record(row)?.sceneKey;
+        if (typeof sceneKey === "string" && sceneKey.trim()) dropped.sceneKeys.push(sceneKey.trim());
+      } else if (key === "progressionChecks") {
+        const dimension = record(row)?.dimension;
+        if (typeof dimension === "string" && dimension.trim()) dropped.progressionDimensions.push(dimension.trim());
+      }
       return parsed.success ? [parsed.data] : [];
     });
   }
@@ -54,7 +64,32 @@ function inspectableFields(raw: Record<string, unknown>) {
   }));
   const originalPaths = (text: string) => text.replace(/(actionStateChecks|sceneCausalityVerdicts|progressionChecks|blockingIssues|issueChecks|repairDirectives|missingObligations)\[(\d+)\]/g,
     (whole, key: string, index: string) => indexes[key]?.[Number(index)] === undefined ? whole : `${key}[${indexes[key]![Number(index)]}]`);
-  return { candidate, originalPaths };
+  return { candidate, originalPaths, dropped };
+}
+
+/** Coverage complaints caused only by shape-dropped rows are already reported as shape problems. */
+function settleDroppedRowCoverage(
+  problems: string[],
+  candidate: SemanticChapterAcceptanceOutput,
+  dropped: { sceneKeys: string[]; progressionDimensions: string[] },
+  input: ChapterAcceptancePromptInput,
+) {
+  const expected = input.expectedSceneKeys ?? [];
+  const actualScenes = (candidate.sceneCausalityVerdicts ?? []).map(row => row.sceneKey);
+  const sceneExplained = expected.every(key => actualScenes.includes(key) || dropped.sceneKeys.includes(key))
+    && new Set(actualScenes).size === actualScenes.length;
+  const presentDimensions: string[] = (candidate.progressionChecks ?? []).map(row => row.dimension);
+  const explainedDimensions = dropped.progressionDimensions.filter(dimension => presentDimensions.includes(dimension));
+  if (!sceneExplained && !explainedDimensions.length) return { problems, hint: undefined };
+  const settled = problems.filter(problem => {
+    if (problem === "sceneCausalityVerdicts:scene_coverage_invalid" && sceneExplained) return false;
+    const coverage = /^progression_coverage_missing:(.+)$/.exec(problem);
+    return !(coverage && explainedDimensions.includes(coverage[1]));
+  });
+  const hint = settled.length < problems.length
+    ? "本轮有场景或推进检查因自身格式错误被整行剔除，不是覆盖缺失；按上面的字段诊断只修正这些行的格式，不要新增重复场景或重复行来补覆盖。"
+    : undefined;
+  return { problems: settled, hint };
 }
 
 /** Inspect surviving leaves without inventing values for invalid fields. Never returned as an assessment. */
@@ -120,7 +155,7 @@ function inspect(raw: ReviewEnvelope, input: ChapterAcceptancePromptInput) {
     const value = atPath(raw, issue.path);
     return `${issue.path.join(".") || "review"}:review_shape_invalid；当前值=${JSON.stringify(value) ?? "未提供"}；${issue.message}。只在完整正文语境内纠正字段，保留其他已完成场景与判断；不得让格式修复重写整份报告。`;
   });
-  const diagnostic = parsed.success ? { candidate: parsed.data, originalPaths: (text: string) => text }
+  const diagnostic = parsed.success ? { candidate: parsed.data, originalPaths: (text: string) => text, dropped: undefined }
     : inspectableFields(record(raw) ?? {});
   const candidate = diagnostic.candidate;
   let output: ChapterAcceptanceAssessmentOutput;
@@ -134,8 +169,12 @@ function inspect(raw: ReviewEnvelope, input: ChapterAcceptancePromptInput) {
     hints = failure.reviewCorrectionHints ?? [];
     output = recoverSemanticAcceptance(candidate, input, failure.message);
   }
-  return { output, problems: [...new Set([...shapeProblems, ...semanticProblems.map(diagnostic.originalPaths),
-    ...(!parsed.success ? partialProblems(record(raw) ?? {}, input) : [])])], hints: hints.map(diagnostic.originalPaths) };
+  const mappedProblems = [...new Set([...shapeProblems, ...semanticProblems.map(diagnostic.originalPaths),
+    ...(!parsed.success ? partialProblems(record(raw) ?? {}, input) : [])])];
+  const settled = diagnostic.dropped
+    ? settleDroppedRowCoverage(mappedProblems, candidate, diagnostic.dropped, input)
+    : { problems: mappedProblems, hint: undefined };
+  return { output, problems: settled.problems, hints: [...(settled.hint ? [settled.hint] : []), ...hints.map(diagnostic.originalPaths)] };
 }
 
 export function validateReviewEnvelope(raw: ReviewEnvelope, input: ChapterAcceptancePromptInput): ChapterAcceptanceAssessmentOutput {

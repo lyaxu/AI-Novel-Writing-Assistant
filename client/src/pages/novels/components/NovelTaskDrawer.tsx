@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Link } from "react-router-dom";
+import { resolvePendingRecoveryGuidance } from "@/lib/novelWorkflowContinuation";
 import TaskCenterManualEditImpactCard from "@/pages/tasks/components/TaskCenterManualEditImpactCard";
 import TaskCenterRuntimePolicyCard from "@/pages/tasks/components/TaskCenterRuntimePolicyCard";
 import type { NovelTaskDrawerState } from "./NovelEditView.types";
@@ -298,6 +299,7 @@ export default function NovelTaskDrawer({
         : 0,
   )));
   const tokenUsage = task?.tokenUsage ?? null;
+  const recoveryGuidance = task ? resolvePendingRecoveryGuidance(task) : null;
   const primaryAction = projection?.primaryAction ?? null;
   const primaryActionLabel = (
     (primaryAction?.type === "continue" || primaryAction?.type === "auto_execute_range")
@@ -428,6 +430,12 @@ export default function NovelTaskDrawer({
                 {task.checkpointSummary ? (
                   <div className="rounded-xl border bg-background/80 p-3 text-sm text-muted-foreground">
                     {task.checkpointSummary}
+                  </div>
+                ) : null}
+                {recoveryGuidance ? (
+                  <div className="rounded-xl border bg-background/80 p-3 text-sm text-muted-foreground">
+                    <div className="font-medium text-foreground">下一步</div>
+                    <div className="mt-1">{recoveryGuidance.description}</div>
                   </div>
                 ) : null}
                 {task.lastError ? (

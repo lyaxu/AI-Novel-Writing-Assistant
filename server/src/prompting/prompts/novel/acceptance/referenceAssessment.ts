@@ -34,8 +34,11 @@ export function resolveAcceptanceReferences(raw: ReferenceChapterAcceptanceOutpu
     })),
     progressionChecks: raw.progressionChecks.map((check, index) => ({
       ...check,
-      previousEvidence: resolve(check.previousEvidence, `progressionChecks[${index}].previousEvidence`),
-      currentEvidence: resolve(check.currentEvidence, `progressionChecks[${index}].currentEvidence`),
+      // Resolve and validate every reference first; the canonical projection keeps the
+      // model's first two citations per list. Extra valid citations are tolerated rather
+      // than rejecting an otherwise complete review; fabricated IDs still fail above.
+      previousEvidence: resolve(check.previousEvidence, `progressionChecks[${index}].previousEvidence`).slice(0, 2),
+      currentEvidence: resolve(check.currentEvidence, `progressionChecks[${index}].currentEvidence`).slice(0, 2),
     })),
     blockingIssues: raw.blockingIssues.map((issue, index) => ({
       ...issue, sourceEvidence: resolve(issue.sourceEvidence, `blockingIssues[${index}].sourceEvidence`),
