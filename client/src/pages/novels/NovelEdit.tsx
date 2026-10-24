@@ -709,16 +709,16 @@ export default function NovelEdit() {
     if (!continuationRequested || !displayAutoDirectorTask) {
       return;
     }
+    if (displayAutoDirectorTask.status === "succeeded") {
+      setIsContinuationTakeoverOpen(true);
+      return;
+    }
     if (isTaskAwaitingNextChapterScope(displayAutoDirectorTask)) {
       if (continuationFlowStartedTaskIdRef.current === displayAutoDirectorTask.id) {
         return;
       }
       continuationFlowStartedTaskIdRef.current = displayAutoDirectorTask.id;
       startContinuationFlow(displayAutoDirectorTask);
-      return;
-    }
-    if (displayAutoDirectorTask.status === "succeeded") {
-      setIsContinuationTakeoverOpen(true);
     }
   }, [continuationRequested, displayAutoDirectorTask]);
   const actionTargetDirectorTaskId = visibleDirectorTask?.id ?? "";
@@ -1171,11 +1171,12 @@ export default function NovelEdit() {
     },
   });
   const startContinuationFlow = (task: NonNullable<typeof displayAutoDirectorTask>) => {
-    if (isTaskAwaitingNextChapterScope(task)) {
-      openContinuationFlowMutation.mutate(task.id);
+    // A closed range already has a stable terminal task; open the range confirmation directly.
+    if (task.status === "succeeded" || !isTaskAwaitingNextChapterScope(task)) {
+      setIsContinuationTakeoverOpen(true);
       return;
     }
-    setIsContinuationTakeoverOpen(true);
+    openContinuationFlowMutation.mutate(task.id);
   };
   const continueProjectedDirectorActionMutation = useMutation({
     mutationFn: async (input: {
@@ -1658,11 +1659,26 @@ export default function NovelEdit() {
         });
       }
     } else if (mode === "completed" || (mode === "waiting" && task.checkpointType === "workflow_completed")) {
-      actions.push({
-        label: "进入章节执行",
-        onClick: () => openChapterExecution(task),
-        variant: "default",
-      });
+      if (awaitingNextChapterScope) {
+        // The window is closed but more chapters remain planned in the book:
+        // offer the continuation-scope entry instead of a generic “enter execution”.
+        actions.push({
+          label: buildContinueAutoExecutionActionLabel(autoExecutionScopeLabel, false, true),
+          onClick: () => startContinuationFlow(task),
+          variant: "default",
+        });
+        actions.push({
+          label: "查看已完成章节",
+          onClick: () => openChapterExecution(task),
+          variant: "outline",
+        });
+      } else {
+        actions.push({
+          label: "进入章节执行",
+          onClick: () => openChapterExecution(task),
+          variant: "default",
+        });
+      }
     } else if ((mode === "action_required" || mode === "failed") && task.checkpointType === "replan_required") {
       actions.push({
         label: buildReplanAndContinueActionLabel(continueAutoExecutionMutation.isPending),
@@ -2008,6 +2024,17 @@ export default function NovelEdit() {
       actions.push({
         label: "打开质量修复",
         onClick: () => openQualityRepair(task),
+        variant: "outline",
+      });
+    } else if (isTaskAwaitingNextChapterScope(task)) {
+      actions.push({
+        label: buildContinueAutoExecutionActionLabel(resolveAutoExecutionScopeLabel(task), false, true),
+        onClick: () => startContinuationFlow(task),
+        variant: "default",
+      });
+      actions.push({
+        label: "查看已完成章节",
+        onClick: () => openChapterExecution(task),
         variant: "outline",
       });
     } else if (task.checkpointType === "chapter_batch_ready" || task.checkpointType === "workflow_completed") {

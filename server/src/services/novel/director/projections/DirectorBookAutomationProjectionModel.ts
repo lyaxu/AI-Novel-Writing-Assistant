@@ -357,7 +357,9 @@ export function buildUserHeadline(input: {
     return "这次自动推进已停止";
   }
   if (input.status === "completed") {
-    return "AI 完成了最近一次推进";
+    return input.awaitingNextChapterScope
+      ? "本轮正文已完成，可以继续写后续章节"
+      : "AI 完成了最近一次推进";
   }
   return "这本书还没有开启 AI 自动推进";
 }
@@ -547,6 +549,19 @@ export function buildPrimaryAction(input: {
   }
 
   if (input.status === "completed") {
+    if (input.awaitingNextChapterScope) {
+      return action({
+        type: "open_novel",
+        label: "继续写后续章节",
+        target: {
+          novelId: input.novelId,
+          taskId,
+          tab: "chapter",
+          href: buildNovelHref(input.novelId, { tab: "chapter", taskId, continuation: true }),
+        },
+        emphasis: "primary",
+      });
+    }
     return action({
       type: "open_chapter",
       label: "进入章节执行",

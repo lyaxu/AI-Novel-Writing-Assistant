@@ -310,3 +310,58 @@ test("syncAutoDirectorChapterBatchCheckpoint does not overwrite actively running
     prisma.novelWorkflowTask.update = originals.workflowUpdate;
   }
 });
+
+test("healing never rewrites a closed workflow_completed range back to a chapter-batch checkpoint", async () => {
+  const originals = {
+    chapterFindMany: prisma.chapter.findMany,
+    workflowUpdate: prisma.novelWorkflowTask.update,
+  };
+  const calls = [];
+  prisma.chapter.findMany = async () => [1, 2, 3].map((order) => ({
+    id: `chapter-${order}`, order, generationState: "approved",
+  }));
+  prisma.novelWorkflowTask.update = async ({ data }) => {
+    calls.push(data);
+    return data;
+  };
+
+  try {
+    const changed = await syncAutoDirectorChapterBatchCheckpoint({
+      taskId: "task-closed-window",
+      row: {
+        title: "示例项目",
+        novelId: "novel-1",
+        status: "succeeded",
+        checkpointType: "workflow_completed",
+        currentItemLabel: "第 1-3 章正文已完成",
+        checkpointSummary: "本轮第 1-3 章正文已完成。",
+        resumeTargetJson: null,
+        seedPayloadJson: JSON.stringify({
+          autoExecution: {
+            enabled: true,
+            mode: "chapter_range",
+            firstChapterId: "chapter-1",
+            startOrder: 1,
+            endOrder: 3,
+            totalChapterCount: 3,
+            completedChapterCount: 3,
+            remainingChapterCount: 0,
+            volumeChapterListComplete: false,
+            pipelineJobId: "job-3",
+            pipelineStatus: "succeeded",
+          },
+        }),
+        lastError: null,
+        finishedAt: new Date("2026-10-24T12:31:18.000Z"),
+        milestonesJson: null,
+      },
+    });
+
+    assert.equal(changed, false);
+    assert.deepEqual(calls, []);
+  } finally {
+    prisma.chapter.findMany = originals.chapterFindMany;
+    prisma.novelWorkflowTask.update = originals.workflowUpdate;
+  }
+});
+

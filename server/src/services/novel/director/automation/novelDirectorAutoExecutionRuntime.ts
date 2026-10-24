@@ -413,6 +413,12 @@ export class NovelDirectorAutoExecutionRuntime {
           });
         }
 
+        // A saved job may carry a recoverable quality notice from its last chapter.
+        // Once the authorized range is fully written there is nothing left to repair
+        // inside it: close the range as completed instead of pausing for a notice that
+        // can never be continued (remaining count is zero). Otherwise every continue
+        // click would rewrite the same paused checkpoint and never reach a terminal state.
+        const completedRange = isDirectorAutoExecutionRangeComplete(range, autoExecution);
         if (job.status === "succeeded" && job.noticeSummary?.trim()) {
           const qualityIssueChapter = await this.resolveQualityIssueChapter(input.novelId, job);
           const noticeAction = await resolveQualityRepairNoticeAction(this.deps, {
@@ -451,30 +457,34 @@ export class NovelDirectorAutoExecutionRuntime {
             continue autoExecutionLoop;
           }
 
-          await recordQualityRepairCheckpoint(this.deps, {
-            taskId: input.taskId,
-            novelId: input.novelId,
-            request: input.request,
-            range,
-            // The risk decision is part of the checkpoint snapshot so every
-            // recovery surface reads the same explanation immediately.
-            autoExecution: noticeAction.checkpointState,
-            pipelineJobId,
-            pipelineStatus: job.status,
-            checkpointType: noticeAction.checkpointType,
-            pauseMessage: job.noticeSummary.trim(),
-            qualityRepairRisk: noticeAction.qualityRepairRisk,
-          });
-          await syncAutoExecutionTaskState(this.deps, {
-            taskId: input.taskId,
-            novelId: input.novelId,
-            request: input.request,
-            range,
-            autoExecution: noticeAction.checkpointState,
-            isBackgroundRunning: false,
-            resumeStage: "pipeline",
-          });
-          return;
+          if (!completedRange) {
+            await recordQualityRepairCheckpoint(this.deps, {
+              taskId: input.taskId,
+              novelId: input.novelId,
+              request: input.request,
+              range,
+              // The risk decision is part of the checkpoint snapshot so every
+              // recovery surface reads the same explanation immediately.
+              autoExecution: noticeAction.checkpointState,
+              pipelineJobId,
+              pipelineStatus: job.status,
+              checkpointType: noticeAction.checkpointType,
+              pauseMessage: job.noticeSummary.trim(),
+              qualityRepairRisk: noticeAction.qualityRepairRisk,
+            });
+            await syncAutoExecutionTaskState(this.deps, {
+              taskId: input.taskId,
+              novelId: input.novelId,
+              request: input.request,
+              range,
+              autoExecution: noticeAction.checkpointState,
+              isBackgroundRunning: false,
+              resumeStage: "pipeline",
+            });
+            return;
+          }
+          // Completed range: fall through and close the window below instead of
+          // pausing on a notice whose remaining chapter count is already zero.
         }
 
         if (job.status === "succeeded") {

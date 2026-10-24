@@ -164,6 +164,15 @@ hard 卷锁定前期承诺、卖点、推进秩序和节奏稳定性；soft 卷�
 - 跟进中心的同一状态应返回打开续写范围确认的导航动作，而不是提交 `continue_auto_execution` 变更动作，避免用户以为会直接写后续章节。
 - 初始 `chapter_batch_ready`（当前窗口尚未执行完）的“进入已准备章节 / 继续自动执行当前范围”文案保持不变；只有上面的已完成窗口状态使用续写文案。
 
+#### 收口命令与质量提醒的边界
+
+继续一个“已写完窗口”时会先恢复上一章保存的成功任务；该任务可能带有可保留正文的质量提醒（`recoverableRepairDetails`）。当 `remainingChapterCount = 0` 时，`runFromReady` 必须走 `recordCompletedCheckpoint` 收口（显式章节范围 → `workflow_completed`/`succeeded`），不能再落到 `recordQualityRepairCheckpoint` 的暂停分支：
+
+- 零剩余章节的质量提醒没有可继续修复的章节，暂停后所有策略分支（都要求剩余章节数大于 0）都无法自动继续，用户每次点“继续写后续章节”只会重写同一个 `chapter_batch_ready` 等待检查点，永远看不到终态。
+- 显式 `chapter_range` 收口后任务为 `workflow_completed`/`succeeded`，同时 seed 中仍保留 `volumeChapterListComplete = false`，因此结构化判定继续为真，主按钮仍是“继续写后续章节”，可打开续写范围确认。
+- 读侧 healing 只允许为等待中的 `chapter_batch_ready` 刷新文案；`workflow_completed` 的已收口行不得被改回等待状态（`syncAutoDirectorChapterBatchCheckpoint` 只处理 `chapter_batch_ready`）。
+- 收口时的 checkpoint 文案必须写成“本段正文已完成、可继续写后续章节”，不能复用“全书/自动导演已完成”的通用完成文案。
+
 ### Change Impact Scope
 
 角色注入、局部修订和卖点调整遵守“未写范围最小扰动”：

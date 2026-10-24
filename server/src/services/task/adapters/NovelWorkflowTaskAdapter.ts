@@ -280,7 +280,7 @@ function mapSummary(row: {
     : row.status) as TaskStatus;
   const checkpointType = row.checkpointType as NovelWorkflowCheckpoint | null;
   const autoExecution = parseAutoExecutionState(row.seedPayloadJson);
-  const awaitingNextChapterScope = checkpointType === "chapter_batch_ready"
+  const awaitingNextChapterScope = (checkpointType === "chapter_batch_ready" || checkpointType === "workflow_completed")
     && isDirectorAutoExecutionCompletedBatchAwaitingNextScope(autoExecution);
   const isRecoveryInProgress = isAutoDirectorRecoveryInProgress({
     status,

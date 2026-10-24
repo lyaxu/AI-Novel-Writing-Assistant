@@ -82,3 +82,30 @@ test("checkpoint label and structured helper agree on the written-window state",
   assert.equal(formatTakeoverCheckpoint("chapter_batch_ready", task, false), "第 1-3 章自动执行已暂停");
   assert.equal(isTaskAwaitingNextChapterScope(buildTask({ status: "running" })), false);
 });
+
+test("a closed completed range keeps the continuation entry and copy", () => {
+  const closedTask = buildTask({
+    status: "succeeded",
+    checkpointType: "workflow_completed",
+  });
+  const title = buildTakeoverTitle({
+    mode: "completed",
+    novelTitle: "示例书",
+    checkpointType: "workflow_completed",
+    scopeLabel: "第 1-3 章",
+    awaitingNextChapterScope: true,
+  });
+  const description = buildTakeoverDescription({
+    mode: "completed",
+    checkpointType: "workflow_completed",
+    reviewScope: null,
+    scopeLabel: "第 1-3 章",
+    awaitingNextChapterScope: true,
+  });
+
+  assert.equal(isTaskAwaitingNextChapterScope(closedTask), true);
+  assert.equal(formatTakeoverCheckpoint("workflow_completed", closedTask, true), "第 1-3 章正文已完成");
+  assert.match(title, /第 1-3 章正文已完成/);
+  assert.match(description, /会先确认续写终点/);
+  assert.match(description, /不会重写已完成章节/);
+});

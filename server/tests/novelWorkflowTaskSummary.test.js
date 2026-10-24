@@ -80,3 +80,19 @@ test("task summary keeps workflow completion copy when the volume chapter list i
   assert.equal(task.resumeAction, "继续自动执行第 1-3 章");
   assert.equal(task.nextActionLabel, "进入已准备章节");
 });
+
+test("task summary keeps the continuation entry after the range is closed as completed", () => {
+  const row = buildRow({
+    status: "succeeded",
+    checkpointType: "workflow_completed",
+    currentItemLabel: "第 1-3 章正文已完成",
+  });
+
+  const task = mapNovelAutoDirectorTaskSummary(row);
+
+  assert.equal(task.awaitingNextChapterScope, true);
+  assert.equal(task.displayStatus, "第 1-3 章已完成，可继续写后续章节");
+  assert.equal(task.resumeAction, "继续写后续章节");
+  assert.equal(task.nextActionLabel, "继续写后续章节");
+  assert.equal(task.blockingReason, null);
+});

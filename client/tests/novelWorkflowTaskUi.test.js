@@ -72,13 +72,21 @@ test("a fully written window offers continuation scope instead of the batch cont
   assert.equal(canContinueDirector(task), false);
 });
 
-test("continuation copy only applies to the waiting chapter-batch completion state", () => {
+test("continuation copy survives the range being closed as completed", () => {
+  const closedTask = buildTask({
+    status: "succeeded",
+    checkpointType: "workflow_completed",
+    awaitingNextChapterScope: true,
+  });
+
+  assert.equal(isAwaitingNextChapterScope(closedTask), true);
   assert.equal(isAwaitingNextChapterScope(buildTask({ status: "running", awaitingNextChapterScope: true })), false);
+  assert.equal(isAwaitingNextChapterScope(buildTask({ status: "failed", awaitingNextChapterScope: true })), false);
   assert.equal(isAwaitingNextChapterScope(buildTask({
     status: "waiting_approval",
     checkpointType: "workflow_completed",
     awaitingNextChapterScope: true,
-  })), false);
+  })), true);
   assert.equal(isAwaitingNextChapterScope(buildTask()), false);
 });
 

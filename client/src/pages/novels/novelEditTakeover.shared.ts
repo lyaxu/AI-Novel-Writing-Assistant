@@ -21,12 +21,13 @@ export function resolveAutoExecutionScopeLabel(task: UnifiedTaskDetail | null): 
 export function isTaskAwaitingNextChapterScope(
   task: Pick<UnifiedTaskDetail, "status" | "checkpointType" | "awaitingNextChapterScope"> | null | undefined,
 ): boolean {
-  return Boolean(
-    task
-      && task.status === "waiting_approval"
-      && task.checkpointType === "chapter_batch_ready"
-      && task.awaitingNextChapterScope,
-  );
+  if (!task?.awaitingNextChapterScope) {
+    return false;
+  }
+  if (task.status !== "waiting_approval" && task.status !== "succeeded") {
+    return false;
+  }
+  return task.checkpointType === "chapter_batch_ready" || task.checkpointType === "workflow_completed";
 }
 
 export function formatTakeoverCheckpoint(
@@ -55,7 +56,9 @@ export function formatTakeoverCheckpoint(
     return "等待处理重规划建议";
   }
   if (checkpoint === "workflow_completed") {
-    return "主流程已完成";
+    return awaitingNextChapterScope
+      ? `${resolveAutoExecutionScopeLabel(task)}正文已完成`
+      : "主流程已完成";
   }
   return "导演流程进行中";
 }
@@ -68,7 +71,9 @@ export function buildTakeoverTitle(input: {
   awaitingNextChapterScope?: boolean;
 }): string {
   if (input.mode === "completed") {
-    return `《${input.novelTitle}》本轮自动导演已完成`;
+    return input.awaitingNextChapterScope
+      ? `《${input.novelTitle}》${input.scopeLabel}正文已完成`
+      : `《${input.novelTitle}》本轮自动导演已完成`;
   }
   if (
     input.mode === "running"
@@ -116,6 +121,9 @@ export function buildTakeoverDescription(input: {
   awaitingNextChapterScope?: boolean;
 }): string {
   if (input.mode === "completed") {
+    if (input.awaitingNextChapterScope) {
+      return `${input.scopeLabel}正文已完成并保留。继续写后续章节时会先确认续写终点，再补齐下一段章节规划并审查，然后生成后续章节正文，不会重写已完成章节。`;
+    }
     return `本轮${input.scopeLabel}任务完成。可以查看正文与质量检查结果，或点击“完成并收起”收起提醒；继续写作需另选后续章节范围。`;
   }
   if (

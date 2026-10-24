@@ -98,10 +98,20 @@ function getExecutionScopeLabel(input: WorkflowExplainabilityInput, fallback = "
 /**
  * The authorized window is written out, but its volume still has unplanned beats.
  * Continue therefore confirms the continuation endpoint before planning the next segment.
+ *
+ * The same meaning is kept both while the batch boundary is still resumable
+ * (`chapter_batch_ready`) and after the range was explicitly closed
+ * (`workflow_completed`); the latter must not fall back to “enter chapter execution”.
  */
 function isAwaitingNextChapterScope(input: WorkflowExplainabilityInput): boolean {
-  return input.checkpointType === "chapter_batch_ready"
+  return (input.checkpointType === "chapter_batch_ready"
+    || input.checkpointType === "workflow_completed")
     && isDirectorAutoExecutionCompletedBatchAwaitingNextScope(input.autoExecution);
+}
+
+function isAwaitingNextChapterScopeStop(input: WorkflowExplainabilityInput): boolean {
+  return isAwaitingNextChapterScope(input)
+    && (input.status === "waiting_approval" || input.status === "succeeded");
 }
 
 function buildNextChapterStartLabel(input: WorkflowExplainabilityInput): string {
@@ -225,7 +235,9 @@ export function buildWorkflowResumeAction(
       return "处理重规划";
     }
     if (checkpointType === "workflow_completed") {
-      return "进入章节执行";
+      return isAwaitingNextChapterScopeStop(explainabilityInput)
+        ? "继续写后续章节"
+        : "进入章节执行";
     }
     return "继续小说主流程";
   }
@@ -237,7 +249,9 @@ export function buildWorkflowResumeAction(
       return buildAutoExecutionResumeAction(explainabilityInput);
     }
     if (checkpointType === "workflow_completed") {
-      return "进入章节执行";
+      return isAwaitingNextChapterScopeStop(explainabilityInput)
+        ? "继续写后续章节"
+        : "进入章节执行";
     }
     return "从最近检查点恢复";
   }
@@ -245,7 +259,9 @@ export function buildWorkflowResumeAction(
     return "查看当前进度";
   }
   if (status === "succeeded" && checkpointType === "workflow_completed") {
-    return "进入章节执行";
+    return isAwaitingNextChapterScopeStop(explainabilityInput)
+      ? "继续写后续章节"
+      : "进入章节执行";
   }
   return null;
 }
@@ -269,6 +285,9 @@ function buildDisplayStatus(input: WorkflowExplainabilityInput): string | null {
   if (input.status === "waiting_approval") {
     if (input.checkpointType === "chapter_batch_ready") {
       return buildAutoExecutionPreparedStatus(input);
+    }
+    if (isAwaitingNextChapterScopeStop(input)) {
+      return `${getExecutionScopeLabel(input)}已完成，可继续写后续章节`;
     }
     return input.checkpointType
       ? CHECKPOINT_DISPLAY_STATUS[input.checkpointType]
@@ -295,6 +314,9 @@ function buildDisplayStatus(input: WorkflowExplainabilityInput): string | null {
     }
     return "自动导演已取消";
   }
+  if (isAwaitingNextChapterScopeStop(input)) {
+    return `${getExecutionScopeLabel(input)}已完成，可继续写后续章节`;
+  }
   if (input.checkpointType === "workflow_completed") {
     return "自动导演已完成";
   }
@@ -316,6 +338,9 @@ function buildBlockingReason(input: WorkflowExplainabilityInput): string | null 
   }
   if (input.status === "waiting_approval") {
     if (input.checkpointType === "chapter_batch_ready") {
+      return buildAutoExecutionPreparedReason(input);
+    }
+    if (isAwaitingNextChapterScopeStop(input)) {
       return buildAutoExecutionPreparedReason(input);
     }
     return input.checkpointType

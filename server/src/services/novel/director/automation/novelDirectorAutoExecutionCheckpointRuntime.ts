@@ -145,16 +145,26 @@ export async function recordCompletedCheckpoint(
     });
     return;
   }
+  const continuedWindow = completedState.volumeChapterListComplete === false;
+  const nextChapterOrder = resolveDirectorAutoExecutionNextChapterOrder(completedState);
+  const nextSegmentLabel = nextChapterOrder ? `第 ${nextChapterOrder} 章起的` : "后续章节的";
+  const title = input.request.candidate.workingTitle.trim() || input.request.title?.trim() || "当前项目";
   await deps.workflowService.recordCheckpoint(input.taskId, {
     stage: "quality_repair",
     checkpointType: "workflow_completed",
-    checkpointSummary: buildDirectorAutoExecutionCompletedSummary({
-      title: input.request.candidate.workingTitle.trim() || input.request.title?.trim() || "当前项目",
-      scopeLabel,
-      autoReview: completedState.autoReview,
-      autoRepair: completedState.autoRepair,
-    }),
-    itemLabel: buildDirectorAutoExecutionCompletedLabel(scopeLabel),
+    // A closed range that still has unwritten beats keeps the continuation meaning;
+    // its summary must not read as if the whole book was finished.
+    checkpointSummary: continuedWindow
+      ? `《${title}》${scopeLabel}正文已完成并保留。继续写后续章节时会先确认续写终点，再补齐下一段章节规划并审查，然后生成${nextSegmentLabel}正文，不会重写已完成章节。`
+      : buildDirectorAutoExecutionCompletedSummary({
+        title,
+        scopeLabel,
+        autoReview: completedState.autoReview,
+        autoRepair: completedState.autoRepair,
+      }),
+    itemLabel: continuedWindow
+      ? `${scopeLabel}正文已完成，可继续写后续章节`
+      : buildDirectorAutoExecutionCompletedLabel(scopeLabel),
     progress: 1,
     chapterId: completedState.firstChapterId ?? input.range.firstChapterId,
     seedPayload: deps.buildDirectorSeedPayload(input.request, input.novelId, {

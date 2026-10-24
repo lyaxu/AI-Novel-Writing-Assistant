@@ -196,12 +196,13 @@ export function isAwaitingNextChapterScope(task?: Pick<
   NovelAutoDirectorTaskSummary,
   "status" | "checkpointType" | "awaitingNextChapterScope"
 > | null): boolean {
-  return Boolean(
-    task
-      && task.status === "waiting_approval"
-      && task.checkpointType === "chapter_batch_ready"
-      && task.awaitingNextChapterScope,
-  );
+  if (!task?.awaitingNextChapterScope) {
+    return false;
+  }
+  if (task.status !== "waiting_approval" && task.status !== "succeeded") {
+    return false;
+  }
+  return task.checkpointType === "chapter_batch_ready" || task.checkpointType === "workflow_completed";
 }
 
 export function canEnterChapterExecution(task?: NovelAutoDirectorTaskSummary | null): boolean {

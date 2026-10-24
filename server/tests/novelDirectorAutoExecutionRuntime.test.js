@@ -729,6 +729,108 @@ test("runFromReady treats explicit range continuation as approval for quality-al
   );
 });
 
+test("runFromReady closes a fully written range even when the saved job carries a recoverable quality notice", async () => {
+  const calls = [];
+  const runtime = new NovelDirectorAutoExecutionRuntime({
+    novelContextService: {
+      async listChapters() {
+        return [1, 2, 3].map((order) => withExecutionDetail({
+          id: `chapter-${order}`,
+          order,
+          content: `已保存正文 ${order}`,
+          generationState: "approved",
+        }));
+      },
+    },
+    novelService: {
+      async startPipelineJob() {
+        calls.push(["startPipelineJob"]);
+        throw new Error("completed range must not start another chapter");
+      },
+      async findActivePipelineJobForRange() {
+        return null;
+      },
+      async getPipelineJobById(jobId) {
+        calls.push(["getPipelineJobById", jobId]);
+        return {
+          id: "job-chapter-3",
+          status: "succeeded",
+          progress: 1,
+          currentStage: null,
+          currentItemLabel: null,
+          error: null,
+          noticeCode: "PIPELINE_QUALITY_REVIEW",
+          noticeSummary: "部分章节保留正文并记录后续优化项：第3章后续章节调整失败，已保留正文并继续",
+          payload: JSON.stringify({
+            repairMode: "light_repair",
+            recoverableRepairDetails: ["第3章后续章节调整失败，已保留正文并继续：当前小说没有可重规划的章节。"],
+          }),
+        };
+      },
+    },
+    workflowService: {
+      async getTaskById() {
+        return { status: "running" };
+      },
+      async getTaskByIdWithoutHealing() {
+        return { status: "running" };
+      },
+      async markTaskRunning(taskId, input) {
+        calls.push(["markTaskRunning", taskId, input.itemKey]);
+      },
+      async bootstrapTask() {},
+      async recordCheckpoint(taskId, input) {
+        calls.push(["recordCheckpoint", taskId, input.checkpointType]);
+      },
+      async markTaskFailed() {
+        calls.push(["markTaskFailed"]);
+      },
+    },
+    buildDirectorSeedPayload(_request, _novelId, extra) {
+      return extra ?? {};
+    },
+    shouldAutoContinueQualityRepair() {
+      calls.push(["shouldAutoContinueQualityRepair"]);
+      return false;
+    },
+  });
+
+  await runtime.runFromReady({
+    taskId: "task-closed-window",
+    novelId: "novel-1",
+    request: buildRequest({
+      runMode: "full_book_autopilot",
+      autoExecutionPlan: { mode: "chapter_range", startOrder: 1, endOrder: 3, autoReview: true, autoRepair: true },
+    }),
+    existingState: {
+      enabled: true,
+      mode: "chapter_range",
+      firstChapterId: "chapter-1",
+      startOrder: 1,
+      endOrder: 3,
+      totalChapterCount: 3,
+      completedChapterCount: 3,
+      remainingChapterCount: 0,
+      remainingChapterIds: [],
+      remainingChapterOrders: [],
+      nextChapterId: null,
+      nextChapterOrder: null,
+      volumeChapterListComplete: false,
+      pipelineJobId: "job-chapter-3",
+      pipelineStatus: "succeeded",
+    },
+    existingPipelineJobId: "job-chapter-3",
+    resumeCheckpointType: "chapter_batch_ready",
+    approveAutoExecutionScope: true,
+  });
+
+  assert.equal(calls.some((call) => call[0] === "shouldAutoContinueQualityRepair"), false);
+  assert.equal(calls.some((call) => call[0] === "startPipelineJob"), false);
+  assert.equal(calls.some((call) => call[0] === "markTaskFailed"), false);
+  const checkpoints = calls.filter((call) => call[0] === "recordCheckpoint");
+  assert.deepEqual(checkpoints, [["recordCheckpoint", "task-closed-window", "workflow_completed"]]);
+});
+
 for (const pausedStatus of ["queued", "failed"]) test(`runFromReady keeps a ${pausedStatus} manual-recovery pipeline job paused`, async () => {
   const calls = [];
   const runtime = new NovelDirectorAutoExecutionRuntime({

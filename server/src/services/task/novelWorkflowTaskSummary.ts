@@ -31,6 +31,10 @@ export function buildNovelWorkflowNextActionLabel(
       ? "继续写后续章节"
       : "进入已准备章节";
   }
+  if ((status === "waiting_approval" || status === "succeeded") && checkpointType === "workflow_completed"
+    && isDirectorAutoExecutionCompletedBatchAwaitingNextScope(autoExecution)) {
+    return "继续写后续章节";
+  }
   return resumeAction;
 }
 
@@ -60,7 +64,7 @@ export function mapNovelAutoDirectorTaskSummary(
   const seedPayload = parseSeedPayload<DirectorWorkflowSeedPayload>(row.seedPayloadJson);
   const autoExecution = seedPayload?.autoExecution ?? null;
   const executionScopeLabel = autoExecution?.scopeLabel?.trim() || null;
-  const awaitingNextChapterScope = checkpointType === "chapter_batch_ready"
+  const awaitingNextChapterScope = (checkpointType === "chapter_batch_ready" || checkpointType === "workflow_completed")
     && isDirectorAutoExecutionCompletedBatchAwaitingNextScope(autoExecution);
   const explainability = buildWorkflowExplainability({
     status,
