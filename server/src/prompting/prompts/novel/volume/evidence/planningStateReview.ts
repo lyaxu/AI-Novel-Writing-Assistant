@@ -79,7 +79,16 @@ export function projectPlanningStateReview(
         }
       }
     }
-    assertCurrent(decision.transitionEvidence, decision.issueId);
+    if (decision.relation === "contradiction" && decision.transition === "contradicted") {
+      // A contradicted transition may be evidenced by the earlier primary prose that already
+      // happened; the current plan clause is still required by candidateAssertion/referenceAssertion.
+      // Stale plans, future context and fabricated quotes remain rejected.
+      if (decision.transitionEvidence.some(quote => !matchesChapterEvidence(current, quote) && !matchesChapterEvidence(prose, quote))) {
+        throw new Error(`${decision.issueId} cites absent candidate or earlier prose evidence.`);
+      }
+    } else {
+      assertCurrent(decision.transitionEvidence, decision.issueId);
+    }
     assertEither(decision.repair.premiseEvidence, decision.issueId);
     const left = decision.candidateAssertion, right = decision.referenceAssertion;
     if (decision.relation === "contradiction") {

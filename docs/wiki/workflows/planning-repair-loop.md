@@ -292,6 +292,12 @@ A terminal post-validation failure carries a non-enumerable completed response f
 - 处理原则是“入参边界归一程序自管字段，领域层只保留语义/事实校验”，避免继续按单条报错逐条打补丁。
 - 历史问题的 `issueChecks` 判为 resolved 后，该问题离开当前 `issues`；它的 `issueDecisions` 属于过期记账，由投影一并清除，否则“决策覆盖当前问题”的校验会误拒一份语义可用的复核答案。
 
+## 规划质量复核的转折举证
+
+当复核判定“候选计划与已写正文冲突”（`relation=contradiction`、`transition=contradicted`）时，转折证据允许引用更早已写正文，因为“之前已经发生”的事实只能由主正文证明；候选断言与对照断言仍须分别对应当前候选和明确上下文。旧计划、未来内容和伪造引文仍会被拒绝——放宽的只是“转折证据只能来自当前候选”这一条形式限制，不是事实核验。
+
+相关实现：`server/src/prompting/prompts/novel/volume/evidence/planningStateReview.ts`；回归 `tests/planningStateReview.test.js`。
+
 ## 规划修复恢复选项的选择边界（用户视角）
 
 规划修复面板不能只列出按钮，还要让新手判断该点哪个。稳定规则：

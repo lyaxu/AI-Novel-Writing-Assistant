@@ -62,6 +62,15 @@ test("promise mapping cannot overwrite the single validated repair decision", ()
   value.issues=[];value.issueDecisions=[];
   assert.throws(()=>validate(value,candidate,context),/canonical decision/);
 });
+test("a contradicted transition may cite earlier primary prose, but not fabricated evidence", () => {
+  const value = assessment();
+  value.issueDecisions[0].transition = "contradicted";
+  value.issueDecisions[0].transitionEvidence = [prior];
+  assert.doesNotThrow(() => validate(value, candidate, context));
+  value.issueDecisions[0].transitionEvidence = [quote(prior.sourcePath, "已有十三袋粮")];
+  assert.throws(() => validate(value, candidate, context), /absent candidate or earlier prose/);
+});
+
 test("established bridge and missing prerequisite cannot coexist, and forged repair premises are refused", () => {
   const value = assessment(); value.issues[0].basis.kind = "unsupported_prerequisite";
   Object.assign(value.issueDecisions[0], { relation: "missing_precondition", transition: "established", transitionEvidence: [quote("summary", candidate.summary)] });
