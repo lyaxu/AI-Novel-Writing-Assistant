@@ -22,6 +22,7 @@
 - `PromptAsset` 必须提供 `id`、`version`、`taskType`、`mode`、`language`、`contextPolicy`、`render()`，结构化 prompt 还必须有 `outputSchema` 或等价校验。
 - 创作语义判断必须 AI-first。角色身份承接、隐藏身份、题材理解、故事职责、质量风险、下一步动作、修复建议等产品语义，不得用正则、关键词表、固定字符串片段、字符比例或手写分支来判断或阻断流程；这类能力应进入 PromptAsset、结构化输出 schema、semantic retry 或 AI 评估链路。
 - 确定性代码只允许处理结构契约和安全边界，例如必填字段、枚举归一、ID 是否存在、数组长度、权限和数据保护。确定性质量闸门可以指出“缺少 protagonist / gender / 必填字段”这类结构问题，但不能判断“是否承接了某个题材身份”“名字是否像功能位”“语言是否像英文残留”等创作语义。
+- 程序自管的数值字段（如章节场景 `targetWordCount`）在 wire schema 解析层先归一（0/负数至少为 1），再进入 canonical 合同校验；这样单个派生数值不会让整份模型回答在格式阶段被丢掉。语义/事实判断仍由领域层和 AI 复核负责，伪造引用或越过预算上限的输入照样拒绝。章节执行合同、章节任务书与规划修复使用同一规则。
 - 结构化输出使用 `runStructuredPrompt`，纯文本使用 `runTextPrompt`，流式能力使用对应 stream runner。
 - JSON 解析、schema 校验失败由 repair policy 处理；JSON 合法但业务语义不合格由 semantic retry 处理。
 - 同一结构化结果中承担不同职责的字段必须在 `postValidate` 中保护其最小差异边界。比如章节目标在去除空白后与章节摘要或本次修正前的章节目标完全相同时，目标输出无效：应把失败原因交给 `semanticRetryPolicy` 重新生成；重试仍失败时中止本次写入并保留已保存内容，不能让一个字段静默覆盖成另一个字段或沿用无效草稿。

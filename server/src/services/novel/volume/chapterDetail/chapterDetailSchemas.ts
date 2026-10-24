@@ -242,6 +242,15 @@ export function createChapterExecutionContractSchema() {
   );
 }
 
+/** Scene word counts are program-owned budget inputs; a 0/negative echo is normalized, never fatal. */
+const normalizeSceneCardWordCount = (value: unknown) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  const count = record.targetWordCount;
+  if (typeof count !== "number" || !Number.isFinite(count)) return value;
+  const normalized = Math.max(1, Math.round(count));
+  return normalized === count ? value : { ...record, targetWordCount: normalized };
+};
 /** Fresh model output binds prerequisites by ID; legacy saved contracts keep their readable fields. */
 export const stateBoundSceneCardWireSchema = boundedSceneCardSchema.omit({ entryState: true, exitState: true }).extend({
   causality: sceneCausalitySchema.extend({
@@ -256,12 +265,12 @@ export function createChapterExecutionContractWireSchema() {
   }))),
     createChapterExecutionContractSchema().out.extend({
       stateClaims: contextStateClaimsWireSchema,
-      sceneCards: z.array(stateBoundSceneCardWireSchema).min(3).max(8),
+      sceneCards: z.array(z.preprocess(normalizeSceneCardWordCount, stateBoundSceneCardWireSchema)).min(3).max(8),
     }));
 }
 export function createChapterTaskSheetWireSchema() {
   return z.preprocess(normalizeScenePlanPayload, createChapterTaskSheetSchema().out.extend({
     stateClaims: contextStateClaimsWireSchema,
-    sceneCards: z.array(stateBoundSceneCardWireSchema).min(3).max(8),
+    sceneCards: z.array(z.preprocess(normalizeSceneCardWordCount, stateBoundSceneCardWireSchema)).min(3).max(8),
   }));
 }

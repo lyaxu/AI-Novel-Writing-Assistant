@@ -98,6 +98,13 @@ test('legacy contracts remain readable but fresh generation requires state bindi
   ]) { const value = fixture(); mutate(value); assert.equal(createChapterExecutionContractWireSchema().safeParse(value).success, false); assert.throws(() => prompt.postValidate(value, input(), {})); }
 });
 
+test('a zero scene word budget is normalized before execution-contract validation', () => {
+  const value = fixture();
+  value.sceneCards[0].targetWordCount = 0;
+  const parsed = createChapterExecutionContractWireSchema().parse(value);
+  assert.equal(parsed.sceneCards[0].targetWordCount, 1);
+});
+
 test('claims reject stale provenance, forged history, duplicate IDs and invalid scene dependencies', () => {
   assert.throws(() => resolveChapterStateClaims(fixture().stateClaims, review.replace(prose, `${prose}新内容`), 2), /Unknown or stale/);
   for (const mutate of [
