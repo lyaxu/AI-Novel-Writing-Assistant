@@ -1158,8 +1158,12 @@ export class PlanningRepairStore {
           data: { status: "stale" },
         });
       }
+      // A successful commit ends the repair attempt. Clear stale failure bookkeeping so the status
+      // projection does not keep showing a rejected response next to the saved-plan summary.
       const state: PlanningRepairState = { ...previous, phase: "committed", candidateVersionId: versionId,
-        affectedChapterIds: affected, summary: `第${previous.chapterOrder}章起的规划已通过复核并保存（${affected.length}章）。` };
+        affectedChapterIds: affected, technicalError: undefined, pendingOperation: undefined,
+        repairOutputPending: undefined,
+        summary: `第${previous.chapterOrder}章起的规划已通过复核并保存（${affected.length}章）。` };
       snapshot.candidateHash = hash(document);
       snapshot.committed = true;
       const committedSource = await readSource(tx, previous.novelId, task);

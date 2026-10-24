@@ -44,9 +44,14 @@ export default function PlanningRepairPanel({ novelId }: { novelId: string }) {
       <span className="text-sm">{PHASE_LABELS[repair.phase]} · {repair.rounds}/{repair.maxRounds ?? 2} 轮</span>
     </div>
     <p className="break-words text-sm">{repair.summary}</p>
-    {/* After the user gives up, the failure text stays on record but must stop reading as a live
-        error: leaving it as an alert is the frozen message this panel is meant to clear. */}
-    {repair.technicalError && !abandoned ? <p role="alert" className="break-words text-sm text-destructive">{repair.technicalError}</p> : null}
+    {/* After the user gives up or the repair commits, the failure text stays on record but must
+        stop reading as a live error: leaving it as an alert is the frozen message this panel is
+        meant to clear. */}
+    {repair.technicalError && !abandoned && repair.phase !== "committed"
+      ? <p role="alert" className="break-words text-sm text-destructive">{repair.technicalError}</p> : null}
+    {repair.phase === "committed" ? <p className="text-sm text-emerald-700 dark:text-emerald-300">
+      规划已通过复核并保存，这里不需要再操作。回到小说编辑页点“继续自动导演”（或“从最近检查点恢复”），从已保留的正文继续。
+    </p> : null}
     {abandoned && repair.technicalError ? <details className="text-sm">
       <summary className="cursor-pointer text-muted-foreground">这次修复中断时的报错（已放弃，仅作记录）</summary>
       <p className="mt-1 break-words text-muted-foreground">{repair.technicalError}</p>
@@ -58,7 +63,7 @@ export default function PlanningRepairPanel({ novelId }: { novelId: string }) {
         <li>候选方案可用、只是格式、引用或合同校验没过：先选“重新复核保留候选”或“按原策略继续”，复用已有候选更省模型费用；同一份答案复核两次仍失败时，再考虑放弃。</li>
         <li>需要改剧情或计划、但拿不准修改方向：选“让 AI 推荐修复方案”，看过建议再决定；这个选项会产生模型费用。</li>
         <li>已有明确修改方向：展开“高级：自定义修复方向”，写清要保留和要改的部分。</li>
-        <li>规划来源或执行状态发生变化、或不想继续这一步：选“放弃这次修复”，回到源页继续；章节计划与正文不受影响。</li>
+        <li>规划来源或执行状态发生变化、或不想继续这一步：选“放弃这次修复”，再回小说编辑页点“继续自动导演”；章节计划与正文不受影响。</li>
         <li>只是稍后再处理：选“保持暂停”，候选和剩余轮次会保留。</li>
       </ul>
     </details>
@@ -104,14 +109,16 @@ export default function PlanningRepairPanel({ novelId }: { novelId: string }) {
           {abandon.error instanceof Error ? abandon.error.message : "放弃失败，请稍后重试。"}
         </p> : null}
       </div>
-    </div> : <p className="text-sm text-muted-foreground">
+    </div> : repair.phase === "committed" ? null : <p className="text-sm text-muted-foreground">
       {/* Rendered as an explanation, not as nothing. Previously this branch was `null`, so a repair
           that could not act showed no buttons and no reason — the user clicked repair again and again
           with no way to tell they were being held back. */}
-      现在这一步没有可以直接操作的修复：{isPlanningRepairTaskPaused(status)
-        ? "这次修复不在等待你处理的状态，运行可能仍在继续或已经结束。"
-        : `这次运行的当前状态是「${status.status === "cancelled" ? "已取消" : status.status === "succeeded" ? "已完成" : status.status}」，只有在等待你处理时才能在这里修复。`}
-      上面显示的报错是上一次留下的记录；要重新走一遍，请等运行停在需要你确认的位置，再回来点「让 AI 推荐修复方案」。
+      {repair.phase === "abandoned"
+        ? "本次修复已放弃，章节计划与正文都没有改动。回到小说编辑页点“继续自动导演”，从原任务继续即可。"
+        : <>现在这一步没有可以直接操作的修复：{isPlanningRepairTaskPaused(status)
+          ? "这次修复不在等待你处理的状态，运行可能仍在继续或已经结束。"
+          : `这次运行的当前状态是「${status.status === "cancelled" ? "已取消" : status.status === "succeeded" ? "已完成" : status.status}」，只有在等待你处理时才能在这里修复。`}
+          上面显示的报错是上一次留下的记录；要重新走一遍，请等运行停在需要你确认的位置，再回来点「让 AI 推荐修复方案」。</>}
     </p>}
   </section>;
 }
