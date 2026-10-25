@@ -93,8 +93,13 @@ export function projectPlanningStateReview(
     const left = decision.candidateAssertion, right = decision.referenceAssertion;
     if (decision.relation === "contradiction") {
       const actual = new Set(["fact", "outcome"]);
+      // A planned outcome may legitimately repeat an earlier accomplished fact: that is a duplicate
+      // one-time event, not the same-state contradiction of a new intention/attempt. The actual-set
+      // guard below still rejects intentions and attempts masquerading as accomplished results.
+      const duplicatePlannedOutcome = Boolean(right) && left.temporalScope === "planned"
+        && right!.temporalScope === "prior" && actual.has(left.modality) && actual.has(right!.modality);
       if (!right || decision.comparisonScope !== "same_state" || left.subject !== right.subject
-        || left.temporalScope !== right.temporalScope
+        || (!duplicatePlannedOutcome && left.temporalScope !== right.temporalScope)
         || (left.modality !== right.modality && !(actual.has(left.modality) && actual.has(right.modality)))) {
         throw new Error(`Decision ${decision.issueId}: contradiction requires the same subject, time and comparable modality; a new decision/attempt is not an earlier accomplished result.`);
       }
