@@ -11,6 +11,9 @@ export function buildChapterEvidenceIndex(candidate: unknown) {
   // membership is kept separately so a citation against the field container itself still proves
   // that the quote belongs to that field, without accepting unrelated text from elsewhere.
   const containerLeaves = new Map<string, string[]>();
+  // Serialized source of parsed JSON containers. A review may cite a fragment of that exact
+  // serialization (for example a property name plus an evidence id); it is still candidate text.
+  const containerText = new Map<string, string>();
   const aliasSubtree = (canonical: string, alias: string) => {
     for (const leaf of leaves.keys()) {
       if (leaf !== canonical && !leaf.startsWith(`${canonical}.`) && !leaf.startsWith(`${canonical}[`)) continue;
@@ -23,7 +26,7 @@ export function buildChapterEvidenceIndex(candidate: unknown) {
     if (typeof value === "string") {
       try {
         const parsed: unknown = JSON.parse(value);
-        if (parsed && typeof parsed === "object") { add(path, parsed); return; }
+        if (parsed && typeof parsed === "object") { containerText.set(path, value); add(path, parsed); return; }
       } catch { /* An ordinary text leaf. */ }
       // The chapter object and its parsed sceneCards share one root namespace, so a field that
       // exists in both reaches the same path twice — `requiredElements` is one, because it is part
@@ -51,7 +54,10 @@ export function buildChapterEvidenceIndex(candidate: unknown) {
   const root = candidate && typeof candidate === "object" ? candidate as Node : {};
   for (const [key, value] of Object.entries(root)) if (key !== "sceneCards") add(key, value);
   let cards = root.sceneCards;
-  if (typeof cards === "string") { try { cards = JSON.parse(cards); } catch { add("sceneCards", cards); } }
+  if (typeof cards === "string") {
+    const serialized = cards;
+    try { cards = JSON.parse(cards); containerText.set("sceneCards", serialized); } catch { add("sceneCards", cards); }
+  }
   if (cards && typeof cards === "object") {
     const before = new Set(leaves.keys());
     const object = cards as Node;
@@ -79,7 +85,7 @@ export function buildChapterEvidenceIndex(candidate: unknown) {
   for (const [alias, canonical] of aliases) {
     if (leaves.has(alias) && alias !== canonical) throw new Error(`Ambiguous evidence source path: ${alias}`);
   }
-  return { leaves, groups, prerequisites, aliases, containerLeaves };
+  return { leaves, groups, prerequisites, aliases, containerLeaves, containerText };
 }
 
 /** Bounded local diagnostics: where the quote actually lives inside this source, never a guess. */
@@ -107,6 +113,9 @@ export function matchesChapterEvidence(index: ReturnType<typeof buildChapterEvid
     const normalized = normalize(quote);
     const members = index.containerLeaves.get(path);
     if (!normalized || !members) return false;
+    // A fragment of the parsed field's own serialization is still inside this container.
+    const serialized = index.containerText.get(path);
+    if (serialized !== undefined && normalize(serialized).includes(normalized)) return true;
     return members.some((member) => {
       const text = index.leaves.get(member);
       return text !== undefined && normalize(text).includes(normalized);

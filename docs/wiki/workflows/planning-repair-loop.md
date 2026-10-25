@@ -298,6 +298,10 @@ A terminal post-validation failure carries a non-enumerable completed response f
 
 相关实现：`server/src/prompting/prompts/novel/volume/evidence/planningStateReview.ts`；回归 `tests/planningStateReview.test.js`。
 
+- 证据路径指向 `sceneCards` 这类被解析的 JSON 容器时，除了逐叶子匹配，还允许引用该字段**序列化文本中的真实片段**（例如 `"evidenceIds":["prose_..."]`）；片段必须确实出现在该容器原文里，伪造片段仍会被拒绝。这避免复核正确引用了候选内容、却因引用的是 JSON 容器语法而整份退回。
+
+相关实现：`server/src/prompting/prompts/novel/volume/evidence/chapterEvidence.ts`；回归 `tests/chapterPlanningEvidence.test.js`。
+
 ## 规划修复恢复选项的选择边界（用户视角）
 
 规划修复面板不能只列出按钮，还要让新手判断该点哪个。稳定规则：

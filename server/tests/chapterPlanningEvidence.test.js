@@ -205,6 +205,13 @@ test("historical rejected review retains evidence projection without satisfying 
   assert.equal(schema.mapSemanticAssessmentToQualityGate(projected, "full_book_autopilot").canEnterExecution, false);
 });
 
+test("a parsed JSON container can be cited with a fragment of its serialized form", () => {
+  const candidate = { id: "c6", sceneCards: JSON.stringify({ stateClaims: [{ id: "s", source: { evidenceIds: ["prose_abc"] } }], scenes: [] }) };
+  const index = evidence.buildChapterEvidenceIndex(candidate);
+  assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: "sceneCards", quote: '"evidenceIds":["prose_abc"]' }), true);
+  assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: "sceneCards", quote: '"evidenceIds":["prose_fake"]' }), false);
+});
+
 test("resolved historical issues drop their stale decisions before current-issue coverage", () => {
   const index = evidence.buildChapterEvidenceIndex(fixture.candidate);
   const quote = index.leaves.get("readerExperience.keyTurn");
