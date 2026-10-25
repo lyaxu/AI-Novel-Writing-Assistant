@@ -44,10 +44,11 @@ export default function PlanningRepairPanel({ novelId }: { novelId: string }) {
       <span className="text-sm">{PHASE_LABELS[repair.phase]} · {repair.rounds}/{repair.maxRounds ?? 2} 轮</span>
     </div>
     <p className="break-words text-sm">{repair.summary}</p>
-    {/* After the user gives up or the repair commits, the failure text stays on record but must
-        stop reading as a live error: leaving it as an alert is the frozen message this panel is
-        meant to clear. */}
-    {repair.technicalError && !abandoned && repair.phase !== "committed"
+    {/* The failure text is only a live alert while the repair actually waits for the user.
+        During assessing/repairing/reviewing it is a stale record from the previous pause, and
+        after commit/abandon it must stop reading as a current problem. */}
+    {repair.technicalError && !abandoned
+      && (repair.phase === "waiting_confirmation" || repair.phase === "uncertain")
       ? <p role="alert" className="break-words text-sm text-destructive">{repair.technicalError}</p> : null}
     {repair.phase === "committed" ? <p className="text-sm text-emerald-700 dark:text-emerald-300">
       规划已通过复核并保存，这里不需要再操作。回到小说编辑页点“继续自动导演”（或“从最近检查点恢复”），从已保留的正文继续。

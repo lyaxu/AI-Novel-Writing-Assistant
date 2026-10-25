@@ -310,6 +310,7 @@ A terminal post-validation failure carries a non-enumerable completed response f
 面板需直接展示这份判断（实现：`client/src/pages/novels/components/planningRepair/PlanningRepairPanel.tsx`），避免用户靠外部聊天解释才能决定。
 
 - 阶段落入 `committed` 后，面板不再显示旧 `technicalError`，直接提示“规划已保存，回小说编辑页继续自动导演”；服务端提交成功时同步清空旧的失败记账。
+- 进行中的修复阶段（assessing/repairing/reviewing）只显示进度摘要；旧 `technicalError` 只在 `waiting_confirmation`/`uncertain` 这类真正等待用户的阶段作为当前错误显示，避免把历史记录误读成本次失败。
 - 阶段落入 `abandoned` 后，面板说明“计划与正文未改动，回小说编辑页继续自动导演”，避免用户把“放弃修复”误解为放弃整本书或任务。
 - 任务因章节审查失败暂停但正文已保存时，源页恢复入口提示“从最近检查点恢复”；恢复会复用已保存正文并重跑审查，不重新写正文。
 
