@@ -59,8 +59,9 @@ export function projectPlanningStateReview(
       if (matchesChapterEvidence(current, quote) || matchesChapterEvidence(prose, quote)) continue;
       const target = normalizeQuote(quote.quote);
       if (!target) continue;
-      const matches = [...index.leaves.entries()].filter(([path, text]) =>
-        (path.endsWith(".content") || path.includes(".predicate")) && normalizeQuote(text).includes(target));
+      // Any unique real leaf can be the intended source; a candidate state claim commonly carries
+      // the exact earlier-prose quote that the review is trying to cite.
+      const matches = [...index.leaves.entries()].filter(([, text]) => normalizeQuote(text).includes(target));
       if (matches.length === 1) quote.sourcePath = matches[0][0];
     }
   };
@@ -104,12 +105,12 @@ export function projectPlanningStateReview(
       }
     }
     if (decision.relation === "contradiction" && decision.transition === "contradicted") {
-      // A contradicted transition may be evidenced by the earlier primary prose that already
-      // happened; the current plan clause is still required by candidateAssertion/referenceAssertion.
-      // Stale plans, future context and fabricated quotes remain rejected.
-      if (decision.transitionEvidence.some(quote => !matchesChapterEvidence(current, quote) && !matchesChapterEvidence(prose, quote))) {
-        throw new Error(`${decision.issueId} cites absent candidate or earlier prose evidence.`);
-      }
+      // Transition evidence is auxiliary for a contradicted contradiction: the conflict is already
+      // carried by candidateAssertion/referenceAssertion. Keep only quotes that resolve to the
+      // current candidate or earlier primary prose; drop unresolvable extras instead of discarding
+      // an otherwise verified finding. Fabricated candidate/reference/premise evidence still fails.
+      decision.transitionEvidence = decision.transitionEvidence
+        .filter(quote => matchesChapterEvidence(current, quote) || matchesChapterEvidence(prose, quote));
     } else {
       assertCurrent(decision.transitionEvidence, decision.issueId);
     }

@@ -42,7 +42,9 @@ test("an off-by-one prose index is relocated to the real source, fabricated text
   value.issueDecisions[0].transitionEvidence = [quote("writtenEvidence.chapters[9].content", "余粮三袋。")];
   assert.doesNotThrow(() => validate(value, candidate, context));
   value.issueDecisions[0].transitionEvidence = [quote("writtenEvidence.chapters[9].content", "已有三百袋粮")];
-  assert.throws(() => validate(value, candidate, context), /absent candidate or earlier prose/);
+  assert.doesNotThrow(() => validate(value, candidate, context), "auxiliary transition evidence may be dropped");
+  value.issueDecisions[0].referenceAssertion.evidence = [quote(prior.sourcePath, "已有三百袋粮")];
+  assert.throws(() => validate(value, candidate, context), /absent premise/);
 });
 
 test("a planned outcome repeating an earlier accomplished fact is a duplicate-event conflict", () => {
@@ -84,13 +86,15 @@ test("promise mapping cannot overwrite the single validated repair decision", ()
   value.issues=[];value.issueDecisions=[];
   assert.throws(()=>validate(value,candidate,context),/canonical decision/);
 });
-test("a contradicted transition may cite earlier primary prose, but not fabricated evidence", () => {
+test("a contradicted transition drops unresolvable auxiliary evidence but keeps verified conflict evidence", () => {
   const value = assessment();
   value.issueDecisions[0].transition = "contradicted";
   value.issueDecisions[0].transitionEvidence = [prior];
   assert.doesNotThrow(() => validate(value, candidate, context));
   value.issueDecisions[0].transitionEvidence = [quote(prior.sourcePath, "已有十三袋粮")];
-  assert.throws(() => validate(value, candidate, context), /absent candidate or earlier prose/);
+  assert.doesNotThrow(() => validate(value, candidate, context));
+  value.issueDecisions[0].candidateAssertion.evidence = [quote("summary", "候选里不存在的句子")];
+  assert.throws(() => validate(value, candidate, context), /absent candidate evidence/);
 });
 
 test("established bridge and missing prerequisite cannot coexist, and forged repair premises are refused", () => {
