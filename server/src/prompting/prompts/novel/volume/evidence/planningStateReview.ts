@@ -49,6 +49,30 @@ export function projectPlanningStateReview(
     || decisions.size !== issueIds.size || [...issueIds].some(id => !decisions.has(id))) {
     throw new Error("issueDecisions must cover every current unresolved issue exactly once, including historical issues.");
   }
+  // A review may cite the right sentence with an off-by-one array index (writtenEvidence.chapters
+  // or stateClaims). Relocate only when the exact quote occurs once in the intended source family;
+  // fabricated or ambiguous text is never relocated and still fails validation.
+  const normalizeQuote = (text: string) => text.replace(/\s+/g, "");
+  const canonicalize = (quotes: Array<{ sourcePath: string; quote: string }> | undefined,
+    index: ReturnType<typeof buildChapterEvidenceIndex>) => {
+    for (const quote of quotes ?? []) {
+      if (matchesChapterEvidence(current, quote) || matchesChapterEvidence(prose, quote)) continue;
+      const target = normalizeQuote(quote.quote);
+      if (!target) continue;
+      const matches = [...index.leaves.entries()].filter(([path, text]) =>
+        (path.endsWith(".content") || path.includes(".predicate")) && normalizeQuote(text).includes(target));
+      if (matches.length === 1) quote.sourcePath = matches[0][0];
+    }
+  };
+  for (const decision of decisions.values()) {
+    canonicalize(decision.candidateAssertion.evidence, current);
+    canonicalize(decision.referenceAssertion?.evidence, current);
+    canonicalize(decision.referenceAssertion?.evidence, prose);
+    canonicalize(decision.transitionEvidence, current);
+    canonicalize(decision.transitionEvidence, prose);
+    canonicalize(decision.repair.premiseEvidence, current);
+    canonicalize(decision.repair.premiseEvidence, prose);
+  }
   const assertCurrent = (quotes: Array<{ sourcePath: string; quote: string }>, label: string) => {
     if (quotes.some(quote => !matchesChapterEvidence(current, quote))) throw new Error(`${label} cites absent candidate evidence.`);
   };

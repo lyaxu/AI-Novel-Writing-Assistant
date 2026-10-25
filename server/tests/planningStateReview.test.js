@@ -34,6 +34,17 @@ test("a later intention or attempt cannot be labeled the same accomplished histo
     assert.throws(() => validate(value, candidate, context), /same subject, time and comparable modality/);
   }
 });
+test("an off-by-one prose index is relocated to the real source, fabricated text is not", () => {
+  const value = assessment();
+  value.issueDecisions[0].candidateAssertion.temporalScope = "planned";
+  value.issueDecisions[0].candidateAssertion.modality = "outcome";
+  value.issueDecisions[0].transition = "contradicted";
+  value.issueDecisions[0].transitionEvidence = [quote("writtenEvidence.chapters[9].content", "余粮三袋。")];
+  assert.doesNotThrow(() => validate(value, candidate, context));
+  value.issueDecisions[0].transitionEvidence = [quote("writtenEvidence.chapters[9].content", "已有三百袋粮")];
+  assert.throws(() => validate(value, candidate, context), /absent candidate or earlier prose/);
+});
+
 test("a planned outcome repeating an earlier accomplished fact is a duplicate-event conflict", () => {
   const value = assessment();
   value.issueDecisions[0].candidateAssertion.temporalScope = "planned";

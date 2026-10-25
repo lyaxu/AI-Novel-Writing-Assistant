@@ -300,6 +300,7 @@ A terminal post-validation failure carries a non-enumerable completed response f
 
 - 证据路径指向 `sceneCards` 这类被解析的 JSON 容器时，除了逐叶子匹配，还允许引用该字段**序列化文本中的真实片段**（例如 `"evidenceIds":["prose_..."]`）；片段必须确实出现在该容器原文里，伪造片段仍会被拒绝。这避免复核正确引用了候选内容、却因引用的是 JSON 容器语法而整份退回。
 - 重复一次性事件的冲突允许用“计划结果（planned/outcome）”对照“已写事实（prior/fact）”：这是同一事件被安排两次，而不是新意图冒充旧结果；`intention`/`attempt` 与本应有事实的对照仍会被拒绝，避免把“打算做”误当“已经做成”。
+- 复核引用真实原句但数组序号写错（`writtenEvidence.chapters[n]`、`stateClaims[n]` 等）时，适配层在**唯一匹配**的前提下把路径校正到真实来源；仍找不到或存在多个候选的引用照旧拒绝，编造文本不会被放行。
 
 相关实现：`server/src/prompting/prompts/novel/volume/evidence/chapterEvidence.ts`；回归 `tests/chapterPlanningEvidence.test.js`。
 
