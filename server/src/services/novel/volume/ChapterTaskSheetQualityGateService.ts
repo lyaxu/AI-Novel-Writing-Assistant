@@ -19,6 +19,7 @@ import {
   chapterTaskSheetQualityPrompt,
   validatePlanningStateSources,
 } from "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts";
+import { loadStoryCraftContractBlock } from "../../settings/storyCraftContractContext";
 
 export interface ChapterTaskSheetQualityGateOptions {
   mode?: ChapterTaskSheetQualityMode;
@@ -156,6 +157,7 @@ export class ChapterTaskSheetQualityGateService {
       promiseCount = selectedPlanningPromiseIds(context?.selectedPlanningDirection as SelectedPlanningDirection | undefined, candidate.chapterOrder).length;
     } catch { /* Unknown original direction does not invent checks. */ }
     let validationFeedback: string | undefined;
+    const storyCraftContractBlock = await loadStoryCraftContractBlock("review");
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         const generated = await runStructuredPrompt({
@@ -169,6 +171,7 @@ export class ChapterTaskSheetQualityGateService {
             omittedResolvedIssueCount: options.omittedResolvedIssueCount,
             validationFeedback,
           },
+          contextBlocks: storyCraftContractBlock ? [storyCraftContractBlock] : [],
           options: {
             provider: options.provider,
             model: options.model,

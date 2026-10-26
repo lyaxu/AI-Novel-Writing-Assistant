@@ -14,6 +14,7 @@ import {
   sanitizeWriterContextBlocks,
 } from "../../prompting/prompts/novel/chapterLayeredContext";
 import { chapterWriterPrompt } from "../../prompting/prompts/novel/chapterWriter.prompts";
+import { appendStoryCraftContractBlock } from "../settings/storyCraftContractContext";
 import { NovelContinuationService } from "./NovelContinuationService";
 import { assertChapterContentNotEmpty } from "./runtime/chapterEmptyContentError";
 import { prisma } from "../../db/prisma";
@@ -191,7 +192,10 @@ export class ChapterWritingGraph {
       lengthGoal.targetWordCount - currentLength,
       lengthGoal.minWordCount - currentLength,
     );
-    const builtBlocks = [await loadWritingPlatformBlock(input.novelId), ...buildChapterWriterContextBlocks(writeContext)];
+    const builtBlocks = await appendStoryCraftContractBlock([
+      await loadWritingPlatformBlock(input.novelId),
+      ...buildChapterWriterContextBlocks(writeContext),
+    ], "writing");
     const sanitized = sanitizeWriterContextBlocks([
       createContextBlock({
         id: "current_draft_excerpt",
@@ -289,7 +293,10 @@ export class ChapterWritingGraph {
     }
     const contextPackage = input.contextPackage;
     const targetRange = resolveTargetWordRange(chapterWriteContext.chapterMission.targetWordCount);
-    const builtBlocks = [await loadWritingPlatformBlock(input.novelId), ...buildChapterWriterContextBlocks(chapterWriteContext)];
+    const builtBlocks = await appendStoryCraftContractBlock([
+      await loadWritingPlatformBlock(input.novelId),
+      ...buildChapterWriterContextBlocks(chapterWriteContext),
+    ], "writing");
     const sanitized = sanitizeWriterContextBlocks(builtBlocks);
     if (sanitized.removedBlockIds.length > 0) {
       this.deps.logWarn("Writer context blocks removed by guard", {

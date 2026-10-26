@@ -37,6 +37,7 @@ const { chapterTaskSheetQualityPrompt: prompt } = load("../src/prompting/prompts
   "./evidence/planningStateReview": require("../dist/prompting/prompts/novel/volume/evidence/planningStateReview.js"),
   "./evidence/primaryProseCitationCatalog": load("../src/prompting/prompts/novel/volume/evidence/primaryProseCitationCatalog.ts", { "node:crypto": require("node:crypto") }),
   "./evidence/narrativeProgressionEvidence": load("../src/prompting/prompts/novel/volume/evidence/narrativeProgressionEvidence.ts", { "./chapterEvidence": chapterEvidence }),
+  "../../../core/renderContextBlocks": { renderSelectedContextBlocks: () => "" },
 });
 const candidate = { chapterOrder: 2, summary: "通过交换药物赢得初步信任" };
 const source = { status: "available", sourceTaskId: "task", fingerprint: "source-1", candidate: {
@@ -236,6 +237,7 @@ test("existing quality call receives bounded output headroom and no additional m
     "@ai-novel/shared/types/chapterTaskSheetQuality": { ...quality, assessChapterExecutionContractShape: () => ({ canEnterExecution: true }) },
     "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts": { chapterTaskSheetQualityPrompt: prompt, validatePlanningStateSources: () => {} },
     "../../../prompting/core/promptRunner": { runStructuredPrompt: async input => { calls.push(input); return { output: assessment(checks()) }; } },
+    "../../settings/storyCraftContractContext": { loadStoryCraftContractBlock: async () => null },
   });
   const result = await new ChapterTaskSheetQualityGateService().evaluate(candidate, { reviewContextJson: context() });
   assert.equal(calls.length, 1); assert.equal(result.status, "passed");

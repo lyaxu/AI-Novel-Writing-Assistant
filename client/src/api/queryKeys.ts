@@ -160,6 +160,7 @@ export const queryKeys = {
     autoDirectorIssuePolicy: ["settings", "auto-director-issue-policy"] as const,
     autoDirectorApprovalPreferences: ["settings", "auto-director-approval-preferences"] as const,
     pendingReviewAutoPromotion: ["settings", "pending-review-auto-promotion"] as const,
+    storyCraft: ["settings", "story-craft"] as const,
     quickSetup: ["settings", "quick-setup"] as const,
   },
   onboarding: {

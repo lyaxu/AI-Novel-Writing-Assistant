@@ -23,6 +23,7 @@ import {
   volumeStrategyCritiquePrompt,
 } from "../../../prompting/prompts/novel/volume/strategy.prompts";
 import { resolveVolumeStrategyOutputTokenBudget } from "../../../prompting/prompts/novel/promptBudgetProfiles";
+import { appendStoryCraftContractBlock } from "../../settings/storyCraftContractContext";
 import { buildStoryModePromptBlock, normalizeStoryModeOutput } from "../../storyMode/storyModeProfile";
 import type { StoryMacroPlanService } from "../storyMacro/StoryMacroPlanService";
 import {
@@ -240,13 +241,16 @@ async function generateStrategy(params: {
       guidance: options.guidance,
       volumeCountGuidance,
     },
-    contextBlocks: buildVolumeStrategyContextBlocks({
-      novel,
-      workspace,
-      storyMacroPlan,
-      guidance: options.guidance,
-      volumeCountGuidance,
-    }),
+    contextBlocks: await appendStoryCraftContractBlock(
+      buildVolumeStrategyContextBlocks({
+        novel,
+        workspace,
+        storyMacroPlan,
+        guidance: options.guidance,
+        volumeCountGuidance,
+      }),
+      "planning",
+    ),
     options: {
       provider: options.provider,
       model: options.model,
@@ -357,15 +361,18 @@ async function generateSkeleton(params: {
       volumeCountGuidance,
       chapterBudget,
     },
-    contextBlocks: buildVolumeSkeletonContextBlocks({
-      novel,
-      workspace,
-      storyMacroPlan,
-      strategyPlan: document.strategyPlan,
-      guidance: options.guidance,
-      volumeCountGuidance,
-      chapterBudget,
-    }),
+    contextBlocks: await appendStoryCraftContractBlock(
+      buildVolumeSkeletonContextBlocks({
+        novel,
+        workspace,
+        storyMacroPlan,
+        strategyPlan: document.strategyPlan,
+        guidance: options.guidance,
+        volumeCountGuidance,
+        chapterBudget,
+      }),
+      "planning",
+    ),
     options: {
       provider: options.provider,
       model: options.model,
@@ -649,7 +656,10 @@ async function generateChapterDetail(params: {
     ? await runStructuredPrompt({
       asset: volumeChapterPurposePrompt,
       promptInput,
-      contextBlocks: buildVolumeChapterDetailContextBlocks(promptInput),
+      contextBlocks: await appendStoryCraftContractBlock(
+        buildVolumeChapterDetailContextBlocks(promptInput),
+        "planning",
+      ),
       options: {
         provider: options.provider,
         model: options.model,
@@ -670,7 +680,10 @@ async function generateChapterDetail(params: {
       ? await runStructuredPrompt({
         asset: volumeChapterBoundaryPrompt,
         promptInput,
-        contextBlocks: buildVolumeChapterDetailContextBlocks(promptInput),
+        contextBlocks: await appendStoryCraftContractBlock(
+          buildVolumeChapterDetailContextBlocks(promptInput),
+          "planning",
+        ),
         options: {
           provider: options.provider,
           model: options.model,

@@ -42,6 +42,7 @@ export const MOBILE_ROUTE_PATTERNS: MobileRoutePattern[] = [
   { key: "settings-models", pattern: /^\/settings\/models\/?$/, title: "模型与厂商", group: "more" },
   { key: "model-routes", pattern: /^\/settings\/model-routes\/?$/, title: "模型路由管理", group: "more" },
   { key: "settings-director", pattern: /^\/settings\/director\/?$/, title: "自动导演设置", group: "more" },
+  { key: "settings-story-craft", pattern: /^\/settings\/story-craft\/?$/, title: "通用创作规则", group: "more" },
   { key: "settings-knowledge", pattern: /^\/settings\/knowledge\/?$/, title: "知识库与写法", group: "more" },
   { key: "settings-maintenance", pattern: /^\/settings\/maintenance\/?$/, title: "桌面与维护", group: "more" },
   { key: "settings", pattern: /^\/settings\/?$/, title: "系统设置", group: "more" },

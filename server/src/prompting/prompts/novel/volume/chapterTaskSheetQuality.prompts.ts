@@ -18,6 +18,7 @@ import {
   chapterNarrativeProgressionCheckSchema,
 } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import type { PromptAsset } from "../../../core/promptTypes";
+import { renderSelectedContextBlocks } from "../../../core/renderContextBlocks";
 import { buildChapterEvidenceIndex } from "./evidence/chapterEvidence";
 import { projectValidatedIssueChecks } from "./evidence/issueCheckProjection";
 import { newIssueContextEvidenceIndex, validateNewIssueEvidence } from "./evidence/newIssueEvidence";
@@ -191,7 +192,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   QualityWireAssessment
 > = {
   id: "novel.volume.chapter_task_sheet_quality",
-  version: "v19",
+  version: "v20",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -212,7 +213,7 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
     })),
     refinements: z.array(z.string().trim().min(1).max(500)).max(8),
   }),
-  render: (input) => {
+  render: (input, context) => {
     const citationCatalog = buildPrimaryProseCitationCatalog(input.reviewContextJson, input.candidate.chapterOrder);
     return [
     new SystemMessage(createSystemPrompt(input.mode)),
@@ -246,6 +247,13 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
       "priorIssueDecisions (historical judgments only; recheck against current candidate):",
       JSON.stringify(input.priorIssueDecisions ?? []),
       `omittedResolvedIssueCount: ${input.omittedResolvedIssueCount ?? 0}`,
+      ...((context?.blocks?.length ?? 0) > 0
+        ? [
+          "",
+          "通用创作规则（题材无关元规则；按本书题材与设定实例化复核，不要求出现任何特定题材元素）:",
+          renderSelectedContextBlocks(context),
+        ]
+        : []),
     ].join("\n")),
     ];
   },

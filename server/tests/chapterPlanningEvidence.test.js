@@ -36,6 +36,7 @@ const { chapterTaskSheetQualityPrompt: prompt } = load("../src/prompting/prompts
   "./evidence/planningStateReview": require("../dist/prompting/prompts/novel/volume/evidence/planningStateReview.js"),
   "./evidence/primaryProseCitationCatalog": load("../src/prompting/prompts/novel/volume/evidence/primaryProseCitationCatalog.ts", { "node:crypto": require("node:crypto") }),
   "./evidence/narrativeProgressionEvidence": load("../src/prompting/prompts/novel/volume/evidence/narrativeProgressionEvidence.ts", { "./chapterEvidence": evidence }),
+  "../../../core/renderContextBlocks": { renderSelectedContextBlocks: () => "" },
 });
 const fixture = require("./fixtures/planningEvidenceLabeledQuotes.json");
 const output = () => ({ verdict: "usable", safeToSync: true, loadRisk: "normal", recommendedHandling: "use_as_is",

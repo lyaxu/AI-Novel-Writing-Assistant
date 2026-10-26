@@ -2,6 +2,7 @@ import type { VolumePlanDocument } from "@ai-novel/shared/types/novel";
 import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
 import { volumeBeatSheetPrompt } from "../../../prompting/prompts/novel/volume/beatSheet.prompts";
 import { buildVolumeBeatSheetContextBlocks } from "../../../prompting/prompts/novel/volume/contextBlocks";
+import { appendStoryCraftContractBlock } from "../../settings/storyCraftContractContext";
 import type { StoryMacroPlanService } from "../storyMacro/StoryMacroPlanService";
 import {
   allocateChapterBudgets,
@@ -81,7 +82,10 @@ export async function generateBeatSheet(params: {
   const generated = await runStructuredPrompt({
     asset: volumeBeatSheetPrompt,
     promptInput,
-    contextBlocks: buildVolumeBeatSheetContextBlocks(promptInput),
+    contextBlocks: await appendStoryCraftContractBlock(
+      buildVolumeBeatSheetContextBlocks(promptInput),
+      "planning",
+    ),
     options: {
       provider: options.provider,
       model: options.model,

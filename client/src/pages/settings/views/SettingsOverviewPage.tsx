@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, BookOpenCheck, Bot, Database, MonitorCog, Route } from "lucide-react";
+import { ArrowRight, BookOpenCheck, Bot, Database, MonitorCog, Route, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   getAPIKeySettings,
@@ -21,6 +21,7 @@ const entries = [
   { to: "/settings/models", title: "模型与厂商", description: "添加模型厂商、选择模型并管理连接。", icon: Bot },
   { to: "/settings/model-routes", title: "模型路由管理", description: "为不同创作任务选择模型并检查连接状态。", icon: Route },
   { to: "/settings/director", title: "自动导演", description: "安排问题处理、确认偏好与提醒方式。", icon: BookOpenCheck },
+  { to: "/settings/story-craft", title: "通用创作规则", description: "为所有书设定压力、章节、人物和能力的推进底线。", icon: Sparkles },
   { to: "/settings/knowledge", title: "知识库与写法", description: "让资料和写法偏好参与后续创作。", icon: Database },
   { to: "/settings/maintenance", title: "桌面与维护", description: "查看适用于当前设备的更新和数据维护。", icon: MonitorCog },
 ];
@@ -59,6 +60,8 @@ export default function SettingsOverviewPage() {
             ? configuredProvider ? `${configuredProvider.name} · ${configuredProvider.currentModel || "未选择模型"}` : "尚未配置可用的文本模型"
             : title === "模型路由管理"
               ? `${routeCount} 条任务路由已设置`
+            : title === "通用创作规则"
+              ? "对所有书生效，AI 会按每本书的题材实例化"
             : title === "知识库与写法"
               ? rag?.enabled ? `资料检索已开启 · ${rag.embeddingModel || "未选择向量模型"}` : "可选增强，暂不影响开始创作"
               : title === "桌面与维护"

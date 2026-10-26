@@ -28,6 +28,7 @@ function harness(responses, validatePlanningStateSources=()=>{}) {
     "@ai-novel/shared/types/novel/planningPromises":{selectedPlanningPromiseIds:()=>[]},
     "../../../prompting/core/promptRunner":runner,
     "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts":{chapterTaskSheetQualityPrompt:{id:"quality"},validatePlanningStateSources},
+    "../../settings/storyCraftContractContext":{loadStoryCraftContractBlock:async()=>null},
   });
   const generation=load("../src/services/novel/volume/chapterDetail/chapterExecutionContractGeneration.ts",{
     "@ai-novel/shared/types/chapterTaskSheetQuality":schema,"@ai-novel/shared/types/chapterLengthControl":length,
@@ -39,6 +40,7 @@ function harness(responses, validatePlanningStateSources=()=>{}) {
     // The contract guard trace writes to the chapter row; these tests assert retry/routing
     // behaviour, not persistence, so it is stubbed out rather than hitting the database.
     "./chapterContractGuardTrace":{recordChapterContractGuardEvent:async()=>{}},
+    "../../../settings/storyCraftContractContext":{appendStoryCraftContractBlock:async (blocks)=>blocks},
   });
   const chapter={id:"c",chapterOrder:2,title:"查账",summary:"账目有疑点",payoffRefs:[]};
   const params={promptInput:{novel:{},workspace:{novelId:"n",volumes:[]},targetVolume:{id:"v",chapters:[chapter]},targetChapter:chapter,detailMode:"task_sheet"},options:{}};

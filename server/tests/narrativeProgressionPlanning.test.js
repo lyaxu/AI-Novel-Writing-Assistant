@@ -159,7 +159,7 @@ test("wire selects earlier prose IDs and restores exact persisted citations befo
   assert.match(system, /从本次正文目录选择支持此判断的evidenceId/);
   assert.match(system, /所有占位内容必须按实际证据替换，不可照抄/);
   assert.match(system, /依据本维实际比较选择允许的status/);
-  assert.equal(prompt.version, "v19");
+  assert.equal(prompt.version, "v20");
   assert.equal(parseFresh(assessment()).success, false);
   for (const extra of [{ quote: previous }, { quote: "Invented summary." }, { sourcePath: "writtenEvidence.chapters[0].content" }]) {
     const invalid = structuredClone(model);

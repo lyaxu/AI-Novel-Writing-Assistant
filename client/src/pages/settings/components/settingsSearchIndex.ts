@@ -68,6 +68,30 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [
     to: "/settings/director",
   },
   {
+    label: "每章都要有压力 / 倒计时 / 时钟推进",
+    keywords: ["压力", "时钟", "倒计时", "节奏", "铺垫", "水章", "代价", "升级", "紧张感", "推进"],
+    where: "通用创作规则里的「压力契约」",
+    to: "/settings/story-craft",
+  },
+  {
+    label: "每章要写什么 / 开篇钩子 / 章节义务",
+    keywords: ["章节", "钩子", "开篇", "目标", "阻力", "转折", "回报", "章节义务", "原地打转", "经营", "谈判"],
+    where: "通用创作规则里的「章节义务」",
+    to: "/settings/story-craft",
+  },
+  {
+    label: "人物规模 / 角色规划 / 配角人数",
+    keywords: ["人物", "角色", "规模", "配角", "主角", "对手", "npc", "人物规划", "退场", "投放"],
+    where: "通用创作规则里的「人物规划」",
+    to: "/settings/story-craft",
+  },
+  {
+    label: "金手指 / 特殊能力的代价和升级",
+    keywords: ["金手指", "能力", "外挂", "系统", "代价", "反制", "升级", "爽点", "特殊能力", "开挂"],
+    where: "通用创作规则里的「特殊能力 / 金手指」",
+    to: "/settings/story-craft",
+  },
+  {
     label: "开启资料检索 / 知识库向量",
     keywords: ["知识库", "向量", "检索", "召回", "embedding", "资料", "rag"],
     where: "知识库与写法",

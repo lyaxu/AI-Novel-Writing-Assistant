@@ -40,6 +40,7 @@ import promptWorkbenchRouter from "./routes/promptWorkbench";
 import ragRouter from "./routes/rag";
 import settingsAutoDirectorRouter from "./routes/settingsAutoDirector";
 import settingsRouter from "./routes/settings";
+import settingsStoryCraftRouter from "./routes/settingsStoryCraft";
 import styleEngineRouter from "./routes/styleEngine";
 import styleEngineExtractionRouter from "./routes/styleEngineExtraction";
 import storyModeRouter from "./routes/storyMode";
@@ -160,6 +161,7 @@ export function createApp() {
   app.use("/api/tasks", tasksRouter);
   app.use("/api/auto-director/follow-ups", autoDirectorFollowUpsRouter);
   app.use("/api/settings/auto-director", settingsAutoDirectorRouter);
+  app.use("/api/settings/story-craft", settingsStoryCraftRouter);
   app.use("/api/auto-director/channel-callbacks", autoDirectorChannelCallbacksRouter);
   app.use("/api/settings", settingsRouter);
   app.use("/api", onboardingRoutes);

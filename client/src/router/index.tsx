@@ -35,6 +35,7 @@ const SettingsOverviewPage = lazy(() => import("@/pages/settings/views/SettingsO
 const ModelsSettingsPage = lazy(() => import("@/pages/settings/views/ModelsSettingsPage"));
 const ModelRoutesSettingsPage = lazy(() => import("@/pages/settings/views/ModelRoutesSettingsPage"));
 const DirectorSettingsPage = lazy(() => import("@/pages/settings/views/DirectorSettingsPage"));
+const StoryCraftSettingsPage = lazy(() => import("@/pages/settings/views/StoryCraftSettingsPage"));
 const KnowledgeSettingsPage = lazy(() => import("@/pages/settings/views/KnowledgeSettingsPage"));
 const MaintenanceSettingsPage = lazy(() => import("@/pages/settings/views/MaintenanceSettingsPage"));
 const AppearanceSettingsPage = lazy(() => import("@/pages/settings/views/AppearanceSettingsPage"));
@@ -82,6 +83,7 @@ const routes: RouteObject[] = [
       { path: "settings/model-routes", element: <ModelRoutesSettingsPage /> },
       { path: "settings/models", element: <ModelsSettingsPage /> },
       { path: "settings/director", element: <DirectorSettingsPage /> },
+      { path: "settings/story-craft", element: <StoryCraftSettingsPage /> },
       { path: "settings/knowledge", element: <KnowledgeSettingsPage /> },
       { path: "settings/maintenance", element: <MaintenanceSettingsPage /> },
       { path: "settings/appearance", element: <AppearanceSettingsPage /> },

@@ -4,6 +4,7 @@ import type {
 } from "@ai-novel/shared/types/autoDirectorApproval";
 import type { DirectorIssuePolicy } from "@ai-novel/shared/types/directorIssue";
 import type { LLMProvider, ProviderAuthMode, ReasoningEffort } from "@ai-novel/shared/types/llm";
+import type { StoryCraftDefaults } from "@ai-novel/shared/types/storyCraft";
 import type {
   ModelRouteConfig,
   ModelRouteRequestProtocol,
@@ -552,5 +553,15 @@ export async function testLLMConnection(payload: {
       } | null;
     }>
   >("/llm/test", payload);
+  return data;
+}
+
+export async function getStoryCraftSettings() {
+  const { data } = await apiClient.get<ApiResponse<StoryCraftDefaults>>("/settings/story-craft");
+  return data;
+}
+
+export async function saveStoryCraftSettings(payload: StoryCraftDefaults) {
+  const { data } = await apiClient.put<ApiResponse<StoryCraftDefaults>>("/settings/story-craft", payload);
   return data;
 }

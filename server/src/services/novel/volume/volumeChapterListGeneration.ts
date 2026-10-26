@@ -9,6 +9,7 @@ import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
 import { logMemoryUsage } from "../../../runtime/memoryTelemetry";
 import { createVolumeChapterListPrompt } from "../../../prompting/prompts/novel/volume/chapterList.prompts";
 import { buildVolumeChapterListContextBlocks } from "../../../prompting/prompts/novel/volume/contextBlocks";
+import { appendStoryCraftContractBlock } from "../../settings/storyCraftContractContext";
 import { loadPlanningWrittenEvidence } from "./writtenEvidence";
 import {
   inferRequiredChapterCountFromBeatSheet,
@@ -285,7 +286,10 @@ async function generateBeatChapterBlock(params: {
         .map((chapter) => chapter.title),
     }),
     promptInput,
-    contextBlocks: buildVolumeChapterListContextBlocks(promptInput),
+    contextBlocks: await appendStoryCraftContractBlock(
+      buildVolumeChapterListContextBlocks(promptInput),
+      "planning",
+    ),
     options: {
       provider: params.options.provider,
       model: params.options.model,

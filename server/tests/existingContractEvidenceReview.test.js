@@ -41,6 +41,7 @@ function fixture({ changed = false, rejected = false } = {}) {
     // Guard trace persistence is exercised in chapterContractGuardTrace.test.js; these cases
     // assert reuse/review behaviour, so the writer is stubbed rather than hitting the database.
     "./chapterContractGuardTrace": { recordChapterContractGuardEvent: async () => {} },
+    "../../../settings/storyCraftContractContext": { appendStoryCraftContractBlock: async (blocks) => blocks },
   });
   const params = { promptInput: { novel: {}, workspace, targetVolume, targetChapter: candidate }, options: {} };
   return { generation, params, candidate, counts: () => ({ reviews, initial }) };

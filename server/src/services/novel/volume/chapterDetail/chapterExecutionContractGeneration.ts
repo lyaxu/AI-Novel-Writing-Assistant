@@ -14,6 +14,7 @@ import {
 import { runStructuredPrompt } from "../../../../prompting/core/promptRunner";
 import { volumeChapterExecutionContractPrompt } from "../../../../prompting/prompts/novel/volume/chapterDetail.prompts";
 import { buildVolumeChapterDetailContextBlocks } from "../../../../prompting/prompts/novel/volume/contextBlocks";
+import { appendStoryCraftContractBlock } from "../../../settings/storyCraftContractContext";
 import type { StoryMacroPlanService } from "../../storyMacro/StoryMacroPlanService";
 import {
   ChapterTaskSheetQualityGateService,
@@ -228,7 +229,10 @@ export async function generateChapterTaskSheetDetail(params: {
       const generated = await runStructuredPrompt({
         asset: volumeChapterExecutionContractPrompt,
         promptInput,
-        contextBlocks: buildVolumeChapterDetailContextBlocks(promptInput),
+        contextBlocks: await appendStoryCraftContractBlock(
+          buildVolumeChapterDetailContextBlocks(promptInput),
+          "planning",
+        ),
         options: {
           provider: params.options.provider,
           model: params.options.model,
