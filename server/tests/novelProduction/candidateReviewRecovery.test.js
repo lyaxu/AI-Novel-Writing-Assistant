@@ -163,10 +163,10 @@ test('old saved original review and patch outputs replay, then a sync failure ca
   assert.equal(f.record().status, 'completed');
 });
 
-test('original review incomplete remains a stop and does not enter patch or terminal commit', async () => {
+test('original review incomplete gets one full review retry, then remains a stop without patch or terminal commit', async () => {
   const f = harness({ originalFailure: incomplete() });
   await assert.rejects(f.run(), { code: 'CHAPTER_REVIEW_INCOMPLETE' });
-  assert.deepEqual(f.events, ['original_review']);
+  assert.deepEqual(f.events, ['original_review', 'original_review']);
   assert.equal(f.record().status, 'paused');
 });
 

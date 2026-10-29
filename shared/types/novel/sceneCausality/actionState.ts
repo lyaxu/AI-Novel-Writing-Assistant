@@ -21,7 +21,11 @@ const semanticFactSchema = z.object({
   claim: stateText.optional(),
   evidence: z.array(actionStateEvidenceSchema).max(2).optional(),
   storyTime: z.enum(["before_or_at_action", "during_or_after_action", "unknown"]).optional(),
-  support: z.enum(["supported", "contradicted", "insufficient"]).optional(),
+  // Some reviews describe an unverifiable fact as "unknown"; the fact-support field only has
+  // supported/contradicted/insufficient. Map that one value deterministically before semantic
+  // audit instead of rejecting the whole review over a vocabulary mismatch.
+  support: z.preprocess(value => value === "unknown" ? "insufficient" : value,
+    z.enum(["supported", "contradicted", "insufficient"]).optional()),
   reason: stateText.optional(),
 });
 

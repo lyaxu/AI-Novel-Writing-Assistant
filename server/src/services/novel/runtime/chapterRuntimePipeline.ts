@@ -317,18 +317,29 @@ export async function runPipelineChapterWithRuntime(
 
     await hooks.onStageChange?.("reviewing");
     const reviewResult = await productionStep<FinalizedRuntimeResult | CandidateReviewIncomplete>(`pipeline.review:${attempt}`, async () => {
+      const finalize = () => deps.finalizeChapterContent({
+        novelId,
+        chapterId,
+        request,
+        contextPackage: assembled.contextPackage,
+        content,
+        lengthControl: latestLengthControl,
+        runId: null,
+        startMs: null,
+        assertExecutionOwnership: hooks.onCheckCancelled,
+      });
       try {
-        return await deps.finalizeChapterContent({
-          novelId,
-          chapterId,
-          request,
-          contextPackage: assembled.contextPackage,
-          content,
-          lengthControl: latestLengthControl,
-          runId: null,
-          startMs: null,
-          assertExecutionOwnership: hooks.onCheckCancelled,
-        });
+        try {
+          return await finalize();
+        } catch (error) {
+          const failure = error as { code?: unknown } | null;
+          // An incomplete first review is a citation/format failure, not a verdict on the
+          // prose. Re-run the same full review once before asking the author to recover;
+          // repair candidates keep their existing single-review behavior.
+          if (attempt !== 0 || originalEvaluation || failure?.code !== "CHAPTER_REVIEW_INCOMPLETE") throw error;
+          await hooks.onCheckCancelled?.();
+          return await finalize();
+        }
       } catch (error) {
         const failure = error as { code?: unknown; reviewOutput?: unknown } | null;
         if (attempt === 0 || !originalEvaluation || failure?.code !== "CHAPTER_REVIEW_INCOMPLETE") throw error;
