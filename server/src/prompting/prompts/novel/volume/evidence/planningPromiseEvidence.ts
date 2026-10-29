@@ -121,6 +121,18 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
         && matchesChapterEvidence(contextIndex, { ...evidence, sourcePath: path }));
       if (candidates.length === 1) evidence.sourcePath = candidates[0];
     }
+    // Candidate scene-card arrays can also be cited with an off-by-one index. Only repair a
+    // path that does not exist at all and whose quote resolves uniquely in the candidate; a
+    // real-but-wrong field is still rejected so arbitrary path laundering stays impossible.
+    const structuralPath = (path: string) => path.replace(/\[\d+\]/g, "[]").replace(/^sceneCards\./, "");
+    for (const evidence of check.candidateEvidence) {
+      if (candidateIndex.leaves.has(evidence.sourcePath)) continue;
+      const target = structuralPath(evidence.sourcePath);
+      const candidates = [...candidateIndex.leaves.keys()].filter(path =>
+        structuralPath(path) === target
+        && matchesChapterEvidence(candidateIndex, { ...evidence, sourcePath: path }));
+      if (candidates.length === 1) evidence.sourcePath = candidates[0];
+    }
     if (check.candidateEvidence.some(evidence => !matchesChapterEvidence(candidateIndex, evidence))
       || check.contextEvidence.some(evidence => !matchesChapterEvidence(contextIndex, evidence))) {
       const badCandidate = check.candidateEvidence.filter(evidence => !matchesChapterEvidence(candidateIndex, evidence));
