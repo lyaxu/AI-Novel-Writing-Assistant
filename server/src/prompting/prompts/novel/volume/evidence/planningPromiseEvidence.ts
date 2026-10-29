@@ -110,6 +110,17 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
         + JSON.stringify(failed.map(evidence => ({ sourcePath: evidence.sourcePath ?? null, quote: (evidence.quote ?? "").slice(0, 80) })))
         + `。"不合格"包括路径不属于该承诺 ${check.sourceId}，或引文在来源里找不到。`);
     }
+    // Written-evidence arrays are windowed (for example only the last few chapters), so a model
+    // may quote chapter 3 while naming the slot that now holds chapter 4. Only relocate between
+    // writtenEvidence chapter-content slots; compressed facts and other source families are not
+    // interchangeable evidence.
+    const writtenChapterPath = (path: string) => /^writtenEvidence\.chapters\[\d+\]\.content$/.test(path);
+    for (const evidence of check.contextEvidence) {
+      if (!writtenChapterPath(evidence.sourcePath) || matchesChapterEvidence(contextIndex, evidence)) continue;
+      const candidates = [...contextIndex.leaves.keys()].filter(path => writtenChapterPath(path)
+        && matchesChapterEvidence(contextIndex, { ...evidence, sourcePath: path }));
+      if (candidates.length === 1) evidence.sourcePath = candidates[0];
+    }
     if (check.candidateEvidence.some(evidence => !matchesChapterEvidence(candidateIndex, evidence))
       || check.contextEvidence.some(evidence => !matchesChapterEvidence(contextIndex, evidence))) {
       const badCandidate = check.candidateEvidence.filter(evidence => !matchesChapterEvidence(candidateIndex, evidence));
