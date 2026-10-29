@@ -4,8 +4,8 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const root = path.resolve(__dirname, '../..');
 const database = path.resolve(root, '../.comparison/2026-10-10/old-test.db');
-const novelId = 'cmv3wyvw40015gow0780pycx9';
-const taskId = 'cmv8d55el0033z8w0hneoiiru';
+const novelId = 'cmvcmyfvt000c14w05b61rm5w';
+const taskId = 'cmvcmumqq000014w0ycmxc44s';
 const profile = {
   root, database, novelId, taskId,
   url: `http://127.0.0.1:5190/novels/${novelId}/edit?directorTaskId=${taskId}`,
