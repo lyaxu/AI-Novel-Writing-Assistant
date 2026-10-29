@@ -16,7 +16,15 @@ import {
 import { openConflictService } from "../../state/OpenConflictService";
 import { normalizeScore, ruleScore } from "../novelP0Utils";
 import { detectProseQuality } from "./proseQuality/ProseQualityDetector";
-import { acceptanceOutputBudget, buildAcceptanceCacheIdentity, buildAcceptancePromptInput, projectCausalAssessment, assertReviewCompleted } from "./acceptance";
+import {
+  acceptanceOutputBudget,
+  assessChapterLengthCompliance,
+  buildAcceptanceCacheIdentity,
+  buildAcceptancePromptInput,
+  projectCausalAssessment,
+  projectPhysicalContinuityAssessment,
+  assertReviewCompleted,
+} from "./acceptance";
 
 export interface ChapterAcceptanceAssessmentInput {
   novelId: string;
@@ -106,10 +114,6 @@ function missingObligationToReviewIssue(obligation: ChapterExecutionMissingOblig
   };
 }
 
-function countChapterCharacters(content: string): number {
-  return content.replace(/\s+/g, "").trim().length;
-}
-
 function includesAnyMarker(text: string, markers: string[]): boolean {
   const normalized = text.toLowerCase();
   return markers.some((marker) => normalized.includes(marker));
@@ -144,6 +148,12 @@ function shouldDropLengthIssue(input: {
   return false;
 }
 
+/**
+ * Deterministic length reconciliation: measured compliance against the existing length
+ * contract, drop stale model length claims that the measurement contradicts, and only add
+ * a program-owned length finding when the measured body is really outside the band.
+ * Old reports without a length contract keep their previous behavior.
+ */
 function reconcileLengthAssessment(
   output: ChapterAcceptanceAssessmentOutput,
   content: string,
@@ -153,21 +163,46 @@ function reconcileLengthAssessment(
   if (range.minWordCount == null && range.maxWordCount == null) {
     return output;
   }
-  const actualWordCount = countChapterCharacters(content);
+  const measured = assessChapterLengthCompliance({ content, range });
+  if (!measured.compliance) {
+    return output;
+  }
+  const actualWordCount = measured.compliance.actualWordCount;
   const blockingIssues = output.blockingIssues.filter((issue) => !shouldDropLengthIssue({
     issue,
     actualWordCount,
     minWordCount: range.minWordCount,
     maxWordCount: range.maxWordCount,
   }));
-  if (blockingIssues.length === output.blockingIssues.length) {
-    return output;
+  const droppedStaleLengthFindings = blockingIssues.length !== output.blockingIssues.length;
+  let riskTags = droppedStaleLengthFindings
+    ? output.riskTags.filter((tag) => !includesAnyMarker(tag, [...UNDER_LENGTH_MARKERS, ...OVER_LENGTH_MARKERS]))
+    : output.riskTags;
+  const repairDirectives = droppedStaleLengthFindings
+    ? output.repairDirectives.filter((directive) => !isLengthDirective(directive))
+    : output.repairDirectives;
+  if (measured.issue) {
+    // The AI's own verified length finding wins; the measured finding only fills a gap.
+    const sameDirection = measured.issue.code.startsWith("length_over")
+      ? blockingIssues.some(isOverLengthIssue)
+      : blockingIssues.some(isUnderLengthIssue);
+    if (!sameDirection) {
+      blockingIssues.push({
+        severity: measured.issue.severity,
+        category: measured.issue.category,
+        code: measured.issue.code,
+        evidence: measured.issue.evidence,
+        fixSuggestion: measured.issue.fixSuggestion,
+      });
+      riskTags = [...new Set([...riskTags, measured.issue.code])];
+    }
   }
   return {
     ...output,
     blockingIssues,
-    repairDirectives: output.repairDirectives.filter((directive) => !isLengthDirective(directive)),
-    riskTags: output.riskTags.filter((tag) => !includesAnyMarker(tag, [...UNDER_LENGTH_MARKERS, ...OVER_LENGTH_MARKERS])),
+    repairDirectives,
+    riskTags: [...new Set(riskTags)],
+    lengthCompliance: measured.compliance,
   };
 }
 
@@ -176,7 +211,9 @@ export function normalizeAssessment(
   content: string,
   targetWordCount?: number | null,
 ): ChapterAcceptanceAssessmentOutput {
-  const reconciled = projectCausalAssessment(reconcileLengthAssessment(output, content, targetWordCount));
+  const reconciled = projectPhysicalContinuityAssessment(
+    projectCausalAssessment(reconcileLengthAssessment(output, content, targetWordCount)),
+  );
   const score = normalizeScore(reconciled.score ?? ruleScore(content));
   const missingObligations = reconciled.missingObligations ?? [];
   const actionableIssues = reconciled.blockingIssues.filter((issue) => !hasUnverifiedSource(issue));
@@ -375,6 +412,8 @@ export class ChapterAcceptanceAssessmentService {
               reviewCorrectionHints: assessment.reviewCorrectionHints ?? [],
               progressionChecks: assessment.progressionChecks ?? [],
               progressionAuditIssues: assessment.progressionAuditIssues ?? [],
+              physicalContinuityChecks: assessment.physicalContinuityChecks ?? [],
+              lengthCompliance: assessment.lengthCompliance ?? null,
             }),
             issues: {
               create: issues.map((issue, index) => ({
@@ -452,6 +491,8 @@ export class ChapterAcceptanceAssessmentService {
           reviewCorrectionHints: assessment.reviewCorrectionHints ?? [],
           progressionChecks: assessment.progressionChecks ?? [],
           progressionAuditIssues: assessment.progressionAuditIssues ?? [],
+          physicalContinuityChecks: assessment.physicalContinuityChecks ?? [],
+          lengthCompliance: assessment.lengthCompliance ?? null,
         }),
         issues: issues.map((issue, index) => ({
           id: `${reportId}:${issue.code || "issue"}:${index + 1}`,

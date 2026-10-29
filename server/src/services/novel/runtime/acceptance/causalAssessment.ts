@@ -32,7 +32,9 @@ export function buildAcceptancePromptInput(input: ChapterAcceptanceAssessmentInp
 
 /** Reserve a bounded evidence allowance; a larger cap does not itself generate more tokens. */
 export function acceptanceOutputBudget(sceneCount: number): number {
-  return 5760 + Math.min(8, Math.max(0, Math.floor(sceneCount))) * 1536;
+  // Base includes the fixed three-dimension progression evidence and the four fixed
+  // physical-continuity rows added in v19; per-scene allowance stays unchanged.
+  return 6784 + Math.min(8, Math.max(0, Math.floor(sceneCount))) * 1536;
 }
 
 /** Deterministic projection of the AI verdict, never a second semantic classifier. */

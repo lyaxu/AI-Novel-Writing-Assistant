@@ -5,18 +5,27 @@ import { collectAcceptanceDiagnostics } from "../reviewDiagnostics";
 import { normalizeSemanticActions, SEMANTIC_ACTION_RULES } from "./actionFacts";
 import { normalizeSemanticScenes, SEMANTIC_SCENE_RULES } from "./sceneFindings";
 import { normalizeRepairFindings, retainStateClaimCoverageDebt, REPAIR_FINDING_RULES } from "./repairFindings";
+import { normalizeSemanticPhysicalChecks, PHYSICAL_CONTINUITY_RULES } from "./physicalContinuity";
 
 function inspect(raw: SemanticChapterAcceptanceOutput, input: ChapterAcceptancePromptInput) {
   const catalog = buildEvidenceCatalog(input);
-  const resolved = resolveAcceptanceReferences({ ...raw, status: "accepted", repairability: "none",
+  // Physical rows carry their own reference shape; they are normalized separately and
+  // must not be resolved twice through the legacy submission contract.
+  const { physicalContinuityChecks: rawPhysicalChecks, ...legacyFields } = raw;
+  const resolved = resolveAcceptanceReferences({ ...legacyFields, status: "accepted", repairability: "none",
     actionStateChecks: [], sceneCausalityVerdicts: [],
   }, input);
   const actions = normalizeSemanticActions(raw.actionStateChecks, catalog);
   const scenes = normalizeSemanticScenes(raw.sceneCausalityVerdicts, actions.checks, catalog);
+  const physical = normalizeSemanticPhysicalChecks(rawPhysicalChecks, catalog);
   const findings = normalizeRepairFindings(raw.issueChecks, {
     ...resolved.output, actionStateChecks: actions.checks, sceneCausalityVerdicts: scenes.scenes,
   }, catalog);
-  const output: ChapterAcceptanceAssessmentOutput = { ...findings.output, reviewSemanticResponse: structuredClone(raw) };
+  const output: ChapterAcceptanceAssessmentOutput = {
+    ...findings.output,
+    reviewSemanticResponse: structuredClone(raw),
+    ...(rawPhysicalChecks === undefined ? {} : { physicalContinuityChecks: physical.checks }),
+  };
   const diagnostics = collectAcceptanceDiagnostics(output, input, { citationMode: "refs" });
   const links = raw.progressionChecks.flatMap((check, index) => check.status === "stalled"
     && !raw.issueChecks?.some(finding => finding.issueId === check.findingIssueId && finding.status === "unresolved")
@@ -35,9 +44,10 @@ function inspect(raw: SemanticChapterAcceptanceOutput, input: ChapterAcceptanceP
       }
     }
   }
-  const problems = [...new Set([...resolved.issues, ...actions.problems, ...scenes.problems,
+  const problems = [...new Set([...resolved.issues, ...actions.problems, ...scenes.problems, ...physical.problems,
     ...findings.problems, ...links, ...diagnostics.problems])];
   const hints = [...diagnostics.correctionHints, ...SEMANTIC_ACTION_RULES, ...SEMANTIC_SCENE_RULES, ...REPAIR_FINDING_RULES,
+    ...(physical.problems.length ? PHYSICAL_CONTINUITY_RULES : []),
     "所有问题同轮纠正，只改审查回答。证据目录绑定本次正文；保留真实负面判断，无法核实则明确未知。不要以删除场景、改选简单行动或修改正文绕过核验。"];
   return { output, diagnostics, problems, hints };
 }
@@ -93,6 +103,16 @@ export function semanticExample(input?: { expectedSceneKeys?: string[] }) {
       priorState: "首章无前章比较", actualChange: "知情后拒签", newConsequence: "", previousEvidence: [], currentEvidence: [],
       explanation: "仅为首章结构示例，后章须核对给定前文。", repairSuggestion: "",
     })),
+    physicalContinuityChecks: [
+      { dimension: "object_container", verdict: "not_applicable", evidence: [],
+        explanation: "示例章节没有搬运、装载或隐藏物品的关键动作，本维度不适用。", fixSuggestion: undefined },
+      { dimension: "action_prerequisite", verdict: "consistent", evidence,
+        explanation: "示例中签字所需笔与文件在行动前已出现在正文，未缺少前置。", fixSuggestion: undefined },
+      { dimension: "physical_environment", verdict: "not_applicable", evidence: [],
+        explanation: "示例没有依赖距离、体力、能源或承重的动作。", fixSuggestion: undefined },
+      { dimension: "continuity_state", verdict: "unknown", evidence,
+        explanation: "本示例未提供前章正文，无法核对人物伤势与持有物是否延续。", fixSuggestion: undefined },
+    ],
     blockingIssues: [], issueChecks: [], repairDirectives: [], missingObligations: [], riskTags: [],
     decisionReason: "无已核实缺陷，可继续。", continuePolicy: "continue",
     assetSyncRecommendation: { priority: "normal", reason: "常规同步。", requiresFullPayoffReconcile: false },

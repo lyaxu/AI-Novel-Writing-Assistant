@@ -22,11 +22,15 @@ function loadSource(relative, overrides = {}) {
 const prefix = 'prompting/prompts/novel/acceptance/semantic/';
 const actions = loadSource(`${prefix}actionFacts.ts`);
 const scenes = loadSource(`${prefix}sceneFindings.ts`);
-const contract = loadSource(`${prefix}reviewContract.ts`, { './actionFacts': actions, './sceneFindings': scenes });
+const physical = loadSource(`${prefix}physicalContinuity.ts`);
+const contract = loadSource(`${prefix}reviewContract.ts`, {
+  './actionFacts': actions, './sceneFindings': scenes, './physicalContinuity': physical,
+});
 const wire = loadSource(`${prefix}wireReview.ts`, { './reviewContract': contract });
-const semantic = { ...require('../../dist/prompting/prompts/novel/acceptance/semantic'), ...actions, ...scenes, ...contract, ...wire };
+const semantic = { ...require('../../dist/prompting/prompts/novel/acceptance/semantic'), ...actions, ...scenes, ...physical, ...contract, ...wire };
 const { chapterAcceptanceAssessmentPrompt: asset, semanticChapterAcceptanceSchema: reviewSchema } = loadSource('prompting/prompts/novel/chapterAcceptance.prompts.ts', {
   './acceptance/semantic': semantic,
+  './acceptance/semantic/physicalContinuity': physical,
 });
 const { appendStructuredOutputHintMessages } = require('../../dist/prompting/core/structuredOutputHint');
 const { actionStateDimensionCheckSchema } = require('@ai-novel/shared/types/novel/sceneCausality');

@@ -23,6 +23,11 @@ import {
   validateSemanticAcceptance, recoverSemanticAcceptance, semanticExample,
   reviewEnvelopeSchema, validateReviewEnvelope, recoverReviewEnvelope, type ReviewEnvelope,
 } from "./acceptance/semantic";
+import {
+  PHYSICAL_CONTINUITY_RULES,
+  physicalContinuityCheckSchema,
+  semanticPhysicalContinuityCheckSchema,
+} from "./acceptance/semantic/physicalContinuity";
 
 const acceptanceSourceEvidenceSchema = z.object({
   source: z.enum(["current_prose", "established_context"]),
@@ -215,6 +220,18 @@ const acceptanceMissingObligationSchema = z.preprocess(normalizeMissingObligatio
     evidence: z.string().trim().min(1).nullable().optional(),
   }));
 
+/** Measured length compliance; computed by the program from the existing length contract. */
+export const chapterLengthComplianceSchema = z.object({
+  targetWordCount: z.number().int().positive().nullable(),
+  actualWordCount: z.number().int().nonnegative(),
+  minWordCount: z.number().int().positive().nullable(),
+  maxWordCount: z.number().int().positive().nullable(),
+  hardMaxWordCount: z.number().int().positive().nullable(),
+  status: z.enum(["within_band", "over_soft", "over_hard", "under_soft"]),
+  excessWordCount: z.number().int().nullable(),
+});
+export type ChapterLengthCompliance = z.infer<typeof chapterLengthComplianceSchema>;
+
 export const chapterAcceptanceAssessmentSchema = z.object({
   status: z.preprocess(
     normalizeAcceptanceStatus,
@@ -234,6 +251,10 @@ export const chapterAcceptanceAssessmentSchema = z.object({
   actionStateAuditIssues: z.array(z.string()).optional(),
   progressionChecks: z.array(chapterProgressionCheckSchema).max(3).optional(),
   progressionAuditIssues: z.array(z.string()).optional(),
+  /** Physical/continuity audit rows; absent on legacy reports and older prompt versions. */
+  physicalContinuityChecks: z.array(physicalContinuityCheckSchema).max(4).optional(),
+  /** Program-owned measurement of the written length against the existing target band. */
+  lengthCompliance: chapterLengthComplianceSchema.optional(),
   reviewContractIssues: z.array(z.string()).optional(),
   reviewRawResponse: z.unknown().optional(),
   reviewFindings: z.array(reviewFindingRecordSchema).optional(),
@@ -328,6 +349,9 @@ export const semanticChapterAcceptanceSchema = unifiedChapterAcceptanceAssessmen
     previousEvidence: tolerantReferenceArray,
     currentEvidence: tolerantReferenceArray,
   })).length(3),
+  // Optional for archived answers and pre-v19 prompts; when present it must cover all
+  // four physical-continuity dimensions exactly once (legacy reports stay readable).
+  physicalContinuityChecks: z.array(semanticPhysicalContinuityCheckSchema).length(4).optional(),
 });
 export type SemanticChapterAcceptanceOutput = z.infer<typeof semanticChapterAcceptanceSchema>;
 
@@ -533,7 +557,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ReviewEnvelope
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v18",
+  version: "v19",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -604,6 +628,9 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       ...REFERENCE_AUDIT_RULES.slice(10),
       "progressionChecks.status=stalled时findingIssueId必须指向已核实unresolved的问题，先核实已有推进为何不够再建议补文；不能让独立repairSuggestion绕开问题核验。",
       "前后章实际推进审查：",
+      "物理连续性与真实世界规则审查：",
+      ...PHYSICAL_CONTINUITY_RULES,
+      "长度符合性由程序按本章目标字数和现有长度合同核验，你不需要自算字数或发明新阈值；如果篇幅问题来自注水、清单式罗列、重复解释或可压缩的无进展对话，归voice或plot记问题，并说明应保留哪些推进。",
       "正文退化检测边界：",
       ...CHAPTER_PROSE_QUALITY_AUDIT_RULES.map((rule, index) => `${index + 1}. ${rule}`),
       "情绪落地审查：",

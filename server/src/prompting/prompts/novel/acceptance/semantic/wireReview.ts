@@ -37,7 +37,7 @@ function inspectableFields(raw: Record<string, unknown>) {
     if (parsed.success && parsed.data !== undefined) fields[key] = parsed.data;
   }
   // Keep independently valid rows for the same correction; don't let one bad row hide the others.
-  for (const key of ["actionStateChecks", "sceneCausalityVerdicts", "progressionChecks", "blockingIssues", "issueChecks", "repairDirectives", "missingObligations"] as const) {
+  for (const key of ["actionStateChecks", "sceneCausalityVerdicts", "progressionChecks", "physicalContinuityChecks", "blockingIssues", "issueChecks", "repairDirectives", "missingObligations"] as const) {
     if (!Array.isArray(raw[key])) continue;
     let schema: z.ZodType = semanticChapterAcceptanceSchema.shape[key];
     while (!(schema instanceof z.ZodArray) && "unwrap" in schema) schema = (schema as z.ZodOptional<z.ZodType>).unwrap();
@@ -62,7 +62,7 @@ function inspectableFields(raw: Record<string, unknown>) {
   candidate.issueChecks = candidate.issueChecks?.map(finding => ({ ...finding,
     issueIndex: indexes.blockingIssues ? indexes.blockingIssues.indexOf(finding.issueIndex) : finding.issueIndex,
   }));
-  const originalPaths = (text: string) => text.replace(/(actionStateChecks|sceneCausalityVerdicts|progressionChecks|blockingIssues|issueChecks|repairDirectives|missingObligations)\[(\d+)\]/g,
+  const originalPaths = (text: string) => text.replace(/(actionStateChecks|sceneCausalityVerdicts|progressionChecks|physicalContinuityChecks|blockingIssues|issueChecks|repairDirectives|missingObligations)\[(\d+)\]/g,
     (whole, key: string, index: string) => indexes[key]?.[Number(index)] === undefined ? whole : `${key}[${indexes[key]![Number(index)]}]`);
   return { candidate, originalPaths, dropped };
 }

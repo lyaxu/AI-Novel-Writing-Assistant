@@ -116,6 +116,7 @@ export function resolveTargetWordRange(targetWordCount: number | null | undefine
   targetWordCount: number | null;
   minWordCount: number | null;
   maxWordCount: number | null;
+  hardMaxWordCount: number | null;
 } {
   const budget = resolveLengthBudgetContract(targetWordCount);
   if (!budget) {
@@ -123,12 +124,14 @@ export function resolveTargetWordRange(targetWordCount: number | null | undefine
       targetWordCount: null,
       minWordCount: null,
       maxWordCount: null,
+      hardMaxWordCount: null,
     };
   }
   return {
     targetWordCount: budget.targetWordCount,
     minWordCount: budget.softMinWordCount,
     maxWordCount: budget.softMaxWordCount,
+    hardMaxWordCount: budget.hardMaxWordCount,
   };
 }
 

@@ -11,6 +11,8 @@ const { assertReviewCompleted } = require('../../dist/services/novel/runtime/acc
 const { runStructuredPrompt, setPromptRunnerStructuredInvokerForTests } = require('../../dist/prompting/core/promptRunner');
 const { loadRuntimeSource } = require('./sourceHarness.cjs');
 const causal = require('../../dist/services/novel/runtime/acceptance/causalAssessment');
+const lengthCompliance = require('../../dist/services/novel/runtime/acceptance/lengthCompliance');
+const physicalProjection = require('../../dist/services/novel/runtime/acceptance/physicalContinuityProjection');
 const { normalizeAssessment } = loadRuntimeSource('ChapterAcceptanceAssessmentService.ts', {
   '../production/actualState': { actualStateDb: {} },
   '../../../prompting/core/promptRunner': {},
@@ -20,7 +22,9 @@ const { normalizeAssessment } = loadRuntimeSource('ChapterAcceptanceAssessmentSe
   '../../../prompting/prompts/novel/chapterAcceptance.prompts': { chapterAcceptanceAssessmentPrompt: asset },
   '../../state/OpenConflictService': {},
   '../novelP0Utils': { normalizeScore: score => score, ruleScore: () => assert.fail('The archived score is supplied') },
-  './proseQuality/ProseQualityDetector': {}, './acceptance': { ...causal, assertReviewCompleted },
+  './proseQuality/ProseQualityDetector': {},
+  './acceptance': { ...causal, assertReviewCompleted, ...lengthCompliance,
+    projectPhysicalContinuityAssessment: physicalProjection.projectPhysicalContinuityAssessment },
 });
 
 const input = structuredClone(require('./fixtures/secondChapterReview.json').input);

@@ -23,6 +23,9 @@ function valid() {
   state.after.evidence = state.resultChange.basis.evidence = [ref(1)];
   raw.sceneCausalityVerdicts[0].choiceAndResistance.evidence = [ref(1)];
   raw.sceneCausalityVerdicts[0].constraints[0].evidence = [ref(2)];
+  raw.physicalContinuityChecks = raw.physicalContinuityChecks.map(row => ({
+    ...row, evidence: row.verdict === 'not_applicable' ? [] : [ref(1)],
+  }));
   return raw;
 }
 function failure(raw) {

@@ -57,8 +57,8 @@ test("prompt and cache coverage derive only from persisted causal scenes", () =>
 });
 
 test("evidence output allowance scales within the eight-scene contract", () => {
-  assert.equal(acceptanceOutputBudget(0), 5760);
-  assert.equal(acceptanceOutputBudget(3), 10368);
-  assert.equal(acceptanceOutputBudget(8), 18048);
-  assert.equal(acceptanceOutputBudget(100), 18048);
+  assert.equal(acceptanceOutputBudget(0), 6784);
+  assert.equal(acceptanceOutputBudget(3), 11392);
+  assert.equal(acceptanceOutputBudget(8), 19072);
+  assert.equal(acceptanceOutputBudget(100), 19072);
 });

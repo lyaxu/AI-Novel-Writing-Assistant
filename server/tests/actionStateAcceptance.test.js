@@ -56,10 +56,14 @@ const semanticScenes = source("../src/prompting/prompts/novel/acceptance/semanti
 const repairFindings = source("../src/prompting/prompts/novel/acceptance/semantic/repairFindings.ts", {
   "../evidenceCatalog": evidenceCatalog,
 });
+const physicalContinuity = source("../src/prompting/prompts/novel/acceptance/semantic/physicalContinuity.ts", {
+  "../evidenceCatalog": evidenceCatalog,
+});
 const semanticReview = source("../src/prompting/prompts/novel/acceptance/semantic/reviewContract.ts", {
   "../evidenceCatalog": evidenceCatalog, "../referenceAssessment": referenceAssessment,
   "../reviewDiagnostics": reviewDiagnostics, "./actionFacts": semanticActions,
   "./sceneFindings": semanticScenes, "./repairFindings": repairFindings,
+  "./physicalContinuity": physicalContinuity,
 });
 const wireReview = source("../src/prompting/prompts/novel/acceptance/semantic/wireReview.ts", {
   "../../chapterAcceptance.prompts": { get semanticChapterAcceptanceSchema() { return rawPrompts.semanticChapterAcceptanceSchema; } },
@@ -83,11 +87,14 @@ const rawPrompts = source("../src/prompting/prompts/novel/chapterAcceptance.prom
   "./acceptance/reviewDiagnostics": reviewDiagnostics,
   "./acceptance/reviewContract": reviewContract,
   "./acceptance/semantic": { ...semanticActions, ...semanticScenes, ...repairFindings, ...semanticReview, ...wireReview },
+  "./acceptance/semantic/physicalContinuity": physicalContinuity,
 });
 // Quote-based fixtures exercise resolved validation; the production ID-only wire has separate tests.
 const { asset: resolvedAsset, productionAsset } = require("./novelProduction/resolvedAcceptanceHarness.cjs")
   .createResolvedAcceptanceHarness(rawPrompts);
 const prompts = { ...rawPrompts, chapterAcceptanceAssessmentPrompt: resolvedAsset };
+const lengthCompliance = source("../src/services/novel/runtime/acceptance/lengthCompliance.ts");
+const physicalProjection = source("../src/services/novel/runtime/acceptance/physicalContinuityProjection.ts");
 let modelOutput;
 const service = source("../src/services/novel/runtime/ChapterAcceptanceAssessmentService.ts", {
   "../production/actualState": { actualStateDb: {} },
@@ -99,7 +106,9 @@ const service = source("../src/services/novel/runtime/ChapterAcceptanceAssessmen
   "../../state/OpenConflictService": { openConflictService: {} },
   "../novelP0Utils": { normalizeScore: (x) => x, ruleScore: () => scores() },
   "./proseQuality/ProseQualityDetector": { detectProseQuality: () => ({ findings: [] }) },
-  "./acceptance": { ...causal, ...source("../src/services/novel/runtime/acceptance/reviewCompletion.ts"), buildAcceptanceCacheIdentity: async () => "mock" },
+  "./acceptance": { ...causal, ...source("../src/services/novel/runtime/acceptance/reviewCompletion.ts"),
+    ...lengthCompliance, projectPhysicalContinuityAssessment: physicalProjection.projectPhysicalContinuityAssessment,
+    buildAcceptanceCacheIdentity: async () => "mock" },
 });
 const scores = () => ({ coherence: 95, pacing: 95, repetition: 95, engagement: 95, voice: 95, overall: 95 });
 const quote = (text, source = "current_prose", sourceId = "c2") => ({ source, sourceId, quote: text });
@@ -413,8 +422,8 @@ test("fresh prompt has a full compact state example, relevant dimensions only, a
   assert.equal(parsedExample.success, true, JSON.stringify(parsedExample.error?.issues));
   assert.match(String(rendered[0].content), /before\/after及两个basis都使用同一事实结构/);
   assert.match(String(rendered[0].content), /编号只证明引用来源，不自动证明主体、维度、事实或时间正确/);
-  assert.equal(causal.acceptanceOutputBudget(3), 10368);
-  assert.equal(causal.acceptanceOutputBudget(100), 18048);
+  assert.equal(causal.acceptanceOutputBudget(3), 11392);
+  assert.equal(causal.acceptanceOutputBudget(100), 19072);
 });
 
 test("uniform prompt input carries only actual prior prose with exact chapter IDs", () => {

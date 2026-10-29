@@ -23,6 +23,8 @@ const causal = source("../src/services/novel/runtime/acceptance/causalAssessment
   "./actionStateProjection": source("../src/services/novel/runtime/acceptance/actionStateProjection.ts"),
   "./progressionProjection": source("../src/services/novel/runtime/acceptance/progressionProjection.ts"),
 });
+const lengthCompliance = source("../src/services/novel/runtime/acceptance/lengthCompliance.ts");
+const physicalProjection = source("../src/services/novel/runtime/acceptance/physicalContinuityProjection.ts");
 const rows = [];
 const service = source("../src/services/novel/runtime/ChapterAcceptanceAssessmentService.ts", {
   "../production/actualState": { actualStateDb: {
@@ -42,7 +44,8 @@ const service = source("../src/services/novel/runtime/ChapterAcceptanceAssessmen
   "../../state/OpenConflictService": { openConflictService: { syncFromAuditReports: async () => {} } },
   "../novelP0Utils": { normalizeScore: (value) => value },
   "./proseQuality/ProseQualityDetector": {},
-  "./acceptance": { ...causal, ...source("../src/services/novel/runtime/acceptance/reviewCompletion.ts") },
+  "./acceptance": { ...causal, ...source("../src/services/novel/runtime/acceptance/reviewCompletion.ts"),
+    ...lengthCompliance, projectPhysicalContinuityAssessment: physicalProjection.projectPhysicalContinuityAssessment },
 });
 const pipeline = source("../src/services/novel/runtime/chapterRuntimePipeline.ts", {
   "../production/reliability": { productionStep: async (_key, action) => action() },
