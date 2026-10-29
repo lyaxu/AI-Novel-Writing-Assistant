@@ -147,7 +147,13 @@ export function validateChapterPayoffDecisions(
     seen.add(decision.ledgerKey);
     const due = candidate.currentStatus === "overdue"
       || (typeof candidate.targetEndChapterOrder === "number" && candidate.targetEndChapterOrder <= input.chapterOrder);
-    if (due && ["seed", "touch", "pressure"].includes(decision.operation) && !decision.followUp) {
+    // A due payoff that the current contract itself forbids cannot have a legal future landing
+    // supplied by this plan. Keeping it as pressure records the debt without inventing a future
+    // chapter; the ledger still carries it for a later authorized plan. Any non-contract evidence
+    // or seed/touch operation still requires the normal follow-up.
+    const contractForbidden = decision.contractEvidence.sourcePath === "mustAvoid";
+    if (due && ["seed", "touch", "pressure"].includes(decision.operation) && !decision.followUp
+      && !(decision.operation === "pressure" && contractForbidden)) {
       throw new Error(`Unpaid due payoff requires a concrete follow-up even when applying pressure: ${decision.ledgerKey}`);
     }
     const evidenceLeaves = contractFieldText(input.contract[decision.contractEvidence.sourcePath]);

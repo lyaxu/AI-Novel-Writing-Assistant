@@ -30,6 +30,7 @@ Book Contract 的 `chapter3Payoff / chapter10Payoff / chapter30Payoff` 是 Payof
 - AI 对账完成后必须执行 Book Contract 固定来源的生命周期收口。尚未终结、未被本轮输出复用且来源全部属于 `book_contract.*` 的旧账项，在来源被移除或被新账项接管时退出当前正文义务。
 - 退出义务的旧账项复用 `failed / 已失效` 状态，并记录 `source_superseded` 风险原因。原始标题、来源引用和兑现证据必须保留；`paid_off` 永不退役，混合其他有效来源的账项保守保留。
 - `source_superseded` 账项跳过 `sync_stale` 标记，并且后续重复同步不得反复改变其终态。它们不进入 pending、urgent、overdue 分类，也不生成开放 Payoff 冲突。
+- 到期回报若被当前章节合同 `mustAvoid` 明确禁止兑现，允许以 `pressure` 保留债务且不要求虚构 `followUp`；这是显式质量债，账本继续保留该义务，供后续获得授权再承接。`seed`/`touch`/其他到期未兑仍必须有真实未来章节承接，非合同证据不得借用这条放宽。
 
 ## Replan Gate
 

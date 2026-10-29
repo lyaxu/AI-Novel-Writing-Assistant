@@ -19,6 +19,17 @@ test("explicit payoff/partial authorization passes while due pressure without fo
   assert.equal(validateChapterPayoffDecisions({ ...input, decisions: [{ ...decision, operation: "partial_reveal", remainingObligation: "完整应用待第四章", followUp: { chapterOrder: 4, expectedChange: "获得完整应用", planningQuote: "第四章兑现听风奖励" } }] })[0].operation, "partial_reveal");
 });
 
+test("a contract-forbidden due payoff may stay pressure without inventing a future chapter", () => {
+  const mustAvoid = "不得让劳梓凡在本章救出老赵或进入废车场；不得提前揭示收单会调度员身份或通道目的";
+  const forbidden = { ...decision, operation: "pressure",
+    contractEvidence: { sourcePath: "mustAvoid", quote: mustAvoid } };
+  const value = { ...input, contract: { mustAvoid }, decisions: [forbidden] };
+  assert.equal(validateChapterPayoffDecisions(value)[0].operation, "pressure");
+  assert.throws(() => validateChapterPayoffDecisions({ ...value, decisions: [{ ...forbidden, operation: "seed" }] }), /Unpaid due payoff/);
+  assert.throws(() => validateChapterPayoffDecisions({ ...value, decisions: [{ ...forbidden,
+    contractEvidence: { sourcePath: "taskSheet", quote: mustAvoid } }] }), /Unpaid due payoff/);
+});
+
 test("deferral requires an exact future chapter reference, not an invented later promise", () => {
   const delayed = { ...decision, operation: "defer", followUp: { chapterOrder: 4, expectedChange: "第四章获得能力", planningQuote: "第四章兑现听风奖励" } };
   assert.equal(validateChapterPayoffDecisions({ ...input, decisions: [delayed] })[0].operation, "defer");
