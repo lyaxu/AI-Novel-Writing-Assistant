@@ -114,17 +114,18 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
     // may quote chapter 3 while naming the slot that now holds chapter 4. Only relocate between
     // writtenEvidence chapter-content slots; compressed facts and other source families are not
     // interchangeable evidence.
-    const writtenChapterPath = (path: string) => /^writtenEvidence\.chapters\[\d+\]\.content$/.test(path);
+    const structuralPath = (path: string) => path.replace(/\[\d+\]/g, "[]").replace(/^sceneCards\./, "");
     for (const evidence of check.contextEvidence) {
-      if (!writtenChapterPath(evidence.sourcePath) || matchesChapterEvidence(contextIndex, evidence)) continue;
-      const candidates = [...contextIndex.leaves.keys()].filter(path => writtenChapterPath(path)
+      if (matchesChapterEvidence(contextIndex, evidence)) continue;
+      const target = structuralPath(evidence.sourcePath);
+      const candidates = [...contextIndex.leaves.keys()].filter(path =>
+        structuralPath(path) === target
         && matchesChapterEvidence(contextIndex, { ...evidence, sourcePath: path }));
       if (candidates.length === 1) evidence.sourcePath = candidates[0];
     }
     // Candidate scene-card arrays can also be cited with an off-by-one index. Only repair a
     // path that does not exist at all and whose quote resolves uniquely in the candidate; a
     // real-but-wrong field is still rejected so arbitrary path laundering stays impossible.
-    const structuralPath = (path: string) => path.replace(/\[\d+\]/g, "[]").replace(/^sceneCards\./, "");
     for (const evidence of check.candidateEvidence) {
       if (candidateIndex.leaves.has(evidence.sourcePath)) continue;
       const target = structuralPath(evidence.sourcePath);
