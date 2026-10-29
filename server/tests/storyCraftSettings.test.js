@@ -105,6 +105,10 @@ test("generic story craft defaults are genre-neutral and cover the four engineer
   assert.ok(writingText.includes("正文写作底线"));
   assert.ok(writingText.includes("每次使用都要有可见代价"));
   assert.equal(writingText.includes("三、人物规划"), false);
+  // Writer scope must not repeat the planning checklist that produces formulaic prose.
+  assert.equal(writingText.includes("二、章节义务"), false);
+  assert.ok(writingText.includes("前置条件"));
+  assert.ok(writingText.includes("不要逐条复述成清单式旁白"));
 
   const reviewText = renderStoryCraftContractText(DEFAULT_STORY_CRAFT_DEFAULTS, "review");
   assert.ok(reviewText.includes("规划复核元规则"));

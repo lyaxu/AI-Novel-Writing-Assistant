@@ -156,6 +156,19 @@ export function validateChapterPayoffDecisions(
       && !(decision.operation === "pressure" && contractForbidden)) {
       throw new Error(`Unpaid due payoff requires a concrete follow-up even when applying pressure: ${decision.ledgerKey}`);
     }
+    // The decision may quote a real contract sentence while naming the wrong contract field
+    // (common when the same event appears in both taskSheet and scene cards). If exactly one
+    // field contains the verbatim quote, relocate the citation instead of failing the chapter;
+    // a quote that appears in no field is still rejected below.
+    const contractFields = ["expectation", "taskSheet", "sceneCards", "hook", "mustAvoid"] as const;
+    if (!citesQuote(contractFieldText(input.contract[decision.contractEvidence.sourcePath]), decision.contractEvidence.quote)) {
+      const matches = contractFields.filter((field) =>
+        field !== decision.contractEvidence.sourcePath
+        && citesQuote(contractFieldText(input.contract[field]), decision.contractEvidence.quote));
+      if (matches.length === 1) {
+        decision.contractEvidence = { ...decision.contractEvidence, sourcePath: matches[0] };
+      }
+    }
     const evidenceLeaves = contractFieldText(input.contract[decision.contractEvidence.sourcePath]);
     if (!citesQuote(evidenceLeaves, decision.contractEvidence.quote)) {
       // Show what the field actually says. The message previously only asked for a verbatim quote,

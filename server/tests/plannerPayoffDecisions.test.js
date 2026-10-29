@@ -41,6 +41,18 @@ test("deferral requires an exact future chapter reference, not an invented later
   assert.equal(validateChapterPayoffDecisions({ ...input, decisions: [{ ...decision, operation: "out_of_scope", reason: "当前任务单属于另一条支线" }] })[0].operation, "out_of_scope");
 });
 
+test("a payoff quote that exists in one contract field is relocated instead of rejected", () => {
+  const quote = "劳梓凡拆义体腿备用电池改镇妖法器，腿失去动力。";
+  const sceneCards = JSON.stringify({ scenes: [{ key: "s1", turn: "白蘅点破引雷符笔法" }] });
+  const value = { ...input, contract: { taskSheet: quote, sceneCards },
+    decisions: [{ ...decision, operation: "payoff", contractEvidence: { sourcePath: "sceneCards", quote } }] };
+  const result = validateChapterPayoffDecisions(value);
+  assert.equal(result[0].contractEvidence.sourcePath, "taskSheet");
+  assert.throws(() => validateChapterPayoffDecisions({ ...value,
+    decisions: [{ ...value.decisions[0], contractEvidence: { sourcePath: "sceneCards", quote: "合同里没有的句子" } }] }),
+  /cites absent current chapter contract evidence/);
+});
+
 test("a replan request justified only by an explicit contract prohibition becomes pressure debt", () => {
   const mustAvoid = "不得让劳梓凡在本章救出老赵或进入废车场；不得提前揭示收单会调度员身份或通道目的";
   const replanDecision = { ...decision, operation: "requires_replan",

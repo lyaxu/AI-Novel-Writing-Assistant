@@ -152,10 +152,11 @@ export function renderStoryCraftContractText(
 
   const sections: string[][] = [];
   if (scope === "writing") {
-    sections.push(renderPressureContract(settings));
-    sections.push(renderChapterObligations(settings));
+    // Pressure pacing and chapter-obligation coverage are planning/review contracts. Repeating
+    // them as a checklist inside the prose prompt makes the writer satisfy beats mechanically,
+    // which reads formulaic and AI-like. Keep only the rules that shape the prose itself.
     sections.push(renderSpecialAbility(settings));
-    const writingSection = ["五、人物使用边界"];
+    const writingSection = ["五、写作落地与连续性"];
     if (settings.characterPlanning.enabled) {
       writingSection.push(
         "- 正文只使用本章任务单、角色事实和已写正文允许出场的角色，不得擅自新增核心角色、扩大人物规模或让未登记角色承担主线功能。",
@@ -164,9 +165,12 @@ export function renderStoryCraftContractText(
     if (settings.specialAbility.enabled && settings.specialAbility.requireVisibleCost) {
       writingSection.push("- 本章使用或展示特殊能力时，必须同时写明代价、限制或风险，不能只写爽点。");
     }
-    if (writingSection.length > 1) {
-      sections.push(writingSection);
-    }
+    writingSection.push(
+      "- 规划中的压力推进和章节义务用于校准方向，正文要用具体动作、对话和场景变化自然呈现；不要逐条复述成清单式旁白、总结句或模板化情绪。",
+      "- 写作前核对本章关键动作的前置条件与物品状态（画符要落笔、容器要能装下、装备/体力/权限要成立），不要跳过必要动作或凭空使用道具。",
+      "- 保持与已写正文一致的人物口吻、句式和视角；具体感官细节优先，少用解释性总结。",
+    );
+    sections.push(writingSection);
   } else {
     sections.push(renderPressureContract(settings));
     sections.push(renderChapterObligations(settings));

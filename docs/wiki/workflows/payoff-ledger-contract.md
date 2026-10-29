@@ -31,6 +31,7 @@ Book Contract 的 `chapter3Payoff / chapter10Payoff / chapter30Payoff` 是 Payof
 - 退出义务的旧账项复用 `failed / 已失效` 状态，并记录 `source_superseded` 风险原因。原始标题、来源引用和兑现证据必须保留；`paid_off` 永不退役，混合其他有效来源的账项保守保留。
 - `source_superseded` 账项跳过 `sync_stale` 标记，并且后续重复同步不得反复改变其终态。它们不进入 pending、urgent、overdue 分类，也不生成开放 Payoff 冲突。
 - 到期回报若被当前章节合同 `mustAvoid` 明确禁止兑现，允许以 `pressure` 保留债务且不要求虚构 `followUp`；这是显式质量债，账本继续保留该义务，供后续获得授权再承接。`seed`/`touch`/其他到期未兑仍必须有真实未来章节承接，非合同证据不得借用这条放宽。
+- 回报决策引用合同证据时，若原句确实存在于合同、只是 `sourcePath` 指错了字段（如原文在 `taskSheet` 却写成 `sceneCards`），适配层在“唯一字段命中”时自动校正路径；所有字段都找不到的引文仍拒绝，不能借纠错放行伪造证据。
 - 若模型对这类“仅因本章合同禁止”的回报输出 `requires_replan`，校验收口阶段会把它转换为 `pressure` 质量债，而不是向管线抛重规划错误（否则会被未知外部调用分类包装成“外部调用中断”）。其他证据来源的 `requires_replan` 仍原样抛 `PayoffPlanningReplanRequiredError`。
 
 ## Replan Gate
