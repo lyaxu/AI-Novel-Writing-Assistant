@@ -192,9 +192,23 @@ export function validateChapterPayoffDecisions(
   if (input.candidates.some((item) => !seen.has(item.ledgerKey))) {
     throw new Error("Payoff decisions must cover every supplied bounded candidate, including explicit out_of_scope decisions.");
   }
-  const replan = decisions.filter((decision) => decision.operation === "requires_replan");
+  // A replan request whose only basis is the current contract's explicit prohibition is a local
+  // debt, not a missing global plan: convert it to pressure so the chapter can proceed while the
+  // ledger keeps the obligation. Replan requests based on anything else still reach the caller.
+  const normalized = decisions.map((decision): ChapterPayoffDecision => {
+    if (decision.operation !== "requires_replan" || decision.contractEvidence.sourcePath !== "mustAvoid") return decision;
+    return {
+      ledgerKey: decision.ledgerKey,
+      operation: "pressure",
+      reason: `${decision.reason}（本章合同明确禁止兑现该回报，按合同压力/质量债保留，待后续授权承接。）`,
+      authorizedScope: decision.authorizedScope,
+      contractEvidence: decision.contractEvidence,
+      followUp: null,
+    } as ChapterPayoffDecision;
+  });
+  const replan = normalized.filter((decision) => decision.operation === "requires_replan");
   if (replan.length && !options.allowReplan) throw new PayoffPlanningReplanRequiredError(replan);
-  return decisions;
+  return normalized;
 }
 
 export function readCurrentPayoffDecisions(rawPlanJson: string | null | undefined, input: {

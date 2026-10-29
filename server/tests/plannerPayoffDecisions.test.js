@@ -41,6 +41,19 @@ test("deferral requires an exact future chapter reference, not an invented later
   assert.equal(validateChapterPayoffDecisions({ ...input, decisions: [{ ...decision, operation: "out_of_scope", reason: "当前任务单属于另一条支线" }] })[0].operation, "out_of_scope");
 });
 
+test("a replan request justified only by an explicit contract prohibition becomes pressure debt", () => {
+  const mustAvoid = "不得让劳梓凡在本章救出老赵或进入废车场；不得提前揭示收单会调度员身份或通道目的";
+  const replanDecision = { ...decision, operation: "requires_replan",
+    contractEvidence: { sourcePath: "mustAvoid", quote: mustAvoid } };
+  const result = validateChapterPayoffDecisions({ ...input, contract: { mustAvoid }, decisions: [replanDecision] });
+  assert.equal(result[0].operation, "pressure");
+  assert.equal(result[0].followUp, null);
+  assert.match(result[0].reason, /质量债/);
+  // A replan based on non-prohibition evidence still reaches the replan gate.
+  assert.throws(() => validateChapterPayoffDecisions({ ...input, decisions: [{ ...replanDecision,
+    contractEvidence: { sourcePath: "taskSheet", quote: decision.contractEvidence.quote } }] }), PayoffPlanningReplanRequiredError);
+});
+
 test("a verbatim quote from sceneCards is accepted even though raw JSON escapes it", () => {
   // Reported failure at chapter 3: "Payoff decision cites absent current chapter contract evidence".
   // The quote was verbatim, but the check searched the raw JSON serialization, where a quotation
