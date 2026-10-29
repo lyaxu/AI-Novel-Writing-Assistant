@@ -7,6 +7,12 @@ import type {
 } from "@ai-novel/shared/types/novel";
 import { parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
 import type { StoryMacroPlan } from "@ai-novel/shared/types/storyMacro";
+import {
+  buildVolumeChapterBudget,
+  findVolumeChapterBudgetEntry,
+  formatVolumeChapterBudgetLines,
+  type VolumeChapterBudget,
+} from "@ai-novel/shared/types/planningScale";
 import { renderCharacterPlanningFoundation, renderMacroPlanningFoundation } from "./context/planningFoundations";
 import type {
   ChapterDetailMode,
@@ -118,6 +124,17 @@ function summarizeCharacters(novel: VolumeGenerationNovel): string {
   return renderCharacterPlanningFoundation(novel.characters);
 }
 
+/** 全书分卷预算：优先使用完成度档案的整书目标，其次小说基础信息。 */
+function resolveNovelVolumeChapterBudget(novel: VolumeGenerationNovel): VolumeChapterBudget | null {
+  const targetChapterCount = novel.completionProfile?.targetChapterCount
+    ?? novel.estimatedChapterCount
+    ?? null;
+  if (typeof targetChapterCount !== "number" || !Number.isFinite(targetChapterCount) || targetChapterCount <= 0) {
+    return null;
+  }
+  return buildVolumeChapterBudget(targetChapterCount);
+}
+
 export function buildCommonNovelContext(novel: VolumeGenerationNovel): string {
   const commercialTags = parseCommercialTags(novel.commercialTagsJson);
   const completion = novel.completionProfile;
@@ -127,6 +144,7 @@ export function buildCommonNovelContext(novel: VolumeGenerationNovel): string {
   const structureLine = completion?.mode === "compact_book"
     ? `compact book structure: three acts; target ${completion.targetChapterCount} chapters; closure required by chapter ${completion.endingRequiredBy}; up to ${completion.maxChapterCount} chapters may be used for closing.`
     : "serial structure: staged continuation; preserve the next-stage reading pull.";
+  const volumeBudget = resolveNovelVolumeChapterBudget(novel);
   return [
     `title: ${novel.title}`,
     `genre: ${novel.genre?.name ?? "unset"}`,
@@ -136,6 +154,9 @@ export function buildCommonNovelContext(novel: VolumeGenerationNovel): string {
     `selling point: ${compactText(novel.bookSellingPoint)}`,
     `${promiseLabel}: ${compactText(novel.first30ChapterPromise)}`,
     structureLine,
+    volumeBudget
+      ? `book volume budget (deterministic; every volume plan and chapter split must respect it):\n${formatVolumeChapterBudgetLines(volumeBudget).join("\n")}`
+      : "",
     `narrative pov: ${compactText(novel.narrativePov, "unset")}`,
     `pace preference: ${compactText(novel.pacePreference, "unset")}`,
     `emotion intensity: ${compactText(novel.emotionIntensity, "unset")}`,
@@ -260,6 +281,8 @@ export function buildStoryMacroContext(storyMacroPlan: StoryMacroPlan | null): s
 }
 
 export function buildVolumeCountGuidanceContext(volumeCountGuidance: VolumeCountGuidance): string {
+  const volumeChapterBudget = volumeCountGuidance.volumeChapterBudget
+    ?? buildVolumeChapterBudget(volumeCountGuidance.chapterBudget);
   return [
     `chapter budget: ${volumeCountGuidance.chapterBudget}`,
     `target chapter range per volume: ${volumeCountGuidance.targetChapterRange.min}-${volumeCountGuidance.targetChapterRange.max} chapters (ideal ${volumeCountGuidance.targetChapterRange.ideal})`,
@@ -272,6 +295,33 @@ export function buildVolumeCountGuidanceContext(volumeCountGuidance: VolumeCount
     `hard planned volume range: ${volumeCountGuidance.hardPlannedVolumeRange.min}-${volumeCountGuidance.hardPlannedVolumeRange.max}`,
     `user preferred volume count: ${volumeCountGuidance.userPreferredVolumeCount ?? "none"}`,
     `respected existing volume count: ${volumeCountGuidance.respectedExistingVolumeCount ?? "none"}`,
+    "",
+    "deterministic volume chapter budget (must be followed by volume skeleton and chapter splitting):",
+    ...formatVolumeChapterBudgetLines(volumeChapterBudget),
+  ].join("\n");
+}
+
+/** 分卷拆章时定位目标卷的章节预算，明确告诉 AI 本卷允许拆出多少章。 */
+export function buildTargetVolumeChapterBudgetContext(input: {
+  novel: VolumeGenerationNovel;
+  volumeOrder: number;
+  volumeTitle?: string | null;
+}): string {
+  const targetChapterCount = input.novel.completionProfile?.targetChapterCount
+    ?? input.novel.estimatedChapterCount
+    ?? null;
+  if (typeof targetChapterCount !== "number" || !Number.isFinite(targetChapterCount) || targetChapterCount <= 0) {
+    return "none";
+  }
+  const budget = buildVolumeChapterBudget(targetChapterCount);
+  const entry = findVolumeChapterBudgetEntry(budget, input.volumeOrder);
+  if (!entry) {
+    return "none";
+  }
+  return [
+    `全书目标章节数：${budget.targetChapterCount} 章，共 ${budget.volumeCount} 卷`,
+    `本卷预算：第 ${entry.volumeOrder} 卷${input.volumeTitle?.trim() ? `《${input.volumeTitle.trim()}》` : ""}应拆 ${entry.chapterCount} 章（全书第 ${entry.startChapter}-${entry.endChapter} 章）`,
+    "拆章必须按本卷章数预算分配，不能把所有章节都挤进第一卷，也不能把本卷拆成明显超出或少于预算的章数。",
   ].join("\n");
 }
 

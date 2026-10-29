@@ -308,6 +308,8 @@ export const macroConstraintContextSchema = z.object({
   growthPath: z.string(),
   endingFlavor: z.string(),
   hardConstraints: z.array(z.string()).default([]),
+  /** 本章必须安排的伏笔动作（写作侧精简提示；不含未到回收章的作者真相）。 */
+  chapterForeshadowActions: z.array(z.string()).optional(),
 });
 
 export const volumeKeyMilestoneGuardSchema = z.object({

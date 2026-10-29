@@ -6,7 +6,6 @@ import { Switch } from "@/components/ui/switch";
 import {
   AI_FREEDOM_OPTIONS,
   BASIC_INFO_FIELD_HINTS,
-  DEFAULT_ESTIMATED_CHAPTER_COUNT,
   EMOTION_OPTIONS,
   PACE_OPTIONS,
   POV_OPTIONS,
@@ -24,6 +23,7 @@ import {
   findOptionSummary,
 } from "./basicInfoForm/BasicInfoFormPrimitives";
 import BookPositioningStudio from "./basicInfoForm/BookPositioningStudio";
+import ChapterLengthPresetField from "./basicInfoForm/ChapterLengthPresetField";
 import CollapsibleSummary from "./CollapsibleSummary";
 import { ContinuationSourceSection } from "./basicInfoForm/ContinuationSourceSection";
 import SelectControl from "@/components/common/SelectControl";
@@ -183,27 +183,14 @@ export default function NovelBasicInfoForm(props: NovelBasicInfoFormProps) {
             />
             <div className="text-xs text-muted-foreground">推荐先设为 2500-3500，后续仍可按章节单独调整。</div>
           </div>
-
-          <div className="space-y-2">
-            <FieldLabel htmlFor="basic-estimated-chapters" hint={BASIC_INFO_FIELD_HINTS.estimatedChapterCount}>
-              预计章节数
-            </FieldLabel>
-            <Input
-              id="basic-estimated-chapters"
-              type="number"
-              min={1}
-              max={2000}
-              value={basicForm.estimatedChapterCount}
-              onChange={(event) => onFormChange({
-                estimatedChapterCount: Math.max(
-                  1,
-                  Math.min(2000, Number(event.target.value || 0) || DEFAULT_ESTIMATED_CHAPTER_COUNT),
-                ),
-              })}
-            />
-            <div className="text-xs text-muted-foreground">会作为大纲、拍点和流水线默认范围的参考，后续仍可调整。</div>
-          </div>
         </div>
+
+        <ChapterLengthPresetField
+          basicForm={basicForm}
+          onFormChange={onFormChange}
+          inputId="basic-estimated-chapters"
+          hint={BASIC_INFO_FIELD_HINTS.estimatedChapterCount}
+        />
 
         <div className="grid gap-3 md:grid-cols-2">
           <div className="space-y-2">

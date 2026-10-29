@@ -1,5 +1,9 @@
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { StoryPlanLevel } from "@ai-novel/shared/types/novel";
+import {
+  extractForeshadowTokenIds,
+  type ChapterForeshadowAction,
+} from "@ai-novel/shared/types/storyPlanningFramework";
 import type { PromptAsset } from "../../core/promptTypes";
 import { normalizePlannerOutput, type PlannerOutput } from "../../../services/planner/plannerOutputNormalization";
 import { plannerOutputSchema } from "../../../services/planner/plannerSchemas";
@@ -8,6 +12,8 @@ import { buildPayoffFollowUpGuidance, validateChapterPayoffDecisions, type Chapt
 interface PlannerPlanPromptInput {
   scopeLabel: string;
   payoffValidation?: ChapterPayoffValidationInput;
+  /** 本章必须安排的伏笔动作；仅在拆章/规划提供伏笔表时存在。 */
+  foreshadowActions?: ChapterForeshadowAction[];
 }
 
 function buildPlannerPlanAsset(input: {
@@ -121,6 +127,9 @@ function buildPlannerPlanAsset(input: {
         input.includeScenes
           ? "10. scenes 必须按顺序组织，且每一项都要能直接给写作阶段使用，不要写成概念标签。"
           : "10. 由于当前层级不要求场景细化，scenes 必须为空数组。",
+        ...(input.planLevel === "chapter" && promptInput.foreshadowActions?.length ? [
+          `11. 本章有 ${promptInput.foreshadowActions.length} 条伏笔动作必须在章纲中安排：把每条动作写入 mustAdvance，并在对应条目开头原样带上它自己的 [伏笔:Fxx] 标记；未到回收章时只能给可见线索，不得说破作者真相。`,
+        ] : []),
         "",
         "故事模式规则：",
         "1. 当上下文存在故事模式约束时，primary mode 视为硬约束，secondary mode 只能作为轻量风味层。",
@@ -196,6 +205,17 @@ function buildPlannerPlanAsset(input: {
         if ((normalized.scenes ?? []).length === 0) {
           throw new Error(`Chapter planner output is missing scenes. planLevel=${input.planLevel}; scenes 实际长度 ${(normalized.scenes ?? []).length}，本章至少需要一个场景。`);
         }
+        if (promptInput.foreshadowActions?.length) {
+          const citedIds = new Set(extractForeshadowTokenIds((normalized.mustAdvance ?? []).join("\n")));
+          const missingIds = promptInput.foreshadowActions
+            .map((action) => action.entry.id)
+            .filter((id) => !citedIds.has(id));
+          if (missingIds.length > 0) {
+            throw new Error(
+              `Chapter planner output did not schedule foreshadow actions: 缺少 ${missingIds.map((id) => `[伏笔:${id}]`).join("、")}。请把每条伏笔动作写入 mustAdvance，并以对应的 [伏笔:Fxx] 标记开头。`,
+            );
+          }
+        }
       }
 
       if (!input.includeScenes && (normalized.scenes ?? []).length > 0) {
@@ -244,7 +264,7 @@ export const plannerArcPlanPrompt = buildPlannerPlanAsset({
 
 export const plannerChapterPlanPrompt = buildPlannerPlanAsset({
   id: "planner.chapter.plan",
-  version: "v6",
+  version: "v7",
   planLevel: "chapter",
   includeScenes: true,
   maxTokensBudget: 2400,

@@ -7,6 +7,14 @@ import type {
   StoryMacroState,
   StoryMacroPhase,
 } from "@ai-novel/shared/types/storyMacro";
+import type {
+  ForeshadowScheduleEntry,
+  StoryBookBlueprint,
+} from "@ai-novel/shared/types/storyPlanningFramework";
+import {
+  normalizeForeshadowSchedule,
+  normalizeStoryBookBlueprint,
+} from "@ai-novel/shared/types/storyPlanningFramework";
 import {
   EMPTY_STATE,
   progressionPhasesSchema,
@@ -41,6 +49,8 @@ interface PersistedConstraintPayload {
   progressionPhases?: unknown;
   constraints?: unknown;
   engine?: unknown;
+  bookBlueprint?: unknown;
+  foreshadowSchedule?: unknown;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -173,12 +183,16 @@ export function serializeConstraintPayload(input: {
   constraintEngine: StoryConstraintEngine | null;
   bookStoryFoundation?: BookStoryFoundation;
   progressionPhases?: StoryMacroPhase[];
+  bookBlueprint?: StoryBookBlueprint | null;
+  foreshadowSchedule?: ForeshadowScheduleEntry[] | null;
 }): string {
   return JSON.stringify({
     constraints: input.constraints,
     engine: input.constraintEngine,
     bookStoryFoundation: input.bookStoryFoundation,
     progressionPhases: input.progressionPhases,
+    bookBlueprint: input.bookBlueprint ?? undefined,
+    foreshadowSchedule: input.foreshadowSchedule?.length ? input.foreshadowSchedule : undefined,
   });
 }
 
@@ -194,6 +208,8 @@ export function mapRowToPlan(row: PersistedPlanRow): StoryMacroPlan {
   const expansion = deriveExpansion(rawExpansion, rawDecomposition, rawConstraintPayload);
   const decomposition = deriveDecomposition(rawDecomposition);
   const constraints = normalizeConstraints(rawConstraintPayload.constraints);
+  const bookBlueprint = normalizeStoryBookBlueprint(rawConstraintPayload.bookBlueprint);
+  const foreshadowSchedule = normalizeForeshadowSchedule(rawConstraintPayload.foreshadowSchedule);
   return {
     id: row.id,
     novelId: row.novelId,
@@ -203,6 +219,8 @@ export function mapRowToPlan(row: PersistedPlanRow): StoryMacroPlan {
     expansion,
     decomposition,
     constraints,
+    ...(bookBlueprint ? { bookBlueprint } : {}),
+    ...(foreshadowSchedule.length > 0 ? { foreshadowSchedule } : {}),
     issues: normalizeIssues(safeParseJSON(row.issuesJson, [])),
     lockedFields: normalizeLockedFields(safeParseJSON(row.lockedFieldsJson, {})),
     constraintEngine: deriveConstraintEngine(expansion, decomposition, constraints, rawConstraintPayload.engine, bookStoryFoundation, progressionPhases),

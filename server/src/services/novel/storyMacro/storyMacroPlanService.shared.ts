@@ -1,5 +1,9 @@
 import type { StoryMacroField, StoryMacroFieldValue, StoryMacroPlan } from "@ai-novel/shared/types/storyMacro";
 import type { NovelStoryMode } from "@ai-novel/shared/types/storyMode";
+import {
+  buildVolumeChapterBudget,
+  formatVolumeChapterBudgetLines,
+} from "@ai-novel/shared/types/planningScale";
 import { buildBookFramingSummary } from "../bookFraming";
 import { buildStoryModePromptBlock } from "../../storyMode/storyModeProfile";
 import {
@@ -36,6 +40,9 @@ export function formatProjectContext(novel: StoryMacroNovelContext, worldSliceCo
     primary: novel.primaryStoryMode,
     secondary: novel.secondaryStoryMode,
   });
+  const volumeBudget = novel.estimatedChapterCount
+    ? buildVolumeChapterBudget(novel.estimatedChapterCount)
+    : null;
 
   return [
     novel.title ? `项目标题：${novel.title}` : "",
@@ -47,6 +54,9 @@ export function formatProjectContext(novel: StoryMacroNovelContext, worldSliceCo
     novel.pacePreference ? `节奏偏好：${novel.pacePreference}` : "",
     novel.emotionIntensity ? `情绪强度：${novel.emotionIntensity}` : "",
     novel.estimatedChapterCount ? `预计章节数：${novel.estimatedChapterCount}` : "",
+    volumeBudget
+      ? `全书分卷预算（五阶段章范围必须落在这个预算内）：\n${formatVolumeChapterBudgetLines(volumeBudget).join("\n")}`
+      : "",
     worldSliceContext.trim(),
   ].filter(Boolean).join("\n");
 }

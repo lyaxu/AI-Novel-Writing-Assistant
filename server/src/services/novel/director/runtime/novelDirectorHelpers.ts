@@ -38,6 +38,7 @@ import type { NovelWorkflowResumeTarget } from "@ai-novel/shared/types/novelWork
 import type { DirectorBookContractParsed } from "./novelDirectorSchemas";
 import type { DirectorCompletionProfile } from "@ai-novel/shared/types/directorCompletion";
 import { buildDirectorCompletionProfile } from "@ai-novel/shared/types/directorCompletion";
+import { DEFAULT_ESTIMATED_CHAPTER_COUNT } from "@ai-novel/shared/types/planningScale";
 
 export type LLMOptions = Pick<DirectorCandidatesRequest, "provider" | "model" | "temperature">;
 
@@ -148,7 +149,10 @@ export function applyDirectorRunModeContract<T extends {
   };
 }
 
-export function normalizeDirectorTargetChapterCount(value: number | null | undefined, fallback = 80): number {
+export function normalizeDirectorTargetChapterCount(
+  value: number | null | undefined,
+  fallback = DEFAULT_ESTIMATED_CHAPTER_COUNT,
+): number {
   const numericValue = typeof value === "number" && Number.isFinite(value) ? value : fallback;
   return Math.max(
     DIRECTOR_MIN_TARGET_CHAPTER_COUNT,
@@ -550,7 +554,7 @@ export function buildWorkflowSeedPayload(
     ? normalizeDirectorAutoApprovalConfig(input.autoApproval)
     : null;
   const completionProfile = input.completionProfile
-    ?? buildDirectorCompletionProfile(basicForm.estimatedChapterCount ?? 80);
+    ?? buildDirectorCompletionProfile(basicForm.estimatedChapterCount ?? DEFAULT_ESTIMATED_CHAPTER_COUNT);
   return {
     title: basicForm.title || null,
     description: basicForm.description || null,

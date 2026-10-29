@@ -1,5 +1,13 @@
 import { createContextBlock } from "../../../core/contextBudget";
 import type { PromptContextBlock } from "../../../core/promptTypes";
+import {
+  renderChapterForeshadowActionsContext,
+  renderForeshadowScheduleSummary,
+  selectForeshadowActionsForChapter,
+  selectForeshadowActionsForChapterRange,
+  type ChapterForeshadowAction,
+} from "@ai-novel/shared/types/storyPlanningFramework";
+import { buildVolumeChapterBudget, formatVolumeChapterBudgetLines } from "@ai-novel/shared/types/planningScale";
 import { renderSelectedPlanningDirection } from "./context/planningFoundations";
 import { buildPrimaryProseCitationCatalog } from "./evidence/primaryProseCitationCatalog";
 import {
@@ -14,6 +22,7 @@ import {
   buildConflictLevelCurveContext,
   buildCompactVolumeCard,
   buildRecentChapterExecutionContext,
+  buildTargetVolumeChapterBudgetContext,
   buildVolumeCountGuidanceContext,
   buildSoftFutureVolumeSummary,
   buildStoryMacroContext,
@@ -38,6 +47,50 @@ function guidanceBlock(guidance?: string): PromptContextBlock | null {
     priority: 70,
     content: `User guidance:\n${guidance.trim()}`,
   });
+}
+
+function buildDeterministicVolumeBudgetContent(input: {
+  chapterBudget: number;
+  volumeChapterBudget?: import("@ai-novel/shared/types/planningScale").VolumeChapterBudget;
+}): string {
+  const budget = input.volumeChapterBudget ?? buildVolumeChapterBudget(input.chapterBudget);
+  return [
+    "已确定的整书分卷章节预算（拆章硬约束，不能把章节都挤进第一卷）：",
+    ...formatVolumeChapterBudgetLines(budget),
+  ].join("\n");
+}
+
+function collectChapterRangeForeshadowActions(input: {
+  storyMacroPlan: VolumeChapterListPromptInput["storyMacroPlan"];
+  startOrder: number;
+  endOrder: number;
+}): ChapterForeshadowAction[] {
+  if (!input.storyMacroPlan?.foreshadowSchedule?.length) {
+    return [];
+  }
+  return selectForeshadowActionsForChapterRange(
+    input.storyMacroPlan.foreshadowSchedule,
+    input.startOrder,
+    input.endOrder,
+  );
+}
+
+function buildVolumeForeshadowScheduleContent(input: {
+  storyMacroPlan: VolumeChapterListPromptInput["storyMacroPlan"];
+  startOrder: number;
+  endOrder: number;
+}): string {
+  const schedule = input.storyMacroPlan?.foreshadowSchedule ?? [];
+  const rangeActions = collectChapterRangeForeshadowActions(input);
+  return [
+    "全书核心伏笔/谜团表（规划约束：埋设、推进、回收章按表执行）：",
+    renderForeshadowScheduleSummary(schedule),
+    "",
+    `本次拆章范围（第 ${input.startOrder}-${input.endOrder} 章）内必须落实的伏笔动作：`,
+    renderChapterForeshadowActionsContext({ chapterOrder: input.startOrder, actions: rangeActions }),
+    "",
+    "拆章时必须在对应章序安排这些动作；不能把埋设、推进或回收合并到其他章，也不能把所有伏笔都挤到第一卷。",
+  ].join("\n");
 }
 
 export function buildVolumeStrategyContextBlocks(input: VolumeStrategyPromptInput): PromptContextBlock[] {
@@ -164,7 +217,10 @@ export function buildVolumeSkeletonContextBlocks(input: VolumeSkeletonPromptInpu
       priority: 94,
       required: true,
       allowSummary: false,
-      content: `Chapter budget: ${input.chapterBudget}`,
+      content: buildDeterministicVolumeBudgetContent({
+        chapterBudget: input.chapterBudget,
+        volumeChapterBudget: input.volumeCountGuidance.volumeChapterBudget,
+      }),
     }),
     guidanceBlock(input.guidance),
   ].filter((block): block is PromptContextBlock => Boolean(block));
@@ -303,6 +359,32 @@ export function buildVolumeChapterListContextBlocks(input: VolumeChapterListProm
       content: `Locked existing beat summary:\n${buildBeatChapterSummary(input.preservedBeatChapterSummary)}`,
     }),
     createContextBlock({
+      id: "volume_chapter_budget",
+      group: "volume_chapter_budget",
+      priority: 95,
+      required: true,
+      allowSummary: false,
+      content: buildTargetVolumeChapterBudgetContext({
+        novel: input.novel,
+        volumeOrder: input.targetVolume.sortOrder,
+        volumeTitle: input.targetVolume.title,
+      }),
+    }),
+    ...(input.storyMacroPlan?.foreshadowSchedule?.length
+      ? [createContextBlock({
+        id: "foreshadow_schedule",
+        group: "foreshadow_schedule",
+        priority: 97,
+        required: true,
+        allowSummary: false,
+        content: buildVolumeForeshadowScheduleContent({
+          storyMacroPlan: input.storyMacroPlan,
+          startOrder: input.targetChapterStartOrder,
+          endOrder: input.targetChapterEndOrder,
+        }),
+      })]
+      : []),
+    createContextBlock({
       id: "conflict_level_curve",
       group: "conflict_level_curve",
       priority: 96,
@@ -353,6 +435,22 @@ export function buildVolumeChapterDetailContextBlocks(input: VolumeChapterDetail
       priority: 96,
       content: `Target beat sheet:\n${buildBeatSheetContext(input.targetBeatSheet)}`,
     }),
+    ...(input.storyMacroPlan?.foreshadowSchedule?.length
+      ? [createContextBlock({
+        id: "chapter_foreshadow_actions",
+        group: "chapter_foreshadow_actions",
+        priority: 98,
+        required: true,
+        allowSummary: false,
+        content: renderChapterForeshadowActionsContext({
+          chapterOrder: input.targetChapter.chapterOrder,
+          actions: selectForeshadowActionsForChapter(
+            input.storyMacroPlan.foreshadowSchedule,
+            input.targetChapter.chapterOrder,
+          ),
+        }),
+      })]
+      : []),
     createContextBlock({
       id: "chapter_neighbors",
       group: "chapter_neighbors",

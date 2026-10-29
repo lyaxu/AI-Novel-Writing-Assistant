@@ -1,4 +1,5 @@
 import { buildDirectorCompletionProfile } from "@ai-novel/shared/types/directorCompletion";
+import { DEFAULT_ESTIMATED_CHAPTER_COUNT } from "@ai-novel/shared/types/planningScale";
 import { prisma } from "../../../../db/prisma";
 import { plannerService } from "../../../planner/PlannerService";
 import { ChapterPlanJITService, type ChapterPlanJITDeps } from "../../planning/ChapterPlanJITService";
@@ -57,7 +58,7 @@ export class ChapterExecutionPreparationService {
           temperature: request.temperature,
           taskId: request.workflowTaskId,
           prepareRouteWindow: isAutopilot,
-          completionProfile: isAutopilot ? buildDirectorCompletionProfile(estimatedChapterCount ?? 80) : undefined,
+          completionProfile: isAutopilot ? buildDirectorCompletionProfile(estimatedChapterCount ?? DEFAULT_ESTIMATED_CHAPTER_COUNT) : undefined,
         });
         await currentProductionSession()?.bindPrepared({ stage: "execution_contract" });
       }, true);

@@ -151,7 +151,7 @@ test("prompt registry exposes versioned planning assets", () => {
     "agent.runtime.fallback_answer@v1",
     "agent.runtime.setup_guidance@v1",
     "agent.runtime.setup_ideation@v1",
-    "planner.chapter.plan@v6",
+    "planner.chapter.plan@v7",
     "novel.director.candidates@v6",
     "novel.director.candidate_patch@v5",
     "novel.director.blueprint@v1",
@@ -163,7 +163,7 @@ test("prompt registry exposes versioned planning assets", () => {
     "novel.character.mind.snapshot@v1",
     "novel.character.influence.options@v1",
     "novel.character.dialogue.turn@v1",
-    "novel.story_macro.decomposition@v2",
+    "novel.story_macro.decomposition@v3",
     "novel.volume.strategy@v4",
     "novel.volume.strategy.critique@v3",
     "novel.volume.skeleton@v5",
@@ -213,7 +213,7 @@ test("prompt registry exposes versioned planning assets", () => {
     assert.ok(getRegisteredPromptAsset(id, version), `missing prompt asset ${key}`);
   }
 
-  const chapterAsset = getRegisteredPromptAsset("planner.chapter.plan", "v6");
+  const chapterAsset = getRegisteredPromptAsset("planner.chapter.plan", "v7");
   assert.ok(chapterAsset);
   assert.equal(chapterAsset.taskType, "planner");
 });
@@ -675,7 +675,7 @@ test("novel main-chain prompt assets declare explicit non-zero context budgets",
     ["novel.director.candidates@v6", NOVEL_PROMPT_BUDGETS.directorCandidates],
     ["novel.director.candidate_patch@v5", NOVEL_PROMPT_BUDGETS.directorCandidatePatch],
     ["novel.director.blueprint@v1", NOVEL_PROMPT_BUDGETS.directorBlueprint],
-    ["novel.story_macro.decomposition@v2", NOVEL_PROMPT_BUDGETS.storyMacroDecomposition],
+    ["novel.story_macro.decomposition@v3", NOVEL_PROMPT_BUDGETS.storyMacroDecomposition],
     ["novel.story_macro.field_regeneration@v2", NOVEL_PROMPT_BUDGETS.storyMacroFieldRegeneration],
     ["novel.volume.strategy@v4", NOVEL_PROMPT_BUDGETS.volumeStrategy],
     ["novel.volume.strategy.critique@v3", NOVEL_PROMPT_BUDGETS.volumeStrategyCritique],

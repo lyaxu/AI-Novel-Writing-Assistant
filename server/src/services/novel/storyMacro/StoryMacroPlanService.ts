@@ -1,6 +1,16 @@
 import type { BookStoryFoundation } from "@ai-novel/shared/types/novel/bookStoryFoundation";
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import type {
+  ForeshadowScheduleEntry,
+  StoryBookBlueprint,
+} from "@ai-novel/shared/types/storyPlanningFramework";
+import {
+  normalizeForeshadowSchedule,
+  normalizeStoryBookBlueprint,
+  validateStoryFramework,
+} from "@ai-novel/shared/types/storyPlanningFramework";
+import { DEFAULT_ESTIMATED_CHAPTER_COUNT } from "@ai-novel/shared/types/planningScale";
+import type {
   StoryDecomposition,
   StoryExpansion,
   StoryMacroField,
@@ -137,6 +147,8 @@ export class StoryMacroPlanService {
       issues?: StoryMacroIssue[];
       lockedFields?: StoryMacroLocks;
       constraintEngine?: ReturnType<typeof buildStoryConstraintEngine> | null;
+      bookBlueprint?: StoryBookBlueprint | null;
+      foreshadowSchedule?: ForeshadowScheduleEntry[] | null;
       state?: StoryMacroState;
     },
   ): Promise<StoryMacroPlan> {
@@ -150,6 +162,20 @@ export class StoryMacroPlanService {
     const nextConstraintEngine = input.constraintEngine !== undefined
       ? input.constraintEngine
       : (previousPlan?.constraintEngine ?? null);
+    const bookBlueprint = input.bookBlueprint !== undefined
+      ? input.bookBlueprint
+      : (previousPlan?.bookBlueprint ?? null);
+    const foreshadowSchedule = input.foreshadowSchedule !== undefined
+      ? input.foreshadowSchedule
+      : (previousPlan?.foreshadowSchedule ?? null);
+    const constraintPayload = serializeConstraintPayload({
+      bookStoryFoundation,
+      progressionPhases,
+      constraints: nextConstraints,
+      constraintEngine: nextConstraintEngine,
+      bookBlueprint,
+      foreshadowSchedule,
+    });
     const row = await prisma.storyMacroPlan.upsert({
       where: { novelId },
       create: {
@@ -159,12 +185,7 @@ export class StoryMacroPlanService {
         decompositionJson: input.decomposition ? JSON.stringify(input.decomposition) : null,
         issuesJson: JSON.stringify(input.issues ?? []),
         lockedFieldsJson: JSON.stringify(input.lockedFields ?? {}),
-        constraintEngineJson: serializeConstraintPayload({
-          bookStoryFoundation,
-          progressionPhases,
-          constraints: nextConstraints,
-          constraintEngine: nextConstraintEngine,
-        }),
+        constraintEngineJson: constraintPayload,
         stateJson: JSON.stringify(input.state ?? EMPTY_STATE),
       },
       update: {
@@ -174,14 +195,8 @@ export class StoryMacroPlanService {
         ...(input.issues !== undefined ? { issuesJson: JSON.stringify(input.issues) } : {}),
         ...(input.lockedFields !== undefined ? { lockedFieldsJson: JSON.stringify(input.lockedFields) } : {}),
         ...(input.constraints !== undefined || input.constraintEngine !== undefined || input.bookStoryFoundation !== undefined || input.progressionPhases !== undefined
-          ? {
-              constraintEngineJson: serializeConstraintPayload({
-                bookStoryFoundation,
-                progressionPhases,
-                constraints: nextConstraints,
-                constraintEngine: nextConstraintEngine,
-              }),
-            }
+          || input.bookBlueprint !== undefined || input.foreshadowSchedule !== undefined
+          ? { constraintEngineJson: constraintPayload }
           : {}),
         ...(input.state !== undefined ? { stateJson: JSON.stringify(input.state) } : {}),
       },
@@ -193,7 +208,12 @@ export class StoryMacroPlanService {
     storyInput: string,
     projectContext: string,
     options: LLMOptions,
-  ): Promise<{ plan: StoryMacroEditablePlan; issues: StoryMacroIssue[] }> {
+  ): Promise<{
+    plan: StoryMacroEditablePlan;
+    bookBlueprint: StoryBookBlueprint | null;
+    foreshadowSchedule: ForeshadowScheduleEntry[];
+    issues: StoryMacroIssue[];
+  }> {
     const parsed = await runStructuredPrompt({
       asset: storyMacroDecompositionPrompt,
       promptInput: {
@@ -222,6 +242,8 @@ export class StoryMacroPlanService {
         decomposition: normalizeDecomposition(parsed.output.decomposition),
         constraints: normalizeConstraints(parsed.output.constraints),
       },
+      bookBlueprint: normalizeStoryBookBlueprint(parsed.output.bookBlueprint),
+      foreshadowSchedule: normalizeForeshadowSchedule(parsed.output.foreshadowSchedule),
       issues: normalizeIssues(parsed.output.issues),
     };
   }
@@ -312,6 +334,11 @@ export class StoryMacroPlanService {
     const constraintEngine = isDecompositionComplete(merged.decomposition)
       ? buildStoryConstraintEngine(merged)
       : null;
+    const frameworkIssues = validateStoryFramework({
+      bookBlueprint: generated.bookBlueprint,
+      foreshadowSchedule: generated.foreshadowSchedule,
+      targetChapterCount: novel.estimatedChapterCount ?? DEFAULT_ESTIMATED_CHAPTER_COUNT,
+    }).filter((issue) => issue.severity === "error");
     return this.savePlan(novelId, {
       bookStoryFoundation: merged.bookStoryFoundation,
       progressionPhases: merged.progressionPhases,
@@ -319,9 +346,18 @@ export class StoryMacroPlanService {
       expansion: merged.expansion,
       decomposition: merged.decomposition,
       constraints: merged.constraints,
-      issues: generated.issues,
+      issues: [
+        ...generated.issues,
+        ...frameworkIssues.map((issue) => ({
+          type: "missing_info" as const,
+          field: "global" as const,
+          message: issue.message,
+        })),
+      ],
       lockedFields: locks,
       constraintEngine,
+      bookBlueprint: generated.bookBlueprint,
+      foreshadowSchedule: generated.foreshadowSchedule,
       state: previousPlan?.state ?? EMPTY_STATE,
     });
   }

@@ -1,4 +1,5 @@
 import type { BookStoryFoundation } from "./novel/bookStoryFoundation";
+import type { ForeshadowScheduleEntry, StoryBookBlueprint } from "./storyPlanningFramework";
 
 export type StoryMacroField =
   | "expanded_premise"
@@ -100,6 +101,10 @@ export interface StoryMacroPlan {
   issues: StoryMacroIssue[];
   lockedFields: StoryMacroLocks;
   constraintEngine?: StoryConstraintEngine | null;
+  /** 全书五阶段大底与结局契约；老书没有该字段时保持 undefined。 */
+  bookBlueprint?: StoryBookBlueprint | null;
+  /** 核心伏笔/谜团表；老书没有该字段时保持 undefined。 */
+  foreshadowSchedule?: ForeshadowScheduleEntry[] | null;
   state: StoryMacroState;
   createdAt: string;
   updatedAt: string;

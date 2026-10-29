@@ -2,6 +2,10 @@ import { renderBookStoryFoundation } from "../../bookFoundation";
 import type { StoryMacroPlan } from "@ai-novel/shared/types/storyMacro";
 import type { VolumeGenerationNovel } from "../../../../../services/novel/volume/volumeModels";
 import type { SelectedPlanningDirection } from "@ai-novel/shared/types/novel/planningPromises";
+import {
+  renderForeshadowScheduleSummary,
+  renderStoryBookBlueprintSummary,
+} from "@ai-novel/shared/types/storyPlanningFramework";
 
 export function renderSelectedPlanningDirection(source?: SelectedPlanningDirection): string {
   return [
@@ -60,7 +64,13 @@ export function renderMacroPlanningFoundation(plan: StoryMacroPlan): string {
       } : undefined,
       constraints: list(plan.constraints, 8, 240),
     }),
-  ].join("\n");
+    plan.bookBlueprint
+      ? `全书五阶段框架（规划约束；章范围与分卷预算必须一致）：\n${renderStoryBookBlueprintSummary(plan.bookBlueprint)}`
+      : "",
+    plan.foreshadowSchedule?.length
+      ? `全书核心伏笔/谜团表（规划约束；正文未揭示的作者真相不得提前说破）：\n${renderForeshadowScheduleSummary(plan.foreshadowSchedule)}`
+      : "",
+  ].filter(Boolean).join("\n");
 }
 
 type PlanningCharacter = VolumeGenerationNovel["characters"][number];

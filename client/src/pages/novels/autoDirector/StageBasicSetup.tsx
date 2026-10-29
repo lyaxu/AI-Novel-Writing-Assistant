@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { NovelBasicFormState } from "../novelBasicInfo.shared";
 import {
   BASIC_INFO_FIELD_HINTS,
@@ -9,11 +8,11 @@ import {
   READER_CHANNEL_OPTIONS,
   WRITING_PLATFORM_OPTIONS,
 } from "../novelBasicInfo.shared";
-import { parseEstimatedChapterCountInput } from "./estimatedChapterCountInput";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AUTO_DIRECTOR_MOBILE_CLASSES } from "@/mobile/autoDirector";
 import { BookFramingQuickFillButton } from "../components/basicInfoForm/BookFramingQuickFillButton";
+import ChapterLengthPresetField from "../components/basicInfoForm/ChapterLengthPresetField";
 import {
   FieldLabel,
   findOptionSummary,
@@ -37,7 +36,6 @@ export default function StageBasicSetup({
   onBack,
   onConfirm,
 }: StageBasicSetupProps) {
-  const [estimatedChapterCountDraft, setEstimatedChapterCountDraft] = useState<string | null>(null);
   const hasLargeChapterPlan = basicForm.estimatedChapterCount > 200;
   const controlClassName = "w-full rounded-lg border-0 bg-muted/40 px-3 py-2.5 text-sm outline-none ring-1 ring-transparent transition hover:bg-muted/55 focus:bg-background focus:ring-2 focus:ring-primary/25";
 
@@ -175,28 +173,14 @@ export default function StageBasicSetup({
           </div>
         </div>
 
-        <div className="space-y-2">
-          <FieldLabel htmlFor="director-basic-estimated" hint={BASIC_INFO_FIELD_HINTS.estimatedChapterCount}>预计章节数</FieldLabel>
-          <Input
-            id="director-basic-estimated"
-            type="number"
-            min={1}
-            max={2000}
-            className={controlClassName}
-            value={estimatedChapterCountDraft ?? String(basicForm.estimatedChapterCount)}
-            onChange={(event) => {
-              const draft = event.target.value;
-              setEstimatedChapterCountDraft(draft);
-              const estimatedChapterCount = parseEstimatedChapterCountInput(draft);
-              if (estimatedChapterCount !== null) {
-                onBasicFormChange({ estimatedChapterCount });
-              }
-            }}
-            onBlur={() => setEstimatedChapterCountDraft(null)}
+        <div className="space-y-2 md:col-span-2">
+          <ChapterLengthPresetField
+            basicForm={basicForm}
+            onFormChange={onBasicFormChange}
+            inputId="director-basic-estimated"
+            inputClassName={controlClassName}
+            hint={BASIC_INFO_FIELD_HINTS.estimatedChapterCount}
           />
-          <div className={`text-xs text-muted-foreground ${AUTO_DIRECTOR_MOBILE_CLASSES.wrapText}`}>
-            会作为整书结构密度和后续卷章规划的参考，不是硬性上限。
-          </div>
           {basicForm.estimatedChapterCount <= 60 ? (
             <div className={`rounded-lg bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-900 ${AUTO_DIRECTOR_MOBILE_CLASSES.wrapText}`}>
               紧凑全书模式：AI 会在有限篇幅内完成完整结局，必要时最多追加 5 章收尾。

@@ -7,6 +7,7 @@ import type { NarrativeForm } from "./creationStudio";
 import type { WritingPlatform } from "./writingPlatform";
 import type { DirectorRiskHistoryItem } from "./directorRisk";
 import type { ChapterQualityDebtDetails } from "./chapterQualityLoop";
+import type { VolumeChapterBudget } from "./planningScale";
 export type {
   BaseCharacter,
   Character,
@@ -876,6 +877,8 @@ export interface VolumeCountGuidance {
   hardPlannedVolumeRange: VolumeCountRange;
   userPreferredVolumeCount?: number | null;
   respectedExistingVolumeCount?: number | null;
+  /** 确定性分卷预算（按约 50 章一卷均分）；旧调用方可不传，提示层会按 chapterBudget 现算。 */
+  volumeChapterBudget?: VolumeChapterBudget;
 }
 
 export interface VolumeStrategyVolume {

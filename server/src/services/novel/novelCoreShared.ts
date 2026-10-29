@@ -285,7 +285,12 @@ const CONTINUATION_ANALYSIS_SECTION_KEYS: BookAnalysisSectionKey[] = [
 ];
 
 const CONTINUATION_ANALYSIS_SECTION_KEY_SET = new Set<BookAnalysisSectionKey>(CONTINUATION_ANALYSIS_SECTION_KEYS);
-export const DEFAULT_ESTIMATED_CHAPTER_COUNT = 80;
+export {
+  DEFAULT_ESTIMATED_CHAPTER_COUNT,
+  MAX_ESTIMATED_CHAPTER_COUNT,
+  MIN_ESTIMATED_CHAPTER_COUNT,
+  normalizeEstimatedChapterCount,
+} from "@ai-novel/shared/types/planningScale";
 
 export function normalizeNovelOutput<T extends {
   continuationBookAnalysisSections?: string | null;

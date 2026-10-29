@@ -103,6 +103,12 @@ export function renderStoryMacroText(macro: MacroConstraintContext): string {
     `结局味道：${displayPromptValue(macro.endingFlavor)}`,
     renderBookStoryFoundation(macro.bookStoryFoundation),
     macro.hardConstraints.length > 0 ? `硬性约束：${macro.hardConstraints.join(" | ")}` : "",
+    (macro.chapterForeshadowActions?.length ?? 0) > 0
+      ? [
+        "本章伏笔动作（正文必须安排；[伏笔:Fxx] 是规划标记，正文绝不能出现）：",
+        ...(macro.chapterForeshadowActions ?? []).map((action) => `- ${action}`),
+      ].join("\n")
+      : "",
   ].filter(Boolean).join("\n");
 }
 

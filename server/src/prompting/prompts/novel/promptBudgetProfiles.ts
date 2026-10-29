@@ -5,7 +5,7 @@ export const NOVEL_PROMPT_BUDGETS = {
   directorCandidatePatch: 1200,
   directorBookContract: 1400,
   directorBlueprint: 2400,
-  storyMacroDecomposition: 1800,
+  storyMacroDecomposition: 2200,
   storyMacroFieldRegeneration: 1600,
   volumeStrategy: 2100,
   volumeStrategyCritique: 1800,

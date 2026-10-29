@@ -1,3 +1,5 @@
+import { DEFAULT_ESTIMATED_CHAPTER_COUNT } from "./planningScale.js";
+
 export type DirectorCompletionMode = "compact_book" | "serial_book";
 
 export type DirectorPromiseScope = "whole_book" | "first_30_chapters";
@@ -14,7 +16,9 @@ export interface DirectorCompletionProfile {
 }
 
 export function buildDirectorCompletionProfile(targetChapterCount: number): DirectorCompletionProfile {
-  const target = Math.max(1, Math.round(Number.isFinite(targetChapterCount) ? targetChapterCount : 80));
+  const target = Math.max(1, Math.round(
+    Number.isFinite(targetChapterCount) ? targetChapterCount : DEFAULT_ESTIMATED_CHAPTER_COUNT,
+  ));
   const compact = target <= 60;
   return {
     mode: compact ? "compact_book" : "serial_book",
@@ -28,7 +32,7 @@ export function buildDirectorCompletionProfile(targetChapterCount: number): Dire
 
 export function normalizeDirectorCompletionProfile(
   profile: Partial<DirectorCompletionProfile> | null | undefined,
-  fallbackTargetChapterCount = 80,
+  fallbackTargetChapterCount = DEFAULT_ESTIMATED_CHAPTER_COUNT,
 ): DirectorCompletionProfile {
   const target = typeof profile?.targetChapterCount === "number"
     ? profile.targetChapterCount

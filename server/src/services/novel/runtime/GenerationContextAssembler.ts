@@ -1,5 +1,6 @@
 import type { GenerationContextPackage } from "@ai-novel/shared/types/chapterRuntime";
 import { buildDirectorCompletionProfile } from "@ai-novel/shared/types/directorCompletion";
+import { DEFAULT_ESTIMATED_CHAPTER_COUNT } from "@ai-novel/shared/types/planningScale";
 import { buildCompressionLog } from "../../../prompting/core/contextBudget";
 import { prisma } from "../../../db/prisma";
 import { ragServices } from "../../rag";
@@ -346,7 +347,7 @@ export class GenerationContextAssembler {
         chapter30Payoff: novel.bookContract?.chapter30Payoff,
       }),
       ...(() => {
-        const completion = buildDirectorCompletionProfile(novel.estimatedChapterCount ?? 80);
+        const completion = buildDirectorCompletionProfile(novel.estimatedChapterCount ?? DEFAULT_ESTIMATED_CHAPTER_COUNT);
         return {
           completionMode: completion.mode,
           promiseScope: completion.promiseScope,
@@ -355,7 +356,7 @@ export class GenerationContextAssembler {
         };
       })(),
     });
-    const macroConstraints = buildMacroConstraintContext(storyMacroPlan);
+    const macroConstraints = buildMacroConstraintContext(storyMacroPlan, { chapterOrder: chapter.order });
     const productionFoundationPrompt = [
       novel.genre?.name ? `题材基底：${novel.genre.name}` : "",
       novel.genre?.description ? `题材定位：${novel.genre.description}` : "",

@@ -1,5 +1,6 @@
 import type { LLMProvider } from "@ai-novel/shared/types/llm";
 import type { StoryPlanLevel } from "@ai-novel/shared/types/novel";
+import type { ChapterForeshadowAction } from "@ai-novel/shared/types/storyPlanningFramework";
 import { runStructuredPrompt } from "../../prompting/core/promptRunner";
 import type { PromptContextBlock } from "../../prompting/core/promptTypes";
 import { normalizePlannerOutput, type PlannerOutput } from "./plannerOutputNormalization";
@@ -22,6 +23,7 @@ export async function invokePlannerLLM(input: {
   planLevel: StoryPlanLevel;
   contextBlocks: PromptContextBlock[];
   payoffValidation?: ChapterPayoffValidationInput;
+  foreshadowActions?: ChapterForeshadowAction[];
   attribution?: { novelId: string; chapterId?: string };
 }): Promise<PlannerOutput> {
   const asset = input.planLevel === "book"
@@ -34,6 +36,7 @@ export async function invokePlannerLLM(input: {
     promptInput: {
       scopeLabel: input.scopeLabel,
       payoffValidation: input.payoffValidation,
+      foreshadowActions: input.foreshadowActions,
     },
     contextBlocks: input.contextBlocks,
     options: {

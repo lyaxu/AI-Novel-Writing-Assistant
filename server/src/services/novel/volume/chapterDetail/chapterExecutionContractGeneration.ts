@@ -20,6 +20,10 @@ import {
   ChapterTaskSheetQualityGateService,
   ChapterTaskSheetQualityGateError,
 } from "../ChapterTaskSheetQualityGateService";
+import {
+  findMissingForeshadowActions,
+  formatForeshadowToken,
+} from "@ai-novel/shared/types/storyPlanningFramework";
 import type {
   VolumeGenerateOptions,
   VolumeGenerationNovel,
@@ -292,6 +296,33 @@ export async function generateChapterTaskSheetDetail(params: {
         sceneCards: serializeChapterScenePlan(scenePlan),
       };
       previousCandidate = candidate;
+      // 伏笔动作是结构化规划义务：只在 requiredElements/taskSheet/场景 mustAdvance 中找
+      // `[伏笔:Fxx]` 规划标记，不做正文关键词扫描。缺失时按“输出无效”退回一次修复，
+      // 不把缺项静默降级成质量债，也不阻塞整条生产链。
+      const missingForeshadowActions = promptInput.storyMacroPlan?.foreshadowSchedule?.length
+        ? findMissingForeshadowActions({
+          schedule: promptInput.storyMacroPlan.foreshadowSchedule,
+          chapterOrder: promptInput.targetChapter.chapterOrder,
+          plannedTexts: [
+            ...(generated.output.requiredElements ?? []),
+            generated.output.taskSheet,
+            ...(generated.output.sceneCards ?? []).flatMap((scene) => [scene.purpose, ...(scene.mustAdvance ?? [])]),
+          ],
+        })
+        : [];
+      if (missingForeshadowActions.length > 0) {
+        const missingDetail = missingForeshadowActions
+          .map((action) => `${formatForeshadowToken(action.entry.id)}（${action.actions.join("/")}：${action.entry.question}）`)
+          .join("；");
+        throw Object.assign(
+          new Error(`本章伏笔动作未在章纲中安排：${missingDetail}。请把这些动作写入 requiredElements，并以对应 [伏笔:Fxx] 标记开头。`),
+          {
+            name: "ChapterForeshadowCoverageError",
+            code: "PROMPT_POST_VALIDATION_FAILED",
+            promptQualityFailureKind: "post_validate_failed",
+          },
+        );
+      }
       if (!params.options.planningRepairManaged) await qualityGate.assertCanEnterExecution(candidate, {
         mode: params.options.chapterTaskSheetQualityMode,
         provider: params.options.provider,

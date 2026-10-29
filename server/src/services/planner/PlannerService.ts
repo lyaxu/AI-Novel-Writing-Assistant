@@ -39,6 +39,10 @@ import {
 import { resolveChapterPlanParticipants } from "./plannerParticipantResolution";
 import { buildPayoffEvidenceHash, buildPayoffPlanningEvidenceBlock, readCurrentPayoffDecisions, validateChapterPayoffDecisions, type ChapterPayoffValidationInput } from "./payoff";
 import { loadPlanningWrittenEvidence } from "../novel/volume/writtenEvidence";
+import {
+  renderChapterForeshadowActionsContext,
+  selectForeshadowActionsForChapter,
+} from "@ai-novel/shared/types/storyPlanningFramework";
 import { plannerPlanQueryService } from "./query";
 import { plannerReplanService, type ReplanInput } from "./replan";
 import {
@@ -525,6 +529,15 @@ export class PlannerService {
         })),
       })),
     };
+    const chapterForeshadowActions = storyMacroPlan?.foreshadowSchedule?.length
+      ? selectForeshadowActionsForChapter(storyMacroPlan.foreshadowSchedule, chapter.order)
+      : [];
+    const chapterForeshadowContext = chapterForeshadowActions.length > 0
+      ? renderChapterForeshadowActionsContext({
+        chapterOrder: chapter.order,
+        actions: chapterForeshadowActions,
+      })
+      : "";
     const contextBlocks = buildChapterPlanContextBlocks({
       novelTitle: novel.title,
       description: novel.description,
@@ -587,6 +600,7 @@ export class PlannerService {
         ? buildPlannerConflictLevelAnchorContext(plannerVolumes, options.replanContext.affectedChapterOrders)
         : "无",
       storyMacroSummary: buildStoryMacroSummary(storyMacroPlan),
+      chapterForeshadowActions: chapterForeshadowContext,
       currentVolumeWindow: buildCurrentVolumeWindowSummary(plannerVolumes, chapter.order),
       payoffLedgerSummary: buildPlannerPayoffLedgerContext(payoffLedger, chapter.order),
       storyModeBlock,
@@ -599,6 +613,7 @@ export class PlannerService {
       planLevel: "chapter",
       contextBlocks,
       payoffValidation,
+      foreshadowActions: chapterForeshadowActions.length > 0 ? chapterForeshadowActions : undefined,
     });
     const metadata = normalizePlanMetadata("chapter", output, {
       ...defaultMetadata,

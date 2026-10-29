@@ -2,6 +2,7 @@ import type { BookAnalysisSectionKey } from "@ai-novel/shared/types/bookAnalysis
 import { formatCommercialTagsInput, normalizeCommercialTags } from "@ai-novel/shared/types/novelFraming";
 import type { WritingPlatformPreference } from "@ai-novel/shared/types/writingPlatform";
 import type { PowerSystemPreference } from "@ai-novel/shared/types/novelResourceRecommendation";
+import { DEFAULT_ESTIMATED_CHAPTER_COUNT } from "@ai-novel/shared/types/planningScale";
 
 export interface NovelBasicFormState {
   title: string;
@@ -49,7 +50,7 @@ export interface BasicInfoOption<T extends string> {
   recommended?: boolean;
 }
 
-export const DEFAULT_ESTIMATED_CHAPTER_COUNT = 80;
+export { DEFAULT_ESTIMATED_CHAPTER_COUNT };
 
 export const WRITING_MODE_OPTIONS: BasicInfoOption<NovelBasicFormState["writingMode"]>[] = [
   {

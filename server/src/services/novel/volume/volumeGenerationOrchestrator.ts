@@ -72,6 +72,7 @@ import {
   buildVolumeCountGuidance,
 } from "@ai-novel/shared/types/volumePlanning";
 import { buildDirectorCompletionProfile } from "@ai-novel/shared/types/directorCompletion";
+import { DEFAULT_ESTIMATED_CHAPTER_COUNT } from "@ai-novel/shared/types/planningScale";
 
 type StoryMacroPlanResult = Awaited<ReturnType<StoryMacroPlanService["getPlan"]>> | null;
 
@@ -187,7 +188,7 @@ async function loadGenerationContext(params: {
 
   const novel: VolumeGenerationNovel = {
     ...rawNovel,
-    completionProfile: buildDirectorCompletionProfile(rawNovel.estimatedChapterCount ?? 80),
+    completionProfile: buildDirectorCompletionProfile(rawNovel.estimatedChapterCount ?? DEFAULT_ESTIMATED_CHAPTER_COUNT),
     storyModePromptBlock: buildStoryModePromptBlock({
       primary: rawNovel.primaryStoryMode ? normalizeStoryModeOutput(rawNovel.primaryStoryMode) : null,
       secondary: rawNovel.secondaryStoryMode ? normalizeStoryModeOutput(rawNovel.secondaryStoryMode) : null,

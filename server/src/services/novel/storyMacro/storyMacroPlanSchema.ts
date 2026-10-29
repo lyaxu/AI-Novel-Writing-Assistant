@@ -1,4 +1,8 @@
 import { bookStoryFoundationSchema } from "@ai-novel/shared/types/novel/bookStoryFoundation";
+import {
+  foreshadowScheduleSchema,
+  storyBookBlueprintSchema,
+} from "@ai-novel/shared/types/storyPlanningFramework";
 import type {
   StoryConflictLayers,
   StoryDecomposition,
@@ -116,6 +120,10 @@ export const STORY_MACRO_RESPONSE_SCHEMA = z.object({
     ending_flavor: z.string().trim().min(1).max(220),
   }),
   constraints: z.array(z.string().trim().min(1).max(240)).min(2).max(8),
+  // 全书大底五阶段与结局契约；老调用方/老存档可以没有这两个字段。
+  bookBlueprint: storyBookBlueprintSchema.optional(),
+  // 核心伏笔/谜团表：建议 3-8 条，上限 20 条。
+  foreshadowSchedule: foreshadowScheduleSchema.max(20).optional().default([]),
   issues: z.array(z.object({
     type: z.string().trim().min(1).max(40),
     field: z.string().trim().min(1).max(60),

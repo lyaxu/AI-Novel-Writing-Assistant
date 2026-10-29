@@ -261,6 +261,8 @@ export function buildChapterPlanContextBlocks(input: {
   replanContext: string;
   replanConflictLevelAnchors?: string;
   storyMacroSummary: string;
+  /** 本章必须安排的伏笔动作（结构化提示，含 [伏笔:Fxx] 规划标记）。 */
+  chapterForeshadowActions?: string;
   currentVolumeWindow: string;
   payoffLedgerSummary: string;
   storyModeBlock: string;
@@ -340,6 +342,16 @@ export function buildChapterPlanContextBlocks(input: {
       priority: 96,
       content: buildBlockContent("故事宏观约束", input.storyMacroSummary || "无"),
     }),
+    ...(input.chapterForeshadowActions?.trim()
+      ? [createContextBlock({
+        id: "chapter_foreshadow_actions",
+        group: "chapter_foreshadow_actions",
+        priority: 96,
+        required: true,
+        allowSummary: false,
+        content: buildBlockContent("本章伏笔动作", input.chapterForeshadowActions),
+      })]
+      : []),
     createContextBlock({
       id: "payoff_ledger",
       group: "payoff_ledger",

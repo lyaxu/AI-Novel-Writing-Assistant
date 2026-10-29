@@ -3,6 +3,7 @@ import type {
   DirectorConfirmRequest,
 } from "@ai-novel/shared/types/novelDirector";
 import { buildDirectorCompletionProfile } from "@ai-novel/shared/types/directorCompletion";
+import { DEFAULT_ESTIMATED_CHAPTER_COUNT } from "@ai-novel/shared/types/planningScale";
 import type { PipelineJobStatus, VolumePlanDocument } from "@ai-novel/shared/types/novel";
 import {
   buildDirectorAutoExecutionScopeLabelFromState,
@@ -54,7 +55,7 @@ export function resolveAutoExecutionBookProfile(input: {
   ].find((value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0);
   if (target === undefined && input.existingState?.completionProfile) return { ...input.existingState.completionProfile };
   // Legacy records without book intent retain the shared book default, never the batch length.
-  return buildDirectorCompletionProfile(target ?? 80);
+  return buildDirectorCompletionProfile(target ?? DEFAULT_ESTIMATED_CHAPTER_COUNT);
 }
 
 function findMissingChapterOrders(

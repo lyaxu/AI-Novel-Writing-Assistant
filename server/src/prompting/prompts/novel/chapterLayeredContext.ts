@@ -17,6 +17,10 @@ import { sanitizeCreativeMustAdvanceItems } from "@ai-novel/shared/types/chapter
 import type { ReviewIssue } from "@ai-novel/shared/types/novel";
 import type { StoryMacroPlan } from "@ai-novel/shared/types/storyMacro";
 import {
+  renderChapterForeshadowActionsForWriter,
+  selectForeshadowActionsForChapter,
+} from "@ai-novel/shared/types/storyPlanningFramework";
+import {
   hasReaderExperienceContractValue,
   normalizeReaderExperienceContract,
   type ReaderExperienceContract,
@@ -136,10 +140,19 @@ export function buildBookContractContext(input: {
   };
 }
 
-export function buildMacroConstraintContext(storyMacroPlan: StoryMacroPlan | null): MacroConstraintContext | null {
+export function buildMacroConstraintContext(
+  storyMacroPlan: StoryMacroPlan | null,
+  options: { chapterOrder?: number | null } = {},
+): MacroConstraintContext | null {
   if (!storyMacroPlan) {
     return null;
   }
+  const chapterForeshadowActions = typeof options.chapterOrder === "number"
+    && storyMacroPlan.foreshadowSchedule?.length
+    ? renderChapterForeshadowActionsForWriter(
+      selectForeshadowActionsForChapter(storyMacroPlan.foreshadowSchedule, options.chapterOrder),
+    )
+    : [];
   return {
     sellingPoint: compactText(storyMacroPlan.decomposition?.selling_point, "not specified"),
     coreConflict: compactText(storyMacroPlan.decomposition?.core_conflict, "not specified"),
@@ -152,6 +165,7 @@ export function buildMacroConstraintContext(storyMacroPlan: StoryMacroPlan | nul
       ...(storyMacroPlan.constraints ?? []),
       ...(storyMacroPlan.constraintEngine?.hard_constraints ?? []),
     ], 8),
+    ...(chapterForeshadowActions.length > 0 ? { chapterForeshadowActions } : {}),
   };
 }
 
