@@ -72,6 +72,11 @@ test("legacy compatibility rejects fake labels, arbitrary splicing, altered punc
   assert.equal(evidence.matchesChapterEvidence(index, "s.prerequisites：条件甲，sourceKind=establish_in_scene，reference=来源甲"), true);
   assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: "s.turn", quote: "甲， 乙。" }), true);
 });
+test("quote wrappers around a real mid-sentence fragment are tolerated, paraphrases still fail", () => {
+  const index = evidence.buildChapterEvidenceIndex({ prose: "数据就好看。你身上那块芯片，编号前四个字母查不到。" });
+  assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: "prose", quote: "“你身上那块芯片，编号前四个字母查不到。”" }), true);
+  assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: "prose", quote: "“你身上那块芯片，编号你还没查。”" }), false);
+});
 test("coverage includes eight real issues plus synthetic overload without dropping any issue", () => {
   const issues = Array.from({ length: 8 }, (_, i) => ({ id: `i${i}`, severity: "high", target: "semantic", summary: "问题", repairHint: "修改",
     basis: { kind: "unsupported_prerequisite", candidateEvidence: [{ sourcePath: "summary", quote: "完成交换" }], counterEvidence: [], contextEvidence: [],

@@ -123,9 +123,17 @@ export function projectPlanningStateReview(
       // guard below still rejects intentions and attempts masquerading as accomplished results.
       const duplicatePlannedOutcome = Boolean(right) && left.temporalScope === "planned"
         && right!.temporalScope === "prior" && actual.has(left.modality) && actual.has(right!.modality);
+      // A planned action that repeats an already accomplished one-time fact is a conflicting
+      // requirement, not a same-state contradiction. Keep the finding, but do not require the
+      // model to invent an outcome modality just to describe the duplicate action.
+      const duplicatePlannedAction = Boolean(right) && left.temporalScope === "planned"
+        && left.modality === "attempt" && right!.temporalScope === "prior" && actual.has(right!.modality)
+        && issue.basis?.kind === "conflicting_requirements";
+      const duplicatePlannedEvent = duplicatePlannedOutcome || duplicatePlannedAction;
       if (!right || decision.comparisonScope !== "same_state" || left.subject !== right.subject
-        || (!duplicatePlannedOutcome && left.temporalScope !== right.temporalScope)
-        || (left.modality !== right.modality && !(actual.has(left.modality) && actual.has(right.modality)))) {
+        || (!duplicatePlannedEvent && left.temporalScope !== right.temporalScope)
+        || (!duplicatePlannedEvent && left.modality !== right.modality
+          && !(actual.has(left.modality) && actual.has(right.modality)))) {
         throw new Error(`Decision ${decision.issueId}: contradiction requires the same subject, time and comparable modality; a new decision/attempt is not an earlier accomplished result.`);
       }
     }

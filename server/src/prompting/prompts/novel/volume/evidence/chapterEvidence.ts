@@ -101,24 +101,34 @@ export function findChapterEvidencePaths(index: ReturnType<typeof buildChapterEv
   return found;
 }
 
+function evidenceQuoteVariants(quote: string): string[] {
+  const normalized = normalize(quote);
+  if (!normalized) return [];
+  // Models sometimes add a quotation mark when they start mid-sentence (or preserve the
+  // closing quote), so the cited fragment is one character longer than the real prose.
+  // Strip only quote wrappers; do not strip arbitrary punctuation or paraphrase text.
+  const unwrapped = normalized.replace(/^[“”"'‘’]+|[“”"'‘’]+$/g, "");
+  return unwrapped && unwrapped !== normalized ? [normalized, unwrapped] : [normalized];
+}
+
 export function matchesChapterEvidence(index: ReturnType<typeof buildChapterEvidenceIndex>, evidence: string | EvidenceQuote): boolean {
   const exactAt = (path: string, quote: string) => {
     const text = index.leaves.get(index.aliases.get(path) ?? path);
-    return Boolean(normalize(quote) && text !== undefined && normalize(text).includes(normalize(quote)));
+    return text !== undefined && evidenceQuoteVariants(quote).some((variant) => normalize(text).includes(variant));
   };
   // A parsed JSON field may be cited as its own container (for example "sceneCards"). The quote
   // must still appear inside that field, so an imprecise-but-correct field name cannot smuggle
   // in unrelated text, while a merely coarse path no longer discards an otherwise valid answer.
   const containerAt = (path: string, quote: string) => {
-    const normalized = normalize(quote);
+    const variants = evidenceQuoteVariants(quote);
     const members = index.containerLeaves.get(path);
-    if (!normalized || !members) return false;
+    if (!variants.length || !members) return false;
     // A fragment of the parsed field's own serialization is still inside this container.
     const serialized = index.containerText.get(path);
-    if (serialized !== undefined && normalize(serialized).includes(normalized)) return true;
+    if (serialized !== undefined && variants.some((variant) => normalize(serialized).includes(variant))) return true;
     return members.some((member) => {
       const text = index.leaves.get(member);
-      return text !== undefined && normalize(text).includes(normalized);
+      return text !== undefined && variants.some((variant) => normalize(text).includes(variant));
     });
   };
   if (typeof evidence !== "string") {

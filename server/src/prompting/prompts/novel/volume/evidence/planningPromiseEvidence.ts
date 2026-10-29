@@ -70,6 +70,27 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
       throw new Error(`Promise ${check.sourceId} has an incompatible handoffStatus. 实际 status=${JSON.stringify(check.status)}，handoffStatus=${JSON.stringify(check.handoffStatus)}：deferred 时 handoffStatus 必须是 covered / partial / missing / conflicting 之一（不能是 not_needed）；非 deferred 时必须是 not_needed。`);
     }
     if (isOpeningPlanningPromise(check.sourceId) && check.scope === "book_arc") throw new Error(`Opening promise ${check.sourceId} cannot be reclassified as a book arc. 实际 scope=${JSON.stringify(check.scope)}：开篇承诺必须留在开篇范围内。`);
+    // The allowed `selectedPlanningDirection.candidate.` prefix is a display convenience; a
+    // model may also omit or vary it. If the exact quote exists uniquely under this promise's
+    // own source subtree, relocate the citation instead of rejecting an otherwise valid review.
+    for (const evidence of check.sourceEvidence) {
+      const relative = evidence.sourcePath.startsWith("selectedPlanningDirection.candidate.")
+        ? evidence.sourcePath.slice("selectedPlanningDirection.candidate.".length)
+        : evidence.sourcePath;
+      if (!belongsToPlanningPromiseSource(relative, check.sourceId)) {
+        // Do not launder guessed or foreign prefixes into a valid citation, even if the quote
+        // happens to exist elsewhere in the selected source.
+        continue;
+      }
+      if (matchesChapterEvidence(sourceIndex, { ...evidence, sourcePath: relative })) {
+        evidence.sourcePath = relative;
+        continue;
+      }
+      const candidates = [...sourceIndex.leaves.keys()].filter(path =>
+        belongsToPlanningPromiseSource(path, check.sourceId)
+        && matchesChapterEvidence(sourceIndex, { ...evidence, sourcePath: path }));
+      if (candidates.length === 1) evidence.sourcePath = candidates[0];
+    }
     if (!check.sourceEvidence.length || check.sourceEvidence.some(evidence => {
       const sourcePath = evidence.sourcePath.startsWith("selectedPlanningDirection.candidate.")
         ? evidence.sourcePath.slice("selectedPlanningDirection.candidate.".length)
