@@ -69,14 +69,18 @@ function toOptionalText(value: string | null | undefined): string | null {
   return normalized || null;
 }
 
-function shouldFallbackToStagedAutoCast(error: unknown): error is StructuredOutputError {
+export function shouldFallbackToStagedAutoCast(error: unknown): error is StructuredOutputError {
   if (!(error instanceof StructuredOutputError)) {
     return false;
   }
 
+  // A single cast call can exceed the provider output ceiling once the cast, coverage plan and
+  // relations are all rich (e.g. a 100-chapter book). The staged members/relations prompts are
+  // exactly the bounded fallback for that case, so treat output_limit like an incomplete answer.
   return error.category === "incomplete_json"
     || error.category === "malformed_json"
-    || error.category === "schema_mismatch";
+    || error.category === "schema_mismatch"
+    || error.category === "output_limit";
 }
 
 function buildAutoCastMemberRosterText(parsed: CharacterCastAutoMembersResponseParsed): string {
