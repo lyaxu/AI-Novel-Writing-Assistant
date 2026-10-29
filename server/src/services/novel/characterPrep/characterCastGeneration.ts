@@ -31,6 +31,12 @@ import {
 } from "./characterCastQuality";
 import { WorldContextGateway } from "../worldContext/WorldContextGateway";
 
+// A 2026-10-29 live probe confirmed the configured DeepSeek endpoint accepts and completes
+// max_tokens=16000 (finish_reason=length at 16000 completion tokens). The provider adapter's
+// generic 8192 budget was the only reason cast generation truncated, so this one bounded,
+// once-per-book task gets a larger single-request budget instead of lowering profile quality.
+const CHARACTER_CAST_AUTO_MAX_OUTPUT_TOKENS = 16_000;
+
 export interface CharacterPrepOptions {
   provider?: LLMProvider;
   model?: string;
@@ -299,6 +305,7 @@ async function generateAutoCharacterCastDraftViaStagedPrompts(
       provider: options.provider,
       model: options.model,
       temperature: memberTemperature,
+      maxTokens: CHARACTER_CAST_AUTO_MAX_OUTPUT_TOKENS,
     },
   });
 
@@ -321,6 +328,7 @@ async function generateAutoCharacterCastDraftViaStagedPrompts(
       provider: options.provider,
       model: options.model,
       temperature: 0.3,
+      maxTokens: CHARACTER_CAST_AUTO_MAX_OUTPUT_TOKENS,
     },
   });
 
@@ -410,6 +418,7 @@ export async function generateAutoCharacterCastDraft(
         provider: options.provider,
         model: options.model,
         temperature: options.temperature ?? 0.5,
+        maxTokens: CHARACTER_CAST_AUTO_MAX_OUTPUT_TOKENS,
       },
     });
     parsed = generation.output;
