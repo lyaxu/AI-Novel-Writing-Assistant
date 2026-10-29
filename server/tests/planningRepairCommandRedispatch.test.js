@@ -54,6 +54,8 @@ function fixture() {
     "../../../../workers/TaskDispatcher": { taskDispatcher: { notify() {} } }, "./leases/DirectorCommandLeaseService": {},
     "../recovery/planningRepair/planningRepairRecovery": recovery,
     "@ai-novel/shared/types/planningRepair/recovery": policy,
+    "../recovery/DirectorRecoveryConvergenceService": { createDirectorRecoveryConvergenceService: () => ({ converge: async () => ({ changed: false, actions: [] }) }) },
+    "../../novelCoreShared": { logPipelineWarn: () => {} },
   });
   const read = async () => ({ ...row, seedPayloadJson: JSON.stringify(seed) });
   const service = new DirectorCommandService({ getTaskByIdWithoutHealing: read, getTaskById: read });

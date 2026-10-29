@@ -86,6 +86,8 @@ function commandService(f) {
     '../recovery/planningRepair/planningRepairRecovery': { assertPlanningRepairResumeAllowed() {} },
     '@ai-novel/shared/types/planningRepair/recovery': {}, '../../production/recovery': recovery,
     '../recovery/rangeCompletion': acceptance,
+    '../recovery/DirectorRecoveryConvergenceService': { createDirectorRecoveryConvergenceService: () => ({ converge: async () => ({ changed: false, actions: [] }) }) },
+    '../../novelCoreShared': { logPipelineWarn: () => {} },
   });
   const service = new DirectorCommandService({ getTaskById: async () => structuredClone(f.row) });
   service.recoverStaleLeases = async () => 0;
@@ -167,6 +169,8 @@ test('explicit restored range enters existing auto execution without repeating s
     '../automation/novelDirectorAutoExecution': auto,
     '../automation/novelDirectorAutoExecutionScopeRuntime': require('../../dist/services/novel/director/automation/novelDirectorAutoExecutionScopeRuntime'),
     '../../production/recovery': recovery, '../../production/reliability': require('../../dist/services/novel/production/reliability'),
+    '../recovery/DirectorRecoveryConvergenceService': { createDirectorRecoveryConvergenceService: () => ({ converge: async () => ({ changed: false, actions: [] }) }) },
+    '../../novelCoreShared': { logPipelineWarn: () => {} },
   };
   const { NovelDirectorContinueRuntime } = loadRuntimeSource('../director/runtime/novelDirectorContinueRuntime.ts', imports);
   const runs = [], scheduled = [];

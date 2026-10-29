@@ -60,6 +60,8 @@ function fixture({ previousCommands = [], paused = true } = {}) {
     "./leases/DirectorCommandLeaseService": {},
     "../recovery/planningRepair/planningRepairRecovery": { assertPlanningRepairResumeAllowed: () => {} },
     "../recovery/rangeCompletion": {},
+    "../recovery/DirectorRecoveryConvergenceService": { createDirectorRecoveryConvergenceService: () => ({ converge: async () => ({ changed: false, actions: [] }) }) },
+    "../../novelCoreShared": { logPipelineWarn: () => {} },
     "@ai-novel/shared/types/planningRepair/recovery": {},
     "../../production/recovery": { assertUnchangedPipelineRecoveryScope: scope.assertUnchangedPipelineRecoveryScope,
       createChapterPipelineRecoveryService: () => ({ prepareDirectorContinuation: async () => expected }) },

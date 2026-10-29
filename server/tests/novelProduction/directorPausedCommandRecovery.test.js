@@ -31,6 +31,8 @@ function fixture({ preflightFails = false, taskCasFails = false, jobCasFails = f
     "./leases/DirectorCommandLeaseService": {},
     "../recovery/planningRepair/planningRepairRecovery": { assertPlanningRepairResumeAllowed: () => {} },
     "../recovery/rangeCompletion": {},
+    "../recovery/DirectorRecoveryConvergenceService": { createDirectorRecoveryConvergenceService: () => ({ converge: async () => ({ changed: false, actions: [] }) }) },
+    "../../novelCoreShared": { logPipelineWarn: () => {} },
     "@ai-novel/shared/types/planningRepair/recovery": {},
     "../../production/recovery": { assertUnchangedPipelineRecoveryScope: scope.assertUnchangedPipelineRecoveryScope, createChapterPipelineRecoveryService: () => ({ prepareDirectorContinuation: async (...args) => {
       calls.push(["preflight", ...args]); if (preflightFails) throw new AppError("unknown or changed manuscript", 409); return expected;

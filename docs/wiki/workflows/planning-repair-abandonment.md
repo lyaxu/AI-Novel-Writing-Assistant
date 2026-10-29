@@ -45,12 +45,22 @@
   `committed` 原本就会显示为暂停（修复已完成，检查点要让用户看到），一起排除等于静默删掉该行为。
 - **恢复入口**：`assertPlanningRepairResumeAllowed`、`PlanningRepairRecoveryService` 的归属与执行校验、
   `novelDirectorContinueRuntime` 的 continue 分支都按终态判定，不再对已放弃的会话发起恢复。
+- **继续与重试不会被终态挡住**：显式重试的写守卫（`planningRepairWorkflowWriteGuard`）使用
+  `isTerminalPlanningRepairPhase` 判定；`abandoned` / `committed` 会话不再要求「先确认修复」。
+  显式继续前的恢复收敛可清理终态会话遗留的 `planningRepairRecovery` / `planningRepairPipelineRecovery`
+  执行绑定（保留 `planningRepair` 证据与候选；有 `pendingGrant` 时不清）。
+- **停在复核阶段的陈旧会话**：仅当相位是 `reviewing`、任务暂停、没有活跃命令、没有
+  `pendingOperation` / `repairOutputPending` / `pendingGrant` 时，**不带规划修复授权键**的普通继续会把它
+  收敛为 `abandoned`（记录自动收敛原因），让未写章节按原任务重新规划；带
+  `planningRepairRecoveryKey` 的继续表示用户要重试该修复，必须保留会话。收敛只改技术状态，
+  候选、计划与正文均不变。
 
 ## 失败模式
 
 | 症状 | 原因 |
 | --- | --- |
 | 放弃后这一章再也无法修复 | `begin` 复用了吸收态。检查 `abandonedGaveUp` 分支是否仍在 |
+| 放弃后重试仍提示"先确认修复" | 写守卫没有用终态谓词，把 `abandoned` 当成未完成会话 |
 | 放弃后面板仍显示同一个报错 | `pendingOperation` 未清除，或投影仍把它当作暂停 |
 | 放弃后别的任务仍被挡 | 锁判定没有使用终态谓词，或该行相位未真正写入 |
 | 放弃记录消失 | 新会话覆盖了槽位却没有携带 `abandoned_previous` |

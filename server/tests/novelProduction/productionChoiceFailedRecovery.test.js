@@ -115,6 +115,8 @@ function continuation(f) {
   '../recovery/planningRepair/planningRepairRecovery':{assertPlanningRepairResumeAllowed:()=>{},readPlanningRepairSeed:()=>({})},
   '../automation/novelDirectorAutoExecution':auto,'../automation/novelDirectorAutoExecutionScopeRuntime':{},
   '../../production/recovery':{},'../../production/reliability':{},'../recovery/planningRepair':{},
+  '../recovery/DirectorRecoveryConvergenceService':{createDirectorRecoveryConvergenceService:()=>({converge:async()=>({changed:false,actions:[]})})},
+  '../../novelCoreShared':{logPipelineWarn:()=>{}},
  });
  const scheduled=[],executions=[];
  const runtime=new NovelDirectorContinueRuntime({

@@ -45,6 +45,8 @@ import { buildRequestedAutoExecutionState } from "../automation/novelDirectorAut
 import { createChapterPipelineRecoveryService, assertUnchangedPipelineRecoveryScope, type PipelineRecoveryExpectation } from "../../production/recovery";
 import { ChapterProductionError } from "../../production/reliability";
 import { PlanningRepairPipelineRecoveryService, type PlanningPipelineRecoveryInput, type PlanningPipelineRecoveryResult } from "../recovery/planningRepair";
+import { createDirectorRecoveryConvergenceService } from "../recovery/DirectorRecoveryConvergenceService";
+import { logPipelineWarn } from "../../novelCoreShared";
 
 export type DirectorAssetFirstRecovery =
   | {
@@ -259,13 +261,28 @@ export class NovelDirectorContinueRuntime {
     forceResume?: boolean;
     acceptManualChanges?: boolean;
   }): Promise<void> {
-    const row = await this.deps.workflowService.getTaskById(taskId);
+    let row = await this.deps.workflowService.getTaskById(taskId);
     if (!row) {
       throw new Error("自动导演任务不存在。");
     }
     if (row.lane !== "auto_director") {
       await this.deps.workflowService.continueTask(taskId);
       return;
+    }
+    // A runtime-level continue (also used by follow-up actions) must not stay blocked by stale
+    // technical state that no user action can clear from the source page. Only factually finished
+    // or abandoned boundaries are converged; the strict preflight below is unchanged.
+    if (row.pendingManualRecovery || row.status === "waiting_approval" || row.status === "failed") {
+      const converged = await this.convergeRecoveryBoundary(taskId, Boolean(input?.planningRepairRecoveryKey));
+      if (converged) {
+        const refreshed = this.deps.workflowService.getTaskByIdWithoutHealing
+          ? await this.deps.workflowService.getTaskByIdWithoutHealing(taskId)
+          : null;
+        row = refreshed ?? await this.deps.workflowService.getTaskById(taskId);
+        if (!row) {
+          throw new Error("自动导演任务不存在。");
+        }
+      }
     }
     assertPlanningRepairResumeAllowed(row.seedPayloadJson, input?.planningRepairRecoveryKey);
     const planningRepairSeed = readPlanningRepairSeed(row.seedPayloadJson);
@@ -689,6 +706,23 @@ export class NovelDirectorContinueRuntime {
     return this.deps.runDirectorPipeline
       ? this.deps.runDirectorPipeline(input)
       : this.deps.pipelineRuntime.runPipeline(input);
+  }
+
+  private async convergeRecoveryBoundary(taskId: string, preservePlanningRepairSession: boolean): Promise<boolean> {
+    try {
+      const result = await createDirectorRecoveryConvergenceService().converge({
+        taskId,
+        trigger: "director_continue_runtime",
+        preservePlanningRepairSession,
+      });
+      return result.changed;
+    } catch (error) {
+      // Best-effort technical cleanup: the strict saved-boundary preflight below stays in charge.
+      logPipelineWarn("自动导演恢复边界收敛未应用，保留原恢复核对。", {
+        taskId, error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
   }
 
   private async prepareSavedPipelineRecovery(input: {

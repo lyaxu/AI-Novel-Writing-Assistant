@@ -1,4 +1,5 @@
 import type { NovelWorkflowTask, Prisma, PrismaClient } from "@prisma/client";
+import { isTerminalPlanningRepairPhase } from "@ai-novel/shared/types/planningRepair/recovery";
 import { assertPlanningRepairResumeAllowed } from "../director/recovery/planningRepair/planningRepairRecovery";
 
 const REPAIR_SEED_KEYS = [
@@ -45,8 +46,12 @@ export function guardPlanningRepairWorkflowUpdate(current: NovelWorkflowTask, de
     if (!["queued", "waiting_approval"].includes(desiredStatus ?? "") || data.cancelRequestedAt !== null) {
       throw new Error("Explicit retry must enqueue the task and clear its cancellation request.");
     }
-    if (isRecord(repair) && (! ["assessing", "repairing", "reviewing", "ready", "committed"].includes(String(repair.phase))
-      || repair.pendingOperation || (isRecord(currentSeed?.planningRepairRecovery) && currentSeed.planningRepairRecovery.pendingGrant))) {
+    // A terminal session (committed/abandoned) no longer owns a grant or an in-flight operation.
+    // Leaving it in the "resumable repair" allowlist made an explicit retry fail forever after
+    // the user gave the repair up, even though no work was pending.
+    if (isRecord(repair) && !isTerminalPlanningRepairPhase(String(repair.phase))
+      && (! ["assessing", "repairing", "reviewing", "ready", "committed"].includes(String(repair.phase))
+        || repair.pendingOperation || (isRecord(currentSeed?.planningRepairRecovery) && currentSeed.planningRepairRecovery.pendingGrant))) {
       throw new Error("Planning repair still requires explicit source confirmation before retry.");
     }
   }

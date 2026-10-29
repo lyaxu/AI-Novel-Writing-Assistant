@@ -30,11 +30,29 @@ export interface PipelineRecoveryProjection {
   pipelineRange?: { startOrder: number; endOrder: number };
   canResumePipeline: boolean;
 }
+export interface RecoveryChapterSnapshot {
+  order: number;
+  content?: string | null;
+  generationState?: string | null;
+  chapterStatus?: string | null;
+}
+/** Technical convergence of a job row whose target chapter is already factually complete. */
+export interface CompletedPipelineJobExpectation {
+  novelId: string;
+  chapterId: string;
+  /** The row's status at the moment the completed target was proven; CAS compares it. */
+  jobStatus: string;
+  updatedAt: Date;
+  payload: string | null;
+  completedAt: Date;
+}
 export interface ChapterPipelineRecoveryDeps {
   inspect: (target: RecoveryTarget) => Promise<Inspection>;
   findJob: (id: string) => Promise<PipelineRecoveryJob | null>;
-  findChapter: (target: RecoveryTarget) => Promise<{ order: number } | null>;
+  findChapter: (target: RecoveryTarget) => Promise<RecoveryChapterSnapshot | null>;
   resumeJob: (jobId: string, expected: PipelineRecoveryExpectation) => Promise<void>;
+  /** Optional so read-only projections and older harnesses keep working without a write port. */
+  completeJob?: (jobId: string, expected: CompletedPipelineJobExpectation) => Promise<void>;
   now?: () => number;
 }
 
@@ -123,6 +141,58 @@ export class ChapterPipelineRecoveryService {
     };
   }
 
+  /**
+   * Explicit continuation only: converge a stale paused range job whose target chapter is
+   * already factually complete.
+   *
+   * A chapter can finish and save while the range job row keeps its earlier `failed` +
+   * `pendingManualRecovery` projection. The chapter journal is the execution witness: when the
+   * journal is `completed`, belongs to this exact job/chapter, shows no unknown or still-running
+   * external step, and the chapter prose is saved and marked completed, the range job is stale
+   * bookkeeping rather than an unfinished pause. The caller may then resume at the next chapter.
+   *
+   * Anything uncertain (unknown call, changed manuscript, active lease, incomplete chapter,
+   * journal owned by another operation) returns null so the strict preflight keeps blocking.
+   */
+  async reconcileStaleCompletedChapterJob(
+    jobId: string,
+    request: DirectorPipelineRecoveryRequest,
+  ): Promise<Extract<DirectorPipelineContinuationExpectation, { kind: "completed" }> | null> {
+    if (!this.deps.completeJob) return null;
+    const original = await this.deps.findJob(jobId);
+    if (!original || original.id !== jobId || !original.currentItemKey
+      || original.novelId !== request.novelId || !request.directorTaskId.trim()) return null;
+    // Only a paused/stale row needs convergence; live jobs and terminal rows follow their own paths.
+    if (!original.pendingManualRecovery || original.cancelRequestedAt
+      || !["queued", "running", "failed"].includes(original.status)) return null;
+    let payload: Record<string, unknown> | null = null;
+    try {
+      const parsed: unknown = JSON.parse(original.payload ?? "null");
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) payload = parsed as Record<string, unknown>;
+    } catch { return null; }
+    if (payload?.workflowTaskId !== request.directorTaskId) return null;
+    const now = this.deps.now?.() ?? Date.now();
+    const leaseExpiry = original.executionLeaseExpiresAt?.getTime();
+    if (original.executionOwner
+      && (leaseExpiry === undefined || !Number.isFinite(leaseExpiry) || leaseExpiry > now)) return null;
+    const target = { novelId: original.novelId, chapterId: original.currentItemKey };
+    const chapter = await this.deps.findChapter(target);
+    // Deletion is not completion: only a saved, explicitly completed chapter is factually done.
+    if (!chapter || chapter.chapterStatus !== "completed" || !(chapter.content ?? "").trim()) return null;
+    const inspection = await this.deps.inspect(target);
+    if (!inspection || inspection.entry !== "pipeline"
+      || inspection.workflowTaskId !== request.directorTaskId
+      || inspection.operationId !== `pipeline:${jobId}:${target.chapterId}`
+      || inspection.status !== "completed"
+      || inspection.leaseActive || inspection.inputChanged || inspection.canAcknowledge
+      || inspection.steps.some(step => step.status === "unknown" || step.status === "running")) return null;
+    const completedAt = new Date(now);
+    await this.deps.completeJob(jobId, {
+      novelId: target.novelId, chapterId: target.chapterId, jobStatus: original.status,
+      updatedAt: original.updatedAt, payload: original.payload, completedAt,
+    });
+    return { kind: "completed", novelId: target.novelId, chapterId: null, updatedAt: completedAt, payload: original.payload };
+  }
   async resume(target: RecoveryTarget & { operationId: string }): Promise<{ jobId: string }> {
     const inspection = await this.deps.inspect(target);
     if (!inspection || inspection.operationId !== target.operationId) {

@@ -25,6 +25,25 @@
 - 章节执行中的长耗时操作返回后，进入终态提交、资产同步和 generation state 写回前必须重新确认 owner。审校、修复或同步期间已失权的执行者必须在提交前退出，不能把旧正文、审计或资产写入新执行者的作业。
 - OpenAI 兼容客户端关闭 SDK 隐式重试。结构化策略切换、JSON 修复和业务重试仍是显式调用，并受各自合同约束。
 
+## 已完成章节与放弃修复的收敛（stale-but-finished）
+
+事实已完成、但技术状态仍停在失败/暂停的边界，不能靠用户在章节源页反复核对来解开。显式「继续自动导演」或「重试」入口（命令受理与 continue 运行时）会在严格恢复预检**之前**执行一次有界收敛；读接口、轮询和后台扫描都不参与收敛，也不直接改状态。
+
+- **已完成章节的陈旧范围任务**：目标是 `currentItemKey` 的章节行已 `chapterStatus=completed`、正文非空；该章活动执行记录的 `operationId` 必须是 `pipeline:<jobId>:<chapterId>`、状态 `completed`、父任务匹配，且没有 `unknown`/`running` 外部步骤、没有活跃租约、没有稿件变化、没有待核对结果。满足时用 CAS（updatedAt/status/pendingManualRecovery/payload/租约）把该 job 收敛为 `succeeded` 并清空当前项，随后按正常路径继续下一章。任一条件不满足（未知调用、正文未完成、稿件/执行约定变化、活跃租约、journal 属于别的 operation）→ 不收敛，仍走严格预检并在章节源页提示核对。
+- **终态规划修复**：`abandoned` / `committed` 都是终态，不再持有预算授权或执行绑定。显式重试不得被终态会话挡住（写守卫使用 `isTerminalPlanningRepairPhase`）；收敛可清理终态会话遗留的 `planningRepairRecovery` / `planningRepairPipelineRecovery` 执行绑定，但保留 `planningRepair` 的放弃/提交证据、候选与正文。存在 `pendingGrant` 时不清，交给显式修复入口处理。
+- **停在复核阶段的陈旧修复会话**：仅当相位是 `reviewing`、任务处于暂停、没有活跃命令、没有 `pendingOperation` / `repairOutputPending` / `pendingGrant` 时，**不带规划修复授权键**的普通继续才把它收敛为 `abandoned`（写明自动收敛原因），让第 5 章之类未写章节按原任务重新规划。带 `planningRepairRecoveryKey` 的继续表示用户要重试该修复，必须保留会话。
+- **任务指针指向错误的替换任务**：失败重试可能把 `autoExecution.pipelineJobId` 写成自己，但章节日志仍属于原范围 job，于是每次继续都因「目标章既未完成也不是该 job 的暂停」被拒。只有同时证明：替换 job 与原 job 同书、同父任务、同范围、同一 payload，替换 job failed+pending 且 `llmCallCount/totalTokens/completedCount` 全为 0、没有任何 journal 归属、没有取消/活跃租约；原 job failed+pending 且拥有该章 active journal（paused、未过期、无 unknown/running 步骤、正文/执行约定指纹匹配）；当前没有活跃命令、活跃作业，且规划修复终态或不存在 —— 才把任务指针 CAS 回原 job，并把零调用的替换 job 标记结束（保留原 failed 证据）。原 journal、预算和候选一律不动，仍由原 job 恢复。
+
+失败模式：
+
+| 症状 | 原因 |
+| --- | --- |
+| 章节已完成，继续仍要求源页核对 | 只看 job 状态，没有用章节行 + 完整 journal 证明完成 |
+| 放弃修复后重试永远报「仍需确认」 | 写守卫把 `abandoned` 当成未完成修复 |
+| 普通继续把用户刚要重试的修复会话结束掉 | 收敛没有区分是否带显式修复授权键 |
+| 重新规划时又创建了替代 job，原 journal 被归档 | 没有把指针收敛回 journal 所有者 |
+| 收敛覆盖了另一条暂停或人工稿 | 缺少 CAS、租约检查或正文指纹校验 |
+
 ## 恢复顺序
 
 1. 读取导演任务及其持久化的流水线作业标识。

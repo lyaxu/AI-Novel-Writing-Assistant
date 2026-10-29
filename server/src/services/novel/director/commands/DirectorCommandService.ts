@@ -42,12 +42,18 @@ import { DirectorCommandLeaseService } from "./leases/DirectorCommandLeaseServic
 import { assertPlanningRepairResumeAllowed, readPlanningRepairSeed } from "../recovery/planningRepair/planningRepairRecovery";
 import { isPlanningRepairTaskPaused } from "@ai-novel/shared/types/planningRepair/recovery";
 import { createChapterPipelineRecoveryService, assertUnchangedPipelineRecoveryScope } from "../../production/recovery";
+import { createDirectorRecoveryConvergenceService } from "../recovery/DirectorRecoveryConvergenceService";
+import { logPipelineWarn } from "../../novelCoreShared";
 import { acceptIncompleteCompletedRangeCommand } from "../recovery/rangeCompletion";
 import { DIRECTOR_EXECUTION_STEP_IDS } from "../workflowStepRuntime/directorWorkflowStepIds";
 
 const ACTIVE_COMMAND_STATUSES: DirectorRunCommandStatus[] = ["queued", "leased", "running"];
 /** Commands whose explicit intent is to resume from the current manual-recovery pause. */
 const RESUME_GATE_COMMAND_TYPES: DirectorRunCommandType[] = ["approve_gate", "continue", "resume_from_checkpoint"];
+/** Explicit recovery commands may converge a stale-but-factually-finished pause before preflight. */
+const RECOVERY_CONVERGENCE_COMMAND_TYPES: DirectorRunCommandType[] = [
+  ...RESUME_GATE_COMMAND_TYPES, "retry", "accept_manual_changes_and_continue",
+];
 const SETTLED_COMMAND_STATUSES: DirectorRunCommandStatus[] = ["succeeded", "failed", "cancelled"];
 /** How long an identical repeat resume is treated as a duplicate click instead of a new attempt. */
 const RESUME_DUPLICATE_WINDOW_MS = 3 * 60_000;
@@ -751,6 +757,35 @@ export class DirectorCommandService {
         where: { taskId: input.taskId, commandType: input.commandType, idempotencyKey: input.idempotencyKey },
       });
       if (existing) return toAcceptedResponse(existing, null);
+    }
+    // Explicit recovery first converges only factually stale technical state (finished chapter /
+    // abandoned repair / displaced job pointer). Live pauses, unknown calls and active leases are
+    // left alone so the strict preflight below keeps blocking with the source-page message.
+    if (RECOVERY_CONVERGENCE_COMMAND_TYPES.includes(input.commandType) && !row.cancelRequestedAt) {
+      try {
+        const convergence = await createDirectorRecoveryConvergenceService().converge({
+          taskId: input.taskId,
+          trigger: `director_command:${input.commandType}`,
+          preservePlanningRepairSession: Boolean(input.payload.planningRepairRecoveryKey),
+        });
+        if (convergence.changed) {
+          const refreshed = this.workflowService.getTaskByIdWithoutHealing
+            ? await this.workflowService.getTaskByIdWithoutHealing(input.taskId)
+            : null;
+          const nextRow = refreshed ?? await this.workflowService.getTaskById(input.taskId);
+          if (!nextRow) {
+            throw new AppError("Task not found.", 404);
+          }
+          row = nextRow;
+        }
+      } catch (error) {
+        // Convergence is best-effort cleanup. The preflight below remains the safety gate, so a
+        // bookkeeping failure must not fake a started recovery or hide the original pause.
+        logPipelineWarn("自动导演恢复边界收敛未应用，保留原恢复核对。", {
+          taskId: input.taskId, commandType: input.commandType,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
     if (input.commandType !== "cancel") {
       assertPlanningRepairResumeAllowed(row.seedPayloadJson, input.payload.planningRepairRecoveryKey);

@@ -56,6 +56,26 @@ for (const phase of ["assessing", "repairing", "reviewing", "ready", "committed"
   });
 }
 
+test("explicit retry releases a cancelled task whose repair session was abandoned", () => {
+  const current = row("abandoned", { status: "cancelled", cancelRequestedAt: new Date() });
+  const desired = { status: "queued", cancelRequestedAt: null, attemptCount: 3, seedPayloadJson: "{}" };
+  const result = guard(current, desired, { explicitRetry: true });
+  assert.equal(result.status, "queued");
+  assert.equal(result.cancelRequestedAt, null);
+  assert.equal(result.attemptCount, 3);
+  assert.deepEqual(JSON.parse(result.seedPayloadJson).planningRepair, JSON.parse(current.seedPayloadJson).planningRepair);
+});
+
+test("explicit retry of an abandoned session is not blocked by a stale pending grant", () => {
+  const current = row("abandoned", { status: "cancelled" });
+  const seed = JSON.parse(current.seedPayloadJson);
+  seed.planningRepairRecovery = { repairKey: "repair", pendingGrant: true };
+  current.seedPayloadJson = JSON.stringify(seed);
+  const result = guard(current, { status: "queued", cancelRequestedAt: null }, { explicitRetry: true });
+  assert.equal(result.status, "queued");
+  assert.equal(result.cancelRequestedAt, null);
+});
+
 for (const phase of ["waiting_confirmation", "uncertain", "technical_failed"]) {
   test(`explicit retry does not bypass ${phase}`, () => {
     assert.throws(() => guard(row(phase, { status: "cancelled" }), {
