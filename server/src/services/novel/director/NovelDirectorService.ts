@@ -95,6 +95,7 @@ import { loadPersistentDirectorRuntimeProjection } from "./projections/novelDire
 import { qualityDebtSettingsService } from "../../settings/QualityDebtSettingsService";
 import { pendingReviewAutoPromotionService } from "../state/PendingReviewAutoPromotionService";
 import { parseSeedPayload } from "../workflow/novelWorkflow.shared";
+import { registerChapterTitleAutoRecoveryPort } from "../workflow/novelWorkflowChapterTitleRecoveryPort";
 import { getDirectorInputFromSeedPayload } from "./runtime/novelDirectorHelpers";
 import {
   directorWorkflowStepModuleRegistry,
@@ -202,6 +203,9 @@ export class NovelDirectorService {
     volumeService: this.volumeService,
     buildDirectorSeedPayload: (directorInput, novelId, extra) => buildDirectorWorkflowSeedPayload(directorInput, novelId, extra),
     scheduleBackgroundRun: (taskId, runner) => this.scheduleBackgroundRun(taskId, runner),
+    // A successful automatic title repair continues the original director task. The
+    // explicit recovery flag is required because the repair boundary saved a pause.
+    continueTaskAfterRepair: (taskId) => this.continueRuntime.continueTask(taskId, { forceResume: true }),
   });
   private readonly continueRuntime = new NovelDirectorContinueRuntime({
     workflowService: this.workflowService,
@@ -223,7 +227,16 @@ export class NovelDirectorService {
     scheduleBackgroundRun: (taskId, runner) => this.scheduleBackgroundRun(taskId, runner),
   });
 
-  constructor(_options?: Record<string, never>) {}
+  constructor(_options?: Record<string, never>) {
+    // Workflow-level healing detects the chapter-title diversity soft failure and
+    // delegates here without importing the director stack (avoids a module cycle).
+    registerChapterTitleAutoRecoveryPort({
+      scheduleAutoRepair: (input) => this.chapterTitleRepairRuntime.autoRepairAndContinue(input.taskId, {
+        volumeId: input.volumeId,
+        issue: input.issue,
+      }),
+    });
+  }
 
   private async autoPromotePendingReviewProposals(input: {
     novelId: string;

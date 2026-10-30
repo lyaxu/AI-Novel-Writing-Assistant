@@ -13,6 +13,15 @@ import {
   resolveDirectorAutoExecutionWorkflowState,
 } from "../director/automation/novelDirectorAutoExecution";
 import { resolveStructuredOutlineRecoveryCursor } from "../director/recovery/novelDirectorStructuredOutlineRecovery";
+import {
+  CHAPTER_TITLE_AUTO_REPAIR_FALLBACK_MESSAGE,
+  planChapterTitleAutoRepair,
+  readChapterTitleAutoRepairState,
+} from "../director/recovery/chapterTitleAutoRepairPolicy";
+import {
+  getChapterTitleAutoRecoveryPort,
+  type ChapterTitleAutoRecoveryScheduleResult,
+} from "./novelWorkflowChapterTitleRecoveryPort";
 import { isChapterTitleDiversityIssue } from "../volume/chapterTitleDiversity";
 import { NovelWorkflowStoreService } from "./NovelWorkflowStoreService";
 import {
@@ -72,7 +81,13 @@ type AutoDirectorNovelTaskRow = {
 };
 
 export class NovelWorkflowHealingService {
-  constructor(private readonly workflow: NovelWorkflowStoreService) {}
+  constructor(
+    private readonly workflow: NovelWorkflowStoreService,
+    private readonly options: {
+      /** Test seam: command activity probe before any automatic model work. */
+      hasActiveAutoDirectorCommand?: (taskId: string) => Promise<boolean>;
+    } = {},
+  ) {}
 
   private async resolveStructuredOutlineTaskProgress(input: {
     novelId: string;
@@ -628,6 +643,13 @@ export class NovelWorkflowHealingService {
     return true;
   }
 
+  /**
+   * A chapter-title diversity warning is a recoverable soft failure, not a user
+   * decision. In full autopilot (or with an enabled auto execution state) the
+   * existing title-repair runtime is scheduled automatically and the task keeps
+   * running afterwards; the manual "quick repair" notice only remains as a
+   * bounded fallback when no automatic attempt can be started.
+   */
   public async healChapterTitleDiversitySoftFailure(
     taskId: string,
     row = null as AutoDirectorNovelTaskRow | null,
@@ -648,13 +670,15 @@ export class NovelWorkflowHealingService {
       return false;
     }
 
+    const seedPayload = parseSeedPayload<DirectorWorkflowSeedPayload>(existing.seedPayloadJson);
     const resumeTarget = mergeResumeTargets(
       parseResumeTarget(existing.resumeTargetJson),
       parseSeedResumeTarget(existing.seedPayloadJson),
     );
+    const volumeId = resumeTarget?.volumeId ?? null;
     const notice = buildChapterTitleDiversityTaskNotice({
       issue,
-      volumeId: resumeTarget?.volumeId ?? null,
+      volumeId,
     });
     const nextResumeTarget = (resumeTarget && resumeTarget.stage !== "basic")
       ? {
@@ -662,6 +686,41 @@ export class NovelWorkflowHealingService {
         volumeId: resumeTarget.volumeId ?? notice.action.volumeId ?? null,
       }
       : buildNovelCreateResumeTarget(taskId, "director");
+    const autoRepair = planChapterTitleAutoRepair({
+      issue,
+      runMode: seedPayload?.directorInput?.runMode ?? seedPayload?.runMode,
+      autoExecutionEnabled: seedPayload?.autoExecution?.enabled,
+      volumeId,
+      state: readChapterTitleAutoRepairState(seedPayload),
+    });
+    let boundedFallbackMessage: string | null = null;
+    if (autoRepair.action === "auto_repair") {
+      const port = getChapterTitleAutoRecoveryPort();
+      // A still-active director command owns the current transition. Re-read on the
+      // next poll instead of racing a repair against the command that just failed.
+      if (port && !(await this.hasActiveAutoDirectorCommand(taskId))) {
+        let scheduled: ChapterTitleAutoRecoveryScheduleResult = "unavailable";
+        try {
+          scheduled = await port.scheduleAutoRepair({ taskId, volumeId, issue });
+        } catch (error) {
+          scheduled = "unavailable";
+          console.warn("[novel.workflow] 自动修复章节标题调度失败，保留可手动恢复的暂停。", {
+            taskId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        if (scheduled === "scheduled") {
+          return true;
+        }
+        boundedFallbackMessage = CHAPTER_TITLE_AUTO_REPAIR_FALLBACK_MESSAGE;
+      } else if (port) {
+        return false;
+      }
+    } else if (autoRepair.action === "already_attempted") {
+      // The single automatic attempt already ran. Do not retry it in a loop; keep the
+      // warning as a visible, recoverable pause that still offers the manual repair.
+      boundedFallbackMessage = CHAPTER_TITLE_AUTO_REPAIR_FALLBACK_MESSAGE;
+    }
 
     await this.workflow.updateTaskWithRetry({
       where: { id: taskId },
@@ -669,9 +728,11 @@ export class NovelWorkflowHealingService {
         status: "waiting_approval",
         currentStage: stageLabel("structured_outline"),
         currentItemKey: existing.currentItemKey ?? "chapter_list",
-        currentItemLabel: "章节列表已生成，但标题结构仍需分散",
+        currentItemLabel: boundedFallbackMessage
+          ? "章节标题结构仍需分散，可继续任务或手动快速修复"
+          : "章节列表已生成，但标题结构仍需分散",
         checkpointType: null,
-        checkpointSummary: null,
+        checkpointSummary: boundedFallbackMessage,
         resumeTargetJson: stringifyResumeTarget(nextResumeTarget),
         seedPayloadJson: mergeSeedPayload(existing.seedPayloadJson, {
           taskNotice: notice,
@@ -683,6 +744,26 @@ export class NovelWorkflowHealingService {
       },
     });
     return true;
+  }
+
+  /** Queued or lease-protected commands still own this task's state transition. */
+  private async hasActiveAutoDirectorCommand(taskId: string): Promise<boolean> {
+    if (this.options.hasActiveAutoDirectorCommand) {
+      return this.options.hasActiveAutoDirectorCommand(taskId);
+    }
+    try {
+      const now = Date.now();
+      const commands = await prisma.directorRunCommand.findMany({
+        where: { taskId, status: { in: ["queued", "leased", "running"] } },
+        select: { status: true, leaseExpiresAt: true },
+      });
+      return commands.some((command) => command.status === "queued"
+        || !command.leaseExpiresAt
+        || command.leaseExpiresAt.getTime() > now);
+    } catch {
+      // A bookkeeping read failure must never authorize an automatic model call.
+      return true;
+    }
   }
 
   public async healStaleAutoDirectorStructuredOutlineProgress(

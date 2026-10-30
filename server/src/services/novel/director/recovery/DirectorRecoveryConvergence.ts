@@ -140,3 +140,117 @@ export function planDisplacedPipelineBindingConvergence(
   if (chapter.hasProse) return null;
   return { displacedJobId: displacedJob.id, originalJobId: originalJob.id, originalJobStatus: originalJob.status };
 }
+
+export interface StalePlanRepairExecutionJobEvidence {
+  id: string;
+  novelId: string;
+  status: string;
+  pendingManualRecovery: boolean;
+  currentItemKey: string | null;
+  payloadWorkflowTaskId: string | null;
+  leaseActive: boolean;
+  cancelRequestedAt: unknown | null;
+  startOrder: number;
+  endOrder: number;
+}
+
+export interface StalePlanRepairExecutionChapterEvidence {
+  id: string;
+  order: number;
+  hasProse: boolean;
+  /** A saved chapter contract (task sheet / scene cards) or a chapter-level story plan exists. */
+  hasUsablePlan: boolean;
+}
+
+export interface StalePlanRepairExecutionEvidence {
+  taskId: string;
+  novelId: string;
+  taskPaused: boolean;
+  cancelRequested: boolean;
+  activeCommand: boolean;
+  /** Another queued/running job for this novel already owns execution. */
+  activeJobInNovel: boolean;
+  repairTerminalOrAbsent: boolean;
+  repairPhase: string | null;
+  executionRange: { startOrder: number; endOrder: number } | null;
+  pipelineJobId: string | null;
+  job: StalePlanRepairExecutionJobEvidence | null;
+  /** The chapter the director is about to write, resolved from the saved execution state. */
+  nextChapter: StalePlanRepairExecutionChapterEvidence | null;
+  /** The paused production journal for `nextChapter`; unknown external calls block any rebuild. */
+  journal: { status: string; hasUncertainStep: boolean } | null;
+}
+
+export type StalePlanRepairExecutionPlan =
+  | {
+    action: "rebuild_execution";
+    previousJobId: string;
+    targetChapterId: string;
+    targetChapterOrder: number;
+  }
+  | {
+    action: "requires_planning";
+    previousJobId: string;
+    targetChapterOrder: number | null;
+  }
+  | { action: "none"; reason: string };
+
+/**
+ * Convergence for a planning-repair pause that can never resume its old execution job.
+ *
+ * When planning repair ended (abandoned/committed) and the saved range job lost its resumable
+ * position (`currentItemKey = null`, stale scope, or no recoverable journal anchor), every
+ * continue/retry click is rejected with "原章节任务缺少可核对的恢复位置". The chapter itself may
+ * already be planned. In that case the safe recovery is a *new* execution binding for that
+ * chapter, starting from the saved plan. If the chapter has no usable plan yet, the task must go
+ * back through normal planning instead of writing blind.
+ *
+ * Never rebuilds over saved prose, unknown external calls, an active lease/command, a live job or
+ * a non-terminal repair session; those boundaries keep the strict preflight in charge.
+ */
+export function planStalePlanRepairExecutionRebuild(
+  evidence: StalePlanRepairExecutionEvidence,
+): StalePlanRepairExecutionPlan {
+  if (evidence.cancelRequested) return { action: "none", reason: "task_cancelled" };
+  if (!evidence.taskPaused) return { action: "none", reason: "task_not_paused" };
+  if (evidence.activeCommand) return { action: "none", reason: "active_command" };
+  if (evidence.activeJobInNovel) return { action: "none", reason: "active_job" };
+  if (!evidence.repairTerminalOrAbsent) return { action: "none", reason: "planning_repair_active" };
+  const job = evidence.job;
+  if (!evidence.pipelineJobId || !job || job.id !== evidence.pipelineJobId) {
+    return { action: "none", reason: "no_saved_job" };
+  }
+  // Another director record owns this execution; retiring it would overwrite another task's work.
+  if (job.payloadWorkflowTaskId !== evidence.taskId) return { action: "none", reason: "job_owned_by_other_task" };
+  if (job.novelId !== evidence.novelId) return { action: "none", reason: "job_novel_mismatch" };
+  if (job.cancelRequestedAt) return { action: "none", reason: "job_cancelled" };
+  if (!job.pendingManualRecovery) return { action: "none", reason: "job_not_paused" };
+  if (job.leaseActive) return { action: "none", reason: "job_lease_active" };
+  if (!["queued", "running", "failed"].includes(job.status)) return { action: "none", reason: "job_status_terminal" };
+  // The old job is only unrecoverable when it lost its anchor or points outside the saved scope.
+  const lostAnchor = !job.currentItemKey;
+  const outsideSavedScope = Boolean(evidence.nextChapter
+    && (evidence.nextChapter.order < job.startOrder || evidence.nextChapter.order > job.endOrder));
+  if (!lostAnchor && !outsideSavedScope) return { action: "none", reason: "job_still_recoverable" };
+  if (evidence.journal?.hasUncertainStep) return { action: "none", reason: "journal_unknown_call" };
+  if (evidence.journal && evidence.journal.status !== "paused") {
+    return { action: "none", reason: "journal_not_paused" };
+  }
+  const chapter = evidence.nextChapter;
+  if (!chapter) return { action: "none", reason: "no_pending_chapter" };
+  if (evidence.executionRange
+    && (chapter.order < evidence.executionRange.startOrder || chapter.order > evidence.executionRange.endOrder)) {
+    return { action: "none", reason: "chapter_out_of_execution_range" };
+  }
+  // Saved prose is never rewritten by a rebuild; it needs its own review/repair recovery.
+  if (chapter.hasProse) return { action: "none", reason: "target_chapter_has_prose" };
+  if (chapter.hasUsablePlan) {
+    return {
+      action: "rebuild_execution",
+      previousJobId: job.id,
+      targetChapterId: chapter.id,
+      targetChapterOrder: chapter.order,
+    };
+  }
+  return { action: "requires_planning", previousJobId: job.id, targetChapterOrder: chapter.order };
+}

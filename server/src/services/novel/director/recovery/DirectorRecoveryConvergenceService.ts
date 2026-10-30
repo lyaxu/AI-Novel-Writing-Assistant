@@ -13,6 +13,7 @@ import {
   type BindingJournalEvidence,
   type PlanningRepairConvergenceEvidence,
 } from "./DirectorRecoveryConvergence";
+import { createPlanRepairExecutionRebuildService } from "./PlanRepairExecutionRebuildService";
 
 const ACTIVE_COMMAND_STATUSES = ["queued", "leased", "running"] as const;
 const TERMINAL_REPAIR_AUTO_ABANDON_REASON =
@@ -152,7 +153,10 @@ const BINDING_JOB_SELECT = {
  *  2. execution bindings left behind by an already terminal (abandoned/committed) repair session;
  *  3. a paused range job whose target chapter is saved and journal-completed (via the strict
  *     chapter recovery preflight);
- *  4. a displaced failed job pointer whose journal is still owned by the original range job.
+ *  4. a displaced failed job pointer whose journal is still owned by the original range job;
+ *  5. a terminal planning-repair pause whose saved range job lost its resumable chapter anchor —
+ *     a new execution binding is rebuilt for the pending chapter when it already has a usable
+ *     plan, otherwise the task is routed to normal planning (never blind prose).
  *
  * Unknown external calls, active leases, changed manuscripts, incomplete prose and live commands
  * are all left untouched so the strict recovery preflight keeps blocking with its source-page
@@ -271,6 +275,37 @@ export class DirectorRecoveryConvergenceService {
           });
           task = await prisma.novelWorkflowTask.findUnique({ where: { id: task.id } }) ?? task;
           seed = parseSeed(task.seedPayloadJson) ?? nextSeed;
+        }
+      }
+    }
+
+    // 5. A terminal planning repair can leave `autoExecution.pipelineJobId` pointing at a range
+    //    job that lost its resumable chapter anchor (no `currentItemKey`, stale scope). Rebuild a
+    //    fresh execution binding for the chapter that is actually pending when it already has a
+    //    saved plan; if it has no plan, clear the dead binding so normal planning takes over.
+    //    All writes are CAS-guarded; prose, unknown calls and active leases keep the strict block.
+    {
+      const freshTask = await prisma.novelWorkflowTask.findUnique({ where: { id: input.taskId } });
+      if (freshTask) {
+        try {
+          const freshSeed = parseSeed(freshTask.seedPayloadJson) ?? seed;
+          const rebuild = await createPlanRepairExecutionRebuildService().converge({
+            task: freshTask,
+            seed: freshSeed,
+            repairPhase: readRepair(freshSeed)?.phase ?? null,
+            activeCommand,
+            trigger: input.trigger,
+          });
+          if (rebuild.changed && rebuild.action) {
+            actions.push(rebuild.action.action === "rebuild_execution"
+              ? "rebuilt_stale_plan_repair_execution"
+              : "routed_stale_plan_repair_to_planning");
+          }
+        } catch (error) {
+          logPipelineWarn("规划修复终止后的执行绑定重建未应用，保留原有恢复核对。", {
+            taskId: input.taskId, trigger: input.trigger,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
     }
