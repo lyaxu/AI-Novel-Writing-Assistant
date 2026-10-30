@@ -53,7 +53,11 @@ const progressionWireChecksSchema = z.array(chapterNarrativeProgressionCheckSche
   "Every narrative progression dimension must appear exactly once.");
 type QualityWireAssessment = Omit<AiChapterTaskSheetQualityAssessment, "progressionChecks" | "issues" | "repairGuidance" | "issueDecisions"> & {
   issueDecisions: Array<Omit<z.infer<typeof planningIssueDecisionSchema>, "claimIds">>;
-  issues: Array<Omit<AiChapterTaskSheetQualityAssessment["issues"][number], "repairHint">>;
+  issues: Array<Omit<AiChapterTaskSheetQualityAssessment["issues"][number], "repairHint" | "basis"> & {
+    basis?: Omit<NonNullable<AiChapterTaskSheetQualityAssessment["issues"][number]["basis"]>, "kind"> & {
+      kind: string;
+    };
+  }>;
   progressionChecks: z.infer<typeof progressionWireChecksSchema>;
 };
 
@@ -204,7 +208,12 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   outputSchema: aiChapterTaskSheetQualityAssessmentSchema.omit({ repairGuidance: true }).extend({
     issueDecisions: z.array(planningIssueDecisionSchema.omit({ claimIds: true })),
     stateChecks: z.array(planningStateCheckSchema).max(80),
-    issues: z.array(chapterTaskSheetQualityIssueSchema.omit({ repairHint: true }).extend({ basis: chapterPlanningIssueBasisSchema })).max(10)
+    issues: z.array(chapterTaskSheetQualityIssueSchema.omit({ repairHint: true }).extend({
+      // basis.kind is wholly derived from the issueDecision relation below. Accept a free string
+      // at the wire boundary so one unfamiliar label does not discard an otherwise usable review;
+      // the canonical kind is projected deterministically in postValidate.
+      basis: chapterPlanningIssueBasisSchema.extend({ kind: z.string().trim().min(1).max(80) }),
+    })).max(10)
       .refine(issues => issues.filter(issue => !["contract_overloaded", "selected_direction_drift"].includes(issue.id)).length <= 8),
     promiseChecks: z.array(chapterPlanningPromiseCheckSchema.extend({ handoffStatus: chapterPlanningHandoffStatusSchema })).max(10),
     progressionChecks: progressionWireChecksSchema,
@@ -259,16 +268,30 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
   },
   postValidate: (wireOutput, input) => {
     const { progressionChecks, issueDecisions, ...assessment } = wireOutput;
+    const basisKindByRelation = {
+      contradiction: "conflicting_requirements",
+      missing_precondition: "unsupported_prerequisite",
+      missing_requirement: "missing_requirement",
+      boundary_violation: "boundary_violation",
+    } as const;
     const output: AiChapterTaskSheetQualityAssessment = {
       ...assessment,
       // One AI-authored issue link per state; reverse links are a deterministic projection.
       ...(issueDecisions ? { issueDecisions: issueDecisions.map(decision => ({ ...decision,
         claimIds: (assessment.stateChecks ?? []).filter(check => check.issueId === decision.issueId).map(check => check.claimId),
       })) } : {}),
-      issues: assessment.issues.map(issue => ({ ...issue,
-        repairHint: issueDecisions?.find(decision => decision.issueId === issue.id)?.repair.instruction
-          ?? (issue as { repairHint?: string }).repairHint ?? "",
-      })),
+      issues: assessment.issues.map(issue => {
+        const decision = issueDecisions?.find(item => item.issueId === issue.id);
+        const basis = issue.basis && decision
+          ? { ...issue.basis, kind: basisKindByRelation[decision.relation] }
+          : issue.basis as unknown as AiChapterTaskSheetQualityAssessment["issues"][number]["basis"];
+        return {
+          ...issue,
+          ...(basis ? { basis } : {}),
+          repairHint: decision?.repair.instruction
+            ?? (issue as { repairHint?: string }).repairHint ?? "",
+        } as AiChapterTaskSheetQualityAssessment["issues"][number];
+      }),
       repairGuidance: [],
       ...(progressionChecks ? { progressionChecks: progressionChecks.map(check => ({
         ...check,
