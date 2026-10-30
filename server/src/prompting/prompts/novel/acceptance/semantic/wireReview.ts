@@ -149,14 +149,59 @@ function partialProblems(raw: Record<string, unknown>, input: ChapterAcceptanceP
   return problems;
 }
 
+/**
+ * A review can carry a dangling "problem" record whose own shape is invalid (for example a
+ * blocking issue without a code) and bind findings/directives to it. That is a malformed
+ * optional finding, not an incomplete review of the prose. Drop only the unbound records before
+ * schema validation; surviving findings still keep their own evidence checks.
+ */
+function pruneDanglingReviewBindings(raw: ReviewEnvelope): ReviewEnvelope {
+  const envelope = record(raw);
+  if (!envelope) return raw;
+  const rawBlocking = Array.isArray(envelope.blockingIssues) ? envelope.blockingIssues : [];
+  const keptIndexes: number[] = [];
+  const blockingIssues = rawBlocking.filter((row, index) => {
+    const code = record(row)?.code;
+    const kept = typeof code === "string" && code.trim().length > 0;
+    if (kept) keptIndexes.push(index);
+    return kept;
+  });
+  const issueChecks = Array.isArray(envelope.issueChecks)
+    ? envelope.issueChecks.flatMap(row => {
+      const issueIndex = record(row)?.issueIndex;
+      if (typeof issueIndex !== "number" || !Number.isInteger(issueIndex)) return [];
+      const mapped = keptIndexes.indexOf(issueIndex);
+      return mapped < 0 ? [] : [{ ...record(row), issueIndex: mapped }];
+    })
+    : envelope.issueChecks;
+  const validIssueIds = new Set((Array.isArray(issueChecks) ? issueChecks : []).flatMap(row => {
+    const issueId = record(row)?.issueId;
+    return typeof issueId === "string" && issueId.trim() ? [issueId] : [];
+  }));
+  const keepBound = (list: unknown) => Array.isArray(list)
+    ? list.filter(row => {
+      const issueId = record(row)?.issueId;
+      return typeof issueId === "string" && validIssueIds.has(issueId);
+    })
+    : list;
+  return {
+    ...envelope,
+    blockingIssues,
+    issueChecks,
+    repairDirectives: keepBound(envelope.repairDirectives),
+    missingObligations: keepBound(envelope.missingObligations),
+  };
+}
+
 function inspect(raw: ReviewEnvelope, input: ChapterAcceptancePromptInput) {
-  const parsed = semanticChapterAcceptanceSchema.safeParse(raw);
+  const normalized = pruneDanglingReviewBindings(raw);
+  const parsed = semanticChapterAcceptanceSchema.safeParse(normalized);
   const shapeProblems = parsed.success ? [] : parsed.error.issues.map(issue => {
-    const value = atPath(raw, issue.path);
+    const value = atPath(normalized, issue.path);
     return `${issue.path.join(".") || "review"}:review_shape_invalid；当前值=${JSON.stringify(value) ?? "未提供"}；${issue.message}。只在完整正文语境内纠正字段，保留其他已完成场景与判断；不得让格式修复重写整份报告。`;
   });
   const diagnostic = parsed.success ? { candidate: parsed.data, originalPaths: (text: string) => text, dropped: undefined }
-    : inspectableFields(record(raw) ?? {});
+    : inspectableFields(record(normalized) ?? {});
   const candidate = diagnostic.candidate;
   let output: ChapterAcceptanceAssessmentOutput;
   let semanticProblems: string[] = [];
@@ -170,7 +215,7 @@ function inspect(raw: ReviewEnvelope, input: ChapterAcceptancePromptInput) {
     output = recoverSemanticAcceptance(candidate, input, failure.message);
   }
   const mappedProblems = [...new Set([...shapeProblems, ...semanticProblems.map(diagnostic.originalPaths),
-    ...(!parsed.success ? partialProblems(record(raw) ?? {}, input) : [])])];
+    ...(!parsed.success ? partialProblems(record(normalized) ?? {}, input) : [])])];
   const settled = diagnostic.dropped
     ? settleDroppedRowCoverage(mappedProblems, candidate, diagnostic.dropped, input)
     : { problems: mappedProblems, hint: undefined };
