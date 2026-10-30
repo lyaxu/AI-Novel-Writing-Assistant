@@ -10,6 +10,7 @@ import { logMemoryUsage } from "../../../runtime/memoryTelemetry";
 import { createVolumeChapterListPrompt } from "../../../prompting/prompts/novel/volume/chapterList.prompts";
 import { buildVolumeChapterListContextBlocks } from "../../../prompting/prompts/novel/volume/contextBlocks";
 import { appendStoryCraftContractBlock } from "../../settings/storyCraftContractContext";
+import { PLANNING_OUTPUT_TOKEN_BUDGET } from "../../../prompting/prompts/novel/promptBudgetProfiles";
 import { loadPlanningWrittenEvidence } from "./writtenEvidence";
 import {
   inferRequiredChapterCountFromBeatSheet,
@@ -294,7 +295,7 @@ async function generateBeatChapterBlock(params: {
       provider: params.options.provider,
       model: params.options.model,
       temperature: params.options.temperature ?? 0.35,
-      maxTokens: Math.min(4_800, 900 + params.beatPlan.chapterCount * 260),
+      maxTokens: PLANNING_OUTPUT_TOKEN_BUDGET,
       novelId: params.document.novelId,
       volumeId: params.targetVolume.id,
       taskId: params.options.taskId,

@@ -22,7 +22,7 @@ import {
   createVolumeStrategyPrompt,
   volumeStrategyCritiquePrompt,
 } from "../../../prompting/prompts/novel/volume/strategy.prompts";
-import { resolveVolumeStrategyOutputTokenBudget } from "../../../prompting/prompts/novel/promptBudgetProfiles";
+import { PLANNING_OUTPUT_TOKEN_BUDGET, resolveVolumeStrategyOutputTokenBudget } from "../../../prompting/prompts/novel/promptBudgetProfiles";
 import { appendStoryCraftContractBlock } from "../../settings/storyCraftContractContext";
 import { buildStoryModePromptBlock, normalizeStoryModeOutput } from "../../storyMode/storyModeProfile";
 import type { StoryMacroPlanService } from "../storyMacro/StoryMacroPlanService";
@@ -378,7 +378,7 @@ async function generateSkeleton(params: {
       provider: options.provider,
       model: options.model,
       temperature: options.temperature ?? 0.35,
-      maxTokens: Math.min(6_000, 800 + targetVolumeCount * 520),
+      maxTokens: PLANNING_OUTPUT_TOKEN_BUDGET,
       novelId: document.novelId,
       taskId: options.taskId,
       stage: "volume_strategy",

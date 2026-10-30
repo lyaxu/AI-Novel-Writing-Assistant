@@ -3,6 +3,7 @@ import { runStructuredPrompt } from "../../../prompting/core/promptRunner";
 import { volumeBeatSheetPrompt } from "../../../prompting/prompts/novel/volume/beatSheet.prompts";
 import { buildVolumeBeatSheetContextBlocks } from "../../../prompting/prompts/novel/volume/contextBlocks";
 import { appendStoryCraftContractBlock } from "../../settings/storyCraftContractContext";
+import { PLANNING_OUTPUT_TOKEN_BUDGET } from "../../../prompting/prompts/novel/promptBudgetProfiles";
 import type { StoryMacroPlanService } from "../storyMacro/StoryMacroPlanService";
 import {
   allocateChapterBudgets,
@@ -90,7 +91,7 @@ export async function generateBeatSheet(params: {
       provider: options.provider,
       model: options.model,
       temperature: options.temperature ?? 0.35,
-      maxTokens: 2_800,
+      maxTokens: PLANNING_OUTPUT_TOKEN_BUDGET,
       novelId: document.novelId,
       volumeId: targetVolume.id,
       taskId: options.taskId,

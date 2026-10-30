@@ -17,6 +17,7 @@ import {
 import type { TitleFactorySuggestion } from "@ai-novel/shared/types/title";
 import type { NovelCreateResourceRecommendation } from "@ai-novel/shared/types/novelResourceRecommendation";
 import { runStructuredPrompt } from "../../../../prompting/core/promptRunner";
+import { PLANNING_OUTPUT_TOKEN_BUDGET } from "../../../../prompting/prompts/novel/promptBudgetProfiles";
 import { novelCreateResourceRecommendationService } from "../../NovelCreateResourceRecommendationService";
 import {
   buildDirectorCandidateContextBlocks,
@@ -533,7 +534,7 @@ export class NovelDirectorCandidateStageService {
         provider: input.provider,
         model: input.model,
         temperature: clampTemperature(input.temperature, 0.4),
-        maxTokens: 6000,
+        maxTokens: PLANNING_OUTPUT_TOKEN_BUDGET,
         taskId: input.workflowTaskId,
         stage: "auto_director",
         itemKey: "candidate_direction_batch",

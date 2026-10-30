@@ -12,6 +12,7 @@ import {
   serializeChapterScenePlan,
 } from "@ai-novel/shared/types/chapterLengthControl";
 import { runStructuredPrompt } from "../../../../prompting/core/promptRunner";
+import { PLANNING_OUTPUT_TOKEN_BUDGET } from "../../../../prompting/prompts/novel/promptBudgetProfiles";
 import { volumeChapterExecutionContractPrompt } from "../../../../prompting/prompts/novel/volume/chapterDetail.prompts";
 import { buildVolumeChapterDetailContextBlocks } from "../../../../prompting/prompts/novel/volume/contextBlocks";
 import { appendStoryCraftContractBlock } from "../../../settings/storyCraftContractContext";
@@ -242,7 +243,7 @@ export async function generateChapterTaskSheetDetail(params: {
           model: params.options.model,
           temperature: params.options.temperature ?? 0.35,
           // The contract includes all scene cards, not just the task-sheet summary.
-          maxTokens: 8_192,
+          maxTokens: PLANNING_OUTPUT_TOKEN_BUDGET,
           // The coordinator reserves each attempt durably. Hidden provider/strategy retries
           // would spend outside that reservation and erase the uncertainty boundary.
           disableFallbackModel: true,

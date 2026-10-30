@@ -70,11 +70,10 @@ function createValidStrategyPayload() {
   };
 }
 
-test("volume strategy output budget grows with the expected volume count and remains bounded", () => {
-  assert.equal(resolveVolumeStrategyOutputTokenBudget(3), 1800);
-  assert.equal(resolveVolumeStrategyOutputTokenBudget(9), 2640);
-  assert.equal(resolveVolumeStrategyOutputTokenBudget(24), 5040);
-  assert.equal(resolveVolumeStrategyOutputTokenBudget(100), 5200);
+test("volume strategy uses the generous planner output budget regardless of volume count", () => {
+  for (const volumeCount of [2, 3, 9, 24, 100]) {
+    assert.equal(resolveVolumeStrategyOutputTokenBudget(volumeCount), 32_768, String(volumeCount));
+  }
 });
 
 function createVolume(sortOrder) {

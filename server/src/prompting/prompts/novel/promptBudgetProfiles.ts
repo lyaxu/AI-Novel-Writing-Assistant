@@ -26,21 +26,16 @@ export const NOVEL_PROMPT_BUDGETS = {
   chapterSummary: 1000,
 } as const;
 
-const VOLUME_STRATEGY_OUTPUT_TOKEN_FLOOR = 1_800;
-const VOLUME_STRATEGY_OUTPUT_TOKENS_PER_VOLUME = 160;
-const VOLUME_STRATEGY_OUTPUT_TOKEN_CEILING = 5_200;
+/**
+ * Planning stages return whole-book or whole-volume structured documents. Provider defaults
+ * and a per-volume formula keep underestimating that shape (a 2-volume skeleton can still
+ * need more than 1840 tokens). Use one generous ceiling for every planner structured call;
+ * the model still stops naturally once the document is complete.
+ */
+export const PLANNING_OUTPUT_TOKEN_BUDGET = 32_768;
 
-export function resolveVolumeStrategyOutputTokenBudget(expectedVolumeCount: number): number {
-  const normalizedVolumeCount = Number.isFinite(expectedVolumeCount)
-    ? Math.max(1, Math.round(expectedVolumeCount))
-    : 1;
-  return Math.min(
-    VOLUME_STRATEGY_OUTPUT_TOKEN_CEILING,
-    Math.max(
-      VOLUME_STRATEGY_OUTPUT_TOKEN_FLOOR,
-      1_200 + normalizedVolumeCount * VOLUME_STRATEGY_OUTPUT_TOKENS_PER_VOLUME,
-    ),
-  );
+export function resolveVolumeStrategyOutputTokenBudget(_expectedVolumeCount: number): number {
+  return PLANNING_OUTPUT_TOKEN_BUDGET;
 }
 
 export const RUNTIME_PROMPT_BUDGET_PROFILES: PromptBudgetProfile[] = [
