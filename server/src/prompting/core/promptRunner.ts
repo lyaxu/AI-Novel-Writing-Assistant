@@ -44,6 +44,15 @@ import type {
 } from "./promptTypes";
 
 type PromptRunnerLLMFactory = typeof getLLM;
+
+/**
+ * Planning prompts routinely return large structured documents (book blueprint,
+ * phase map, foreshadow schedule, chapter task sheets). A provider-level 8K
+ * default truncates those calls before the model can finish the JSON. Keep the
+ * higher ceiling on the planner task type only; prose and review calls retain
+ * their own explicit budgets.
+ */
+const PLANNER_DEFAULT_MAX_OUTPUT_TOKENS = 32_768;
 type PromptRunnerStructuredInvoker = typeof invokeStructuredLlmDetailed;
 
 let promptRunnerLLMFactory: PromptRunnerLLMFactory = getLLM;
@@ -629,7 +638,8 @@ async function resolveStructuredOutput<I, O, R = O>(input: {
           provider: input.options?.provider,
           model: input.options?.model,
           temperature: input.options?.temperature,
-          maxTokens: input.options?.maxTokens,
+          maxTokens: input.options?.maxTokens
+            ?? (input.asset.taskType === "planner" ? PLANNER_DEFAULT_MAX_OUTPUT_TOKENS : undefined),
           timeoutMs: input.options?.timeoutMs,
           signal: input.options?.signal,
           disableFallbackModel: input.options?.disableFallbackModel,
@@ -1187,7 +1197,8 @@ export async function streamStructuredPrompt<I, O, R = O>(input: {
           provider: input.options?.provider,
           model: input.options?.model,
           temperature: input.options?.temperature,
-          maxTokens: input.options?.maxTokens,
+          maxTokens: input.options?.maxTokens
+            ?? (input.asset.taskType === "planner" ? PLANNER_DEFAULT_MAX_OUTPUT_TOKENS : undefined),
           timeoutMs: input.options?.timeoutMs,
           signal: input.options?.signal,
           disableFallbackModel: input.options?.disableFallbackModel,
