@@ -752,7 +752,8 @@ export async function runStructuredPrompt<I, O, R = O>(input: {
       provider: input.options?.provider,
       model: input.options?.model,
       temperature: input.options?.temperature,
-      maxTokens: input.options?.maxTokens,
+      maxTokens: input.options?.maxTokens
+        ?? (input.asset.taskType === "planner" ? PLANNER_DEFAULT_MAX_OUTPUT_TOKENS : undefined),
       timeoutMs: input.options?.timeoutMs,
       signal: input.options?.signal,
       disableFallbackModel: input.options?.disableFallbackModel,
