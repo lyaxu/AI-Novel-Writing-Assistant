@@ -8,18 +8,7 @@ import { downloadNovelExport, getNovelChapters, getNovelDetail } from "@/api/nov
 import { queryKeys } from "@/api/queryKeys";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-function countWords(content: string | null | undefined): number {
-  const text = content?.trim() ?? "";
-  if (!text) return 0;
-  const cjk = text.match(/[\u3400-\u9fff]/g)?.length ?? 0;
-  const words = text.replace(/[\u3400-\u9fff]/g, " ").match(/[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*/g)?.length ?? 0;
-  return cjk + words;
-}
-
-function formatCount(value: number): string {
-  return new Intl.NumberFormat("zh-CN").format(value);
-}
+import { countChapterDisplayWords as countWords, formatDisplayWordCount as formatCount } from "@/lib/wordCount";
 
 function formatChapterStatus(status?: ChapterStatus | null): string {
   switch (status) {

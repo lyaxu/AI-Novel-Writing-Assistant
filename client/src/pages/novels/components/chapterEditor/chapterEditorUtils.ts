@@ -1,4 +1,5 @@
 import type { Descendant, Value } from "platejs";
+import { countChapterDisplayWords } from "@/lib/wordCount";
 import type { ChapterEditorOperation } from "@ai-novel/shared/types/novel";
 import type {
   ChapterEditorRequestBuilderInput,
@@ -20,7 +21,7 @@ export function normalizeEditorText(text: string): string {
 }
 
 export function countEditorWords(text: string): number {
-  return normalizeEditorText(text).replace(/\s+/g, "").length;
+  return countChapterDisplayWords(normalizeEditorText(text));
 }
 
 function normalizeParagraphText(text: string): string {

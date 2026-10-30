@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import MarkdownViewer from "@/components/common/MarkdownViewer";
+import { countChapterDisplayWords } from "@/lib/wordCount";
 import {
   hasText,
   resolveDisplayedChapterStatus,
@@ -89,7 +90,7 @@ export default function ChapterExecutionResultPanel(props: ChapterExecutionResul
       : hasVisibleLiveWritingOutput
         ? visibleLiveWritingOutput
         : "";
-  const contentPanelWordCount = contentPanelContent.trim().length;
+  const contentPanelWordCount = countChapterDisplayWords(contentPanelContent);
 
   const isSelectedChapterRepairStreaming = isRepairStreaming && repairStreamingChapterId === selectedChapter.id;
 

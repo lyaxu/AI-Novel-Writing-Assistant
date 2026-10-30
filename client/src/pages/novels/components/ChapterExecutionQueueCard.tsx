@@ -3,6 +3,7 @@ import { Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { countChapterDisplayWords } from "@/lib/wordCount";
 import {
   chapterStatusDescription,
   chapterStatusLabel,
@@ -147,7 +148,7 @@ export default function ChapterExecutionQueueCard(props: ChapterExecutionQueueCa
                       </div>
                       <div>
                         <div>当前字数</div>
-                        <div className="mt-1 font-medium text-foreground">{chapter.content?.length ?? 0}</div>
+                        <div className="mt-1 font-medium text-foreground">{countChapterDisplayWords(chapter.content)}</div>
                       </div>
                     </div>
                   </button>

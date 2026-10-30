@@ -3,6 +3,7 @@ import type { ChapterRuntimePackage } from "@ai-novel/shared/types/chapterRuntim
 import type { Chapter, StoryPlan } from "@ai-novel/shared/types/novel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { countChapterDisplayWords } from "@/lib/wordCount";
 import { chapterStatusLabel, generationStateLabel, resolveDisplayedChapterStatus } from "../chapterExecution.shared";
 
 interface ChapterExecutionOverviewPanelProps {
@@ -73,7 +74,7 @@ export default function ChapterExecutionOverviewPanel(props: ChapterExecutionOve
   const displayedStatus = resolveDisplayedChapterStatus(selectedChapter);
   const statusLabel = chapterStatusLabel(displayedStatus);
   const generationLabel = generationStateLabel(selectedChapter.generationState);
-  const currentWordCount = runtimePackage?.draft.wordCount ?? selectedChapter.content?.trim().length ?? 0;
+  const currentWordCount = countChapterDisplayWords(runtimePackage?.draft.content ?? selectedChapter.content);
   const targetWordCount = selectedChapter.targetWordCount ?? null;
   const issueCount = openAuditIssues.length || reviewResult?.issues?.length || 0;
   const updatedAt = selectedChapter.updatedAt ? new Date(selectedChapter.updatedAt).toLocaleString("zh-CN") : "暂无";
