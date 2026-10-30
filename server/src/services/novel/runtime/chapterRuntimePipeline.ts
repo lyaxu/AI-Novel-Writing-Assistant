@@ -332,11 +332,15 @@ export async function runPipelineChapterWithRuntime(
         try {
           return await finalize();
         } catch (error) {
-          const failure = error as { code?: unknown } | null;
-          // An incomplete first review is a citation/format failure, not a verdict on the
-          // prose. Re-run the same full review once before asking the author to recover;
-          // repair candidates keep their existing single-review behavior.
-          if (attempt !== 0 || originalEvaluation || failure?.code !== "CHAPTER_REVIEW_INCOMPLETE") throw error;
+          const failure = error as { code?: unknown; name?: unknown; category?: unknown } | null;
+          // A malformed/incomplete review response or an incomplete citation/coverage pass is a
+          // technical review failure, not a verdict on the prose. Re-run the same full review
+          // once before asking the author to recover; repair candidates keep their existing
+          // single-review behavior.
+          const retryableParseFailure = failure?.name === "StructuredOutputError"
+            && ["malformed_json", "incomplete_json", "schema_mismatch"].includes(String(failure.category));
+          const retryableReview = retryableParseFailure || failure?.code === "CHAPTER_REVIEW_INCOMPLETE";
+          if (attempt !== 0 || originalEvaluation || !retryableReview) throw error;
           await hooks.onCheckCancelled?.();
           return await finalize();
         }

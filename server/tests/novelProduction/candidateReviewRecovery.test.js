@@ -169,6 +169,14 @@ test('original review incomplete gets one full review retry, then remains a stop
   assert.deepEqual(f.events, ['original_review', 'original_review']);
   assert.equal(f.record().status, 'paused');
 });
+test('a malformed first review response gets one full review retry before stopping', async () => {
+  const malformed = Object.assign(new Error('malformed review json'),
+    { name: 'StructuredOutputError', category: 'malformed_json' });
+  const f = harness({ originalFailure: malformed });
+  await assert.rejects(f.run());
+  assert.deepEqual(f.events, ['original_review', 'original_review']);
+  assert.equal(f.record().status, 'paused');
+});
 
 for (const code of ['CHAPTER_PRODUCTION_UNCERTAIN', 'LLM_OUTPUT_LIMIT', 'CHAPTER_PRODUCTION_CONFLICT',
   'CHAPTER_PRODUCTION_STORAGE', 'PIPELINE_CANCELLED', 'PLANNING_REPAIR_CONFIRMATION_REQUIRED']) {
