@@ -35,6 +35,8 @@ function harness(responses, validatePlanningStateSources=()=>{}) {
     "../../../../prompting/core/promptRunner":runner,
     "../../../../prompting/prompts/novel/volume/chapterDetail.prompts":{volumeChapterExecutionContractPrompt:{id:"contract"}},
     "../../../../prompting/prompts/novel/volume/contextBlocks":{buildVolumeChapterDetailContextBlocks:()=>[]},
+    "../../../../prompting/prompts/novel/promptBudgetProfiles":{PLANNING_OUTPUT_TOKEN_BUDGET:8192},
+    "@ai-novel/shared/types/storyPlanningFramework":require("../../shared/dist/types/storyPlanningFramework.js"),
     "../ChapterTaskSheetQualityGateService":service,"../writtenEvidence":{},
     "../planningPromises":{projectPlanningHorizon:()=>({readonlyOpeningRoutes:[]})},
     // The contract guard trace writes to the chapter row; these tests assert retry/routing

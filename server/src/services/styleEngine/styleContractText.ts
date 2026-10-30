@@ -6,21 +6,33 @@ import type {
   StyleContractViolationSource,
   StyleDetectionRuleType,
 } from "@ai-novel/shared/types/styleEngine";
+import { STYLE_CONTRACT_EXECUTION_LINE } from "./contract/styleRuleText";
 
+/**
+ * 正文写作时的合同顺序：叙事/语言/节奏等“核心写法”排在前面。
+ * 上下文预算不足、块被摘要裁剪时，先保留的也是这几段核心规则。
+ */
 export const WRITER_STYLE_CONTRACT_SECTIONS: StyleContractSectionKey[] = [
   "narrative",
-  "character",
   "language",
   "rhythm",
+  "character",
   "antiAi",
   "selfCheck",
 ];
 
 export const PLANNER_STYLE_CONTRACT_SECTIONS: StyleContractSectionKey[] = [
   "narrative",
+  "language",
+  "character",
+  "antiAi",
+];
+
+export const STYLE_RULE_CONTRACT_SECTIONS: Array<Extract<StyleContractSectionKey, "narrative" | "character" | "language" | "rhythm">> = [
+  "narrative",
   "character",
   "language",
-  "antiAi",
+  "rhythm",
 ];
 
 function getSection(contract: StyleContract, key: StyleContractSectionKey): StyleContractSection {
@@ -38,15 +50,19 @@ function compactList(values: string[] | undefined, fallback = "none"): string {
 }
 
 function summarizeSection(section: StyleContractSection, maxLines: number): string[] {
-  const lines = [
-    section.summary?.trim() ? `${section.key}.summary: ${section.summary.trim()}` : "",
-    ...section.lines.map((line) => line.trim()).filter(Boolean),
-  ].filter(Boolean);
-  return lines.slice(0, maxLines);
+  return section.lines.map((line) => line.trim()).filter(Boolean).slice(0, maxLines);
 }
 
 export function listStyleContractSectionsWithContent(contract: StyleContract): StyleContractSectionKey[] {
   return WRITER_STYLE_CONTRACT_SECTIONS.filter((key) => getSection(contract, key).hasContent);
+}
+
+/** 是否存在真正的写法规则（叙事/人物/语言/节奏），而不只是全局反 AI 底线。 */
+export function hasStyleRuleContent(contract: StyleContract | null | undefined): boolean {
+  if (!contract) {
+    return false;
+  }
+  return STYLE_RULE_CONTRACT_SECTIONS.some((key) => getSection(contract, key).hasContent);
 }
 
 export function buildPlannerStyleContractSummaryText(
@@ -72,10 +88,40 @@ export function buildFullStyleContractText(
     return "";
   }
 
+  // 只输出有内容的小节：未选写法时不能给正文塞“叙事合同/语言合同”这类空壳标题。
   return sections
-    .map((key) => getSection(contract, key).text.trim())
+    .map((key) => getSection(contract, key))
+    .filter((section) => section.hasContent)
+    .map((section) => section.text.trim())
     .filter(Boolean)
     .join("\n\n");
+}
+
+function firstRuleLine(section: StyleContractSection): string {
+  const line = section.lines.find((item) => item.trim());
+  if (!line) {
+    return "";
+  }
+  return line.replace(/^[-*\d.\s]+/g, "").replace(/^总体要求（[^）]*）：/, "").trim();
+}
+
+function buildStyleContractOverview(contract: StyleContract): string {
+  const entries: string[] = [];
+  for (const key of STYLE_RULE_CONTRACT_SECTIONS) {
+    const section = getSection(contract, key);
+    if (!section.hasContent) {
+      continue;
+    }
+    const summary = section.summary?.trim() || firstRuleLine(section);
+    if (!summary) {
+      continue;
+    }
+    entries.push(`- ${section.title.replace(/合同$/, "")}：${summary.length > 90 ? `${summary.slice(0, 90)}…` : summary}`);
+  }
+  if (entries.length === 0) {
+    return "";
+  }
+  return ["【写法合同速览】", ...entries].join("\n");
 }
 
 export function buildStyleContractMetaText(contract: StyleContract | null | undefined): string {
@@ -105,7 +151,15 @@ export function buildWriterStyleContractText(contract: StyleContract | null | un
   if (!contract) {
     return "";
   }
-  return buildFullStyleContractText(contract);
+  const body = buildFullStyleContractText(contract);
+  if (!body) {
+    return "";
+  }
+  // 有真正写法规则时先给一段速览：即使上下文预算把合同裁短，核心风格方向也会保留。
+  const overview = hasStyleRuleContent(contract) ? buildStyleContractOverview(contract) : "";
+  return [overview, body, hasStyleRuleContent(contract) ? STYLE_CONTRACT_EXECUTION_LINE : ""]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export function inferStyleViolationSource(

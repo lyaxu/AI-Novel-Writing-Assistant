@@ -5,7 +5,7 @@ import type {
 } from "@ai-novel/shared/types/chapterRuntime";
 import { createContextBlock } from "../../../core/contextBudget";
 import type { PromptContextBlock } from "../../../core/promptTypes";
-import { buildWriterStyleContractText } from "../../../../services/styleEngine/styleContractText";
+import { buildWriterStyleContractText, hasStyleRuleContent } from "../../../../services/styleEngine/styleContractText";
 import {
   buildCharacterGuidanceText,
   buildLedgerItemLine,
@@ -269,7 +269,10 @@ export function buildChapterWriterContextBlocks(
   const includeCharacterDynamics = shouldIncludeCharacterDynamics(writeContext, mode);
   const includeOpenConflicts = !isIncremental && writeContext.openConflictSummaries.length > 0;
   const includeRecentChapters = mode === "full" && writeContext.recentChapterSummaries.length > 0;
-  const includeStyleContract = mode !== "incremental" && Boolean(writeContext.styleContract);
+  const styleContractText = buildWriterStyleContractText(writeContext.styleContract);
+  const hasStyleRules = hasStyleRuleContent(writeContext.styleContract);
+  // 多轮补写也要带写法合同，否则同一章的后续段落会丢风格；增量模式只降为可选块。
+  const includeStyleContract = Boolean(styleContractText);
   const includeContinuationConstraints = mode === "full" && writeContext.continuationConstraints.length > 0;
   const wordRange = resolveTargetWordRange(writeContext.chapterMission.targetWordCount);
   const blocks: Array<PromptContextBlock | null> = [
@@ -537,11 +540,12 @@ export function buildChapterWriterContextBlocks(
       : null,
     includeStyleContract
       ? createContextBlock({
-        id: "style_contract",
-        group: "style_contract",
-        priority: 74,
+        // 没有选中写法时只注入全局反 AI 底线，不再生成“空壳”写法合同。
+        id: hasStyleRules ? "style_contract" : "anti_ai_baseline",
+        group: hasStyleRules ? "style_contract" : "anti_ai_baseline",
+        priority: hasStyleRules ? 74 : 72,
         required: mode === "full",
-        content: buildWriterStyleContractText(writeContext.styleContract),
+        content: styleContractText,
       })
       : null,
     includeContinuationConstraints

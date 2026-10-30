@@ -28,9 +28,9 @@ test("personal style allows situated thoughts without changing stored global rul
   assert.equal(rule.promptInstruction, "Original psychology prohibition");
   assert.equal(rules[1], other);
   const compiled = new StyleCompiler().compile({ styleProfile: profile, antiAiRules: rules });
-  assert.match(compiled.selfCheck, /character-specific inner reasoning/);
-  assert.match(compiled.style, /allowSwearing: must keep yes/);
-  assert.match(compiled.character, /situated_inner_voice/);
+  assert.match(compiled.selfCheck, /人物自己的计算、误判和犹豫/);
+  assert.match(compiled.style, /粗口使用（必须）：允许/);
+  assert.match(compiled.character, /贴近人物口气的内心声音/);
   assert.doesNotMatch(compiled.antiAi.split("Original psychology prohibition")[0], /必须通过行为/);
 });
 
@@ -43,7 +43,7 @@ test("existing profiles and no-profile generation retain the original policy", a
     styleProfile: { narrativeRules: {}, characterRules: {}, languageRules: {}, rhythmRules: {} },
     antiAiRules: [rule],
   });
-  assert.match(compiled.selfCheck, /instead of showing/);
+  assert.match(compiled.selfCheck, /检查是否用旁白解释心理/);
 });
 
 test("more specific psychology modes override inherited book rules", async () => {

@@ -4,6 +4,7 @@ import type {
 } from "@ai-novel/shared/types/chapterRuntime";
 import { StyleDetectionService } from "../../styleEngine/StyleDetectionService";
 import { StyleRewriteService } from "../../styleEngine/StyleRewriteService";
+import { hasStyleRuleContent } from "../../styleEngine/styleContractText";
 import type { ChapterRuntimeRequestInput } from "./chapterRuntimeSchema";
 import { PostGenerationStyleReviewPolicyResolver } from "./PostGenerationStyleReviewPolicyResolver";
 
@@ -53,7 +54,20 @@ export class PostGenerationStyleReviewRunner {
       };
     }
 
-    if (!input.contextPackage.styleContext?.compiledBlocks) {
+    const styleContext = input.contextPackage.styleContext;
+    if (!styleContext?.compiledBlocks) {
+      return {
+        report: null,
+        autoRewritten: false,
+        originalContent: null,
+        finalContent: input.content,
+      };
+    }
+    // 没有选中写法时只有全局反 AI 底线，不把它当成“写法评审”来跑。
+    const baselineOnlyShell = styleContext.compiledBlocks.contract
+      && !hasStyleRuleContent(styleContext.compiledBlocks.contract)
+      && !styleContext.effectiveStyleProfileId;
+    if (baselineOnlyShell) {
       return {
         report: null,
         autoRewritten: false,

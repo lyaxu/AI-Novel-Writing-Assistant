@@ -9,10 +9,24 @@ import type {
   StyleProfile,
   StyleRuleSet,
 } from "@ai-novel/shared/types/styleEngine";
-import { isStyleCompatibilityField } from "@ai-novel/shared/types/styleEngine";
+import { STYLE_ENGINE_COMPATIBILITY_FIELDS } from "@ai-novel/shared/types/styleEngine";
+import {
+  STYLE_CONTRACT_EXECUTION_LINE,
+  STYLE_CONTRACT_SECTION_TITLES,
+  renderStyleRuleLines,
+  renderStyleSelfCheckLines,
+} from "./contract/styleRuleText";
 import { clamp } from "./helpers";
 
 type StyleSectionKey = keyof StyleRuleSet;
+type StyleRuleSectionKey = "narrative" | "character" | "language" | "rhythm";
+
+const STYLE_RULE_SECTION_BY_CONTRACT_SECTION: Record<StyleRuleSectionKey, StyleSectionKey> = {
+  narrative: "narrativeRules",
+  character: "characterRules",
+  language: "languageRules",
+  rhythm: "rhythmRules",
+};
 
 interface BindingSummary {
   styleProfileId: string;
@@ -44,68 +58,39 @@ interface CompileStyleInput {
 }
 
 const TARGET_TYPE_LABELS: Record<StyleBinding["targetType"], string> = {
-  novel: "Novel",
-  chapter: "Chapter",
-  task: "Task",
+  novel: "书级",
+  chapter: "章节级",
+  task: "任务级",
 };
-
-const SECTION_LABELS: Record<StyleContractSectionKey, string> = {
-  narrative: "Narrative contract",
-  character: "Character contract",
-  language: "Language contract",
-  rhythm: "Rhythm contract",
-  antiAi: "Anti-AI contract",
-  selfCheck: "Self-check",
-};
-
-function formatRuleValue(value: unknown): string {
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item)).join(", ");
-  }
-  if (typeof value === "boolean") {
-    return value ? "yes" : "no";
-  }
-  return String(value);
-}
-
-function resolveDirective(weight: number): string {
-  if (weight >= 0.85) {
-    return "must keep";
-  }
-  if (weight >= 0.65) {
-    return "keep preferred";
-  }
-  return "keep when natural";
-}
 
 function resolveAntiAiVerb(weight: number, type: AntiAiRule["type"]): string {
   if (type === "encourage") {
     if (weight >= 0.85) {
-      return "prefer";
+      return "优先";
     }
     if (weight >= 0.65) {
-      return "encourage";
+      return "鼓励";
     }
-    return "use when natural";
+    return "自然使用";
   }
 
   if (type === "forbidden") {
     if (weight >= 0.85) {
-      return "forbid";
+      return "禁止";
     }
     if (weight >= 0.65) {
-      return "avoid strongly";
+      return "避免";
     }
-    return "avoid";
+    return "尽量避开";
   }
 
   if (weight >= 0.85) {
-    return "watch closely";
+    return "重点警惕";
   }
   if (weight >= 0.65) {
-    return "watch";
+    return "警惕";
   }
-  return "note";
+  return "留意";
 }
 
 function renderBindingContext(summaries: BindingSummary[] | undefined): string {
@@ -116,14 +101,14 @@ function renderBindingContext(summaries: BindingSummary[] | undefined): string {
   const lines = summaries.map((binding, index) => {
     const targetLabel = TARGET_TYPE_LABELS[binding.targetType];
     const profileLabel = binding.styleProfileName?.trim() || binding.styleProfileId;
-    const suffix = index === summaries.length - 1 ? " <- highest priority" : "";
-    return `${index + 1}. ${targetLabel} -> ${profileLabel} (priority=${binding.priority}, weight=${binding.weight.toFixed(2)})${suffix}`;
+    const suffix = index === summaries.length - 1 ? " ← 最高优先级" : "";
+    return `${index + 1}. ${targetLabel} → ${profileLabel}（优先级 ${binding.priority}，权重 ${binding.weight.toFixed(2)}）${suffix}`;
   });
 
   return [
-    "Style source stack:",
+    "写法来源（从宽到具体，越靠后优先级越高）：",
     ...lines,
-    "Merge rule: more specific sources override same-name rules from broader sources.",
+    "继承规则：同一规则以更具体来源为准。",
   ].join("\n");
 }
 
@@ -154,23 +139,17 @@ function hasStructuredRuleContent(rules: Record<string, unknown>): boolean {
 }
 
 function renderObjectRules(
-  sectionKey: StyleSectionKey,
-  sectionLabel: string,
+  sectionKey: StyleRuleSectionKey,
   rules: Record<string, unknown>,
   defaultWeight: number,
   sectionWeightMap?: Record<string, number>,
 ): string[] {
-  const entries = Object.entries(rules).filter(([, value]) => value !== undefined && value !== null && value !== "");
-  if (entries.length === 0) {
-    return [];
-  }
-
-  return entries.map(([key, value], index) => {
-    const rawWeight = clamp(sectionWeightMap?.[key] ?? defaultWeight, 0.3, 1);
-    const compatibilityField = isStyleCompatibilityField(sectionKey, key);
-    const weight = compatibilityField ? clamp(rawWeight - 0.2, 0.3, 1) : rawWeight;
-    const prefix = compatibilityField ? "[compat] " : "";
-    return `${index + 1}. ${sectionLabel}.${key}: ${prefix}${resolveDirective(weight)} ${formatRuleValue(value)}`;
+  return renderStyleRuleLines({
+    section: sectionKey,
+    rules,
+    weight: defaultWeight,
+    fieldWeights: sectionWeightMap,
+    compatibilityFields: STYLE_ENGINE_COMPATIBILITY_FIELDS[STYLE_RULE_SECTION_BY_CONTRACT_SECTION[sectionKey]],
   });
 }
 
@@ -192,13 +171,13 @@ function compileAntiAiRuleLines(
   for (const rule of rules) {
     const weight = clamp(ruleWeightMap?.[rule.id] ?? defaultWeight, 0.3, 1);
     const instruction = rule.promptInstruction?.trim() || rule.description;
-    grouped[rule.type].push(`- ${resolveAntiAiVerb(weight, rule.type)}: ${instruction}`);
+    grouped[rule.type].push(`- ${resolveAntiAiVerb(weight, rule.type)}：${instruction}`);
   }
 
   return [
-    ...(grouped.forbidden.length > 0 ? ["Forbidden:", ...grouped.forbidden] : []),
-    ...(grouped.risk.length > 0 ? ["Risk watch:", ...grouped.risk] : []),
-    ...(grouped.encourage.length > 0 ? ["Encourage:", ...grouped.encourage] : []),
+    ...(grouped.forbidden.length > 0 ? ["禁止项：", ...grouped.forbidden] : []),
+    ...(grouped.risk.length > 0 ? ["风险项：", ...grouped.risk] : []),
+    ...(grouped.encourage.length > 0 ? ["鼓励项：", ...grouped.encourage] : []),
   ];
 }
 
@@ -207,9 +186,9 @@ function buildContractSection(input: {
   summary?: string | null;
   lines: string[];
 }): StyleContractSection {
-  const title = SECTION_LABELS[input.key];
+  const title = STYLE_CONTRACT_SECTION_TITLES[input.key];
   const summary = compactText(input.summary);
-  const text = [title, ...input.lines].filter(Boolean).join("\n");
+  const text = [`【${title}】`, ...input.lines.filter(Boolean)].join("\n");
   return {
     key: input.key,
     title,
@@ -240,7 +219,6 @@ export class StyleCompiler {
       key: "narrative",
       summary: input.styleProfile.narrativeRules.summary,
       lines: renderObjectRules(
-        "narrativeRules",
         "narrative",
         input.styleProfile.narrativeRules,
         weight,
@@ -251,7 +229,6 @@ export class StyleCompiler {
       key: "character",
       summary: input.styleProfile.characterRules.summary,
       lines: renderObjectRules(
-        "characterRules",
         "character",
         input.styleProfile.characterRules,
         weight,
@@ -262,7 +239,6 @@ export class StyleCompiler {
       key: "language",
       summary: input.styleProfile.languageRules.summary,
       lines: renderObjectRules(
-        "languageRules",
         "language",
         input.styleProfile.languageRules,
         weight,
@@ -273,7 +249,6 @@ export class StyleCompiler {
       key: "rhythm",
       summary: input.styleProfile.rhythmRules.summary,
       lines: renderObjectRules(
-        "rhythmRules",
         "rhythm",
         input.styleProfile.rhythmRules,
         weight,
@@ -286,14 +261,7 @@ export class StyleCompiler {
     });
     const selfCheck = buildContractSection({
       key: "selfCheck",
-      lines: [
-        input.styleProfile.characterRules.psychologyMode === "situated_inner_voice"
-          ? "- Keep concrete, character-specific inner reasoning that changes a choice or reveals a contradiction; remove redundant emotional labels and narrator explanations. Do not replace every thought with a gesture."
-          : "- Check whether the draft explains psychology instead of showing it through action or tone.",
-        "- Check whether paragraph endings summarize, elevate, or moralize.",
-        "- Check whether sentence rhythm becomes too even or template-like.",
-        "- If AI flavor remains, revise before returning the final draft.",
-      ],
+      lines: renderStyleSelfCheckLines({ styleProfile: input.styleProfile }),
     });
 
     const contract: StyleContract = {
@@ -319,20 +287,21 @@ export class StyleCompiler {
     };
 
     const style = [
-      "Writing style requirements:",
+      "写作风格要求（按以下合同执行）：",
       narrative.text,
       language.text,
       rhythm.text,
+      STYLE_CONTRACT_EXECUTION_LINE,
     ].filter(Boolean).join("\n\n");
 
     const output = input.outputInstruction
       ?? [
-        "Output requirements:",
-        "Return only the final novel prose.",
-        "Do not explain the rules, do not output outlines, and do not add meta commentary.",
+        "输出要求：",
+        "只输出最终小说正文。",
+        "不要解释规则，不要输出提纲，不要加元叙述。",
         weight >= 0.85
-          ? "When constraints compete, obey the active style contract and anti-AI rules first."
-          : "Apply the style contract naturally without sounding like you are reciting rules.",
+          ? "约束冲突时，优先服从当前写法合同与反 AI 底线。"
+          : "自然运用写法合同，不要像在背诵规则。",
       ].join("\n");
 
     return {

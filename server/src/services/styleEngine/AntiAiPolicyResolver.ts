@@ -21,7 +21,10 @@ function sortEffectiveBindings(bindings: StyleBinding[]): StyleBinding[] {
     if (targetDiff !== 0) {
       return targetDiff;
     }
-    return right.priority - left.priority;
+    if (right.priority !== left.priority) {
+      return right.priority - left.priority;
+    }
+    return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
   });
 }
 

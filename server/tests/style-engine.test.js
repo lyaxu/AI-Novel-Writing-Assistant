@@ -106,9 +106,9 @@ test("StyleCompiler changes anti-ai tone by weight", () => {
   const strong = compiler.compile({ ...baseInput, weight: 0.9 });
   const medium = compiler.compile({ ...baseInput, weight: 0.5 });
 
-  assert.match(strong.antiAi, /Forbidden:/);
-  assert.match(strong.antiAi, /forbid: 直接解释人物心理/);
-  assert.match(medium.antiAi, /avoid: 直接解释人物心理/);
+  assert.match(strong.antiAi, /禁止项：/);
+  assert.match(strong.antiAi, /禁止：直接解释人物心理/);
+  assert.match(medium.antiAi, /尽量避开：直接解释人物心理/);
 });
 
 test("StyleCompiler emits layered binding context and section-level strength", () => {
@@ -147,10 +147,10 @@ test("StyleCompiler emits layered binding context and section-level strength", (
     },
   });
 
-  assert.match(compiled.context, /Style source stack:/);
-  assert.match(compiled.context, /Task -> 临时任务覆盖/);
-  assert.match(compiled.style, /narrative\.summary: must keep 动作先行/);
-  assert.match(compiled.character, /character\.emotionExpression: keep when natural 克制外露/);
+  assert.match(compiled.context, /写法来源（从宽到具体/);
+  assert.match(compiled.context, /任务级 → 临时任务覆盖/);
+  assert.match(compiled.style, /总体要求（必须）：动作先行/);
+  assert.match(compiled.character, /情绪表达（自然使用）：克制外露/);
 });
 
 test("StyleBindingService uses explicit global anti-ai baseline flag", async () => {

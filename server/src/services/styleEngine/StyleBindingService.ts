@@ -20,6 +20,46 @@ const TARGET_PRIORITY: Record<StyleBinding["targetType"], number> = {
 type StyleSectionKey = keyof StyleRuleSet;
 type RuleWeightMap = Record<StyleSectionKey, Record<string, number>>;
 
+type StyleProfileRowWithAntiAi = Parameters<typeof mapStyleProfileRow>[0];
+
+type StyleBindingRowLike = {
+  id: string;
+  styleProfileId: string;
+  targetType: StyleBinding["targetType"];
+  targetId: string;
+  priority: number;
+  weight: number;
+  enabled: boolean;
+  styleProfile: StyleProfileRowWithAntiAi;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const BINDING_INCLUDE = {
+  styleProfile: {
+    include: {
+      antiAiBindings: {
+        include: { antiAiRule: true },
+      },
+    },
+  },
+} as const;
+
+function mapBindingRow(row: StyleBindingRowLike): StyleBinding {
+  return {
+    id: row.id,
+    styleProfileId: row.styleProfileId,
+    targetType: row.targetType,
+    targetId: row.targetId,
+    priority: row.priority,
+    weight: row.weight,
+    enabled: row.enabled,
+    styleProfile: mapStyleProfileRow(row.styleProfile),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
 function buildEmptyRuleWeightMap(): RuleWeightMap {
   return {
     narrativeRules: {},
@@ -43,15 +83,40 @@ function assignRuleWeights(
   }
 }
 
+/** 生效写法：更具体（书<章<任务）、更高优先级、更新绑定的来源排在最前。 */
 function sortMatchedBindings(bindings: StyleBinding[]): StyleBinding[] {
   return bindings.slice().sort((left, right) => {
     const targetDiff = TARGET_PRIORITY[right.targetType] - TARGET_PRIORITY[left.targetType];
     if (targetDiff !== 0) {
       return targetDiff;
     }
-    return right.priority - left.priority;
+    if (right.priority !== left.priority) {
+      return right.priority - left.priority;
+    }
+    return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
   });
 }
+
+/**
+ * 合并顺序：从宽到具体、从低优先级到高优先级、从旧到新。
+ * reduce 里越靠后的来源覆盖前面的同名规则，这样“刚选的写法”一定能压过旧绑定。
+ * 旧实现把同优先级的新绑定排在前面，reduce 时旧规则最后写入并覆盖新规则，
+ * 造成“界面显示已切换写法，但正文仍按旧写法生成”。
+ */
+function sortBindingsForMerge(bindings: StyleBinding[]): StyleBinding[] {
+  return bindings.slice().sort((left, right) => {
+    const targetDiff = TARGET_PRIORITY[left.targetType] - TARGET_PRIORITY[right.targetType];
+    if (targetDiff !== 0) {
+      return targetDiff;
+    }
+    if (left.priority !== right.priority) {
+      return left.priority - right.priority;
+    }
+    return new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime();
+  });
+}
+
+type CreateBindingInput = Pick<StyleBinding, "styleProfileId" | "targetType" | "targetId" | "priority" | "weight" | "enabled">;
 
 export class StyleBindingService {
   private readonly compiler = new StyleCompiler();
@@ -65,58 +130,72 @@ export class StyleBindingService {
         targetId: filter?.targetId,
         styleProfileId: filter?.styleProfileId,
       },
-      include: {
-        styleProfile: {
-          include: {
-            antiAiBindings: {
-              include: { antiAiRule: true },
-            },
-          },
-        },
-      },
+      include: BINDING_INCLUDE,
       orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
     });
 
-    return rows.map((row) => ({
-      id: row.id,
-      styleProfileId: row.styleProfileId,
-      targetType: row.targetType,
-      targetId: row.targetId,
-      priority: row.priority,
-      weight: row.weight,
-      enabled: row.enabled,
-      styleProfile: mapStyleProfileRow(row.styleProfile),
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    }));
+    return rows.map((row) => mapBindingRow(row as unknown as StyleBindingRowLike));
   }
 
-  async createBinding(input: Pick<StyleBinding, "styleProfileId" | "targetType" | "targetId" | "priority" | "weight" | "enabled">): Promise<StyleBinding> {
+  async createBinding(input: CreateBindingInput): Promise<StyleBinding> {
+    const normalizedInput = await this.normalizeBindingPriority(input);
+    if (normalizedInput.existingBindingId) {
+      const current = await prisma.styleBinding.findUnique({
+        where: { id: normalizedInput.existingBindingId },
+        include: BINDING_INCLUDE,
+      });
+      if (current) {
+        return mapBindingRow(current as unknown as StyleBindingRowLike);
+      }
+    }
     const row = await prisma.styleBinding.create({
-      data: input,
-      include: {
-        styleProfile: {
-          include: {
-            antiAiBindings: {
-              include: { antiAiRule: true },
-            },
-          },
-        },
-      },
+      data: normalizedInput.data,
+      include: BINDING_INCLUDE,
     });
 
-    return {
-      id: row.id,
-      styleProfileId: row.styleProfileId,
-      targetType: row.targetType,
-      targetId: row.targetId,
-      priority: row.priority,
-      weight: row.weight,
-      enabled: row.enabled,
-      styleProfile: mapStyleProfileRow(row.styleProfile),
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    };
+    return mapBindingRow(row as unknown as StyleBindingRowLike);
+  }
+
+  /**
+   * 用户从“本书默认写法”里再选一套时，旧接口固定传 priority=1。
+   * 如果直接落库，两套写法同优先级，旧规则仍会压过新规则，看起来像“选了没生效”。
+   * 这里统一让新绑定排在已有绑定之前；同一套写法重复绑定则提升原绑定，不重复创建。
+   */
+  private async normalizeBindingPriority(input: CreateBindingInput): Promise<{
+    data: CreateBindingInput;
+    existingBindingId?: string;
+  }> {
+    if (input.targetType !== "novel" && input.targetType !== "chapter") {
+      return { data: input };
+    }
+    const existing = await prisma.styleBinding.findMany({
+      where: {
+        targetType: input.targetType,
+        targetId: input.targetId,
+        enabled: true,
+      },
+      select: { id: true, styleProfileId: true, priority: true },
+      orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
+    });
+    if (existing.length === 0) {
+      return { data: input };
+    }
+    const maxPriority = Math.max(...existing.map((binding) => binding.priority));
+    const sameProfile = existing.find((binding) => binding.styleProfileId === input.styleProfileId);
+    if (sameProfile) {
+      if (sameProfile.priority >= maxPriority) {
+        return { data: input, existingBindingId: sameProfile.id };
+      }
+      await prisma.styleBinding.update({
+        where: { id: sameProfile.id },
+        data: { priority: maxPriority + 1 },
+      });
+      return { data: input, existingBindingId: sameProfile.id };
+    }
+    if (input.priority > maxPriority) {
+      return { data: input };
+    }
+    return { data: { ...input, priority: maxPriority + 1 } };
   }
 
   async deleteBinding(id: string): Promise<void> {
@@ -151,18 +230,7 @@ export class StyleBindingService {
       orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
     });
 
-    const matchedBindings: StyleBinding[] = bindings.map((row) => ({
-      id: row.id,
-      styleProfileId: row.styleProfileId,
-      targetType: row.targetType,
-      targetId: row.targetId,
-      priority: row.priority,
-      weight: row.weight,
-      enabled: row.enabled,
-      styleProfile: mapStyleProfileRow(row.styleProfile),
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    }));
+    const matchedBindings: StyleBinding[] = bindings.map((row) => mapBindingRow(row as unknown as StyleBindingRowLike));
 
     if (input.taskStyleProfileId) {
       const profileRow = await prisma.styleProfile.findUnique({
@@ -184,20 +252,14 @@ export class StyleBindingService {
           priority: 999,
           weight: 1,
           enabled: true,
-          styleProfile: mapStyleProfileRow(profileRow),
+          styleProfile: mapStyleProfileRow(profileRow as unknown as StyleProfileRowWithAntiAi),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
       }
     }
 
-    const ordered = matchedBindings.slice().sort((left, right) => {
-      const targetPriorityDiff = TARGET_PRIORITY[left.targetType] - TARGET_PRIORITY[right.targetType];
-      if (targetPriorityDiff !== 0) {
-        return targetPriorityDiff;
-      }
-      return left.priority - right.priority;
-    });
+    const ordered = sortBindingsForMerge(matchedBindings);
     const effectiveBinding = sortMatchedBindings(matchedBindings)[0] ?? null;
     const sourceTargets = Array.from(new Set(ordered.map((binding) => binding.targetType)));
     const sourceLabels = sourceTargets.map((targetType) => targetType.toUpperCase());

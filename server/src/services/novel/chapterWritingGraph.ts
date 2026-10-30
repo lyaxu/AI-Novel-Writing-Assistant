@@ -14,6 +14,7 @@ import {
   sanitizeWriterContextBlocks,
 } from "../../prompting/prompts/novel/chapterLayeredContext";
 import { chapterWriterPrompt } from "../../prompting/prompts/novel/chapterWriter.prompts";
+import type { PromptInvocationMeta } from "../../prompting/core/promptTypes";
 import { appendStoryCraftContractBlock } from "../settings/storyCraftContractContext";
 import { NovelContinuationService } from "./NovelContinuationService";
 import { assertChapterContentNotEmpty } from "./runtime/chapterEmptyContentError";
@@ -125,6 +126,45 @@ function buildDraftContinuationBlock(content: string, targetWordCount: number, m
 
 export class ChapterWritingGraph {
   constructor(private readonly deps: ChapterGraphDeps) {}
+
+  /**
+   * 写法合同是正文风格的主要依据；上下文预算紧张时它可能被摘要或丢弃。
+   * 这里把压缩状态写进告警日志，避免“写了但风格没生效”再次变成不可见问题。
+   */
+  private logStyleContractContextState(
+    invocation: PromptInvocationMeta | null | undefined,
+    chapterOrder: number,
+    stage: string,
+  ): void {
+    if (!invocation) {
+      return;
+    }
+    const styleBlockIds = new Set(["style_contract", "anti_ai_baseline"]);
+    const summarized = invocation.summarizedContextBlockIds.filter((id) => styleBlockIds.has(id));
+    const dropped = invocation.droppedContextBlockIds.filter((id) => styleBlockIds.has(id));
+    if (summarized.length === 0 && dropped.length === 0) {
+      return;
+    }
+    this.deps.logWarn("Style contract context was compressed by the prompt budget", {
+      chapterOrder,
+      stage,
+      summarizedBlockIds: summarized,
+      droppedBlockIds: dropped,
+    });
+  }
+
+  private logMissingCompiledStyleContract(
+    styleContext: GenerationContextPackage["styleContext"] | undefined,
+    chapterOrder: number,
+  ): void {
+    if (!styleContext?.effectiveStyleProfileId || styleContext.compiledBlocks) {
+      return;
+    }
+    this.deps.logWarn("Selected style profile has no compiled contract; writing continues without it", {
+      chapterOrder,
+      effectiveStyleProfileId: styleContext.effectiveStyleProfileId,
+    });
+  }
 
   private async continuityNode(
     novelId: string,
@@ -261,6 +301,7 @@ export class ChapterWritingGraph {
       },
     });
     const appended = completion.output.trim();
+    this.logStyleContractContextState(completion.meta.invocation, input.chapter.order, "writer_extend");
     if (!appended) {
       return input.content;
     }
@@ -292,6 +333,7 @@ export class ChapterWritingGraph {
       throw new Error("Chapter runtime context is required before chapter generation.");
     }
     const contextPackage = input.contextPackage;
+    this.logMissingCompiledStyleContract(contextPackage.styleContext, input.chapter.order);
     const targetRange = resolveTargetWordRange(chapterWriteContext.chapterMission.targetWordCount);
     const builtBlocks = await appendStoryCraftContractBlock([
       await loadWritingPlatformBlock(input.novelId),
@@ -346,6 +388,8 @@ export class ChapterWritingGraph {
         triggerReason: "chapter_initial_draft",
       },
     });
+
+    this.logStyleContractContextState(streamed.invocation, input.chapter.order, "writer_draft");
 
     return {
       stream: streamed.stream as AsyncIterable<BaseMessageChunk>,

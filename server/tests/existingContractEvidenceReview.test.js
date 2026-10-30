@@ -26,6 +26,8 @@ function fixture({ changed = false, rejected = false } = {}) {
     "../../../../prompting/core/promptRunner": { runStructuredPrompt: () => { initial++; throw new Error("unexpected initial generation"); } },
     "../../../../prompting/prompts/novel/volume/chapterDetail.prompts": {},
     "../../../../prompting/prompts/novel/volume/contextBlocks": {},
+    "../../../../prompting/prompts/novel/promptBudgetProfiles": { PLANNING_OUTPUT_TOKEN_BUDGET: 8192 },
+    "@ai-novel/shared/types/storyPlanningFramework": require("../../shared/dist/types/storyPlanningFramework.js"),
     "../ChapterTaskSheetQualityGateService": { ChapterTaskSheetQualityGateService: class { async assertCanEnterExecution(value, options) {
       reviews++; assert.equal(value.taskSheet, "saved contract"); assert.equal(JSON.parse(options.reviewContextJson).writtenEvidence.chapters[0].content, "刀具收缴，烙印胸口");
       const context = JSON.parse(options.reviewContextJson);
@@ -65,7 +67,7 @@ test("public nonmanaged readiness shortcut invokes same review before returning 
   const mod = load("../src/services/novel/volume/ChapterExecutionContractService.ts", {
     "@ai-novel/shared/types/chapterLengthControl": {}, "@ai-novel/shared/types/chapterTaskSheetQuality": {},
     "../../../db/prisma": { prisma: { chapter: { findFirst: async () => row } } },
-    "../../styleEngine/styleContractText": { buildWriterStyleContractText: () => "style" },
+    "../../styleEngine/styleContractText": { buildWriterStyleContractText: () => "style", hasStyleRuleContent: () => true },
     "../../planner/plannerPersistence": { buildChapterExecutionContractHash: (value) => JSON.stringify(value) },
     "./volumeGenerationOrchestrator": { generateVolumePlanDocument: () => { throw new Error("must not regenerate"); } },
     "./volumeWorkspacePersistence": {}, "./volumeWorkspaceDocument": {},
