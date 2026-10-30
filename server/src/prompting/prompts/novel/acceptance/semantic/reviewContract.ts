@@ -112,6 +112,8 @@ export function semanticExample(input?: { expectedSceneKeys?: string[] }) {
         explanation: "示例没有依赖距离、体力、能源或承重的动作。", fixSuggestion: undefined },
       { dimension: "continuity_state", verdict: "unknown", evidence,
         explanation: "本示例未提供前章正文，无法核对人物伤势与持有物是否延续。", fixSuggestion: undefined },
+      { dimension: "terminology_introduction", verdict: "not_applicable", evidence: [],
+        explanation: "示例正文没有首次进入读者视野的关键能力、势力、物品或称号专名，本维度不适用。", fixSuggestion: undefined },
     ],
     blockingIssues: [], issueChecks: [], repairDirectives: [], missingObligations: [], riskTags: [],
     decisionReason: "无已核实缺陷，可继续。", continuePolicy: "continue",

@@ -36,11 +36,31 @@ const CAPACITY_CONTENT = "他把餐箱放在门口，从箱子里扶出一个瘦
 const PREREQUISITE_CONTENT = "他翻出空白符纸与朱砂笔，却没有落笔。他抽出那张镇宅符，往门框上一拍，符纸亮起。";
 const EXEMPT_CONTENT = "他从空间折叠餐箱里接出孩子，又把餐箱折成手掌大小塞进口袋。";
 
+/** The terminology dimension is not applicable when no key proper noun first enters the prose. */
+const NOT_APPLICABLE_TERMINOLOGY_ROW = {
+  dimension: "terminology_introduction",
+  verdict: "not_applicable",
+  evidence: [],
+  explanation: "本章没有首次进入读者视野的关键能力、势力、物品或称号专名。",
+};
+
+/** Five audited dimensions; tests override only the row they exercise. */
+function physicalRows(terminologyRow = NOT_APPLICABLE_TERMINOLOGY_ROW) {
+  return [
+    { dimension: "object_container", verdict: "not_applicable", evidence: [], explanation: "本章没有搬运或装载关键物品。" },
+    { dimension: "action_prerequisite", verdict: "not_applicable", evidence: [], explanation: "本章没有依赖工具或消耗品的动作。" },
+    { dimension: "physical_environment", verdict: "not_applicable", evidence: [], explanation: "本章没有依赖距离、体力或能源的动作。" },
+    { dimension: "continuity_state", verdict: "not_applicable", evidence: [], explanation: "本章没有需要跨章核对的状态。" },
+    terminologyRow,
+  ];
+}
+
 /** Complete, structurally valid semantic review used as the base of each scenario. */
 function validReview(input, catalog) {
   const raw = contract.semanticExample(input);
-  const first = { evidenceId: catalog.entries[0].id };
-  const second = { evidenceId: catalog.entries[Math.min(1, catalog.entries.length - 1)].id };
+  const currentEntries = catalog.entries.filter((entry) => entry.source === "current_prose");
+  const first = { evidenceId: currentEntries[0].id };
+  const second = { evidenceId: currentEntries[Math.min(1, currentEntries.length - 1)].id };
   const action = raw.actionStateChecks[0];
   action.actionEvidence = [second];
   const state = action.states[0];
@@ -50,12 +70,7 @@ function validReview(input, catalog) {
   if (raw.sceneCausalityVerdicts[0].constraints.length) {
     raw.sceneCausalityVerdicts[0].constraints[0].evidence = [first];
   }
-  raw.physicalContinuityChecks = [
-    { dimension: "object_container", verdict: "not_applicable", evidence: [], explanation: "本章没有搬运或装载关键物品。" },
-    { dimension: "action_prerequisite", verdict: "not_applicable", evidence: [], explanation: "本章没有依赖工具或消耗品的动作。" },
-    { dimension: "physical_environment", verdict: "not_applicable", evidence: [], explanation: "本章没有依赖距离、体力或能源的动作。" },
-    { dimension: "continuity_state", verdict: "not_applicable", evidence: [], explanation: "本章没有需要跨章核对的状态。" },
-  ];
+  raw.physicalContinuityChecks = physicalRows();
   return raw;
 }
 
@@ -72,11 +87,11 @@ function recover(raw, input) {
   });
 }
 
-test("structured physical audit schema exposes the four dimensions and verdicts", () => {
+test("structured physical and terminology audit schema exposes the five dimensions and verdicts", () => {
   assert.deepEqual([...PHYSICAL_DIMENSIONS],
-    ["object_container", "action_prerequisite", "physical_environment", "continuity_state"]);
+    ["object_container", "action_prerequisite", "physical_environment", "continuity_state", "terminology_introduction"]);
   const schema = prompts.semanticChapterAcceptanceSchema;
-  assert.ok(schema.parse(contract.semanticExample({ expectedSceneKeys: ["scene"] })).physicalContinuityChecks.length === 4);
+  assert.equal(schema.parse(contract.semanticExample({ expectedSceneKeys: ["scene"] })).physicalContinuityChecks.length, 5);
 });
 
 test("a container that hides a person can not later be carried one-handed: capacity/weight defect is detected", () => {
@@ -87,12 +102,10 @@ test("a container that hides a person can not later be carried one-handed: capac
       evidence: [ref(catalog, "从箱子里扶出一个瘦小的孩子"), ref(catalog, "一手拎着那只餐箱")],
       explanation: "同一只餐箱能藏下一个孩子，第二天却能被单手拎着，容量与重量前后不一致。",
       fixSuggestion: "统一餐箱的容积与重量描述：或说明它是空间装备，或改成需要两人搬运/推车。" },
-    { dimension: "action_prerequisite", verdict: "not_applicable", evidence: [], explanation: "本章没有依赖工具或消耗品的动作。" },
-    { dimension: "physical_environment", verdict: "not_applicable", evidence: [], explanation: "本章没有依赖距离、体力或能源的动作。" },
-    { dimension: "continuity_state", verdict: "not_applicable", evidence: [], explanation: "本章没有需要跨章核对的状态。" },
+    ...physicalRows().slice(1),
   ];
   const output = validate(raw, input);
-  assert.equal(output.physicalContinuityChecks.length, 4);
+  assert.equal(output.physicalContinuityChecks.length, 5);
   assert.equal(output.physicalContinuityChecks[0].evidence.length, 2);
   assert.ok(output.physicalContinuityChecks[0].evidence.every(item => item.source === "current_prose" && item.quote));
   assert.doesNotThrow(() => assertReviewCompleted(output));
@@ -118,6 +131,7 @@ test("using a protective talisman without drawing it: missing action prerequisit
       fixSuggestion: "在使用前补一个画符动作：落笔、朱砂、时间与失败风险，或把道具改成已经画好的符。" },
     { dimension: "physical_environment", verdict: "not_applicable", evidence: [], explanation: "本章没有依赖距离、体力或能源的动作。" },
     { dimension: "continuity_state", verdict: "not_applicable", evidence: [], explanation: "本章没有需要跨章核对的状态。" },
+    NOT_APPLICABLE_TERMINOLOGY_ROW,
   ];
   const output = validate(raw, input);
   const normalized = normalizeAssessment(output, input.content, 2800);
@@ -138,6 +152,7 @@ test("an explicit world rule exemption is not misreported as a defect", () => {
     { dimension: "action_prerequisite", verdict: "not_applicable", evidence: [], explanation: "本章没有依赖工具或消耗品的动作。" },
     { dimension: "physical_environment", verdict: "not_applicable", evidence: [], explanation: "本章没有依赖距离、体力或能源的动作。" },
     { dimension: "continuity_state", verdict: "not_applicable", evidence: [], explanation: "本章没有需要跨章核对的状态。" },
+    NOT_APPLICABLE_TERMINOLOGY_ROW,
   ];
   const output = validate(raw, input);
   // No target word count here: this test isolates the physical exemption from length control.
@@ -169,7 +184,7 @@ test("fabricated evidence in a physical finding is rejected, never silently drop
   assert.ok(recovered.reviewContractIssues.some(problem => problem.includes("不属于本次正文证据目录")));
 });
 
-test("physical audit requires all four dimensions and defect fix suggestions", () => {
+test("physical audit requires all five dimensions and defect fix suggestions", () => {
   const { input, catalog } = catalogFor(CAPACITY_CONTENT);
   const raw = validReview(input, catalog);
   raw.physicalContinuityChecks = [
@@ -178,7 +193,7 @@ test("physical audit requires all four dimensions and defect fix suggestions", (
   const problems = physicalContract.normalizeSemanticPhysicalChecks(raw.physicalContinuityChecks, catalog).problems;
   assert.ok(problems.some(problem => problem.includes("severity:required_for_defect")));
   assert.ok(problems.some(problem => problem.includes("fixSuggestion:required_for_defect")));
-  for (const dimension of ["action_prerequisite", "physical_environment", "continuity_state"]) {
+  for (const dimension of ["action_prerequisite", "physical_environment", "continuity_state", "terminology_introduction"]) {
     assert.ok(problems.some(problem => problem.includes(`physical_dimension_coverage_missing:${dimension}`)));
   }
 });
@@ -269,6 +284,97 @@ test("legacy assessments without audit data keep their previous behavior", () =>
   assert.deepEqual(projectPhysicalContinuityAssessment(legacy), legacy);
 });
 
+// Real sample-book failure: the first chapter ends with “破妄眼每用一次…” while the
+// proper noun was never established inside the story. These cases exercise the AI-first
+// contract with simulated structured judgements, not keyword detection.
+const TERMINOLOGY_FIRST_USE_CONTENT = "他闭上眼，再睁开时，破妄眼已经亮起。从这一刻起，破妄眼每用一次，眼底就会多一道血丝。";
+const TERMINOLOGY_ESTABLISHED_CONTENT = "半年后，破妄眼每用一次，眼底就会多一道血丝。";
+const TERMINOLOGY_ALIAS_CONTENT = "他闭上眼，再睁开时，那双眼睛已经亮起。从这一刻起，这双眼睛每用一次，眼底就会多一道血丝。";
+const TERMINOLOGY_ORDINARY_CONTENT = "雨点打在青石板上，他缩在屋檐下，看巷口那盏忽明忽灭的纸灯笼。";
+
+test("using a key proper noun before any in-story naming source is a terminology defect", () => {
+  const { input, catalog } = catalogFor(TERMINOLOGY_FIRST_USE_CONTENT);
+  const raw = validReview(input, catalog);
+  raw.physicalContinuityChecks = physicalRows({
+    dimension: "terminology_introduction", verdict: "defect", severity: "medium",
+    evidence: [ref(catalog, "破妄眼已经亮起"), ref(catalog, "破妄眼每用一次")],
+    explanation: "正文第一次直接使用“破妄眼”这个能力名，前文与本章首次使用前都没有人物命名、他人告知或记录来源，读者不知道这双眼睛叫什么。",
+    fixSuggestion: "在首次使用前补一个正文内命名场景（人物命名、他人告知或师门记录带出），或把首次使用改成只写功能与代称“这双眼睛”。",
+  });
+  const output = validate(raw, input);
+  assert.equal(output.physicalContinuityChecks.length, 5);
+  assert.equal(output.physicalContinuityChecks[4].verdict, "defect");
+  assert.doesNotThrow(() => assertReviewCompleted(output));
+  const normalized = normalizeAssessment(output, input.content);
+  const issue = normalized.blockingIssues.find(item => item.code === "physical_terminology_introduction");
+  assert.ok(issue, "名称未建立就首次使用应进入现有 blocking issue");
+  assert.equal(normalized.status, "repairable");
+  assert.equal(normalized.continuePolicy, "repair_once");
+  assert.match(issue.evidence, /破妄眼/);
+  assert.match(issue.evidence, /专有名词命名来源/);
+  assert.match(issue.fixSuggestion, /命名|代称/);
+  assert.ok(normalized.riskTags.includes("physical_terminology_introduction"));
+});
+
+test("a proper noun already named in earlier prose is not misreported", () => {
+  const establishedProse = [{
+    chapterId: "c1", order: 1,
+    content: "老人盯着他的眼睛看了很久，说：“这叫破妄眼。”",
+  }];
+  const { input, catalog } = catalogFor(TERMINOLOGY_ESTABLISHED_CONTENT, {
+    chapterId: "c2", chapterOrder: 2, establishedProse,
+  });
+  const raw = validReview(input, catalog);
+  raw.physicalContinuityChecks = physicalRows({
+    dimension: "terminology_introduction", verdict: "consistent",
+    evidence: [ref(catalog, "这叫破妄眼", "established_context"), ref(catalog, "破妄眼每用一次")],
+    explanation: "名称已在第 1 章由人物当面命名，本章首次使用有前文名称来源，读者已经知道这双眼睛叫破妄眼。",
+  });
+  const normalized = normalizeAssessment(validate(raw, input), input.content);
+  assert.equal(normalized.blockingIssues.filter(item => item.code.startsWith("physical_")).length, 0);
+  assert.equal(normalized.status, "accepted");
+  assert.equal(normalized.continuePolicy, "continue");
+});
+
+test("ordinary narrative and alias-only prose are not misreported as naming-source defects", () => {
+  const ordinary = catalogFor(TERMINOLOGY_ORDINARY_CONTENT);
+  const ordinaryRaw = validReview(ordinary.input, ordinary.catalog);
+  ordinaryRaw.physicalContinuityChecks = physicalRows({
+    dimension: "terminology_introduction", verdict: "not_applicable", evidence: [],
+    explanation: "本章只有普通叙述与日常名词，没有首次进入读者视野的关键能力、势力或物品专名。",
+  });
+  const ordinaryNormalized = normalizeAssessment(validate(ordinaryRaw, ordinary.input), ordinary.input.content);
+  assert.equal(ordinaryNormalized.blockingIssues.length, 0);
+  assert.equal(ordinaryNormalized.status, "accepted");
+
+  // 名称未建立时只写功能、现象或代称（这双眼睛/那股寒意）不属于缺陷。
+  const alias = catalogFor(TERMINOLOGY_ALIAS_CONTENT);
+  const aliasRaw = validReview(alias.input, alias.catalog);
+  aliasRaw.physicalContinuityChecks = physicalRows({
+    dimension: "terminology_introduction", verdict: "not_applicable", evidence: [],
+    explanation: "本章只写这双眼睛的功能与代称，没有直接使用作者设定名，不构成名称来源缺陷。",
+  });
+  const aliasNormalized = normalizeAssessment(validate(aliasRaw, alias.input), alias.input.content);
+  assert.equal(aliasNormalized.blockingIssues.length, 0);
+});
+
+test("legacy v19 four-row audit reports stay readable and are not re-judged", () => {
+  const legacyRows = physicalRows().slice(0, 4).map(row => ({ ...row, evidence: [] }));
+  const legacyV19 = {
+    status: "continue_with_risk",
+    score: { coherence: 80, pacing: 80, repetition: 80, engagement: 80, voice: 80, overall: 80 },
+    summary: "旧版四维审计报告。", physicalContinuityChecks: legacyRows,
+    blockingIssues: [], repairDirectives: [], missingObligations: [], repairability: "none",
+    decisionReason: "旧报告继续使用。", riskTags: [], continuePolicy: "continue",
+    assetSyncRecommendation: { priority: "normal", reason: "常规同步", requiresFullPayoffReconcile: false },
+  };
+  assert.doesNotThrow(() => prompts.chapterAcceptanceAssessmentSchema.parse(legacyV19));
+  const normalized = normalizeAssessment(legacyV19, "旧正文");
+  assert.equal(normalized.physicalContinuityChecks.length, 4);
+  assert.equal(normalized.blockingIssues.length, 0);
+  assert.equal(normalized.riskTags.includes("physical_terminology_introduction"), false);
+});
+
 // The pipeline is the real consumer of acceptance issues: a physical finding must use the
 // existing repair attempt and, when repair is exhausted, the existing quality-debt path.
 const selectionModule = loadRuntimeSource("selection/ChapterRepairCandidateSelection.ts", {
@@ -287,10 +393,10 @@ const { runPipelineChapterWithRuntime } = loadRuntimeSource("chapterRuntimePipel
   },
 });
 
-function pipelineRuntimePackage(failing) {
+function pipelineRuntimePackage(failing, issueCode = "physical_object_container") {
   const score = failing ? 70 : 92;
   const issue = {
-    auditType: "continuity", severity: "high", code: "physical_object_container",
+    auditType: "continuity", severity: "high", code: issueCode,
     evidence: "物品与容器：同一只餐箱前后容量与重量不一致。", fixSuggestion: "统一餐箱容量与重量描述。",
   };
   return {
@@ -303,12 +409,12 @@ function pipelineRuntimePackage(failing) {
     },
     context: { chapterRepairContext: null, bookContract: null, macroConstraints: null, volumeWindow: null, styleContext: null },
     meta: failing
-      ? { acceptanceStatus: "repairable", continuePolicy: "repair_once", repairDirectives: [], riskTags: ["physical_object_container"] }
+      ? { acceptanceStatus: "repairable", continuePolicy: "repair_once", repairDirectives: [], riskTags: [issueCode] }
       : { acceptanceStatus: "accepted", continuePolicy: "continue", repairDirectives: [], riskTags: [] },
   };
 }
 
-function pipelineDeps(results) {
+function pipelineDeps(results, issueCode = "physical_object_container") {
   let index = 0;
   const committed = [];
   return {
@@ -326,7 +432,7 @@ function pipelineDeps(results) {
       syncFinalChapterArtifacts: async (_n, _c, content) => ({ status: "completed", contentHash: content, completedArtifacts: ["artifact_delta"] }),
       finalizeChapterContent: async ({ content }) => {
         const failing = results[Math.min(index++, results.length - 1)];
-        return { finalContent: content, runtimePackage: pipelineRuntimePackage(failing), needsRepair: failing };
+        return { finalContent: content, runtimePackage: pipelineRuntimePackage(failing, issueCode), needsRepair: failing };
       },
       finalizeChapterTimeline: async () => {},
       commitFinalizedChapterContent: async ({ evaluation }) => { committed.push(evaluation.finalContent); },
@@ -355,4 +461,23 @@ test("an unrepairable physical issue degrades to quality debt instead of failing
   assert.ok(result.qualityDebtAttribution, "仍有可用正文时记录质量债归因");
   assert.ok(result.qualityDebtAttribution.firstFailureIssueCodes.includes("physical_object_container"));
   assert.equal(result.recoverableRepairFailure, null);
+});
+
+test("a terminology naming-source issue uses the existing repair attempt and quality debt path", async () => {
+  const issueCode = "physical_terminology_introduction";
+  const repaired = pipelineDeps([true, false], issueCode);
+  const pass = await runPipelineChapterWithRuntime(repaired.deps, "novel-1", "chapter-1",
+    { maxRetries: 1, repairMode: "light_repair" }, {});
+  assert.equal(pass.pass, true);
+  assert.equal(pass.retryCountUsed, 1);
+  assert.equal(pass.qualityDebtAttribution, null);
+  assert.deepEqual(repaired.committed, ["修复后的正文"]);
+
+  const { deps } = pipelineDeps([true, true], issueCode);
+  const debt = await runPipelineChapterWithRuntime(deps, "novel-1", "chapter-1",
+    { maxRetries: 1, repairMode: "light_repair" }, {});
+  assert.equal(debt.pass, false);
+  assert.ok(debt.qualityDebtAttribution, "同类问题在修复耗尽后走既有质量债通道");
+  assert.ok(debt.qualityDebtAttribution.firstFailureIssueCodes.includes(issueCode));
+  assert.equal(debt.recoverableRepairFailure, null);
 });

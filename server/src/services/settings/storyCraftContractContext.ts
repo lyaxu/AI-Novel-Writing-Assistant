@@ -137,6 +137,83 @@ function renderSpecialAbility(settings: StoryCraftDefaults): string[] {
 }
 
 /**
+ * 专有名词投放：能力、功法、势力、组织、特殊物品、称号等作者设定名，
+ * 必须先让读者在正文里知道这个名字从哪来，再直接使用。
+ *
+ * 复核 scope 把同一底线改成复核口径，规划 scope 要求把首次命名安排写进任务单；
+ * 具体渠道和名字由 AI 按本书题材、叙述方式与已写正文实例化，渲染文本不出现任何题材设定。
+ */
+function renderTerminologyIntroduction(
+  settings: StoryCraftDefaults,
+  scope: "planning" | "review",
+): string[] {
+  const terminology = settings.terminologyIntroduction;
+  if (!terminology.enabled) {
+    return [];
+  }
+  const lines = ["五、专有名词投放"];
+  if (scope === "review") {
+    lines.push(
+      "- 复核候选计划时，检查每个关键专有名词第一次进入正文是否已经安排正文内的名称来源；没有来源就要在候选里直接使用设定名，按缺陷退回修改计划。",
+    );
+  } else {
+    lines.push(
+      "- 规划阶段先为关键专有名词安排首次命名：在章节任务单或执行合同里写清名称第一次进入正文的章节、由谁、通过什么渠道说出或出现。",
+    );
+  }
+  if (terminology.requireInStoryNameSource) {
+    lines.push(
+      "- 能力、功法、势力、组织、特殊物品、称号等专有名词，必须先让读者在正文里看到名称的来源，再使用这个名称。名称来源包括：人物当场命名、他人告知、系统或界面提示、铭文/记录/告示、传闻等。",
+    );
+  }
+  if (terminology.allowFunctionBeforeName) {
+    lines.push(
+      "- 名称还没在正文里建立时，只能写它的功能、现象或代称（例如“这双眼睛”“那股寒意”），不能直接使用作者设定里的名字。",
+    );
+  }
+  if (terminology.firstNamingNeedsSceneOrChannel) {
+    lines.push("- 第一次给出名称要落在具体场景动作或信息渠道上，不能靠旁白术语突然点出。");
+  }
+  if (terminology.nameSourceHint) {
+    lines.push(`- 名称来源参考：${terminology.nameSourceHint}；只作示例，按本书题材与叙述方式实例化。`);
+  }
+  lines.push(
+    "- 名称来源必须写在正文里：规划、大纲、任务书和作者设定只能说明“要有这个名字”，不能当作读者已经知道的依据。",
+    "- 作者或题材确有特例时，在补充要求里写清允许的讲述方式；没有明确说明时按默认规则处理。",
+  );
+  if (terminology.notes) {
+    lines.push(`- 补充要求：${terminology.notes}`);
+  }
+  return lines;
+}
+
+/** 写作 scope 只保留能直接指导正文写法的迁移，不重复规划清单。 */
+function renderTerminologyWritingLines(settings: StoryCraftDefaults): string[] {
+  const terminology = settings.terminologyIntroduction;
+  if (!terminology.enabled) {
+    return [];
+  }
+  const lines: string[] = [];
+  if (terminology.requireInStoryNameSource) {
+    lines.push(
+      "- 正文第一次出现能力、功法、势力、组织、特殊物品或称号的名称之前，先让读者在故事里得到这个名称：由人物当场命名、由他人告知、由系统或界面提示、由铭文/记录/告示带出，或由传闻提到。",
+    );
+  }
+  if (terminology.allowFunctionBeforeName) {
+    lines.push(
+      "- 名称还没在正文里建立时，只写它的功能、现象或代称（例如“这双眼睛”“那股寒意”），不要在叙述里直接使用设定名。",
+    );
+  }
+  if (terminology.firstNamingNeedsSceneOrChannel) {
+    lines.push("- 第一次给出名称要落在具体场景动作或信息渠道上，不要用旁白突然点出术语。");
+  }
+  if (terminology.notes) {
+    lines.push(`- 补充要求：${terminology.notes}`);
+  }
+  return lines;
+}
+
+/**
  * 把“通用创作规则”渲染成可直接进入 AI 上下文的文本。
  *
  * 文本只写题材无关的元规则，并要求 AI 按当前书的题材实例化；这里不出现任何
@@ -157,6 +234,7 @@ export function renderStoryCraftContractText(
     // which reads formulaic and AI-like. Keep only the rules that shape the prose itself.
     sections.push(renderSpecialAbility(settings));
     const writingSection = ["五、写作落地与连续性"];
+    writingSection.push(...renderTerminologyWritingLines(settings));
     if (settings.characterPlanning.enabled) {
       writingSection.push(
         "- 正文只使用本章任务单、角色事实和已写正文允许出场的角色，不得擅自新增核心角色、扩大人物规模或让未登记角色承担主线功能。",
@@ -178,6 +256,7 @@ export function renderStoryCraftContractText(
       sections.push(renderCharacterPlanning(settings.characterPlanning));
     }
     sections.push(renderSpecialAbility(settings));
+    sections.push(renderTerminologyIntroduction(settings, scope));
   }
   const body = sections.filter((lines) => lines.length > 0);
   if (body.length === 0) {

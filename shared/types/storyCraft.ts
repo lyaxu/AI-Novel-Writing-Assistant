@@ -124,6 +124,30 @@ export const storyCraftSpecialAbilitySchema = z.object({
   notes: shortNoteSchema,
 });
 
+/**
+ * 专有名词投放：能力、功法、势力、组织、特殊物品、称号等作者设定名，
+ * 必须先让读者在正文内看到名称来源，再直接使用这个名称。
+ *
+ * 只规定“名称怎么进入读者视野”的工程底线，不规定具体名字或题材；
+ * 具体渠道由 AI 按本书题材、叙述方式和已写正文实例化。
+ */
+export const storyCraftTerminologyIntroductionSchema = z.object({
+  /** 是否启用这一组元规则。 */
+  enabled: z.boolean().default(true),
+  /** 关键专有名词首次进入正文前，必须先建立正文内名称来源。 */
+  requireInStoryNameSource: z.boolean().default(true),
+  /** 名称未建立前只能写功能、现象或代称，不能直接使用作者设定名。 */
+  allowFunctionBeforeName: z.boolean().default(true),
+  /** 首次命名要落在场景动作或信息渠道上，不能靠旁白术语突然点出。 */
+  firstNamingNeedsSceneOrChannel: z.boolean().default(true),
+  /** 题材无关的名称来源示例，供 AI 结合本书题材与叙述方式选择。 */
+  nameSourceHint: z.string().trim().max(200).default(
+    "人物命名、他人告知、系统/界面提示、铭文/记录/告示、传闻等",
+  ),
+  /** 作者或题材特例说明；留空时只使用上面的通用规则。 */
+  notes: shortNoteSchema,
+});
+
 export const storyCraftDefaultsSchema = z.object({
   /** 总开关：关闭后，所有规划和写作提示都不再注入这组元规则。 */
   enabled: z.boolean().default(true),
@@ -131,12 +155,14 @@ export const storyCraftDefaultsSchema = z.object({
   chapterObligations: storyCraftChapterObligationSchema.default(() => storyCraftChapterObligationSchema.parse({})),
   characterPlanning: storyCraftCharacterPlanningSchema.default(() => storyCraftCharacterPlanningSchema.parse({})),
   specialAbility: storyCraftSpecialAbilitySchema.default(() => storyCraftSpecialAbilitySchema.parse({})),
+  terminologyIntroduction: storyCraftTerminologyIntroductionSchema.default(() => storyCraftTerminologyIntroductionSchema.parse({})),
 });
 
 export type StoryCraftPressureContract = z.infer<typeof storyCraftPressureContractSchema>;
 export type StoryCraftChapterObligations = z.infer<typeof storyCraftChapterObligationSchema>;
 export type StoryCraftCharacterPlanning = z.infer<typeof storyCraftCharacterPlanningSchema>;
 export type StoryCraftSpecialAbility = z.infer<typeof storyCraftSpecialAbilitySchema>;
+export type StoryCraftTerminologyIntroduction = z.infer<typeof storyCraftTerminologyIntroductionSchema>;
 export type StoryCraftDefaults = z.infer<typeof storyCraftDefaultsSchema>;
 
 /** 默认值直接来自 schema 默认项，保证“未保存”和“恢复默认”是同一份规则。 */
@@ -155,5 +181,6 @@ export function hasEnabledStoryCraftRules(settings: StoryCraftDefaults): boolean
     || settings.chapterObligations.enabled
     || settings.characterPlanning.enabled
     || settings.specialAbility.enabled
+    || settings.terminologyIntroduction.enabled
   );
 }

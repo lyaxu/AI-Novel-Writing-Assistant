@@ -251,8 +251,8 @@ export const chapterAcceptanceAssessmentSchema = z.object({
   actionStateAuditIssues: z.array(z.string()).optional(),
   progressionChecks: z.array(chapterProgressionCheckSchema).max(3).optional(),
   progressionAuditIssues: z.array(z.string()).optional(),
-  /** Physical/continuity audit rows; absent on legacy reports and older prompt versions. */
-  physicalContinuityChecks: z.array(physicalContinuityCheckSchema).max(4).optional(),
+  /** Physical/continuity/terminology audit rows; absent on legacy reports and older prompt versions. */
+  physicalContinuityChecks: z.array(physicalContinuityCheckSchema).max(5).optional(),
   /** Program-owned measurement of the written length against the existing target band. */
   lengthCompliance: chapterLengthComplianceSchema.optional(),
   reviewContractIssues: z.array(z.string()).optional(),
@@ -350,8 +350,8 @@ export const semanticChapterAcceptanceSchema = unifiedChapterAcceptanceAssessmen
     currentEvidence: tolerantReferenceArray,
   })).length(3),
   // Optional for archived answers and pre-v19 prompts; when present it must cover all
-  // four physical-continuity dimensions exactly once (legacy reports stay readable).
-  physicalContinuityChecks: z.array(semanticPhysicalContinuityCheckSchema).length(4).optional(),
+  // five audited dimensions exactly once (legacy reports stay readable).
+  physicalContinuityChecks: z.array(semanticPhysicalContinuityCheckSchema).length(5).optional(),
 });
 export type SemanticChapterAcceptanceOutput = z.infer<typeof semanticChapterAcceptanceSchema>;
 
@@ -557,7 +557,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
   ReviewEnvelope
 > = {
   id: "novel.chapter.acceptance_assessment",
-  version: "v19",
+  version: "v20",
   taskType: "review",
   mode: "structured",
   language: "zh",
@@ -628,7 +628,7 @@ export const chapterAcceptanceAssessmentPrompt: PromptAsset<
       ...REFERENCE_AUDIT_RULES.slice(10),
       "progressionChecks.status=stalled时findingIssueId必须指向已核实unresolved的问题，先核实已有推进为何不够再建议补文；不能让独立repairSuggestion绕开问题核验。",
       "前后章实际推进审查：",
-      "物理连续性与真实世界规则审查：",
+      "物理连续性、真实世界规则与专有名词命名来源审查：",
       ...PHYSICAL_CONTINUITY_RULES,
       "长度符合性由程序按本章目标字数和现有长度合同核验，你不需要自算字数或发明新阈值；如果篇幅问题来自注水、清单式罗列、重复解释或可压缩的无进展对话，归voice或plot记问题，并说明应保留哪些推进。",
       "正文退化检测边界：",

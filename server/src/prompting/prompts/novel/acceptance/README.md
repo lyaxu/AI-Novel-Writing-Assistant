@@ -1,16 +1,18 @@
 # 正文接收的行动状态证据
 
-## 当前审查语义契约（v19）
+## 当前审查语义契约（v20）
 
 传输层只接收JSON值并完整保留；semantic/wireReview拥有详细Schema、诊断投影和最终门禁。字段格式、覆盖与语义问题共用一次有完整正文的纠正，禁止审查走无正文的整份JSON修复。格式错误的诊断投影不能被认证为成功；原始值及所有失败依据完整保留。五维枚举与非空场景示例必须实际送到初审，不能只依赖修复阶段Schema。
 
-## 物理连续性与真实世界规则审计（v19）
+## 物理连续性、真实世界规则与专有名词命名来源审计（v20）
 
-`semantic/physicalContinuity.ts` 拥有四维结构化审计：`object_container`（物品/容器尺寸容量重量是否支撑动作与搬运）、`action_prerequisite`（画符落笔、朱砂符纸、工具、权限、知识等前置是否已建立）、`physical_environment`（距离时间、体力伤势、能源承重）和 `continuity_state`（道具位置、伤势消耗、持有物、知识关系、时间线与已写正文/前章一致）。新回答固定四维各一行，`verdict` 为 `consistent|defect|exempt|not_applicable|unknown`；历史回答缺该字段时保持可读，不被伪造为已审计。
+`semantic/physicalContinuity.ts` 拥有五维结构化审计：`object_container`（物品/容器尺寸容量重量是否支撑动作与搬运）、`action_prerequisite`（画符落笔、朱砂符纸、工具、权限、知识等前置是否已建立）、`physical_environment`（距离时间、体力伤势、能源承重）、`continuity_state`（道具位置、伤势消耗、持有物、知识关系、时间线与已写正文/前章一致）和 `terminology_introduction`（关键专有名词第一次进入正文时是否有正文内命名来源）。新回答固定五维各一行，`verdict` 为 `consistent|defect|exempt|not_applicable|unknown`；历史回答缺该字段或只有四维时保持可读，不被伪造为已审计。
 
-AI-first 边界：题材豁免由 AI 判断，`exempt` 必须带 `worldRuleBasis`（来自本次上下文或已写前章的设定依据）。程序不维护题材规则表、不做关键词或正则判定；只校验 `{evidenceId}` 属于本次证据快照、`defect` 有本章证据且给出 severity/fixSuggestion、`exempt` 有设定依据、四维覆盖完整。伪造编号和结构问题进入同一次带完整正文的纠正；耗尽后按 `CHAPTER_REVIEW_INCOMPLETE` 保留原稿暂停，不把未核实意见喂给修文。
+`terminology_introduction` 的边界：能力、功法、势力、组织、特殊物品、称号等作者设定名，在首次出现之前必须先由正文内渠道建立（人物命名、他人告知、系统/界面提示、铭文/记录/告示、传闻等）。名称未建立就直接使用设定名 = `defect`，即使后文补出名字也算首次使用时读者不知道；名称尚未建立时正文只写功能、现象或代称（“这双眼睛”）不算缺陷。计划、大纲、任务书、作者设定只说明“要有这个名字”，不能当作正文已经建立。程序不做关键词或正则判定，只校验 AI 的结构化结论与证据。
 
-`defect` 的语义结论在运行时投影成 `physical_<dimension>` blocking issue，进入既有修复与质量债链路；`exempt`/`consistent` 不生成改稿，`unknown` 只保留风险标签。长度不进入 AI 自算：`chapterLengthControl` 的既有目标/软区间/硬上限由程序测量，结果以 `lengthCompliance` 记录并只在带外生成 `length_*` 问题；带内模型长度问题会被撤销。该审计不写正文、不补设定、不改大纲。
+AI-first 边界：题材豁免由 AI 判断，`exempt` 必须带 `worldRuleBasis`（来自本次上下文或已写前章的设定依据）。程序不维护题材规则表、不做关键词或正则判定；只校验 `{evidenceId}` 属于本次证据快照、`defect` 有本章证据且给出 severity/fixSuggestion、`exempt` 有设定依据、五维覆盖完整。伪造编号和结构问题进入同一次带完整正文的纠正；耗尽后按 `CHAPTER_REVIEW_INCOMPLETE` 保留原稿暂停，不把未核实意见喂给修文。
+
+`defect` 的语义结论在运行时投影成 `physical_<dimension>` blocking issue，进入既有修复与质量债链路；`exempt`/`consistent` 不生成改稿，`unknown` 只保留风险标签。专有名词命名来源的修复建议只允许两种方向：在首次使用之前补一个正文内命名场景或信息渠道，或把首次使用改成只写功能、现象与代称；不得建议在旁白里直接解释设定名，也不得新增未建立的世界设定。长度不进入 AI 自算：`chapterLengthControl` 的既有目标/软区间/硬上限由程序测量，结果以 `lengthCompliance` 记录并只在带外生成 `length_*` 问题；带内模型长度问题会被撤销。该审计不写正文、不补设定、不改大纲。
 
 同一状态只比较同一主体的同一具体属性。能力使用、身体受伤、耗材减少可同时发生，必须分别表达；知识A转为知识B不是A的前后变化。程序验证结构对应，AI负责命题理解，不能用枚举别名替换掩盖错误语义。
 

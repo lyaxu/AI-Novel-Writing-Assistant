@@ -190,8 +190,8 @@ export default function StoryCraftSettingsSection(props: {
           <div className="min-w-0 space-y-1">
             <CardTitle className="text-base">通用创作规则</CardTitle>
             <CardDescription className={AUTO_DIRECTOR_MOBILE_CLASSES.wrapText}>
-              为所有书设定故事推进的底线：压力怎么走、每章要交付什么、人物规模怎么铺、特殊能力有什么代价。
-              规则不绑定题材，AI 会按每本书的题材和设定写成具体安排。
+              为所有书设定故事推进的底线：压力怎么走、每章要交付什么、人物规模怎么铺、特殊能力有什么代价、
+              专有名词怎样在正文里先立住。规则不绑定题材，AI 会按每本书的题材和设定写成具体安排。
             </CardDescription>
           </div>
           <span className="shrink-0 text-xs text-muted-foreground">
@@ -528,6 +528,54 @@ export default function StoryCraftSettingsSection(props: {
             placeholder="例如：能力使用次数与主角的身体状态绑定。"
             onChange={(value) => update({
               specialAbility: { ...current.specialAbility, notes: value },
+            })}
+          />
+        </RuleGroup>
+
+        <RuleGroup
+          title="专有名词投放"
+          description="能力、功法、势力、组织、特殊物品、称号这些名字，先让读者在故事里知道名字从哪来，再直接使用。"
+        >
+          <ToggleRow
+            title="名称先建立再使用"
+            description="第一次出现专有名词前，正文里要先有人物命名、他人告知、系统或界面提示、铭文或记录、传闻等来源。"
+            checked={current.terminologyIntroduction.requireInStoryNameSource}
+            onChange={(checked) => update({
+              terminologyIntroduction: { ...current.terminologyIntroduction, requireInStoryNameSource: checked },
+            })}
+          />
+          <ToggleRow
+            title="名称建立前只写功能或代称"
+            description="读者还不知道名字时，写这双眼睛、那股寒意这类现象与代称，不直接使用作者设定名。"
+            checked={current.terminologyIntroduction.allowFunctionBeforeName}
+            onChange={(checked) => update({
+              terminologyIntroduction: { ...current.terminologyIntroduction, allowFunctionBeforeName: checked },
+            })}
+          />
+          <ToggleRow
+            title="首次命名要落在场景或信息渠道上"
+            description="第一次给出名字要发生在具体动作、对话、界面、铭文或传闻里，不能靠旁白术语突然点出。"
+            checked={current.terminologyIntroduction.firstNamingNeedsSceneOrChannel}
+            onChange={(checked) => update({
+              terminologyIntroduction: { ...current.terminologyIntroduction, firstNamingNeedsSceneOrChannel: checked },
+            })}
+          />
+          <TextRow
+            label="名称来源参考"
+            description="只作参考，AI 会按本书题材与叙述方式选择具体渠道，并写进章节安排。"
+            value={current.terminologyIntroduction.nameSourceHint}
+            maxLength={200}
+            onChange={(value) => update({
+              terminologyIntroduction: { ...current.terminologyIntroduction, nameSourceHint: value },
+            })}
+          />
+          <TextRow
+            label="专有名词投放补充要求"
+            description="可写本书允许的讲述特例，例如某些称号由叙述者直接称呼；留空则按上面的通用规则。"
+            value={current.terminologyIntroduction.notes}
+            placeholder="例如：门内弟子称号允许由讲述者直接称呼。"
+            onChange={(value) => update({
+              terminologyIntroduction: { ...current.terminologyIntroduction, notes: value },
             })}
           />
         </RuleGroup>

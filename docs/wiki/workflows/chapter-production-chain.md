@@ -49,7 +49,7 @@
 - 自动修文需要比较原稿与候选稿时，两次接收闸门只能生成运行时评估，不能提前覆盖持久审计报告或 open conflicts。候选选定后，只有最终保留稿的接收结果可以一次性持久化；回退原稿时，后续 Timeline、事实和资产也必须使用原稿对应的评估。
 - 候选风险比较必须使用运行包中稳定的审计 `id/code` 与义务种类，不得把模型生成的 evidence 文本当作问题身份。evidence 是面向修复的说明，措辞变化不能单独构成新增风险。
 - 正文自然度/退化检测输出统一进入 `mode_fit` 审计报告，issue code 使用 `prose_*` 前缀。`high/critical` 视为本章阻塞审计问题并复用现有 patch repair / heavy repair 链路；`medium/low` 只作为提示和后续局部优化依据，不触发全章重写。
-- 接收闸门还包含物理连续性与真实世界规则审计（物品/容器容量重量、动作前置条件、物理环境、跨章状态连续性）以及程序测量的长度符合性。物理缺陷转成 `physical_*` blocking issue，超带长度转成 `length_*` blocking issue，二者都复用现有一次修复与质量债通道，不新增并行流程；超自然/科幻设定豁免由 AI 结合本书设定判断，程序只核对证据与结构。详细边界见 [物理连续性、真实世界规则与长度符合性审计](./physical-continuity-and-length-audit.md)。
+- 接收闸门还包含物理连续性、真实世界规则与专有名词命名来源审计（物品/容器容量重量、动作前置条件、物理环境、跨章状态连续性、关键专有名词首次出现是否有正文内命名来源）以及程序测量的长度符合性。物理与命名缺陷转成 `physical_*` blocking issue，超带长度转成 `length_*` blocking issue，二者都复用现有一次修复与质量债通道，不新增并行流程；超自然/科幻设定豁免由 AI 结合本书设定判断，程序只核对证据与结构。详细边界见 [物理连续性、真实世界规则、专有名词命名来源与长度符合性审计](./physical-continuity-and-length-audit.md)。
 - `prose_*` 问题默认属于本章局部质量问题。自动修复耗尽后，如果正文仍可读，应登记 `defer_and_continue` 质量债并继续剩余章节；不得仅因为单章正文自然度问题写入 `replanAlertDetails`、`PIPELINE_REPLAN_REQUIRED` 或全局自动导演重规划。
 - 正文接收裁决只等待唯一的 `acceptance` gate。Timeline 不属于 writer required context，也不参与“正文是否可接收”的质量判断；接收服务不得再维护并行的 timeline gate、timeline cache 或伪造通过结果。接收结论确定后，唯一的 `ChapterTimelineFinalizationService` 必须为当前 content hash 写入 `stable` 或 `degraded` checkpoint，才能释放章节状态。未启用 Timeline 时不得生成“缺少 timeline context”的正文质量告警，而应提交最小降级锚点。
 - `acceptance` 门禁按同章、同正文 content hash 和有效验收输入指纹复用成功结果。指纹涵盖验收资产版本、实际渲染的上下文与槽位/模板覆盖，以及解析后的模型配置；仅正文不变不足以证明结果可复用。外围运行包时间戳不参与身份。旧版缺少完整指纹的缓存作为 miss，不清理用户数据。

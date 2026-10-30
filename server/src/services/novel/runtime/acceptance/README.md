@@ -12,11 +12,11 @@
 
 `expectedSceneKeys` 只来自已保存且登记了因果合同的场景。新审查必须精确覆盖；旧资产没有该合同则使用空范围，不伪造已完成审查。失败的因果结论映射到局部问题和风险，未知证据不产生编造补文的指令。完整证据由上层接收服务保存到审查元数据。
 
-调用与缓存还共用输出预算：基础6784（含固定三维推进证据与四维物理连续性审计的固定额度），每个需审场景预留1536，按最多8场封顶19072；三场为11392。额度同时容纳原场景判断、关键行动状态链、跨章推进检查与物理连续性审计行，模型路由可根据供应商和思考配置调整实际额度。这里仅提高本次调用证据输出的上限，不新增调用，也不承诺固定实耗或模型质量。
+调用与缓存还共用输出预算：基础7040（含固定三维推进证据与五维物理/专有名词审计的固定额度），每个需审场景预留1536，按最多8场封顶19328；三场为11648。额度同时容纳原场景判断、关键行动状态链、跨章推进检查与物理/专有名词审计行，模型路由可根据供应商和思考配置调整实际额度。这里仅提高本次调用证据输出的上限，不新增调用，也不承诺固定实耗或模型质量。
 
-## 物理连续性与长度符合性投影
+## 物理连续性、专有名词命名来源与长度符合性投影
 
-`physicalContinuityProjection.ts` 消费AI已核实并带本章原文证据的 `physicalContinuityChecks`：只有 `defect` 投影为 `physical_<dimension>` blocking issue，进入现有修复与质量债链路；`exempt`/`consistent` 不生成改稿，`unknown` 只保留 `physical_unknown_<dimension>` 风险标签。缺本章证据的 `defect` 不转成改稿命令。投影按 code 幂等，重复规范化不会重复增加问题，也不新增修文授权路径。
+`physicalContinuityProjection.ts` 消费AI已核实并带本章原文证据的 `physicalContinuityChecks`：只有 `defect` 投影为 `physical_<dimension>` blocking issue，进入现有修复与质量债链路；`exempt`/`consistent` 不生成改稿，`unknown` 只保留 `physical_unknown_<dimension>` 风险标签。缺本章证据的 `defect` 不转成改稿命令。投影按 code 幂等，重复规范化不会重复增加问题，也不新增修文授权路径。`terminology_introduction` 缺陷使用与正文渠道一致的修复建议（首次使用前补命名场景或信息渠道，或改用功能、现象与代称），不生成旁白术语解释或新设定。
 
 `lengthCompliance.ts` 只做确定性后处理：用统一的正文字符统计和既有 `chapterLengthControl` 合同（目标/软区间/硬上限）计算 `lengthCompliance`，带外用 `length_over_soft`、`length_over_hard`、`length_under_soft` 生成普通 `plot` 问题；带内不产生问题，并撤销模型声称的、与测量相反的长度问题及其指令。程序测量填补缺口而不覆盖模型已确证的事实判断，也不引入新阈值；没有目标字数时保持旧行为。
 

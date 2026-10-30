@@ -26,7 +26,7 @@ Wiki 不记录单次提交改了什么，也不替代 release notes。它只记�
 - [故事原型与样章试读](./workflows/story-prototype-trial.md)
 - [结构化输出预算与手动恢复](./workflows/structured-output-budget-recovery.md)
 - [章节生产链路](./workflows/chapter-production-chain.md)
-- [物理连续性、真实世界规则与长度符合性审计](./workflows/physical-continuity-and-length-audit.md)
+- [物理连续性、真实世界规则、专有名词命名来源与长度符合性审计](./workflows/physical-continuity-and-length-audit.md)
 - [读者体验合同](./workflows/reader-experience-contract.md)
 - [Payoff Ledger 来源与同步合同](./workflows/payoff-ledger-contract.md)
 - [角色资源账本工作流](./workflows/character-resource-ledger.md)

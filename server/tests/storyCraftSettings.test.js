@@ -72,7 +72,7 @@ function renderPromptText(asset, promptInput, blocks) {
   return messages.map((message) => String(message.content)).join("\n");
 }
 
-test("generic story craft defaults are genre-neutral and cover the four engineering contracts", () => {
+test("generic story craft defaults are genre-neutral and cover the five engineering contracts", () => {
   assert.equal(DEFAULT_STORY_CRAFT_DEFAULTS.enabled, true);
   assert.equal(DEFAULT_STORY_CRAFT_DEFAULTS.pressureContract.escalationIntervalChapters, 5);
   assert.equal(DEFAULT_STORY_CRAFT_DEFAULTS.pressureContract.visibleCostEveryChapter, true);
@@ -81,6 +81,9 @@ test("generic story craft defaults are genre-neutral and cover the four engineer
   assert.ok(DEFAULT_STORY_CRAFT_DEFAULTS.characterPlanning.namedNpcMinPerVolume
     <= DEFAULT_STORY_CRAFT_DEFAULTS.characterPlanning.namedNpcMaxPerVolume);
   assert.equal(DEFAULT_STORY_CRAFT_DEFAULTS.specialAbility.requireVisibleCost, true);
+  assert.equal(DEFAULT_STORY_CRAFT_DEFAULTS.terminologyIntroduction.requireInStoryNameSource, true);
+  assert.equal(DEFAULT_STORY_CRAFT_DEFAULTS.terminologyIntroduction.allowFunctionBeforeName, true);
+  assert.equal(DEFAULT_STORY_CRAFT_DEFAULTS.terminologyIntroduction.firstNamingNeedsSceneOrChannel, true);
 
   const planningText = renderStoryCraftContractText(DEFAULT_STORY_CRAFT_DEFAULTS, "planning");
   for (const marker of [
@@ -88,11 +91,14 @@ test("generic story craft defaults are genre-neutral and cover the four engineer
     "章节义务",
     "人物规划",
     "特殊能力/金手指",
+    "专有名词投放",
     "每 5 章至少安排一次不可逆升级",
     "禁止纯铺垫章",
     "避免连续同场景循环",
     "主角 1 人",
     "反制手段",
+    "名称还没在正文里建立时",
+    "名称来源必须写在正文里",
     "按本书题材",
   ]) {
     assert.ok(planningText.includes(marker), `planning contract should mention ${marker}`);
@@ -107,12 +113,16 @@ test("generic story craft defaults are genre-neutral and cover the four engineer
   assert.equal(writingText.includes("三、人物规划"), false);
   // Writer scope must not repeat the planning checklist that produces formulaic prose.
   assert.equal(writingText.includes("二、章节义务"), false);
+  assert.equal(writingText.includes("五、专有名词投放"), false);
+  assert.ok(writingText.includes("正文第一次出现能力、功法、势力、组织、特殊物品或称号的名称之前"));
+  assert.ok(writingText.includes("只写它的功能、现象或代称"));
   assert.ok(writingText.includes("前置条件"));
   assert.ok(writingText.includes("不要逐条复述成清单式旁白"));
 
   const reviewText = renderStoryCraftContractText(DEFAULT_STORY_CRAFT_DEFAULTS, "review");
   assert.ok(reviewText.includes("规划复核元规则"));
   assert.ok(reviewText.includes("压力契约"));
+  assert.ok(reviewText.includes("复核候选计划时，检查每个关键专有名词"));
 });
 
 test("generic story craft contract text honors toggles and global disable", () => {
@@ -138,6 +148,25 @@ test("generic story craft contract text honors toggles and global disable", () =
     pressureContract: { ...DEFAULT_STORY_CRAFT_DEFAULTS.pressureContract, escalationIntervalChapters: 8 },
   };
   assert.ok(renderStoryCraftContractText(customEscalation, "planning").includes("每 8 章至少安排一次不可逆升级"));
+
+  const noTerminology = {
+    ...DEFAULT_STORY_CRAFT_DEFAULTS,
+    terminologyIntroduction: { ...DEFAULT_STORY_CRAFT_DEFAULTS.terminologyIntroduction, enabled: false },
+  };
+  assert.equal(renderStoryCraftContractText(noTerminology, "planning").includes("五、专有名词投放"), false);
+  assert.equal(renderStoryCraftContractText(noTerminology, "writing").includes("名称还没在正文里建立时"), false);
+
+  const customTerminology = {
+    ...DEFAULT_STORY_CRAFT_DEFAULTS,
+    terminologyIntroduction: {
+      ...DEFAULT_STORY_CRAFT_DEFAULTS.terminologyIntroduction,
+      nameSourceHint: "由掌柜报账时说出",
+      notes: "门内弟子称号允许由讲述者直接称呼。",
+    },
+  };
+  const customTerminologyText = renderStoryCraftContractText(customTerminology, "planning");
+  assert.ok(customTerminologyText.includes("由掌柜报账时说出"));
+  assert.ok(customTerminologyText.includes("门内弟子称号允许由讲述者直接称呼"));
 });
 
 test("story craft settings expose defaults, reject invalid values, persist and read back", async () => {
@@ -154,6 +183,8 @@ test("story craft settings expose defaults, reject invalid values, persist and r
     assert.equal(getPayload.data.enabled, true);
     assert.equal(getPayload.data.pressureContract.escalationIntervalChapters, 5);
     assert.equal(getPayload.data.specialAbility.revealPacing, "staged");
+    assert.equal(getPayload.data.terminologyIntroduction.requireInStoryNameSource, true);
+    assert.equal(getPayload.data.terminologyIntroduction.nameSourceHint.includes("人物命名"), true);
 
     const invalidInterval = await fetch(`http://127.0.0.1:${port}/api/settings/story-craft`, {
       method: "PUT",
@@ -161,6 +192,13 @@ test("story craft settings expose defaults, reject invalid values, persist and r
       body: JSON.stringify({ pressureContract: { escalationIntervalChapters: 0 } }),
     });
     assert.equal(invalidInterval.status, 400);
+
+    const invalidNameSourceHint = await fetch(`http://127.0.0.1:${port}/api/settings/story-craft`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ terminologyIntroduction: { nameSourceHint: "长".repeat(201) } }),
+    });
+    assert.equal(invalidNameSourceHint.status, 400);
 
     const invalidRange = await fetch(`http://127.0.0.1:${port}/api/settings/story-craft`, {
       method: "PUT",
@@ -178,6 +216,10 @@ test("story craft settings expose defaults, reject invalid values, persist and r
         enabled: true,
         pressureContract: { escalationIntervalChapters: 7, notes: "每章都要让读者看到时钟在走。" },
         specialAbility: { revealPacing: "gradual" },
+        terminologyIntroduction: {
+          nameSourceHint: "由掌柜报账时说出",
+          notes: "门内弟子称号允许由讲述者直接称呼。",
+        },
       }),
     });
     assert.equal(putResponse.status, 200);
@@ -186,18 +228,23 @@ test("story craft settings expose defaults, reject invalid values, persist and r
     assert.equal(putPayload.data.pressureContract.escalationIntervalChapters, 7);
     assert.equal(putPayload.data.pressureContract.notes, "每章都要让读者看到时钟在走。");
     assert.equal(putPayload.data.specialAbility.revealPacing, "gradual");
+    assert.equal(putPayload.data.terminologyIntroduction.nameSourceHint, "由掌柜报账时说出");
+    assert.equal(putPayload.data.terminologyIntroduction.notes, "门内弟子称号允许由讲述者直接称呼。");
 
     assert.equal(mock.state.upsertCalls.length, 1);
     assert.equal(mock.state.upsertCalls[0].where.key, STORY_CRAFT_DEFAULTS_SETTING_KEY);
     const stored = JSON.parse(mock.state.upsertCalls[0].update.value);
     assert.equal(stored.pressureContract.escalationIntervalChapters, 7);
     assert.equal(stored.chapterObligations.openingHook, true);
+    assert.equal(stored.terminologyIntroduction.requireInStoryNameSource, true);
+    assert.equal(stored.terminologyIntroduction.nameSourceHint, "由掌柜报账时说出");
 
     const readBack = await fetch(`http://127.0.0.1:${port}/api/settings/story-craft`);
     assert.equal(readBack.status, 200);
     const readBackPayload = await readBack.json();
     assert.equal(readBackPayload.data.pressureContract.escalationIntervalChapters, 7);
     assert.equal(readBackPayload.data.specialAbility.revealPacing, "gradual");
+    assert.equal(readBackPayload.data.terminologyIntroduction.notes, "门内弟子称号允许由讲述者直接称呼。");
   } finally {
     mock.restore();
     await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -281,6 +328,7 @@ test("story craft contract appears in chapter writing and planning review prompt
     }, [block]);
     assert.ok(writerText.includes("【通用创作规则｜正文写作底线】"));
     assert.ok(writerText.includes("每次使用都要有可见代价"));
+    assert.ok(writerText.includes("正文第一次出现能力、功法、势力、组织、特殊物品或称号的名称之前"));
 
     const reviewBlock = await loadStoryCraftContractBlock("review");
     assert.ok(reviewBlock);
@@ -309,6 +357,7 @@ test("story craft contract appears in chapter writing and planning review prompt
     }, [reviewBlock]);
     assert.ok(reviewText.includes("通用创作规则（题材无关元规则"));
     assert.ok(reviewText.includes("【通用创作规则｜规划复核元规则】"));
+    assert.ok(reviewText.includes("五、专有名词投放"));
 
     // 设置为空时，提示词输出保持可运行，不因缺少契约块而中断。
     const withoutContract = renderPromptText(chapterTaskSheetQualityPrompt, {

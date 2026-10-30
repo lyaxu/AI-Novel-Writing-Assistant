@@ -9,7 +9,7 @@ const input = { ...prior.input, chapterId: fixture.provenance.chapterId,
   establishedProse: prior.input.establishedProse.map(row => ({ ...row, chapterId: fixture.provenance.previousChapterId })) };
 
 test('v17 transport retains every field of all four real JSON answers without schema rewriting', () => {
-  assert.equal(asset.version, 'v19');
+  assert.equal(asset.version, 'v20');
   assert.equal(asset.repairPolicy.maxAttempts, 0);
   assert.equal(asset.semanticRetryPolicy.maxAttempts, 1);
   for (const raw of fixture.outputs) assert.deepEqual(asset.outputSchema.parse(raw), raw);

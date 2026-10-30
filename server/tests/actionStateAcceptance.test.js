@@ -422,8 +422,8 @@ test("fresh prompt has a full compact state example, relevant dimensions only, a
   assert.equal(parsedExample.success, true, JSON.stringify(parsedExample.error?.issues));
   assert.match(String(rendered[0].content), /before\/after及两个basis都使用同一事实结构/);
   assert.match(String(rendered[0].content), /编号只证明引用来源，不自动证明主体、维度、事实或时间正确/);
-  assert.equal(causal.acceptanceOutputBudget(3), 11392);
-  assert.equal(causal.acceptanceOutputBudget(100), 19072);
+  assert.equal(causal.acceptanceOutputBudget(3), 11648);
+  assert.equal(causal.acceptanceOutputBudget(100), 19328);
 });
 
 test("uniform prompt input carries only actual prior prose with exact chapter IDs", () => {
