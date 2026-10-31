@@ -156,6 +156,16 @@ export function projectPlanningStateReview(
       throw new Error(`Decision ${decision.issueId}: historical repair premises cannot come from planning claims.`);
     }
   }
+  // A first chapter's planned entry state has no earlier primary prose to support it. The model
+  // sometimes labels it "supported" even though the claim source is a planned scene; the closest
+  // valid verdict is "established_in_plan" (or unknown) when the quote is current plan evidence.
+  const claimsById = new Map(claims.map(claim => [claim.id, claim]));
+  for (const check of output.stateChecks) {
+    const claim = claimsById.get(check.claimId);
+    if (candidate.chapterOrder !== 1 || check.status !== "supported" || claim?.source.kind !== "planned_scene") continue;
+    check.status = check.evidence.length && check.evidence.every(quote => matchesChapterEvidence(current, quote))
+      ? "established_in_plan" : "insufficient_context";
+  }
   const checks = new Map(output.stateChecks.map(check => [check.claimId, check]));
   if (checks.size !== output.stateChecks.length || checks.size !== claimIds.size || [...claimIds].some(id => !checks.has(id))) {
     throw new Error("stateChecks must evaluate every state claim exactly once.");
