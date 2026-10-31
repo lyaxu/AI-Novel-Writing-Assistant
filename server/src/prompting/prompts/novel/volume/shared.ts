@@ -166,6 +166,17 @@ export function buildCommonNovelContext(novel: VolumeGenerationNovel): string {
 }
 
 export function buildCompactVolumeCard(volume: VolumePlan): string {
+  // Deferred duties that had no room in their source chapter stay visible here so volume/chapter
+  // planning can pick them up instead of letting a planning quality debt fade silently.
+  const capacityCarryOver = volume.chapters.flatMap((chapter) => {
+    const plan = parseChapterScenePlan(chapter.sceneCards, {
+      targetWordCount: chapter.targetWordCount ?? undefined,
+    });
+    const deferable = plan?.capacityPlan?.deferable ?? [];
+    return deferable.length > 0
+      ? [`chapter ${chapter.chapterOrder}: ${deferable.slice(0, 4).join("；")}`]
+      : [];
+  }).slice(0, 6);
   return [
     `volume ${volume.sortOrder}: ${volume.title}`,
     `summary: ${compactText(volume.summary)}`,
@@ -181,6 +192,9 @@ export function buildCompactVolumeCard(volume: VolumePlan): string {
     `next volume hook: ${compactText(volume.nextVolumeHook)}`,
     `open payoffs: ${volume.openPayoffs.join(" | ") || "none"}`,
     `chapter count: ${volume.chapters.length}`,
+    ...(capacityCarryOver.length > 0
+      ? ["capacity carry-over (planning quality debt / deferred duties):", ...capacityCarryOver]
+      : []),
   ].join("\n");
 }
 
@@ -503,6 +517,9 @@ export function buildRecentChapterExecutionContext(
           `middle scene ${middleIndex + 1}: ${scene.title} | purpose=${scene.purpose} | mustAdvance=${scene.mustAdvance.join(" | ") || "none"}`
         ))
       : [];
+    const capacityDebtLines = (scenePlan?.capacityPlan?.deferable?.length ?? 0) > 0
+      ? [`capacity carry-over (deferred duty must be picked up later, planning quality debt): ${scenePlan!.capacityPlan!.deferable.join(" | ")}`]
+      : [];
 
     return [
       `chapter ${chapter.chapterOrder}: ${chapter.title}`,
@@ -511,6 +528,7 @@ export function buildRecentChapterExecutionContext(
       openingLine,
       ...middleSceneLines,
       endingLine,
+      ...capacityDebtLines,
     ].filter(Boolean).join("\n");
   }).join("\n\n");
 }

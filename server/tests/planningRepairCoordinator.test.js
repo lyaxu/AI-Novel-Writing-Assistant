@@ -303,6 +303,106 @@ test("local repair does not expand to neighboring chapters", async () => {
   assert.deepEqual(result.volumes[0].chapters[1], h.input.document.volumes[0].chapters[1]);
 });
 
+test("planning capacity debt continues without a window review instead of pausing", async () => {
+  const h = harness({ local: true });
+  h.session.candidate = document();
+  Object.assign(h.session.state, {
+    phase: "reviewing", rounds: 1, affectedChapterIds: ["c3"],
+    capacityDebt: [{
+      fromChapterId: "c3", fromChapterOrder: 3,
+      item: "租约到期后身份自动流转回系统池、可被他人续租的规则揭示",
+      reason: "no_later_writable_chapter", suggestedChapterId: null, suggestedChapterOrder: null,
+    }],
+  });
+  h.gate.evaluate = async () => { h.calls.push("chapter_review"); return pass; };
+  await h.coordinator.run(h.input);
+  assert.equal(h.commits, 1);
+  assert.equal(h.session.state.phase, "committed");
+  assert.equal(h.calls.includes("novel.volume.planning_repair_review"), false);
+  assert.equal(h.calls.filter((call) => call === "chapter_review").length, 1);
+  assert.match(String(h.session.state.summary ?? ""), /质量债/);
+});
+
+test("applied repair output with an unplaceable deferable persists capacity debt and commits", async () => {
+  const h = harness({ local: true });
+  const invoke = async (request) => {
+    const result = await h.invoke(request);
+    if (request.asset.id === "novel.volume.planning_repair") {
+      result.output.changes[0].capacityPlan = {
+        coreEvent: "repaired c3", keyTurn: "turn c3", mustDeliver: ["Investigate"],
+        deferable: ["租约到期后身份自动流转回系统池、可被他人续租的规则揭示"],
+        seedOnly: [], estimatedCoreWordCount: 2400,
+      };
+    }
+    return result;
+  };
+  await new PlanningRepairCoordinator(h.store, h.gate, invoke).run(h.input);
+  assert.equal(h.commits, 1);
+  assert.equal(h.session.state.phase, "committed");
+  const debt = h.session.state.capacityDebt ?? [];
+  assert.equal(debt.length, 1);
+  assert.match(debt[0].item, /租约|规则揭示/);
+  assert.equal(h.calls.includes("novel.volume.planning_repair_review"), false);
+});
+
+const DEFERRED_LEASE_RULE = "租约到期后身份自动流转回系统池、可被他人续租的规则揭示";
+
+function capacitySceneCards({ coreEvent = "事件", keyTurn = "转折", mustDeliver = [], deferable = [] } = {}) {
+  const lengthControl = require("@ai-novel/shared/types/chapterLengthControl");
+  return JSON.stringify(lengthControl.normalizeChapterScenePlan({
+    scenes: [1, 2, 3].map((index) => ({
+      key: `s${index}`, title: `场景${index}`, purpose: "推进主事件", mustAdvance: ["推进"],
+      mustPreserve: [], entryState: "入口", exitState: "出口", forbiddenExpansion: [],
+      targetWordCount: 1000, resistance: "阻力", turn: "转折", emotionalShift: "变化", readerValue: "价值",
+    })),
+    requiredElements: mustDeliver,
+    capacityPlan: {
+      coreEvent, keyTurn, mustDeliver,
+      deferable, seedOnly: [], estimatedCoreWordCount: 2800,
+    },
+  }, 3000));
+}
+
+function capacityCandidateDocument() {
+  const doc = document();
+  doc.volumes[0].chapters[0].exclusiveEvent = "第3章主事件";
+  doc.volumes[0].chapters[0].sceneCards = capacitySceneCards({
+    coreEvent: "第3章主事件", keyTurn: "第3章转折", mustDeliver: ["完成主事件"], deferable: [DEFERRED_LEASE_RULE],
+  });
+  doc.volumes[0].chapters[1].exclusiveEvent = "第4章主事件";
+  doc.volumes[0].chapters[1].sceneCards = capacitySceneCards({
+    coreEvent: "第4章主事件", keyTurn: "第4章转折", mustDeliver: ["完成第4章主事件"],
+  });
+  return doc;
+}
+
+test("resume resolves residual deferred duties into a later writable chapter before review", async () => {
+  const h = harness({ local: true });
+  h.session.candidate = capacityCandidateDocument();
+  h.gate.evaluate = async () => { h.calls.push("chapter_review"); return pass; };
+  Object.assign(h.session.state, { phase: "reviewing", rounds: 1, affectedChapterIds: ["c3", "c4"] });
+  await h.coordinator.run(h.input);
+  assert.equal(h.commits, 1);
+  const destination = JSON.parse(h.session.candidate.volumes[0].chapters[1].sceneCards);
+  assert.ok(destination.capacityPlan.mustDeliver.includes(DEFERRED_LEASE_RULE));
+  assert.ok(destination.requiredElements.includes(DEFERRED_LEASE_RULE));
+  assert.ok(destination.scenes.some((scene) => scene.mustAdvance.some((item) => item.includes(DEFERRED_LEASE_RULE))));
+  assert.deepEqual(h.session.state.capacityDebt ?? [], []);
+  assert.ok(h.calls.includes("novel.volume.planning_repair_review"));
+});
+
+test("resume keeps an unplaceable deferable as planning debt and continues to commit", async () => {
+  const h = harness({ local: true });
+  h.session.candidate = capacityCandidateDocument();
+  h.gate.evaluate = async () => { h.calls.push("chapter_review"); return pass; };
+  Object.assign(h.session.state, { phase: "reviewing", rounds: 1, affectedChapterIds: ["c3"] });
+  await h.coordinator.run(h.input);
+  assert.equal(h.commits, 1);
+  assert.equal(h.session.state.phase, "committed");
+  assert.equal((h.session.state.capacityDebt ?? []).length, 1);
+  assert.equal(h.calls.includes("novel.volume.planning_repair_review"), false);
+});
+
 test("chapter re-review receives book constraints, current candidate and preceding issue ids", async () => {
   const h = harness({ local: true });
   h.input.context = { novel: { genre: "东方玄幻", coreRule: "能力必须有来源" } };

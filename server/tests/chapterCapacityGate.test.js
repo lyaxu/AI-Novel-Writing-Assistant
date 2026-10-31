@@ -408,7 +408,8 @@ function repairDocument() {
 }
 
 function repairChange(chapterId, plan, extra = {}) {
-  const cards = sceneCards({ targetWordCount: 2800, mustAdvance: [[plan.mustDeliver[0] ?? "承接职责"], ["推进"], ["收尾"]] })
+  const { targetWordCount = 2800, ...rest } = extra;
+  const cards = sceneCards({ targetWordCount, mustAdvance: [[plan.mustDeliver[0] ?? "承接职责"], ["推进"], ["收尾"]] })
     .map((card) => ({ ...card, key: `${chapterId}-${card.key}`, causality: createSceneCausality(), entryState: "入口", exitState: "出口" }));
   return {
     chapterId,
@@ -427,7 +428,7 @@ function repairChange(chapterId, plan, extra = {}) {
       netChange: "变", inheritedHookResponsibilities: [], endingHook: "钩",
     },
     capacityPlan: plan,
-    ...extra,
+    ...rest,
   };
 }
 
@@ -482,21 +483,205 @@ test("capacity repair moves deferred duties into the next unwritten chapter and 
   assert.equal(destinationGate.passed, true);
 });
 
-test("capacity repair without a later writable chapter keeps the duty and refuses to lose it", () => {
+const DEFERRED_LEASE_RULE = "租约到期后身份自动流转回系统池、可被他人续租的规则揭示";
+
+function runRepair(document, allowedIds, output) {
+  return domain.applyPlanningRepairCandidate(document, "volume-1", allowedIds, {
+    requiresUserDecision: false,
+    reason: "容量拆分与兜底",
+    changes: output,
+    obligationMoves: [],
+  }, [], []);
+}
+
+test("deferred duty without a carrier is deterministically written into the earliest later writable chapter", () => {
+  const document = repairDocument();
+  const sourcePlan = capacityPlan({
+    mustDeliver: ["验货确认账目被改"],
+    deferable: [DEFERRED_LEASE_RULE],
+    seedOnly: [],
+    estimatedCoreWordCount: 2200,
+  });
+  const targetPlan = capacityPlan({
+    coreEvent: "第2章唯一主事件",
+    keyTurn: "第2章唯一转折",
+    mustDeliver: ["完成第2章主事件"],
+    deferable: [],
+    seedOnly: [],
+  });
+  const repaired = runRepair(document, ["p1", "p2"], [
+    repairChange("p1", sourcePlan),
+    repairChange("p2", targetPlan),
+  ]);
+  const source = repaired.volumes[0].chapters.find((chapter) => chapter.id === "p1");
+  const target = repaired.volumes[0].chapters.find((chapter) => chapter.id === "p2");
+  const sourcePersisted = JSON.parse(source.sceneCards);
+  const targetPersisted = JSON.parse(target.sceneCards);
+  // Source keeps the deferable ledger; the duty is meant to be carried later, not deleted here.
+  assert.deepEqual(sourcePersisted.capacityPlan.deferable, [DEFERRED_LEASE_RULE]);
+  assert.deepEqual(domain.getPlanningRepairCapacityDebt(repaired), []);
+  assert.ok(targetPersisted.capacityPlan.mustDeliver.includes(DEFERRED_LEASE_RULE));
+  assert.ok(targetPersisted.requiredElements.includes(DEFERRED_LEASE_RULE));
+  assert.ok(targetPersisted.scenes.some((scene) => scene.mustAdvance.includes(`承接前章延期职责：${DEFERRED_LEASE_RULE}`)));
+  const targetGate = capacityGateSource.evaluateCandidateCapacity({
+    targetWordCount: target.targetWordCount, exclusiveEvent: target.exclusiveEvent, sceneCards: target.sceneCards,
+  });
+  assert.equal(targetGate.passed, true);
+  const sourceGate = capacityGateSource.evaluateCandidateCapacity({
+    targetWordCount: source.targetWordCount, exclusiveEvent: source.exclusiveEvent, sceneCards: source.sceneCards,
+  }, { allowDeferable: true });
+  assert.equal(sourceGate.passed, true);
+});
+
+test("deferred duty skips a later chapter with no capacity left and lands on the next writable chapter", () => {
+  const document = repairDocument();
+  // p2 only has a 1200-word budget; one mustDeliver already saturates it.
+  document.volumes[0].chapters[1] = repairChapter("p2", "volume-1", 2, { targetWordCount: 1200 });
+  const sourcePlan = capacityPlan({
+    mustDeliver: ["验货确认账目被改"],
+    deferable: [DEFERRED_LEASE_RULE],
+    seedOnly: [],
+  });
+  const p2Plan = capacityPlan({
+    coreEvent: "第2章唯一主事件",
+    keyTurn: "第2章唯一转折",
+    mustDeliver: ["完成第2章主事件"],
+    deferable: [],
+    seedOnly: [],
+  });
+  const p3Plan = capacityPlan({
+    coreEvent: "第3章唯一主事件",
+    keyTurn: "第3章唯一转折",
+    mustDeliver: ["完成第3章主事件"],
+    deferable: [],
+    seedOnly: [],
+  });
+  const repaired = runRepair(document, ["p1", "p2", "p3"], [
+    repairChange("p1", sourcePlan),
+    repairChange("p2", p2Plan, { targetWordCount: 1200 }),
+    repairChange("p3", p3Plan),
+  ]);
+  const target2 = JSON.parse(repaired.volumes[0].chapters.find((chapter) => chapter.id === "p2").sceneCards);
+  const target3 = JSON.parse(repaired.volumes[0].chapters.find((chapter) => chapter.id === "p3").sceneCards);
+  assert.equal(target2.requiredElements.includes(DEFERRED_LEASE_RULE), false);
+  assert.ok(target3.capacityPlan.mustDeliver.includes(DEFERRED_LEASE_RULE));
+  assert.deepEqual(domain.getPlanningRepairCapacityDebt(repaired), []);
+});
+
+test("no later writable chapter records planning capacity debt instead of pausing the whole book", () => {
   const document = repairDocument();
   const plan = capacityPlan({
     mustDeliver: ["验货确认账目被改"],
-    deferable: ["追查伪造印章来源"],
+    deferable: [DEFERRED_LEASE_RULE],
     seedOnly: [],
   });
+  const repaired = runRepair(document, ["p3"], [repairChange("p3", plan)]);
+  const debt = domain.getPlanningRepairCapacityDebt(repaired);
+  assert.equal(debt.length, 1);
+  assert.deepEqual(debt[0], {
+    fromChapterId: "p3",
+    fromChapterOrder: 3,
+    item: DEFERRED_LEASE_RULE,
+    reason: "no_later_writable_chapter",
+    suggestedChapterId: null,
+    suggestedChapterOrder: null,
+  });
+  const source = JSON.parse(repaired.volumes[0].chapters.find((chapter) => chapter.id === "p3").sceneCards);
+  assert.deepEqual(source.capacityPlan.deferable, [DEFERRED_LEASE_RULE]);
+  const sourceGate = capacityGateSource.evaluateCandidateCapacity({
+    targetWordCount: 2800,
+    exclusiveEvent: repaired.volumes[0].chapters.find((chapter) => chapter.id === "p3").exclusiveEvent,
+    sceneCards: source,
+  }, { allowDeferable: true });
+  assert.equal(sourceGate.passed, true);
+});
+
+test("all later chapters over capacity records debt with the earliest suggested chapter", () => {
+  const document = repairDocument();
+  document.volumes[0].chapters[1] = repairChapter("p2", "volume-1", 2, { targetWordCount: 1200 });
+  const sourcePlan = capacityPlan({
+    mustDeliver: ["验货确认账目被改"],
+    deferable: [DEFERRED_LEASE_RULE],
+    seedOnly: [],
+  });
+  const p2Plan = capacityPlan({
+    coreEvent: "第2章唯一主事件",
+    keyTurn: "第2章唯一转折",
+    mustDeliver: ["完成第2章主事件"],
+    deferable: [],
+    seedOnly: [],
+  });
+  const repaired = runRepair(document, ["p1", "p2"], [
+    repairChange("p1", sourcePlan),
+    repairChange("p2", p2Plan, { targetWordCount: 1200 }),
+  ]);
+  const debt = domain.getPlanningRepairCapacityDebt(repaired);
+  assert.equal(debt.length, 1);
+  assert.equal(debt[0].reason, "later_chapters_over_capacity");
+  assert.equal(debt[0].suggestedChapterId, "p2");
+  assert.equal(debt[0].suggestedChapterOrder, 2);
+  const source = JSON.parse(repaired.volumes[0].chapters.find((chapter) => chapter.id === "p1").sceneCards);
+  assert.deepEqual(source.capacityPlan.deferable, [DEFERRED_LEASE_RULE]);
+});
+
+test("an already carried duty is not written twice", () => {
+  const document = repairDocument();
+  const sourcePlan = capacityPlan({
+    mustDeliver: ["验货确认账目被改"],
+    deferable: [DEFERRED_LEASE_RULE],
+    seedOnly: [],
+  });
+  const targetPlan = capacityPlan({
+    coreEvent: "第2章唯一主事件",
+    keyTurn: "第2章唯一转折",
+    mustDeliver: ["完成第2章主事件", DEFERRED_LEASE_RULE],
+    deferable: [],
+    seedOnly: [],
+  });
+  const repaired = runRepair(document, ["p1", "p2"], [
+    repairChange("p1", sourcePlan),
+    repairChange("p2", targetPlan),
+  ]);
+  const target = JSON.parse(repaired.volumes[0].chapters.find((chapter) => chapter.id === "p2").sceneCards);
+  assert.equal(target.capacityPlan.mustDeliver.filter((item) => item === DEFERRED_LEASE_RULE).length, 1);
+  assert.equal(target.requiredElements.filter((item) => item === DEFERRED_LEASE_RULE).length, 1);
+  assert.deepEqual(domain.getPlanningRepairCapacityDebt(repaired), []);
+});
+
+test("a later chapter without a capacity plan is never mutated; debt records the reason", () => {
+  const document = repairDocument();
+  // Old persisted target: no capacity plan in its scene plan.
+  const legacyTarget = document.volumes[0].chapters[1];
+  const legacyTargetPlan = JSON.parse(legacyTarget.sceneCards);
+  delete legacyTargetPlan.capacityPlan;
+  legacyTarget.sceneCards = JSON.stringify(legacyTargetPlan);
+  const sourcePlan = capacityPlan({
+    mustDeliver: ["验货确认账目被改"],
+    deferable: [DEFERRED_LEASE_RULE],
+    seedOnly: [],
+  });
+  const p2Plan = capacityPlan({ coreEvent: "第2章唯一主事件", keyTurn: "第2章唯一转折", mustDeliver: ["完成第2章主事件"], deferable: [], seedOnly: [] });
+  const p2Change = repairChange("p2", p2Plan);
+  delete p2Change.capacityPlan;
+  const repaired = runRepair(document, ["p1", "p2"], [repairChange("p1", sourcePlan), p2Change]);
+  const debt = domain.getPlanningRepairCapacityDebt(repaired);
+  assert.equal(debt.length, 1);
+  assert.equal(debt[0].reason, "later_chapters_missing_capacity_plan");
+  const target = JSON.parse(repaired.volumes[0].chapters.find((chapter) => chapter.id === "p2").sceneCards);
+  assert.equal(target.requiredElements.includes(DEFERRED_LEASE_RULE), false);
+});
+
+test("repair still rejects an allowed chapter outside the target volume", () => {
+  const document = repairDocument();
+  document.volumes.push({
+    id: "volume-2", novelId: "novel-1", title: "第二卷", sortOrder: 2, status: "draft",
+    openPayoffs: [], createdAt: "", updatedAt: "",
+    chapters: [repairChapter("outside", "volume-2", 4)],
+  });
+  const plan = capacityPlan({ mustDeliver: ["验货确认账目被改"], deferable: [], seedOnly: [] });
   assert.throws(
-    () => domain.applyPlanningRepairCandidate(document, "volume-1", ["p3"], {
-      requiresUserDecision: false,
-      reason: "窗口内没有后续章节",
-      changes: [repairChange("p3", plan)],
-      obligationMoves: [],
-    }, [], []),
-    /没有后续未写章节承接/,
+    () => runRepair(document, ["p1", "outside"], [repairChange("p1", plan), repairChange("outside", plan)]),
+    /.+/,
   );
 });
 
@@ -541,7 +726,8 @@ test("contract and repair prompts require the capacity classification", () => {
     .map((message) => message.content).join("\n");
   assert.match(repairText, /capacityPlan/);
   assert.match(repairText, /requiresUserDecision/);
-  assert.equal(repairPrompts.planningRepairPrompt.version, "v15");
+  assert.match(repairText, /规划质量债/);
+  assert.equal(repairPrompts.planningRepairPrompt.version, "v16");
 });
 
 test("compound deferable matches the later chapter's concrete action", () => {

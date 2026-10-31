@@ -17,7 +17,7 @@ import { ChapterTaskSheetQualityGateService } from "../ChapterTaskSheetQualityGa
 import { buildVolumeWorkspaceDocument } from "../volumeWorkspaceDocument";
 import type { VolumeGenerateOptions } from "../volumeModels";
 import { PlanningRepairStore, type RepairSession } from "./PlanningRepairStore";
-import { applyPlanningRepairCandidate, mergeAppliedPlanningRepairObligations, mergeAppliedPlanningRepairRequiredElements, planningRepairOutputSchema, projectPlanningRepairEstablishedStrengths, projectPlanningRepairSceneBudgets } from "./planningRepairDomain";
+import { applyPlanningRepairCandidate, getPlanningRepairCapacityDebt, mergeAppliedPlanningRepairObligations, mergeAppliedPlanningRepairRequiredElements, planningRepairOutputSchema, projectPlanningRepairEstablishedStrengths, projectPlanningRepairSceneBudgets, resolvePlanningCandidateCapacityDebt, type PlanningCapacityDebt } from "./planningRepairDomain";
 import { projectPlanningRepairRequiredElementRevisions } from "./domain/requiredElementRevisions";
 import { projectPlanningHorizon } from "../planningPromises";
 import { buildReviewIssueHistory } from "./domain/reviewIssueHistory";
@@ -211,6 +211,34 @@ export class PlanningRepairCoordinator {
             recoveryRequestId: session.state.recoveryAction?.requestId }] });
         await this.applyRepairOutput(input, session, repaired.output);
       }
+      if (session.candidate) {
+        // Resume/review path: the saved candidate may still contain deferred duties that fit nowhere.
+        // Run the same deterministic fallback before review so the session can continue (with debt)
+        // instead of spending a round or pausing on the old domain guard.
+        const resolution = resolvePlanningCandidateCapacityDebt(
+          session.candidate,
+          input.volumeId,
+          session.state.affectedChapterIds ?? [input.chapterId],
+        );
+        const candidateHasDeferable = chaptersOf(session.candidate, input.volumeId).some((chapter) => (
+          (parseChapterScenePlan(chapter.sceneCards, { targetWordCount: chapter.targetWordCount })?.capacityPlan?.deferable?.length ?? 0) > 0
+        ));
+        // A candidate without any deferable keeps an existing debt record (the duty was already
+        // moved out of the scene plan); an actual deferable rescans authoritatively.
+        const nextDebt = resolution.capacityDebt.length > 0 || resolution.changed || candidateHasDeferable
+          ? resolution.capacityDebt
+          : (session.state.capacityDebt ?? []);
+        const debtChanged = JSON.stringify(nextDebt) !== JSON.stringify(session.state.capacityDebt ?? []);
+        if (resolution.changed || debtChanged) {
+          await this.save(session, {
+            capacityDebt: nextDebt,
+            ...(resolution.changed ? { quality: { chapters: {} } } : {}),
+            summary: nextDebt.length > 0
+              ? `已记录 ${nextDebt.length} 条容量规划质量债，继续复核第${session.state.chapterOrder}章起的规划`
+              : session.state.summary,
+          }, resolution.document);
+        }
+      }
       while (true) {
         const reviews = await this.review(input, session);
         if (!currentEvidenceHistory(session).some(entry => {
@@ -223,7 +251,13 @@ export class PlanningRepairCoordinator {
         const passed = Object.values(reviews.chapters).every(passedPlanningReview)
           && reviews.window?.usable && reviews.window.safeToSync && !reviews.window.requiresUserDecision;
         if (passed) {
-          await this.save(session, { phase: "ready", recoveryAction: undefined, summary: "规划复核通过，正在提交" });
+          const debtCount = (session.state.capacityDebt ?? []).length;
+          await this.save(session, {
+            phase: "ready", recoveryAction: undefined,
+            summary: debtCount > 0
+              ? `规划复核通过（含 ${debtCount} 条容量规划质量债），正在提交`
+              : "规划复核通过，正在提交",
+          });
           const document = await this.store.commit(session, session.candidate!);
           await this.recordCapacityOutcome(input, session, document, reviews);
           committedDocuments.add(document);
@@ -340,6 +374,20 @@ export class PlanningRepairCoordinator {
           decision,
         });
       }
+      const capacityDebt: PlanningCapacityDebt[] = session.state.capacityDebt ?? [];
+      for (const debt of capacityDebt) {
+        // Persisted in the still-unwritten source chapter's repairHistory, so the reason survives
+        // after the repair session and is visible in exports / later diagnosis.
+        await recordChapterCapacityAuditSafely({
+          novelId: input.document.novelId,
+          chapterId: debt.fromChapterId,
+          chapterOrder: debt.fromChapterOrder,
+          event: "capacity_debt",
+          summary: `可延期职责「${debt.item}」在修复窗口内没有可用承接容量，已记录规划质量债；最早后继未写章：${
+            debt.suggestedChapterOrder ? `第${debt.suggestedChapterOrder}章` : "无"}`,
+          extra: `reason=${debt.reason};suggestedChapterId=${debt.suggestedChapterId ?? "none"}`,
+        });
+      }
       const capacityIssueCount = Object.values(reviews.chapters)
         .reduce((count, review) => count + (review.capacity?.violations.length ?? 0), 0);
       logChapterCapacityEvent("repair_committed", {
@@ -348,6 +396,7 @@ export class PlanningRepairCoordinator {
         rounds: session.state.rounds,
         affectedChapterIds: affected,
         capacityIssueCount,
+        capacityDebt,
         reallocations,
       });
       if (reallocations.length > 0) {
@@ -406,15 +455,23 @@ export class PlanningRepairCoordinator {
     } catch (error) {
       return this.rejectRepairOutput(session, error instanceof Error ? error.message : "候选规划未通过边界校验。");
     }
-    // Older persisted responses may predate the marker; protect their candidate save too.
+    // Deferred duties that fit nowhere in the window become a persisted planning capacity debt;
+    // the source chapter may continue instead of pausing the whole book on confirmation.
+    const capacityDebt = getPlanningRepairCapacityDebt(candidate);
     if (!session.state.repairOutputPending) await this.save(session, {
       repairOutputPending: { inputFingerprint: session.inputFingerprint, round: session.state.rounds },
     });
     await this.save(session, {
-      phase: "reviewing", repairOutputPending: undefined, quality: { chapters: {} }, obligationMoves: mergeAppliedPlanningRepairObligations(session.state.obligationMoves ?? [], repair.obligationMoves),
+      phase: "reviewing", repairOutputPending: undefined, quality: { chapters: {} }, capacityDebt,
+      obligationMoves: mergeAppliedPlanningRepairObligations(session.state.obligationMoves ?? [], repair.obligationMoves),
       requiredElementRevisions: mergeAppliedPlanningRepairRequiredElements(session.state.requiredElementRevisions ?? [], repair.changes),
       ...(session.state.recoveryAction?.paidRound === session.state.rounds ? { recoveryAction: undefined } : {}),
-      summary: `正在复核第${session.state.chapterOrder}章起的规划，第${session.state.rounds}/${session.state.maxRounds}轮`,
+      summary: capacityDebt.length > 0
+        ? `已记录 ${capacityDebt.length} 条容量规划质量债，继续复核第${session.state.chapterOrder}章起的规划，第${session.state.rounds}/${session.state.maxRounds}轮`
+        : `正在复核第${session.state.chapterOrder}章起的规划，第${session.state.rounds}/${session.state.maxRounds}轮`,
+      history: capacityDebt.length > 0
+        ? [...session.state.history, { round: session.state.rounds, kind: "capacity_debt", result: capacityDebt }]
+        : session.state.history,
     }, refreshDerived(candidate));
   }
 
@@ -456,6 +513,19 @@ export class PlanningRepairCoordinator {
     }
     // A failed chapter already contains the structured repair direction; do not pay for a premature window review.
     if (!Object.values(review.chapters).every(passedPlanningReview)) return review;
+    const capacityDebt = session.state.capacityDebt ?? [];
+    if (capacityDebt.length > 0) {
+      // Capacity-fallback policy: unresolved deferred duties are a persisted planning quality debt,
+      // not a global planning blocker. Chapter gates already passed, so continue instead of paying
+      // for a window review that can only restate “this duty has no destination”.
+      const summary = `容量兜底：${capacityDebt.length} 条可延期职责在修复窗口内没有可用承接容量，已记录规划质量债并按完成优先继续。`;
+      review.window = { usable: true, safeToSync: true, requiresUserDecision: false, summary, issues: [] };
+      await this.save(session, {
+        phase: "reviewing", pendingOperation: undefined, quality: review, summary,
+        history: [...session.state.history, { round: session.state.rounds, kind: "capacity_debt_review", result: capacityDebt }],
+      });
+      return review;
+    }
     if (!review.window) {
       await this.beforeCall(session, "window_review", "正在复核章节职责、伏笔与前后衔接");
       const result = await this.invoke({
@@ -496,6 +566,7 @@ export class PlanningRepairCoordinator {
       currentRequiredElements: chaptersOf(session.candidate!, input.volumeId).filter(c => ids.includes(c.id))
         .map(c => ({ chapterId: c.id, requiredElements: parseChapterScenePlan(c.sceneCards, { targetWordCount: c.targetWordCount })?.requiredElements ?? [] })),
       appliedRequiredElementRevisions: session.state.requiredElementRevisions ?? [],
+      planningCapacityDebt: session.state.capacityDebt ?? [],
       assessment: { original: firstAssessment?.result ?? review, current: review }, obligationMoves: session.state.obligationMoves ?? [],
       issueHistoryByChapter: Object.fromEntries(ids.map(id => [id,
         buildReviewIssueHistory(currentEvidenceHistory(session), id)])),

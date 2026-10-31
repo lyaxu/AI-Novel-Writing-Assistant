@@ -4,6 +4,7 @@ import type { VolumeChapterPlan, VolumePlanDocument } from "@ai-novel/shared/typ
 import { normalizeChapterScenePlan, parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
 import {
   chapterCapacityPlanSchema,
+  evaluateChapterCapacity,
   isRelatedCapacityText,
   normalizeChapterCapacityPlan,
   type ChapterCapacityPlan,
@@ -246,37 +247,214 @@ function projectRequiredElementsFromCapacityPlan(plan: ChapterCapacityPlan): str
   return result;
 }
 
-function assertRepairDeferableDestinations(
+/**
+ * 可延期职责在规划修复窗口内没有可用承接章时，不能整本停在确认，也不能删除职责。
+ * 这类条目作为“规划容量质量债”随候选一起持久化，来源章可以继续进入写前流程；
+ * 后续章节规划/卷规划会从来源章 capacityPlan.deferable 继续看到它们。
+ */
+export type PlanningCapacityDebtReason =
+  | "no_later_writable_chapter"
+  | "later_chapters_over_capacity"
+  | "later_chapters_missing_capacity_plan";
+
+export interface PlanningCapacityDebt {
+  fromChapterId: string;
+  fromChapterOrder: number;
+  item: string;
+  reason: PlanningCapacityDebtReason;
+  /** 窗口内最早的后继未写章节；供后续章节规划/人工复核定位。 */
+  suggestedChapterId: string | null;
+  suggestedChapterOrder: number | null;
+}
+
+const capacityDebtByDocument = new WeakMap<object, PlanningCapacityDebt[]>();
+
+export function getPlanningRepairCapacityDebt(document: object): PlanningCapacityDebt[] {
+  return capacityDebtByDocument.get(document) ?? [];
+}
+
+const MAX_REQUIRED_ELEMENTS = 8;
+const MAX_SCENE_ADVANCE = 8;
+
+function chapterCarriesCapacityDuty(chapter: VolumeChapterPlan, duty: string): boolean {
+  const plan = parseChapterScenePlan(chapter.sceneCards, { targetWordCount: chapter.targetWordCount });
+  return Boolean(plan && (
+    (plan.capacityPlan?.mustDeliver ?? []).some((item) => isRelatedCapacityText(item, duty))
+    || plan.requiredElements.some((item) => isRelatedCapacityText(item, duty))
+    || plan.scenes.some((scene) => scene.mustAdvance.some((item) => isRelatedCapacityText(item, duty)))
+  ));
+}
+
+/** 场景动作要能被正文执行，不能只把职责名塞进字段；保留原职责文本便于后续匹配/审计。 */
+function formatDeferredDutySceneAction(duty: string): string {
+  return `承接前章延期职责：${duty}`;
+}
+
+function uniqueCapacityTexts(items: readonly string[]): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    const key = comparable(item);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
+/**
+ * Deterministically append a deferred duty to one later chapter: capacityPlan.mustDeliver,
+ * requiredElements and at least one scene's mustAdvance. Returns null when the chapter cannot
+ * represent one more duty without dropping data (field caps) — caller then tries the next chapter.
+ */
+function supplementChapterWithDeferredDuty(
+  chapter: VolumeChapterPlan,
+  scenePlan: NonNullable<ReturnType<typeof parseChapterScenePlan>>,
+  duty: string,
+): { chapter: VolumeChapterPlan; scenePlan: NonNullable<ReturnType<typeof parseChapterScenePlan>> } | null {
+  const capacityPlan = scenePlan.capacityPlan;
+  if (!capacityPlan) return null;
+  const mustDeliver = uniqueCapacityTexts([...capacityPlan.mustDeliver, duty]);
+  const requiredElements = uniqueCapacityTexts([...scenePlan.requiredElements, duty]);
+  if (requiredElements.length > MAX_REQUIRED_ELEMENTS) return null;
+  const scenes = scenePlan.scenes.map((scene) => ({ ...scene, mustAdvance: [...scene.mustAdvance] }));
+  const sceneIndex = scenes.findIndex((scene) => scene.mustAdvance.length < MAX_SCENE_ADVANCE);
+  if (sceneIndex < 0) return null;
+  scenes[sceneIndex].mustAdvance.push(formatDeferredDutySceneAction(duty));
+  const effectiveTargetWordCount = chapter.targetWordCount ?? scenePlan.targetWordCount;
+  let normalized: NonNullable<ReturnType<typeof parseChapterScenePlan>>;
+  try {
+    normalized = normalizeChapterScenePlan({
+      ...(scenePlan.stateClaims !== undefined ? { stateClaims: scenePlan.stateClaims } : {}),
+      scenes,
+      readerExperience: scenePlan.readerExperience,
+      requiredElements,
+      capacityPlan: { ...capacityPlan, mustDeliver },
+    }, effectiveTargetWordCount);
+  } catch {
+    return null;
+  }
+  if (normalized.requiredElements.length !== requiredElements.length
+    || !normalized.capacityPlan
+    || normalized.capacityPlan.mustDeliver.length !== mustDeliver.length) {
+    // Never accept a projection that silently dropped a duty to fit a schema cap.
+    return null;
+  }
+  const nextChapter: VolumeChapterPlan = {
+    ...chapter,
+    ...("requiredElements" in chapter ? { requiredElements: normalized.requiredElements } : {}),
+    sceneCards: JSON.stringify(normalized),
+  };
+  return { chapter: nextChapter, scenePlan: normalized };
+}
+
+/**
+ * Resolve every deferred duty against the allowed repair window:
+ * 1. If a later chapter already carries it, keep the existing linkage.
+ * 2. Otherwise deterministically write it into the earliest later writable chapter that still
+ *    passes the capacity gate (capacityPlan + requiredElements + a scene mustAdvance).
+ * 3. If no later chapter can hold it, keep `deferable` on the source and return a planning capacity
+ *    debt record. The source may continue; the debt stays visible for later planning.
+ */
+function resolveRepairDeferableDestinations(
   volume: VolumePlanDocument["volumes"][number],
-  chapters: readonly VolumeChapterPlan[],
+  chapters: VolumeChapterPlan[],
   allowed: ReadonlySet<string>,
-): void {
+): PlanningCapacityDebt[] {
   const orderById = new Map(volume.chapters.map((chapter) => [chapter.id, chapter.chapterOrder]));
-  const changed = chapters.filter((chapter) => allowed.has(chapter.id));
-  for (const chapter of changed) {
-    const plan = parseChapterScenePlan(chapter.sceneCards, { targetWordCount: chapter.targetWordCount })?.capacityPlan;
-    if (!plan?.deferable?.length) continue;
-    const chapterOrder = orderById.get(chapter.id) ?? 0;
-    const laterChapters = changed.filter((candidate) => (orderById.get(candidate.id) ?? 0) > chapterOrder);
-    for (const deferred of plan.deferable) {
-      const carried = laterChapters.some((laterChapter) => {
-        const laterPlan = parseChapterScenePlan(laterChapter.sceneCards, {
-          targetWordCount: laterChapter.targetWordCount,
-        });
-        return Boolean(laterPlan && (
-          (laterPlan.capacityPlan?.mustDeliver ?? []).some((item) => isRelatedCapacityText(item, deferred))
-          || laterPlan.requiredElements.some((item) => isRelatedCapacityText(item, deferred))
-          || laterPlan.scenes.some((scene) => scene.mustAdvance.some((item) => isRelatedCapacityText(item, deferred)))
-        ));
+  const changed = chapters
+    .filter((chapter) => allowed.has(chapter.id))
+    .slice()
+    .sort((left, right) => (orderById.get(left.id) ?? 0) - (orderById.get(right.id) ?? 0));
+  const debts: PlanningCapacityDebt[] = [];
+  for (const source of changed) {
+    const sourcePlan = parseChapterScenePlan(source.sceneCards, { targetWordCount: source.targetWordCount });
+    const deferable = sourcePlan?.capacityPlan?.deferable ?? [];
+    if (!deferable.length) continue;
+    const sourceOrder = orderById.get(source.id) ?? 0;
+    const laterIds = changed
+      .filter((chapter) => chapter.id !== source.id && (orderById.get(chapter.id) ?? 0) > sourceOrder)
+      .map((chapter) => chapter.id);
+    for (const deferred of uniqueCapacityTexts(deferable)) {
+      const sourceDebts = debts.filter((debt) => debt.fromChapterId === source.id);
+      if (sourceDebts.some((debt) => isRelatedCapacityText(debt.item, deferred))) continue;
+      const alreadyCarried = laterIds.some((id) => {
+        const target = chapters.find((chapter) => chapter.id === id);
+        return Boolean(target && chapterCarriesCapacityDuty(target, deferred));
       });
-      if (!carried) {
-        throw new Error(
-          `可延期职责「${deferred}」在允许窗口内没有后续未写章节承接：请把它写入后章 mustDeliver/requiredElements，`
-          + "或返回 requiresUserDecision=true 并说明需要进入卷规划修复；不能删除或静默丢失。",
-        );
+      if (alreadyCarried) continue;
+      let carried = false;
+      let sawWritableTarget = false;
+      let sawMissingCapacityPlan = false;
+      for (const targetId of laterIds) {
+        const targetIndex = chapters.findIndex((chapter) => chapter.id === targetId);
+        if (targetIndex < 0) continue;
+        const target = chapters[targetIndex];
+        const targetPlan = parseChapterScenePlan(target.sceneCards, { targetWordCount: target.targetWordCount });
+        if (!targetPlan?.capacityPlan) {
+          sawMissingCapacityPlan = true;
+          continue;
+        }
+        sawWritableTarget = true;
+        if (chapterCarriesCapacityDuty(target, deferred)) {
+          carried = true;
+          break;
+        }
+        const supplemented = supplementChapterWithDeferredDuty(target, targetPlan, deferred);
+        if (!supplemented) continue;
+        const decision = evaluateChapterCapacity({
+          targetWordCount: target.targetWordCount ?? supplemented.scenePlan.targetWordCount,
+          exclusiveEvent: target.exclusiveEvent,
+          requiredElements: supplemented.scenePlan.requiredElements,
+          sceneMustAdvance: supplemented.scenePlan.scenes.flatMap((scene) => scene.mustAdvance),
+          sceneCount: supplemented.scenePlan.scenes.length,
+          capacityPlan: supplemented.scenePlan.capacityPlan,
+        }, { allowDeferable: true });
+        if (!decision.passed) continue;
+        chapters[targetIndex] = supplemented.chapter;
+        carried = true;
+        break;
       }
+      if (carried) continue;
+      const suggested = laterIds
+        .map((id) => chapters.find((chapter) => chapter.id === id))
+        .find((chapter): chapter is VolumeChapterPlan => Boolean(chapter));
+      debts.push({
+        fromChapterId: source.id,
+        fromChapterOrder: sourceOrder,
+        item: deferred,
+        reason: sawWritableTarget ? "later_chapters_over_capacity"
+          : sawMissingCapacityPlan ? "later_chapters_missing_capacity_plan"
+            : "no_later_writable_chapter",
+        suggestedChapterId: suggested?.id ?? null,
+        suggestedChapterOrder: suggested ? (orderById.get(suggested.id) ?? null) : null,
+      });
     }
   }
+  return debts;
+}
+
+/**
+ * Resolve residual deferred duties on an already-saved candidate (resume/review path).
+ * The same deterministic fallback runs after applying a repair output; this entry lets a paused
+ * session recover without buying another model round.
+ */
+export function resolvePlanningCandidateCapacityDebt(
+  document: VolumePlanDocument,
+  volumeId: string,
+  allowedIds: readonly string[],
+): { document: VolumePlanDocument; capacityDebt: PlanningCapacityDebt[]; changed: boolean } {
+  const volume = document.volumes.find((item) => item.id === volumeId);
+  if (!volume) return { document, capacityDebt: [], changed: false };
+  const allowed = new Set(allowedIds.filter((id) => volume.chapters.some((chapter) => chapter.id === id)));
+  const candidate = structuredClone(document);
+  const targetVolume = candidate.volumes.find((item) => item.id === volumeId)!;
+  const before = JSON.stringify(targetVolume.chapters);
+  const capacityDebt = resolveRepairDeferableDestinations(targetVolume, targetVolume.chapters, allowed);
+  targetVolume.chapters = targetVolume.chapters.slice();
+  const after = JSON.stringify(targetVolume.chapters);
+  capacityDebtByDocument.set(candidate, capacityDebt);
+  return { document: candidate, capacityDebt, changed: before !== after };
 }
 
 /** Pure candidate construction only; aggregate review and persistence belong to the coordinator. */
@@ -405,10 +583,12 @@ export function applyPlanningRepairCandidate(
     };
   });
 
+  // Resolve deferred duties before projecting the candidate: supplementation mutates later chapters
+  // in the `chapters` array, and the aggregate candidate must see those updates.
+  const capacityDebt = resolveRepairDeferableDestinations(volume, chapters, allowed);
   const candidateChapters = allChapters.map((chapter) => (
     allowed.has(chapter.id) ? chapters.find((item) => item.id === chapter.id)! : chapter
   ));
-  assertRepairDeferableDestinations(volume, chapters, allowed);
   for (const chapter of chapters.filter((item) => allowed.has(item.id))) {
     const event = comparable(chapter.exclusiveEvent);
     if (candidateChapters.some((other) => other.id !== chapter.id && comparable(other.exclusiveEvent) === event)) {
@@ -470,8 +650,10 @@ export function applyPlanningRepairCandidate(
       throw new Error(`Planning repair obligation ledger disagrees with changes: ${ref}`);
     }
   }
-  return {
+  const documentWithRepair: VolumePlanDocument = {
     ...document,
     volumes: document.volumes.map((item) => item.id === volumeId ? { ...item, chapters } : item),
   };
+  capacityDebtByDocument.set(documentWithRepair, capacityDebt);
+  return documentWithRepair;
 }

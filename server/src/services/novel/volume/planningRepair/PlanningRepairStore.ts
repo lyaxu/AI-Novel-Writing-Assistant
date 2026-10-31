@@ -41,6 +41,8 @@ export interface PlanningRepairState {
   repairOutputPending?: { inputFingerprint: string; round: number };
   summary?: string;
   quality?: unknown;
+  /** Capacity debts accepted by the last applied repair; unresolved deferables stay here. */
+  capacityDebt?: import("./planningRepairDomain").PlanningCapacityDebt[];
   history: unknown[];
   obligationMoves?: unknown[];
   /** Only mappings saved atomically with the repaired candidate; proposed output is history only. */

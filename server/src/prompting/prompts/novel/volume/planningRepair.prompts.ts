@@ -41,14 +41,14 @@ const commonRules = [
   "同次确认的hookStrategy与openingChain若给出不同章序，先核对原选整体方向与明确回报时限，不机械要求按原型编号重复兑现。readonlyPlanningHorizon提供实际已存节奏拍，可据此核实已有承接而不改动窗口外规划；只有节奏拍而无章合同时，明确它是较粗安排，不伪造具体章节ID。存在承接不等于承诺准时兑现，不能把明确前三章回报任意拖到卷中。需要新改窗口外落点或无法兼容原选取舍时，才交回方向确认。",
   "只输出严格 JSON，不输出 Markdown、注释、解释或额外字段。所有叙事文本、reason、summary 和 issues 使用中文；字段名、枚举值、ID 及已有引用标识保持原样。",
   "容量规则：每章只允许一个主事件和一个明确转折。每个 change 必须返回 capacityPlan{coreEvent,keyTurn,mustDeliver:string[],deferable:string[],seedOnly:string[],estimatedCoreWordCount:number}。coreEvent 必须与本章 exclusiveEvent 是同一件事（可措辞相同或包含关系）；keyTurn 只写一个发生在本章的明确转折，不能复述主事件，也不能安排多个转折。mustDeliver 是本章必须兑现的可见结果；seedOnly 是只埋设、本章不兑现真相的线索；deferable 是本章不兑现、需要后续章节承接的职责。本章 requiredElements 由系统按 mustDeliver+seedOnly 重建，deferable 不得留在本章 requiredElements 或场景 mustAdvance 中。",
-  "当 assessment.current 的 capacity 结论未通过（issues 或 violations 中带 capacity_ 前缀）时，按容量修复：先确认本章是否真的只有一个主事件和一个转折；把超出本章目标字数的职责改为 deferable，并在 allowedChapterIds 内章序更晚的未写章节的 changes 中，用 capacityPlan.mustDeliver 与 requiredElements/场景 mustAdvance 实际承接这些职责（后章场景要能落实，不能只写“后文处理”）。每一条 deferable 都必须能在窗口内更晚章节找到明确承接；后两章已写、被锁定、跨卷或窗口内没有后续可写章节时，不得硬塞，必须返回 requiresUserDecision=true 并在 reason 说明需要进入卷规划修复。不能靠调大 targetWordCount、删除职责或降低用户承诺解决容量问题。",
+  "当 assessment.current 的 capacity 结论未通过（issues 或 violations 中带 capacity_ 前缀）时，按容量修复：先确认本章是否真的只有一个主事件和一个转折；把超出本章目标字数的职责改为 deferable，并优先在 allowedChapterIds 内章序更早、仍有容量的未写章节的 changes 中，用 capacityPlan.mustDeliver 与 requiredElements/场景 mustAdvance 实际承接这些职责（后章场景要能落实，不能只写“后文处理”）。系统还会在保存前按最早顺序做一次确定性兜底补写；补写不进去的条目留在来源章 capacityPlan.deferable，由系统记录规划质量债并继续，不会因此整本暂停。因此：窗口内更晚章节已写、被锁定、跨卷或容量不足时，不要删除职责、不要硬塞当前章、也不要返回 requiresUserDecision；保留来源章 deferable 即可。只有真正需要作者决定的事项（如必须新增窗口外章节、正文事实冲突）才 requiresUserDecision。不能靠调大 targetWordCount、删除职责或降低用户承诺解决容量问题。",
   "容量拆分后来源章 requiredElements 减少是允许的：系统按 capacityPlan 重建清单，不需要再用 requiredElementRevisions 删除延期条目；但未延期职责、回报引用和用户承诺必须保留。后章新增承接职责直接写在该章自己的 capacityPlan/requiredElements/场景中。",
 ].join("\n");
 
 // These assets do not resolve models; the coordinator must pass its explicit modelRoute to the runner.
 export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, PlanningRepairOutput, unknown> = {
   id: "novel.volume.planning_repair",
-  version: "v15",
+  version: "v16",
   taskType: "replan",
   mode: "structured",
   language: "zh",

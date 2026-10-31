@@ -61,19 +61,41 @@
    结构性超载使用现有“当前章 + 后续两个未写同卷章节”窗口，规划修复 prompt 要求把
    `deferable` 写进后章并在后章返回可执行的 `capacityPlan` / `requiredElements` / 场景。
 4. **修复结果边界**：`applyPlanningRepairCandidate` 用 `capacityPlan` 重建来源章的
-   `requiredElements`（可延期职责因此被移出本章），并校验每条 `deferable` 在窗口内更晚章节
-   确有承接；没有承接就拒绝保存并提示需要进入卷规划修复，而不是静默丢掉职责。
+   `requiredElements`（可延期职责因此被移出本章），然后按最早顺序做确定性兜底：
+   先找窗口内已有承接；没有则尝试把职责写入最早的后继未写章节（`capacityPlan.mustDeliver`
+   + `requiredElements` + 至少一个场景 `mustAdvance`），每步都重新过容量预算；所有后继章都
+   放不下时，职责保留在来源章 `capacityPlan.deferable`，并生成一份显式的规划容量质量债。
+   兜底不会删除职责，也不会把职责硬塞回当前章。
 5. **复用/写前准备**：已保存合同在复用、读取就绪和正文准备入口会重新跑容量评估；
    带容量计划但不合格的合同不会被当作可复用合同，旧合同缺字段则保持兼容。
-6. **必须写正文前的最终边界**：容量门禁失败 → 生成/规划修复失败 → 不进入 writer。
+6. **恢复已保存候选**：暂停会话继续/复核时，先对已保存候选执行同一套确定性兜底再复核。
+   能补写承接章的照常进入窗口复核；产生容量质量债的，章节复核通过后直接继续提交，
+   不再因为窗口 AI 复核无法安置这条职责而整本卡在规划确认。
+7. **必须写正文前的最终边界**：容量门禁失败 → 生成/规划修复失败 → 不进入 writer。
    已写正文、已批准章节、锁定章节和跨卷章节不能被修复窗口修改。
 
-### 自动拆分（不新增插章）
+### 自动拆分（不新增插章）与质量债兜底
 
 当前卷链没有安全的“插入新章并重排后续章节”能力，因此自动拆分复用规划修复窗口：
-把来源章超载的可延期职责写进当前章之后的一到两个未写同卷章节的任务单/场景，并保持各章
-原始字数预算不变。窗口内没有后续可写章节（下一章已写/锁定，或跨卷）时，系统不硬塞，
-规划修复返回 `requiresUserDecision`（或 domain 拒绝保存）并提示进入卷规划修复。
+把来源章超载的可延期职责按最早顺序写进当前章之后仍有容量的未写同卷章节，保持各章
+原始字数预算不变。写入内容必须落到后章 `capacityPlan.mustDeliver`、`requiredElements`
+和至少一个场景 `mustAdvance`（动作以“承接前章延期职责：…”呈现），不是只改字段。
+
+窗口内没有现成承接、或所有后章都超出容量时：
+- 职责不删除，保留在来源章 `capacityPlan.deferable`；
+- 生成规划容量质量债（记录来源章、职责原文、原因、最早后继未写章），随规划修复 session
+  持久化，并写入未写来源章的 `repairHistory`；
+- 章节级容量门禁在修复轮次允许 `deferable` 存在，后续章节规划/卷规划通过近期章节上下文
+  与卷卡片继续看到这条顺延职责；
+- 会话不再为了这条职责停留在规划确认，也不再额外消耗模型轮次去“想办法安置”。
+
+### 质量债边界
+
+规划容量质量债是**写前规划债**，不是正文质量债：不要求正文已经存在，也不能用
+`autoExecution.qualityDebt*` 冒充已写正文的验收债（那样会让章节被误当成已产出的问题章）。
+它的可追踪来源是：规划修复 session 的 `capacityDebt` + 未写章节 `repairHistory` +
+来源章 `capacityPlan.deferable` + 运行日志。已写正文、锁定章节和跨卷章节永远不进入兜底；
+出现正文指纹变化、活跃执行租约或真正未知调用时仍按原保护边界暂停，不接受兜底。
 
 ### 可观测
 
@@ -90,15 +112,18 @@
 - 超载章：一章列出 8-10 条必须兑现（进秘境、卷入、救人、传功、试招、要账……），
   2000-3000 字目标 → 容量拒绝；规划修复把可延期职责拆到后续章，来源章
   `requiredElements` 减少，后章承接。
-- 无后续可写章：来源章仍有可延期职责，但后两章已写/跨卷 → 不自动拆，提示进入
-  卷规划修复；不删除职责，也不把超出容量强行交给正文。
+- 无后续可写章：来源章仍有可延期职责，但后两章已写/跨卷 → 保留来源章 `deferable`
+  并记规划质量债，来源章继续写前流程；不删除职责，也不把超出容量强行交给正文。
+- 后章容量不足：先尝试下一章；仍无容量则同样记质量债继续，不因一条延期职责停整本。
 
 ## Failure Modes
 
 - **只改 prompt 不加确定性门禁。** 模型仍会输出超载清单；必须有代码侧容量判定与结构化失败。
 - **用关键词猜“事件数量”。** 判定只读 `capacityPlan` 的结构化字段；不按剧情词表或题材规则统计。
-- **把可延期职责从来源章删掉却没有承接章。** `applyPlanningRepairCandidate` 必须拒绝保存，
-  否则“拆分”会退化成静默丢职责。
+- **把可延期职责从来源章删掉却没有承接章。** 兜底必须自动补写或生成可追踪质量债；
+  静默删除仍视为缺陷，因为后续章节无法再看到这条职责。
+- **以为质量债等于静默通过。** 债必须持久化到 session / 未写章节历史 / 来源章
+  `capacityPlan.deferable` 并进入后续规划上下文；只打 console 不算记录。
 - **单章本地反复重试结构性超载。** 单章再生成无法把职责交给后章；结构性超载应走窗口重规划。
 - **旧合同被判死。** 持久化/读取 schema 对 `capacityPlan` 保持可选，新生成合同才强制要求；
   否则旧书续写会被升级阻断。
@@ -111,11 +136,11 @@
 - `server/src/services/novel/volume/chapterDetail/chapterCapacityGate.ts`（候选适配与 issue 映射）
 - `server/src/services/novel/volume/chapterDetail/chapterExecutionContractGeneration.ts`（生成/纠正/审计）
 - `server/src/services/novel/volume/ChapterTaskSheetQualityGateService.ts`（写前质量门禁）
-- `server/src/services/novel/volume/planningRepair/`（窗口重分配与保存边界）
+- `server/src/services/novel/volume/planningRepair/`（窗口重分配、确定性补写、质量债与保存边界）
 - `server/src/prompting/prompts/novel/volume/chapterDetail.prompts.ts`
   （`novel.volume.chapter_execution_contract@v15`）
 - `server/src/prompting/prompts/novel/volume/planningRepair.prompts.ts`
-  （`novel.volume.planning_repair@v15`）
+  （`novel.volume.planning_repair@v16`）
 
 ## Source Documents
 
