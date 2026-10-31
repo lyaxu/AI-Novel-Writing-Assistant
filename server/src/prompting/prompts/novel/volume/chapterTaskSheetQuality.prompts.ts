@@ -52,7 +52,7 @@ const progressionWireChecksSchema = z.array(chapterNarrativeProgressionCheckSche
 })).length(3).refine(checks => new Set(checks.map(check => check.dimension)).size === 3,
   "Every narrative progression dimension must appear exactly once.");
 type QualityWireAssessment = Omit<AiChapterTaskSheetQualityAssessment, "progressionChecks" | "issues" | "repairGuidance" | "issueDecisions"> & {
-  issueDecisions: Array<Omit<z.infer<typeof planningIssueDecisionSchema>, "claimIds">>;
+  issueDecisions: Array<Omit<z.infer<typeof planningIssueDecisionSchema>, "claimIds" | "relation"> & { relation: string }>;
   issues: Array<Omit<AiChapterTaskSheetQualityAssessment["issues"][number], "repairHint" | "basis"> & {
     basis?: Omit<NonNullable<AiChapterTaskSheetQualityAssessment["issues"][number]["basis"]>, "kind"> & {
       kind: string;
@@ -206,7 +206,12 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
     maxTokensBudget: 4200,
   },
   outputSchema: aiChapterTaskSheetQualityAssessmentSchema.omit({ repairGuidance: true }).extend({
-    issueDecisions: z.array(planningIssueDecisionSchema.omit({ claimIds: true })),
+    // The relation drives a deterministic basis projection. Accept a free label at the wire
+    // boundary so an unfamiliar synonym does not discard the whole semantic review; it is
+    // canonicalized below before any consumer sees it.
+    issueDecisions: z.array(planningIssueDecisionSchema.omit({ claimIds: true }).extend({
+      relation: z.string().trim().min(1).max(80),
+    })),
     stateChecks: z.array(planningStateCheckSchema).max(80),
     issues: z.array(chapterTaskSheetQualityIssueSchema.omit({ repairHint: true }).extend({
       // basis.kind is wholly derived from the issueDecision relation below. Accept a free string
@@ -274,14 +279,35 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
       missing_requirement: "missing_requirement",
       boundary_violation: "boundary_violation",
     } as const;
+    const relationAliases: Record<string, keyof typeof basisKindByRelation> = {
+      contradiction: "contradiction", conflict: "contradiction", contradictory: "contradiction",
+      missing_precondition: "missing_precondition", missing_premise: "missing_precondition",
+      missing_condition: "missing_precondition", missing_prerequisite: "missing_precondition",
+      unsupported_prerequisite: "missing_precondition", missing_requirement: "missing_requirement",
+      missing_obligation: "missing_requirement", requirement_missing: "missing_requirement",
+      boundary_violation: "boundary_violation", boundary: "boundary_violation", violation: "boundary_violation",
+    };
+    const canonicalRelation = (decision: { relation?: unknown; transition?: string; referenceAssertion?: unknown } | undefined):
+      keyof typeof basisKindByRelation => {
+      const raw = String(decision?.relation ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+      if (raw in basisKindByRelation) return raw as keyof typeof basisKindByRelation;
+      if (raw in relationAliases) return relationAliases[raw];
+      if (decision?.transition === "contradicted") return "contradiction";
+      if ((decision as { referenceAssertion?: unknown } | undefined)?.referenceAssertion === null) return "missing_requirement";
+      if (decision?.transition === "missing") return "missing_precondition";
+      return "missing_requirement";
+    };
+    const canonicalIssueDecisions = issueDecisions?.map(decision => ({ ...decision,
+      relation: canonicalRelation(decision),
+    }));
     const output: AiChapterTaskSheetQualityAssessment = {
       ...assessment,
       // One AI-authored issue link per state; reverse links are a deterministic projection.
-      ...(issueDecisions ? { issueDecisions: issueDecisions.map(decision => ({ ...decision,
+      ...(canonicalIssueDecisions ? { issueDecisions: canonicalIssueDecisions.map(decision => ({ ...decision,
         claimIds: (assessment.stateChecks ?? []).filter(check => check.issueId === decision.issueId).map(check => check.claimId),
       })) } : {}),
       issues: assessment.issues.map(issue => {
-        const decision = issueDecisions?.find(item => item.issueId === issue.id);
+        const decision = canonicalIssueDecisions?.find(item => item.issueId === issue.id);
         const basis = issue.basis && decision
           ? { ...issue.basis, kind: basisKindByRelation[decision.relation] }
           : issue.basis as unknown as AiChapterTaskSheetQualityAssessment["issues"][number]["basis"];
