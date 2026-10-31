@@ -2,12 +2,17 @@ import { prisma } from "../../../../db/prisma";
 import { isTerminalPlanningRepairPhase } from "@ai-novel/shared/types/planningRepair/recovery";
 import type { NovelWorkflowTaskStatus } from "@prisma/client";
 import { logPipelineInfo, logPipelineWarn } from "../../novelCoreShared";
+import { chapterFingerprint } from "../../production/reliability";
+import { PREPARATION_JOURNAL_STEP_KEYS } from "./PlanningRepairCandidateAdoptionPlan";
+import { retirePreparationJournalIfSafe } from "./PreparationJournalRetirement";
 import {
   planStalePlanRepairExecutionRebuild,
   type StalePlanRepairExecutionChapterEvidence,
   type StalePlanRepairExecutionJobEvidence,
   type StalePlanRepairExecutionPlan,
 } from "./DirectorRecoveryConvergence";
+
+const PREPARATION_KEYS = new Set<string>(PREPARATION_JOURNAL_STEP_KEYS);
 
 /**
  * Application layer for `planStalePlanRepairExecutionRebuild`.
@@ -65,6 +70,18 @@ export interface PlanRepairExecutionRebuildDeps {
   findFirstPendingChapter: (input: { novelId: string; startOrder: number; endOrder: number }) => Promise<RebuildChapterRow | null>;
   hasChapterLevelPlan: (chapterId: string) => Promise<boolean>;
   findActiveJournalMetadata: (input: { novelId: string; chapterId: string }) => Promise<string | null>;
+  /** Archive+clear a paused preparation-only journal owned by the job being superseded. */
+  retirePreparationJournal: (input: {
+    novelId: string;
+    chapterId: string;
+    jobId: string;
+    taskId: string;
+    now: number;
+  }) => Promise<
+    | { status: "retired"; archiveContentHash: string }
+    | { status: "none" }
+    | { status: "blocked"; reason: string }
+  >;
   countActiveJobs: (novelId: string) => Promise<number>;
   updateTaskSeed: (input: {
     taskId: string;
@@ -113,18 +130,36 @@ function readWorkflowTaskId(payload: string | null): string | null {
   return parsed && typeof parsed.workflowTaskId === "string" ? parsed.workflowTaskId : null;
 }
 
-function readJournalEvidence(metadataJson: string | null): { status: string; hasUncertainStep: boolean } | null {
+function readJournalEvidence(metadataJson: string | null, context: {
+  jobId: string;
+  taskId: string;
+  chapterId: string | null;
+}): {
+  status: string;
+  hasUncertainStep: boolean;
+  hasWorkBeyondPreparation: boolean;
+  belongsToPreviousJob: boolean;
+} | null {
   if (!metadataJson) return null;
   const journal = parseJsonRecord(metadataJson);
   if (!journal) return null;
   const steps = record(journal.steps) ? journal.steps : {};
+  const request = record(journal.request) ? journal.request : {};
   const hasUncertainStep = Object.values(steps).some((step) => record(step)
-    && (step.status === "unknown" || step.status === "running"))
+    && (step.status === "unknown" || step.status === "running"
+      || (record(step.planningPause) && step.planningPause.outcome === "unknown")))
     || Boolean(record(journal.values) && journal.values["stream.started"])
     || Boolean(record(journal.values) && journal.values["manual_repair.started"]);
+  const hasWorkBeyondPreparation = Object.keys(steps).some(key => !PREPARATION_KEYS.has(key));
+  const expectedOperationId = context.chapterId ? `pipeline:${context.jobId}:${context.chapterId}` : null;
+  const belongsToPreviousJob = Boolean(expectedOperationId
+    && journal.operationId === expectedOperationId
+    && request.workflowTaskId === context.taskId);
   return {
     status: typeof journal.status === "string" ? journal.status : "",
     hasUncertainStep,
+    hasWorkBeyondPreparation,
+    belongsToPreviousJob,
   };
 }
 
@@ -212,7 +247,11 @@ export class PlanRepairExecutionRebuildService {
       ? readJournalEvidence(await this.deps.findActiveJournalMetadata({
         novelId: task.novelId,
         chapterId: nextChapter.chapter.id,
-      }).catch(() => null))
+      }).catch(() => null), {
+        jobId: job?.id ?? "",
+        taskId: task.id,
+        chapterId: nextChapter.chapter.id,
+      })
       : null;
     const plan: StalePlanRepairExecutionPlan = planStalePlanRepairExecutionRebuild({
       ...baseEvidence,
@@ -226,6 +265,23 @@ export class PlanRepairExecutionRebuildService {
       return { changed: false, action: null, reason: plan.reason };
     }
 
+    // A superseded preparation journal must not keep the chapter's execution ownership slot: a new
+    // job would be rejected as "chapter execution ownership changed". Only the exact failed
+    // preparation pause of the job being retired is archived across a CAS-checked transaction.
+    let journalSuperseded = false;
+    if (nextChapter && journal) {
+      const retirement = await this.deps.retirePreparationJournal({
+        novelId: task.novelId,
+        chapterId: nextChapter.chapter.id,
+        jobId: plan.previousJobId,
+        taskId: task.id,
+        now: nowMs,
+      }).catch(() => ({ status: "blocked" as const, reason: "retirement_failed" }));
+      if (retirement.status === "blocked") {
+        return { changed: false, action: null, reason: `journal_cannot_be_retired:${retirement.reason}` };
+      }
+      journalSuperseded = retirement.status === "retired";
+    }
     const nextAutoExecution: Record<string, unknown> = {
       ...(autoExecution ?? {}),
       pipelineJobId: null,
@@ -248,6 +304,7 @@ export class PlanRepairExecutionRebuildService {
         previousJobId: plan.previousJobId,
         targetChapterId: plan.action === "rebuild_execution" ? plan.targetChapterId : null,
         targetChapterOrder: plan.targetChapterOrder ?? null,
+        journalSuperseded,
         rebuiltAt: now.toISOString(),
         trigger: input.trigger,
         reason: "planning_repair_terminal_unrecoverable_job",
@@ -286,6 +343,7 @@ export class PlanRepairExecutionRebuildService {
         action: plan.action,
         oldJobId: plan.previousJobId,
         retired: retired ? 1 : 0,
+        journalSuperseded: journalSuperseded ? 1 : 0,
         targetChapterId: plan.action === "rebuild_execution" ? plan.targetChapterId : null,
         targetChapterOrder: plan.targetChapterOrder ?? null,
       },
@@ -402,6 +460,24 @@ function defaultDeps(): PlanRepairExecutionRebuildDeps {
       });
       return row?.metadataJson ?? null;
     },
+    retirePreparationJournal: async ({ novelId, chapterId, jobId, taskId, now }) => prisma.$transaction(async (tx) => {
+      const chapter = await tx.chapter.findUnique({
+        where: { id: chapterId },
+        select: {
+          id: true, novelId: true, content: true, title: true, taskSheet: true, sceneCards: true,
+          expectation: true, targetWordCount: true, mustAvoid: true, conflictLevel: true, revealLevel: true, hook: true,
+        },
+      });
+      if (!chapter) return { status: "blocked" as const, reason: "chapter_missing" };
+      return retirePreparationJournalIfSafe(tx, {
+        novelId,
+        chapterId,
+        expectedOperationId: `pipeline:${jobId}:${chapterId}`,
+        taskId,
+        now,
+        expectedChapterFingerprint: chapterFingerprint(chapter),
+      });
+    }, { isolationLevel: "Serializable", timeout: 20_000 }),
     countActiveJobs: async (novelId) => prisma.generationJob.count({
       where: {
         novelId,
@@ -432,7 +508,9 @@ function defaultDeps(): PlanRepairExecutionRebuildDeps {
           id: job.id,
           novelId: job.novelId,
           status: job.status as never,
-          pendingManualRecovery: true,
+          // A failed job that lost its anchor may already have no manual-recovery flag; the CAS must
+          // still accept that exact state instead of requiring a pause that no longer exists.
+          pendingManualRecovery: job.pendingManualRecovery,
           currentItemKey: job.currentItemKey,
           updatedAt: job.updatedAt,
           cancelRequestedAt: null,

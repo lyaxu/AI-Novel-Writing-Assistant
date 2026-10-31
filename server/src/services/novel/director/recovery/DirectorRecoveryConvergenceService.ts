@@ -14,6 +14,7 @@ import {
   type PlanningRepairConvergenceEvidence,
 } from "./DirectorRecoveryConvergence";
 import { createPlanRepairExecutionRebuildService } from "./PlanRepairExecutionRebuildService";
+import { createPlanningRepairCandidateAdoptionService } from "./PlanningRepairCandidateAdoptionService";
 
 const ACTIVE_COMMAND_STATUSES = ["queued", "leased", "running"] as const;
 const TERMINAL_REPAIR_AUTO_ABANDON_REASON =
@@ -195,7 +196,7 @@ export class DirectorRecoveryConvergenceService {
       try {
         await planningRepairStore.abandon({ taskId: task.id, reason: TERMINAL_REPAIR_AUTO_ABANDON_REASON });
         actions.push("abandoned_stale_planning_repair");
-        logPipelineInfo("规划修复陈旧复核会话已自动收敛为放弃，将继续原任务的重新规划。", {
+        logPipelineInfo("规划修复陈旧复核或已无在途调用的技术失败会话已自动收敛为放弃，将继续原任务的重新规划。", {
           taskId: task.id, trigger: input.trigger, action: "abandoned_stale_planning_repair",
         });
         task = await prisma.novelWorkflowTask.findUnique({ where: { id: task.id } }) ?? task;
@@ -279,7 +280,29 @@ export class DirectorRecoveryConvergenceService {
       }
     }
 
-    // 5. A terminal planning repair can leave `autoExecution.pipelineJobId` pointing at a range
+    // 5. A terminal repair may have saved its repaired chapter contract only as a draft
+    //    `VolumePlanVersion` (volume rows still empty). Adopt that candidate before the execution
+    //    rebuild so the recovered chapter starts from the reviewed plan instead of regenerating it.
+    //    An explicit repair authorization means the caller wants the repair session, so skip this.
+    if (!input.preservePlanningRepairSession && !activeCommand) {
+      const freshTask = await prisma.novelWorkflowTask.findUnique({ where: { id: input.taskId } });
+      if (freshTask) {
+        try {
+          const adoption = await createPlanningRepairCandidateAdoptionService().adopt({
+            task: freshTask,
+            trigger: input.trigger,
+          });
+          if (adoption.changed) actions.push("adopted_planning_repair_candidate");
+        } catch (error) {
+          logPipelineWarn("规划修复候选采纳未应用，保留原恢复核对。", {
+            taskId: input.taskId, trigger: input.trigger,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+
+    // 6. A terminal planning repair can leave `autoExecution.pipelineJobId` pointing at a range
     //    job that lost its resumable chapter anchor (no `currentItemKey`, stale scope). Rebuild a
     //    fresh execution binding for the chapter that is actually pending when it already has a
     //    saved plan; if it has no plan, clear the dead binding so normal planning takes over.

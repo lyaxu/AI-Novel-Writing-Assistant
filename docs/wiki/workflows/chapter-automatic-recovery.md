@@ -31,8 +31,10 @@
 
 - **已完成章节的陈旧范围任务**：目标是 `currentItemKey` 的章节行已 `chapterStatus=completed`、正文非空；该章活动执行记录的 `operationId` 必须是 `pipeline:<jobId>:<chapterId>`、状态 `completed`、父任务匹配，且没有 `unknown`/`running` 外部步骤、没有活跃租约、没有稿件变化、没有待核对结果。满足时用 CAS（updatedAt/status/pendingManualRecovery/payload/租约）把该 job 收敛为 `succeeded` 并清空当前项，随后按正常路径继续下一章。任一条件不满足（未知调用、正文未完成、稿件/执行约定变化、活跃租约、journal 属于别的 operation）→ 不收敛，仍走严格预检并在章节源页提示核对。
 - **终态规划修复**：`abandoned` / `committed` 都是终态，不再持有预算授权或执行绑定。显式重试不得被终态会话挡住（写守卫使用 `isTerminalPlanningRepairPhase`）；收敛可清理终态会话遗留的 `planningRepairRecovery` / `planningRepairPipelineRecovery` 执行绑定，但保留 `planningRepair` 的放弃/提交证据、候选与正文。存在 `pendingGrant` 时不清，交给显式修复入口处理。
-- **停在复核阶段的陈旧修复会话**：仅当相位是 `reviewing`、任务处于暂停、没有活跃命令、没有 `pendingOperation` / `repairOutputPending` / `pendingGrant` 时，**不带规划修复授权键**的普通继续才把它收敛为 `abandoned`（写明自动收敛原因），让第 5 章之类未写章节按原任务重新规划。带 `planningRepairRecoveryKey` 的继续表示用户要重试该修复，必须保留会话。
+- **停在复核阶段的陈旧修复会话**：仅当相位是 `reviewing` 或已无在途调用的 `technical_failed`、任务处于暂停、没有活跃命令、没有 `pendingOperation` / `repairOutputPending` / `pendingGrant` 时，**不带规划修复授权键**的普通继续才把它收敛为 `abandoned`（写明自动收敛原因），让未写章节按原任务重新规划。带 `planningRepairRecoveryKey` 的继续表示用户要重试该修复，必须保留会话。
 - **任务指针指向错误的替换任务**：失败重试可能把 `autoExecution.pipelineJobId` 写成自己，但章节日志仍属于原范围 job，于是每次继续都因「目标章既未完成也不是该 job 的暂停」被拒。只有同时证明：替换 job 与原 job 同书、同父任务、同范围、同一 payload，替换 job failed+pending 且 `llmCallCount/totalTokens/completedCount` 全为 0、没有任何 journal 归属、没有取消/活跃租约；原 job failed+pending 且拥有该章 active journal（paused、未过期、无 unknown/running 步骤、正文/执行约定指纹匹配）；当前没有活跃命令、活跃作业，且规划修复终态或不存在 —— 才把任务指针 CAS 回原 job，并把零调用的替换 job 标记结束（保留原 failed 证据）。原 journal、预算和候选一律不动，仍由原 job 恢复。
+- **规划修复终止 + 旧 job 丢失章节锚点 → 从候选重建第一章执行**：终态规划修复（或有记录的 `technical_failed`、无在途调用）之后，旧范围 job 可能 `currentItemKey=null` 且 `pendingManualRecovery=false`，此时普通恢复只会报「原章节任务缺少可核对的恢复位置」。重建前先做两步：① **候选采纳**——若 `planningRepair.candidateVersionId` 存在且仍是 `draft`，并且候选卷/章与修复元数据（volumeId、chapterId、chapterOrder、eligibleChapterIds）一致、任务书/场景卡通过共享执行合同形状与容量门禁、已写正文指纹 `writtenSourceFingerprint` 未变、目标章无正文且无执行合同、旧 job 是失败且未持有活跃 journal，则在一个事务内：校验已写正文指纹 → 归档并移除旧 job 的准备阶段 journal（仅限 paused、只含 `prepare*` 步骤、无 unknown/running、无 partial 正文、`expectedFingerprint` 与当前章一致）→ 写回目标章执行合同 → 启用候选版本并持久化卷工作区 → 在 seed 写 `planningRepairCandidateAdoption` 回执；修复相位保持 `abandoned`（会话确实被放弃），不伪造“复核通过”。② **执行重建**——把旧 job 标记 `cancelled` 并保留原 `error`/token 记录，清空 `autoExecution.pipelineJobId/pipelineStatus`，把 `nextChapterId/nextChapterOrder` 指向第一章，写入 `planningRepairExecutionRebuild` 回执；新 job 由正常自动执行运行时创建并绑定。候选不是 draft、合同不完整、正文已存在、已写正文变化、journal 有未知/已完成工作、存在活跃命令/作业/租约时一律不采纳、不重建，保留原暂停。
+- **候选不丢、正文不改**：候选采纳只应用候选里已有的计划文本，不重新调用规划模型生成候选；`planningRepair` 的历史、放弃记录、候选版本与 `planningRepairCandidateAdoption` 都保留为审计证据。目标章已有正文或已有执行合同时不采纳（前者交给正文审查恢复，后者走正常执行）。
 
 失败模式：
 
@@ -43,6 +45,10 @@
 | 普通继续把用户刚要重试的修复会话结束掉 | 收敛没有区分是否带显式修复授权键 |
 | 重新规划时又创建了替代 job，原 journal 被归档 | 没有把指针收敛回 journal 所有者 |
 | 收敛覆盖了另一条暂停或人工稿 | 缺少 CAS、租约检查或正文指纹校验 |
+| 规划修复已结束，继续仍报「缺少可核对的恢复位置」 | 旧 job 已丢锚点（currentItemKey=null），没有按“候选采纳 + 执行重建”路径收敛；或把 `pendingManualRecovery=false` 误判成“作业仍可恢复” |
+| 候选已经可用却又重新生成规划 | 恢复只检查 Chapter/taskSheet，没有读取 planningRepair 的 draft 候选版本 |
+| 新 job 启动即报「章节执行所有权已变化」 | 旧 job 的 paused 准备阶段 journal 仍占 active 槽位；重建必须按严格条件归档并移除该记录 |
+| 采纳候选时覆盖了已写正文或人工改动 | 缺少 writtenSourceFingerprint / chapterFingerprint / 正文非空检查 |
 
 ## 恢复顺序
 

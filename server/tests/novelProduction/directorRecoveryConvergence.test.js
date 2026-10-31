@@ -18,6 +18,16 @@ test("a stale reviewing session with no in-flight marker is abandoned on explici
   assert.deepEqual(planStalePlanningRepairConvergence({ repair: repair(), taskPaused: true, activeCommand: false }), { action: "abandon" });
 });
 
+test("an exhausted technical failure with no in-flight marker is also abandoned on explicit continue", () => {
+  assert.deepEqual(planStalePlanningRepairConvergence({
+    repair: repair({ phase: "technical_failed" }), taskPaused: true, activeCommand: false,
+  }), { action: "abandon" });
+  assert.deepEqual(planStalePlanningRepairConvergence({
+    repair: repair({ phase: "technical_failed", pendingOperation: { kind: "repair" } }),
+    taskPaused: true, activeCommand: false,
+  }), { action: "none" });
+});
+
 for (const [reason, input] of Object.entries({
   "not paused": { repair: repair(), taskPaused: false, activeCommand: false },
   "active command": { repair: repair(), taskPaused: true, activeCommand: true },

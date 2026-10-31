@@ -38,7 +38,12 @@ function evidence(overrides = {}) {
       endOrder: 3,
     },
     nextChapter: { id: CHAPTER_ID, order: 3, hasProse: false, hasUsablePlan: true },
-    journal: { status: "paused", hasUncertainStep: false },
+    journal: {
+      status: "paused",
+      hasUncertainStep: false,
+      hasWorkBeyondPreparation: false,
+      belongsToPreviousJob: true,
+    },
     ...overrides,
   };
 }
@@ -97,8 +102,46 @@ test("plan rebuild: unknown external call, live lease, active job or command all
   })), { action: "none", reason: "job_owned_by_other_task" });
 });
 
+test("plan rebuild: a failed job with no chapter anchor and no pending flag still rebuilds", () => {
+  // Recorded real shape: status=failed, currentItemKey=null, pendingManualRecovery=false. The job
+  // is terminal bookkeeping, not a live pause, so the missing anchor is the only recovery signal.
+  assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({
+    job: { ...evidence().job, status: "failed", pendingManualRecovery: false },
+  })), {
+    action: "rebuild_execution",
+    previousJobId: JOB_ID,
+    targetChapterId: CHAPTER_ID,
+    targetChapterOrder: 3,
+  });
+});
+
+test("plan rebuild: a failed job that still has an anchor keeps the ordinary recovery path", () => {
+  assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({
+    job: { ...evidence().job, status: "failed", pendingManualRecovery: false, currentItemKey: CHAPTER_ID },
+  })), { action: "none", reason: "job_not_paused" });
+});
+
+test("plan rebuild: saved prose or a preparation-owned journal cannot be superseded", () => {
+  assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({
+    journal: { ...evidence().journal, hasWorkBeyondPreparation: true },
+  })), { action: "none", reason: "journal_has_unfinished_work" });
+  assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({
+    journal: { ...evidence().journal, belongsToPreviousJob: false },
+  })), { action: "none", reason: "journal_owned_by_other_execution" });
+  assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({
+    journal: { ...evidence().journal, hasUncertainStep: true },
+  })), { action: "none", reason: "journal_unknown_call" });
+});
+
+test("plan rebuild: an active repair session never rebuilds around its pending state", () => {
+  assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({
+    repairTerminalOrAbsent: false,
+    repairPhase: "technical_failed",
+  })), { action: "none", reason: "planning_repair_active" });
+});
+
 function createHarness(overrides = {}) {
-  const calls = { updateTaskSeed: [], retireJob: [] };
+  const calls = { updateTaskSeed: [], retireJob: [], retirePreparationJournal: [] };
   const task = {
     id: TASK_ID,
     novelId: NOVEL_ID,
@@ -148,11 +191,22 @@ function createHarness(overrides = {}) {
     findChapter: async (id) => (id === CHAPTER_ID ? chapter : null),
     findFirstPendingChapter: async () => chapter,
     hasChapterLevelPlan: async () => overrides.hasChapterLevelPlan ?? false,
-    findActiveJournalMetadata: async () => JSON.stringify({
-      status: "paused",
-      steps: { prepare: { status: "failed" } },
-      values: {},
-    }),
+    findActiveJournalMetadata: async () => (overrides.journalMetadata === undefined
+      ? JSON.stringify({
+        operationId: `pipeline:${JOB_ID}:${CHAPTER_ID}`,
+        status: "paused",
+        expiresAt: 0,
+        request: { entry: "pipeline", workflowTaskId: TASK_ID },
+        expectedChapter: { id: CHAPTER_ID, content: "" },
+        expectedFingerprint: "fingerprint",
+        steps: { prepare: { status: "failed" } },
+        values: {},
+      })
+      : overrides.journalMetadata),
+    retirePreparationJournal: async (input) => {
+      calls.retirePreparationJournal.push(input);
+      return overrides.retirePreparationJournal ?? { status: "retired", archiveContentHash: "archive" };
+    },
     countActiveJobs: async () => overrides.activeJobCount ?? 0,
     updateTaskSeed: async (input) => {
       calls.updateTaskSeed.push(input);
@@ -191,6 +245,54 @@ test("rebuild service clears the dead binding and retires the old job while keep
   assert.equal(nextSeed.planningRepairExecutionRebuild.previousJobId, JOB_ID);
   assert.match(calls.retireJob[0].supersedeMessage, /新的章节执行任务/);
   assert.match(calls.retireJob[0].supersedeMessage, /schema_mismatch/);
+});
+
+test("rebuild service rebuilds a failed job that lost its anchor even without a pending flag", async () => {
+  const failedJob = {
+    id: JOB_ID, novelId: NOVEL_ID, status: "failed", pendingManualRecovery: false,
+    currentItemKey: null, payload: JSON.stringify({ workflowTaskId: TASK_ID }),
+    startOrder: 3, endOrder: 3, cancelRequestedAt: null, executionOwner: null,
+    executionLeaseExpiresAt: null, updatedAt: new Date("2026-10-30T09:00:00.000Z"),
+    error: "[STRUCTURED_OUTPUT:schema_mismatch] 旧的执行任务失败",
+  };
+  const { service, task, calls } = createHarness({ job: failedJob });
+  assert.equal(failedJob.pendingManualRecovery, false);
+  const result = await service.converge({
+    task,
+    seed: JSON.parse(task.seedPayloadJson),
+    repairPhase: "abandoned",
+    activeCommand: false,
+    trigger: "director_command:continue",
+  });
+  assert.equal(result.changed, true);
+  assert.equal(result.action.action, "rebuild_execution");
+  assert.equal(calls.updateTaskSeed.length, 1);
+  assert.equal(calls.retirePreparationJournal.length, 1);
+  assert.deepEqual(calls.retirePreparationJournal[0], {
+    novelId: NOVEL_ID, chapterId: CHAPTER_ID, jobId: JOB_ID, taskId: TASK_ID,
+    now: Date.parse("2026-10-30T10:00:10.000Z"),
+  });
+  assert.equal(calls.retireJob.length, 1);
+  const nextSeed = JSON.parse(calls.updateTaskSeed[0].nextSeedPayloadJson);
+  assert.equal(nextSeed.planningRepairExecutionRebuild.journalSuperseded, true);
+  assert.equal(calls.retireJob[0].job.pendingManualRecovery, false);
+});
+
+test("rebuild service aborts before any task/job write when the paused journal cannot be superseded", async () => {
+  const { service, task, calls } = createHarness({
+    retirePreparationJournal: { status: "blocked", reason: "uncertain_step" },
+  });
+  const result = await service.converge({
+    task,
+    seed: JSON.parse(task.seedPayloadJson),
+    repairPhase: "abandoned",
+    activeCommand: false,
+    trigger: "director_command:continue",
+  });
+  assert.equal(result.changed, false);
+  assert.match(result.reason, /journal_cannot_be_retired/);
+  assert.equal(calls.updateTaskSeed.length, 0);
+  assert.equal(calls.retireJob.length, 0);
 });
 
 test("rebuild service is idempotent after the binding is cleared", async () => {
@@ -234,6 +336,7 @@ test("rebuild service routes an unplanned pending chapter to normal planning", a
   assert.equal(nextSeed.autoExecution.pipelineJobId, null);
   assert.equal(nextSeed.autoExecution.nextChapterId, null);
   assert.equal(nextSeed.autoExecution.nextChapterOrder, 3);
+  assert.equal(calls.retirePreparationJournal.length, 1, "the paused preparation journal is superseded so a new job can start");
 });
 
 test("rebuild service refuses to rebuild over saved prose or an active job", async () => {

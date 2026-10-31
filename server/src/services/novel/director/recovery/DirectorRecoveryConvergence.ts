@@ -19,12 +19,13 @@ export interface PlanningRepairConvergenceEvidence {
 export type PlanningRepairConvergenceDecision = { action: "abandon" } | { action: "none" };
 
 /**
- * A repair session stuck in `reviewing` without an in-flight marker holds the pause forever:
- * the panel keeps offering the same repair while the user just wants to continue writing.
+ * A repair session stuck in `reviewing`—or a `technical_failed` session whose exact failure is
+ * already recorded and has no in-flight marker—holds the pause forever: the panel keeps offering
+ * the same repair while the user just wants to continue writing.
  *
  * The explicit continuation request is treated as "do not retry this review": the session is
  * given up (auditable terminal state) and the chapter is planned again. Bounded deliberately:
- * only the review phase, only while the task is paused, and never while a command, in-flight
+ * only these stale phases, only while the task is paused, and never while a command, in-flight
  * operation, unapplied output or pending budget grant could still change planning sources.
  */
 export function planStalePlanningRepairConvergence(input: {
@@ -35,7 +36,7 @@ export function planStalePlanningRepairConvergence(input: {
   const repair = input.repair;
   if (!repair || isTerminalPlanningRepairPhase(repair.phase)) return { action: "none" };
   if (input.activeCommand || !input.taskPaused) return { action: "none" };
-  if (repair.phase !== "reviewing") return { action: "none" };
+  if (repair.phase !== "reviewing" && repair.phase !== "technical_failed") return { action: "none" };
   if (repair.pendingOperation || repair.repairOutputPending || repair.pendingGrant) return { action: "none" };
   return { action: "abandon" };
 }
@@ -162,6 +163,15 @@ export interface StalePlanRepairExecutionChapterEvidence {
   hasUsablePlan: boolean;
 }
 
+export interface StalePlanRepairExecutionJournalEvidence {
+  status: string;
+  hasUncertainStep: boolean;
+  /** Draft text or post-preparation steps mean the journal is not a pure failed preparation pause. */
+  hasWorkBeyondPreparation: boolean;
+  /** The journal operation must belong to the range job that is about to be superseded. */
+  belongsToPreviousJob: boolean;
+}
+
 export interface StalePlanRepairExecutionEvidence {
   taskId: string;
   novelId: string;
@@ -178,7 +188,7 @@ export interface StalePlanRepairExecutionEvidence {
   /** The chapter the director is about to write, resolved from the saved execution state. */
   nextChapter: StalePlanRepairExecutionChapterEvidence | null;
   /** The paused production journal for `nextChapter`; unknown external calls block any rebuild. */
-  journal: { status: string; hasUncertainStep: boolean } | null;
+  journal: StalePlanRepairExecutionJournalEvidence | null;
 }
 
 export type StalePlanRepairExecutionPlan =
@@ -224,17 +234,26 @@ export function planStalePlanRepairExecutionRebuild(
   if (job.payloadWorkflowTaskId !== evidence.taskId) return { action: "none", reason: "job_owned_by_other_task" };
   if (job.novelId !== evidence.novelId) return { action: "none", reason: "job_novel_mismatch" };
   if (job.cancelRequestedAt) return { action: "none", reason: "job_cancelled" };
-  if (!job.pendingManualRecovery) return { action: "none", reason: "job_not_paused" };
-  if (job.leaseActive) return { action: "none", reason: "job_lease_active" };
-  if (!["queued", "running", "failed"].includes(job.status)) return { action: "none", reason: "job_status_terminal" };
-  // The old job is only unrecoverable when it lost its anchor or points outside the saved scope.
   const lostAnchor = !job.currentItemKey;
   const outsideSavedScope = Boolean(evidence.nextChapter
     && (evidence.nextChapter.order < job.startOrder || evidence.nextChapter.order > job.endOrder));
+  // A failed job that lost its chapter anchor is already terminal bookkeeping: its pending flag may
+  // legitimately be false (nothing is waiting to resume), so it must not be read as "still live".
+  const failedWithoutAnchor = job.status === "failed" && lostAnchor;
+  if (!job.pendingManualRecovery && !failedWithoutAnchor) return { action: "none", reason: "job_not_paused" };
+  if (job.leaseActive) return { action: "none", reason: "job_lease_active" };
+  if (!["queued", "running", "failed"].includes(job.status)) return { action: "none", reason: "job_status_terminal" };
+  // The old job is only unrecoverable when it lost its anchor or points outside the saved scope.
   if (!lostAnchor && !outsideSavedScope) return { action: "none", reason: "job_still_recoverable" };
   if (evidence.journal?.hasUncertainStep) return { action: "none", reason: "journal_unknown_call" };
   if (evidence.journal && evidence.journal.status !== "paused") {
     return { action: "none", reason: "journal_not_paused" };
+  }
+  if (evidence.journal?.hasWorkBeyondPreparation) {
+    return { action: "none", reason: "journal_has_unfinished_work" };
+  }
+  if (evidence.journal && !evidence.journal.belongsToPreviousJob) {
+    return { action: "none", reason: "journal_owned_by_other_execution" };
   }
   const chapter = evidence.nextChapter;
   if (!chapter) return { action: "none", reason: "no_pending_chapter" };
