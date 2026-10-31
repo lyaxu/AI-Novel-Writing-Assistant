@@ -302,7 +302,8 @@ export const chapterTaskSheetQualityPrompt: PromptAsset<
     // `handoffStatus` is a projection for non-deferred promises, not a second semantic choice.
     if (output.promiseChecks) output.promiseChecks = projectPromiseHandoffStatus(output.promiseChecks);
     validatePlanningPromiseEvidence(output.promiseChecks ?? [], input.candidate, input.reviewContextJson);
-    const projected = projectPlanningStateReview(projectValidatedIssueChecks(output, input.candidate, input.previousIssues),
+    const projected = projectPlanningStateReview(projectValidatedIssueChecks(output, input.candidate, input.previousIssues,
+      input.reviewContextJson),
       input.candidate, input.reviewContextJson,
       new Set((input.previousIssues ?? []).filter(issue => !output.issues.some(current => current.id === issue.id)).map(issue => issue.id)));
     validateNewIssueEvidence(output, input.candidate, input.previousIssues, input.reviewContextJson);

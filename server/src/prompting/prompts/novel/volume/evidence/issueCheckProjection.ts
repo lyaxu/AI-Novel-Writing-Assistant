@@ -15,6 +15,7 @@ export function projectValidatedIssueChecks(
   output: AiChapterTaskSheetQualityAssessment,
   candidate: unknown,
   previousIssues: ChapterTaskSheetQualityIssue[] = [],
+  reviewContextJson?: string,
 ): AiChapterTaskSheetQualityAssessment {
   const expected = new Map(previousIssues.map(issue => [issue.id, issue]));
   const checks = output.issueChecks ?? [];
@@ -29,9 +30,28 @@ export function projectValidatedIssueChecks(
       + `缺失 ${JSON.stringify(missing)}，多余 ${JSON.stringify(extra)}，重复 ${JSON.stringify([...new Set(duplicated)])}。`);
   }
   const source = buildChapterEvidenceIndex(candidate);
+  // A repair-window review may legitimately cite a neighboring planned chapter
+  // (`candidateChapters[1].summary`) when judging whether a deferred duty is carried. That is
+  // context evidence, not prose from the current chapter contract; accept it only when the exact
+  // sourcePath/quote also resolves inside the review context, never as a free-floating quote.
+  let contextSource: ReturnType<typeof buildChapterEvidenceIndex> | null = null;
+  if (reviewContextJson?.trim()) {
+    try {
+      const context = JSON.parse(reviewContextJson);
+      if (context && typeof context === "object") contextSource = buildChapterEvidenceIndex(context);
+    } catch { /* Context diagnostics are optional; the candidate check still runs. */ }
+  }
+  const found = (quote: string | { sourcePath?: string; quote?: string }) => {
+    if (typeof quote === "string") {
+      return matchesChapterEvidence(source, quote) || (contextSource ? matchesChapterEvidence(contextSource, quote) : false);
+    }
+    if (typeof quote.sourcePath !== "string" || typeof quote.quote !== "string") return false;
+    const evidence = { sourcePath: quote.sourcePath, quote: quote.quote };
+    return matchesChapterEvidence(source, evidence) || (contextSource ? matchesChapterEvidence(contextSource, evidence) : false);
+  };
   for (const check of checks) {
-    if (check.candidateEvidence.some(quote => !matchesChapterEvidence(source, quote))) {
-      const failed = check.candidateEvidence.filter(quote => !matchesChapterEvidence(source, quote));
+    if (check.candidateEvidence.some(quote => !found(quote))) {
+      const failed = check.candidateEvidence.filter(quote => !found(quote));
       throw new Error(`issueChecks ${check.issueId} contains evidence absent from the current candidate. `
         + `candidateEvidence 共 ${check.candidateEvidence.length} 条，其中 ${failed.length} 条找不到：`
         + JSON.stringify(failed.map(describeEvidence)));

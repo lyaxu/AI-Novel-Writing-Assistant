@@ -262,6 +262,19 @@ test("numeric structured capacity fields can be cited as evidence", () => {
   assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: "scene_1.targetWordCount", quote: "784" }), true);
 });
 
+test("a repair-window review may cite a neighboring candidate chapter as context evidence", () => {
+  const current = output();
+  const reviewContextJson = JSON.stringify({ candidateChapters: [{ summary: "第一章仍在祭坛" },
+    { summary: "次日沈薇来电确认“陈总明天签约”，周野才发现“陈维远”身份被系统续租给匿名ID并冒签意向书。" }] });
+  current.issueChecks = current.issueChecks.map((check, index) => index === 0 ? { ...check,
+    candidateEvidence: [{ sourcePath: "candidateChapters[1].summary",
+      quote: "次日沈薇来电确认“陈总明天签约”，周野才发现“陈维远”身份被系统续租给匿名ID并冒签意向书。" }] } : check);
+  assert.doesNotThrow(() => prompt.postValidate(current, { ...input(), reviewContextJson }));
+  const missing = structuredClone(current);
+  missing.issueChecks[0].candidateEvidence[0].quote = "这段文字不在复核上下文中";
+  assert.throws(() => prompt.postValidate(missing, { ...input(), reviewContextJson }), /absent/);
+});
+
 test("the same path with different text is still reported as ambiguous", () => {
   // Guarding this case is the point of the check: identical text resolves unambiguously, differing
   // text does not, and silently picking one would mis-attribute evidence.
