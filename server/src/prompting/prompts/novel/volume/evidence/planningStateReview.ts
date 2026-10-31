@@ -163,8 +163,13 @@ export function projectPlanningStateReview(
   for (const check of output.stateChecks) {
     const claim = claimsById.get(check.claimId);
     if (check.status !== "supported" || claim?.source.kind !== "planned_scene") continue;
-    check.status = check.evidence.length && check.evidence.every(quote => matchesChapterEvidence(current, quote))
-      ? "established_in_plan" : "insufficient_context";
+    check.status = "established_in_plan";
+    // The plan itself establishes a planned entry state. If the model attached prose quotes that
+    // are not current-plan evidence, drop them rather than inventing historical support; planned
+    // state evidence is optional at this diagnostic boundary.
+    if (check.evidence.length && !check.evidence.every(quote => matchesChapterEvidence(current, quote))) {
+      check.evidence = [];
+    }
   }
   const checks = new Map(output.stateChecks.map(check => [check.claimId, check]));
   if (checks.size !== output.stateChecks.length || checks.size !== claimIds.size || [...claimIds].some(id => !checks.has(id))) {
@@ -180,10 +185,12 @@ export function projectPlanningStateReview(
       }
     }
     if (check.status === "established_in_plan") {
-      if ((claim.temporalScope !== "planned" && !isDeclaredOpeningPremise(claim)) || !check.evidence.length) {
+      const plannedScene = claim.source.kind === "planned_scene";
+      if ((claim.temporalScope !== "planned" && !isDeclaredOpeningPremise(claim))
+        || (!check.evidence.length && !plannedScene)) {
         throw new Error(`State ${claim.id}: planned transition needs current plan evidence.`);
       }
-      assertCurrent(check.evidence, claim.id);
+      if (check.evidence.length) assertCurrent(check.evidence, claim.id);
     }
     if (check.status === "contradicted" && !check.issueId) throw new Error(`State ${claim.id}: contradicted claim requires an issue.`);
     if (check.issueId) {
