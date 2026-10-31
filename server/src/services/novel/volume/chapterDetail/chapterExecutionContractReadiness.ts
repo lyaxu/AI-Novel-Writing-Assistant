@@ -4,6 +4,7 @@ import {
   type ChapterTaskSheetQualityGateResult,
 } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import type { VolumeChapterPlan } from "@ai-novel/shared/types/novel";
+import { evaluateCandidateCapacity } from "./chapterCapacityGate";
 
 export interface PersistedChapterExecutionContract {
   targetWordCount?: number | null;
@@ -89,10 +90,18 @@ export function inspectChapterExecutionContractReadiness(input: {
   const compatibility: ChapterExecutionContractCompatibility = mismatchedFields.length === 0
     ? "compatible"
     : "incompatible";
+  // A persisted contract that carries a capacity plan must still pass the deterministic capacity
+  // gate; legacy contracts without it remain readable and reusable.
+  const capacity = evaluateCandidateCapacity({
+    targetWordCount: input.requirement.targetWordCount ?? input.persisted.targetWordCount,
+    exclusiveEvent: input.requirement.exclusiveEvent,
+    sceneCards: input.persisted.sceneCards,
+  }, { allowDeferable: true });
+  const capacityPassed = !(capacity.capacityPlanPresent && !capacity.passed);
   return {
     structure,
     compatibility,
     mismatchedFields,
-    canReuse: structure.canEnterExecution && compatibility === "compatible",
+    canReuse: structure.canEnterExecution && compatibility === "compatible" && capacityPassed,
   };
 }

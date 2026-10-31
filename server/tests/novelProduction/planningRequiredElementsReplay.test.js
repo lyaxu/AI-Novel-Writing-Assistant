@@ -9,6 +9,7 @@ const domain = loadRuntimeSource('../volume/planningRepair/planningRepairDomain.
   zod: require('zod'),
   '../../../../llm/generatedContentSchema': require('../../dist/llm/generatedContentSchema.js'),
   '@ai-novel/shared/types/chapterLengthControl': lengthControl,
+  '@ai-novel/shared/types/chapterCapacity': require('@ai-novel/shared/types/chapterCapacity'),
   '@ai-novel/shared/types/novel/sceneCausality': require('@ai-novel/shared/types/novel/sceneCausality'),
   '../chapterDetail/chapterDetailSchemas': require('../../dist/services/novel/volume/chapterDetail/chapterDetailSchemas.js'),
   './domain/requiredElementRevisions': revisions,
@@ -28,6 +29,14 @@ const { PlanningRepairCoordinator } = loadRuntimeSource('../volume/planningRepai
   './planningRepairDomain': domain,
   '../planningPromises': { projectPlanningHorizon: () => ({}) },
   './domain/reviewIssueHistory': require('../../dist/services/novel/volume/planningRepair/domain/reviewIssueHistory.js'),
+  './domain/requiredElementRevisions': revisions,
+  '@ai-novel/shared/types/chapterCapacity': require('@ai-novel/shared/types/chapterCapacity'),
+  '../chapterDetail/chapterCapacityGate': {
+    resolveCandidateCapacityPlan: () => null,
+    evaluateCandidateCapacity: () => ({ passed: true, capacityPlanPresent: false, requiresWindowReplan: false,
+      budget: null, violations: [], deferableItems: [], summary: 'legacy' }),
+  },
+  '../chapterDetail/chapterCapacityLog': { logChapterCapacityEvent: () => {}, recordChapterCapacityAuditSafely: async () => {} },
 });
 const sha = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const targetId = fixture.allowedChapterIds[0];

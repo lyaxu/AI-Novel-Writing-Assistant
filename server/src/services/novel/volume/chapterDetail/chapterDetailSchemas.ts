@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { generatedChapterSceneCardSchema } from "@ai-novel/shared/types/chapterLengthControl";
+import { chapterCapacityPlanSchema } from "@ai-novel/shared/types/chapterCapacity";
 import { generatedReaderExperienceContractSchema } from "@ai-novel/shared/types/novel/readerExperience";
 import { chapterStateClaimsSchema, contextStateClaimsWireSchema, sceneCausalitySchema,
   sceneOwnedStateTransitionWireSchema, stateClaimPrerequisiteWireSchema } from "@ai-novel/shared/types/novel/sceneCausality";
@@ -199,6 +200,7 @@ export function createChapterExecutionContractSchema() {
     (raw) => normalizeScenePlanPayload(normalizeBoundaryPayload(normalizeObjectAlias(raw, {
       purpose: ["章节目标", "chapterGoal", "goal", "objective"],
       requiredElements: ["requiredBeats", "mustHappen", "chapterRequiredElements", "必须落实"],
+      capacityPlan: ["capacity", "chapterCapacity", "容量计划"],
     }))),
     z.object({
       stateClaims: chapterStateClaimsSchema.optional(),
@@ -216,6 +218,8 @@ export function createChapterExecutionContractSchema() {
       // a hard minimum would fail generation and force a retry whenever the model omits one,
       // and a local planning gap must not block the chain. Absence is surfaced as advisory debt.
       requiredElements: z.array(z.string().trim().min(1).max(160)).max(8).default([]),
+      // 容量计划随合同生成；持久化 schema 保持可选，旧合同仍可读取。
+      capacityPlan: chapterCapacityPlanSchema.optional(),
       taskSheet: z.string().trim().min(1).max(600),
       readerExperience: boundedReaderExperienceSchema,
       sceneCards: z.array(z.preprocess(normalizeSceneCardPayload, boundedSceneCardSchema)).min(3).max(8),
@@ -262,9 +266,14 @@ export function createChapterExecutionContractWireSchema() {
   return z.preprocess(raw => normalizeScenePlanPayload(normalizeBoundaryPayload(normalizeObjectAlias(raw, {
     purpose: ["章节目标", "chapterGoal", "goal", "objective"],
     requiredElements: ["requiredBeats", "mustHappen", "chapterRequiredElements", "必须落实"],
+    capacityPlan: ["capacity", "chapterCapacity", "容量计划"],
   }))),
     createChapterExecutionContractSchema().out.extend({
       stateClaims: contextStateClaimsWireSchema,
+      // Capacity plan stays optional at the schema layer so legacy contracts and historical wire
+      // fixtures remain readable; the generation path rejects a missing plan explicitly and the
+      // contract prompt requires it for every new contract.
+      capacityPlan: chapterCapacityPlanSchema.optional(),
       sceneCards: z.array(z.preprocess(normalizeSceneCardWordCount, stateBoundSceneCardWireSchema)).min(3).max(8),
     }));
 }

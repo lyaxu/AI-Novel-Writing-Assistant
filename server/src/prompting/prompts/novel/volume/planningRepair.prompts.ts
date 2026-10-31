@@ -40,12 +40,15 @@ const commonRules = [
   "openingChain是开篇功能与回报承诺，允许合理拆合与调整章序；earlyPayoff与全书长期承诺要区分，不要求本章完成全书/前30章全部回报。若来源缺失明确未知，不猜测用户原选；若兑现需要改动受保护约束或窗口外内容，交回既有方向确认，不擅自牺牲承诺。",
   "同次确认的hookStrategy与openingChain若给出不同章序，先核对原选整体方向与明确回报时限，不机械要求按原型编号重复兑现。readonlyPlanningHorizon提供实际已存节奏拍，可据此核实已有承接而不改动窗口外规划；只有节奏拍而无章合同时，明确它是较粗安排，不伪造具体章节ID。存在承接不等于承诺准时兑现，不能把明确前三章回报任意拖到卷中。需要新改窗口外落点或无法兼容原选取舍时，才交回方向确认。",
   "只输出严格 JSON，不输出 Markdown、注释、解释或额外字段。所有叙事文本、reason、summary 和 issues 使用中文；字段名、枚举值、ID 及已有引用标识保持原样。",
+  "容量规则：每章只允许一个主事件和一个明确转折。每个 change 必须返回 capacityPlan{coreEvent,keyTurn,mustDeliver:string[],deferable:string[],seedOnly:string[],estimatedCoreWordCount:number}。coreEvent 必须与本章 exclusiveEvent 是同一件事（可措辞相同或包含关系）；keyTurn 只写一个发生在本章的明确转折，不能复述主事件，也不能安排多个转折。mustDeliver 是本章必须兑现的可见结果；seedOnly 是只埋设、本章不兑现真相的线索；deferable 是本章不兑现、需要后续章节承接的职责。本章 requiredElements 由系统按 mustDeliver+seedOnly 重建，deferable 不得留在本章 requiredElements 或场景 mustAdvance 中。",
+  "当 assessment.current 的 capacity 结论未通过（issues 或 violations 中带 capacity_ 前缀）时，按容量修复：先确认本章是否真的只有一个主事件和一个转折；把超出本章目标字数的职责改为 deferable，并在 allowedChapterIds 内章序更晚的未写章节的 changes 中，用 capacityPlan.mustDeliver 与 requiredElements/场景 mustAdvance 实际承接这些职责（后章场景要能落实，不能只写“后文处理”）。每一条 deferable 都必须能在窗口内更晚章节找到明确承接；后两章已写、被锁定、跨卷或窗口内没有后续可写章节时，不得硬塞，必须返回 requiresUserDecision=true 并在 reason 说明需要进入卷规划修复。不能靠调大 targetWordCount、删除职责或降低用户承诺解决容量问题。",
+  "容量拆分后来源章 requiredElements 减少是允许的：系统按 capacityPlan 重建清单，不需要再用 requiredElementRevisions 删除延期条目；但未延期职责、回报引用和用户承诺必须保留。后章新增承接职责直接写在该章自己的 capacityPlan/requiredElements/场景中。",
 ].join("\n");
 
 // These assets do not resolve models; the coordinator must pass its explicit modelRoute to the runner.
 export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, PlanningRepairOutput, unknown> = {
   id: "novel.volume.planning_repair",
-  version: "v14",
+  version: "v15",
   taskType: "replan",
   mode: "structured",
   language: "zh",
@@ -62,7 +65,7 @@ export const planningRepairPrompt: PromptAsset<PlanningRepairPromptInput, Planni
       "你是网文规划修复器。只修复限定章节窗口的执行合同，不写正文，不重做全书规划。",
       commonRules,
       "逐项解决 assessment.current 中仍未解决的问题，参照issueHistoryByChapter保留此前有效修复；原始问题仅用于检查职责没有丢失。用具体的章节职责和场景变化解决真实缺口，不为可选润色反复改写。只能在允许窗口内保留、合并或移动职责；错误引用可按显式revise账本纠正表述，叙事功能仍须保留。",
-      "输出 {requiresUserDecision:boolean,reason:string,changes:[{chapterId,title,summary,purpose,exclusiveEvent,endingState,nextChapterEntryState,conflictLevel:number,revealLevel:number,taskSheet,mustAvoid,payoffRefs:string[],stateClaims:[],sceneCards:[],readerExperience:{},requiredElementRevisions?:[{original,replacement,reason,preservedFunction,sceneKeys:string[]}]}],obligationMoves:[{obligation,fromChapterId,toChapterId,action,replacement?,reason}]}。",
+      "输出 {requiresUserDecision:boolean,reason:string,changes:[{chapterId,title,summary,purpose,exclusiveEvent,endingState,nextChapterEntryState,conflictLevel:number,revealLevel:number,taskSheet,mustAvoid,payoffRefs:string[],capacityPlan:{coreEvent,keyTurn,mustDeliver:string[],deferable:string[],seedOnly:string[],estimatedCoreWordCount:number},stateClaims:[],sceneCards:[],readerExperience:{},requiredElementRevisions?:[{original,replacement,reason,preservedFunction,sceneKeys:string[]}]}],obligationMoves:[{obligation,fromChapterId,toChapterId,action,replacement?,reason}]}。",
       "changes 必须对每个 allowedChapterIds 恰好返回一次完整的允许字段，包括无需变化的字段。不返回完整替换文档，不新增其他字段。",
       "payoffRefs承载叙事义务，普通保留或迁移仍须保留原引用。若引用含与已写事实冲突的旧实现方式，或用户已确认纠正其表述，可在同一允许章用obligationMoves的revise显式修订：obligation逐字取自candidateChapters当前原引用（无候选才用originalChapters），replacement逐字对应changes里新引用，reason说明事实依据、保留的叙事功能及本章如何落实。新引用替代旧引用，不同时保留错误原句。不得只修改payoffRefs而漏记映射；也不得把旧错误句继续当作执行目标。只因近义润色不应重写引用。",
       "requiredElements不能只留旧条目而另改场景，也不能自由替换整份清单。确有错误或重复已写事件时，在该章requiredElementRevisions逐项修订：original逐字复制currentRequiredElements的当前原句（未提供该投影时读candidateChapters.sceneCards.requiredElements）；replacement给出同章可落实的修正义务；reason引用具体已写事实或本轮问题，说明为何需要改；preservedFunction明确保留的叙事功能与承诺；sceneKeys绑定本轮sceneCards中具体落实该功能的场景key。程序仅做精确映射，事实与功能是否成立仍由AI复核。",

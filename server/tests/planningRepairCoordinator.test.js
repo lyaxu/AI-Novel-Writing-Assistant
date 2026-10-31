@@ -21,6 +21,13 @@ const imports = {
   "./planningRepairDomain": require("../dist/services/novel/volume/planningRepair/planningRepairDomain.js"),
   "./domain/requiredElementRevisions": require("../dist/services/novel/volume/planningRepair/domain/requiredElementRevisions.js"),
   "./domain/reviewIssueHistory": require("../dist/services/novel/volume/planningRepair/domain/reviewIssueHistory.js"),
+  "@ai-novel/shared/types/chapterCapacity": require("@ai-novel/shared/types/chapterCapacity"),
+  "../chapterDetail/chapterCapacityGate": {
+    evaluateCandidateCapacity: () => ({ passed: true, capacityPlanPresent: false, requiresWindowReplan: false,
+      budget: null, violations: [], deferableItems: [], summary: "legacy" }),
+    resolveCandidateCapacityPlan: () => null,
+  },
+  "../chapterDetail/chapterCapacityLog": { logChapterCapacityEvent: () => {}, recordChapterCapacityAuditSafely: async () => {} },
 };
 const coordinatorExports = {};
 const coordinatorJs = ts.transpileModule(fs.readFileSync(coordinatorSource, "utf8"), {

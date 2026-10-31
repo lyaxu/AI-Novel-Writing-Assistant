@@ -20,6 +20,10 @@ import {
   validatePlanningStateSources,
 } from "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts";
 import { loadStoryCraftContractBlock } from "../../settings/storyCraftContractContext";
+import {
+  buildCapacityGateIssues,
+  evaluateCandidateCapacity,
+} from "./chapterDetail/chapterCapacityGate";
 
 export interface ChapterTaskSheetQualityGateOptions {
   mode?: ChapterTaskSheetQualityMode;
@@ -34,6 +38,10 @@ export interface ChapterTaskSheetQualityGateOptions {
   previousIssues?: ChapterTaskSheetQualityIssue[];
   priorIssueDecisions?: ChapterPlanningIssueCheck[];
   omittedResolvedIssueCount?: number;
+  /** New-generation contracts must carry a capacity plan; legacy persisted contracts may omit it. */
+  requireCapacityPlan?: boolean;
+  /** Initial one-chapter contracts may not push deferred duties into nowhere. */
+  allowDeferable?: boolean;
 }
 
 export type ChapterTaskSheetSemanticAssessor = (input: {
@@ -125,6 +133,33 @@ export class ChapterTaskSheetQualityGateService {
         summary: "章节计划的状态来源需要重新核对。",
         issues: [{ id: "state_claim_source_invalid", severity: "high", target: "scene_cards",
           summary: error instanceof Error ? error.message : "状态声明来源无效。", repairHint }], repairGuidance: [repairHint] };
+    }
+
+    // Deterministic capacity gate: cheap, structured, and must run before the semantic review.
+    // It only judges one main event / one turn / classified duties / word+scene capacity;
+    // legacy contracts without a capacity plan stay readable and skip this check.
+    const capacity = evaluateCandidateCapacity(candidate, {
+      requireCapacityPlan: options.requireCapacityPlan,
+      allowDeferable: options.allowDeferable,
+    });
+    if (!capacity.passed) {
+      const { issues, repairGuidance } = buildCapacityGateIssues(capacity);
+      console.info(`[chapter.capacity] rejected novelId=${candidate.novelId} chapter=${candidate.chapterOrder} ${capacity.summary.slice(0, 300)}`);
+      return {
+        status: "repairable",
+        canEnterExecution: false,
+        verdict: "repairable",
+        safeToSync: false,
+        loadRisk: "overloaded",
+        // Structural overload is repaired by redistributing duties into the current + next two
+        // unwritten chapters; classification-only problems stay inside this chapter.
+        recommendedHandling: capacity.requiresWindowReplan ? "replan_window" : "repair_contract",
+        issues,
+        summary: capacity.summary,
+        repairGuidance,
+        confidence: 1,
+        capacity,
+      };
     }
 
     const assessment = this.semanticAssessor

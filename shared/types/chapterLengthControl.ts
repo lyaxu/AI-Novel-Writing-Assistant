@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { sanitizeCreativeMustAdvanceItems } from "./chapterCreativeContract.js";
+import { chapterCapacityPlanSchema, normalizeChapterCapacityPlan } from "./chapterCapacity.js";
 import { sceneCausalitySchema, chapterStateClaimsSchema } from "./novel/sceneCausality.js";
 import {
   EMPTY_READER_EXPERIENCE_CONTRACT,
@@ -68,6 +69,8 @@ export const chapterScenePlanSchema = z.object({
   // Default [] keeps legacy stored plans parseable; the generation-time contract schema is what
   // enforces the 3-8 range for newly generated chapters.
   requiredElements: z.array(z.string().trim().min(1).max(160)).max(8).default([]),
+  // 容量计划随场景计划一起持久化（无数据库列），旧合同没有该字段时保持 undefined。
+  capacityPlan: chapterCapacityPlanSchema.optional(),
 });
 
 export const generatedChapterScenePlanSchema = chapterScenePlanSchema.extend({
@@ -323,6 +326,7 @@ export function normalizeChapterScenePlan(
   }
 
   const boundedScenes = normalizedScenes.slice(0, SCENE_COUNT_MAX);
+  const capacityPlan = normalizeChapterCapacityPlan(record?.capacityPlan);
   return chapterScenePlanSchema.parse({
     ...(record?.stateClaims !== undefined ? { stateClaims: record.stateClaims } : {}),
     targetWordCount: budget.targetWordCount,
@@ -335,6 +339,7 @@ export function normalizeChapterScenePlan(
       .map((item) => (typeof item === "string" ? item.trim() : ""))
       .filter((item) => item.length > 0 && item.length <= 160)
       .slice(0, 8),
+    ...(capacityPlan ? { capacityPlan } : {}),
   });
 }
 

@@ -371,8 +371,12 @@ function createExecutionContractSystemPrompt(): string {
     selectedDirectionRule,
     progressionRule,
     intensityScaleRule,
-    "只输出严格 JSON，必须同时包含 purpose、exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、targetWordCount、mustAvoid、payoffRefs、requiredElements、taskSheet、readerExperience、stateClaims、sceneCards、neighborEventUse、mustAvoidConflicts。",
+    "只输出严格 JSON，必须同时包含 purpose、exclusiveEvent、endingState、nextChapterEntryState、conflictLevel、revealLevel、targetWordCount、mustAvoid、payoffRefs、requiredElements、capacityPlan、taskSheet、readerExperience、stateClaims、sceneCards、neighborEventUse、mustAvoidConflicts。",
+    "【章节容量规则】每章只允许 1 个主事件和 1 个明确转折：capacityPlan.coreEvent 必须与 exclusiveEvent 是同一个事件（可措辞相同或包含关系），capacityPlan.keyTurn 只能写这一个发生在本章内的明确转折，不能复述主事件，也不能安排多个转折。",
+    "必须完成项必须全部归类：capacityPlan.mustDeliver=本章必须兑现；capacityPlan.deferable=本章不兑现、留给后续章节的职责；capacityPlan.seedOnly=只埋设线索、本章不兑现真相。requiredElements 只能由 mustDeliver 与 seedOnly 组成，必须包含全部 mustDeliver；deferable 绝对不得出现在 requiredElements 或任何场景卡的 mustAdvance 中。单章新合同不得靠 deferable 逃过容量检查：有超容量职责时应压缩本章职责，由规划修复另拆到后续章；确实需要后移时 deferable 会触发窗口重分配。",
+    "capacityPlan.estimatedCoreWordCount 必须按本章实际叙事动作估算，并与 targetWordCount 匹配：一个主事件 + 一个转折 + 少量只埋线索，例如 2800 字章节通常只能容纳 1-3 个必须兑现项；不要把 8-10 件事塞进同一章，也不要用“信息密度高”当理由超容量。",
     "requiredElements 是本章的最小事件清单，3-8 条，每一条都必须是正文里能被读者看见的具体专名、事件或动作，例如「假丘处机在城外验货时暴露口音破绽」。禁止写主题、意图、情绪或评价，例如「展现主角的成长」「节奏更紧凑」「体现江湖险恶」——这些无法被验收。清单合起来要能说清这一章实际发生了什么，而不是它想表达什么。",
+    "chapter_capacity 未提供时按默认目标字数自行控制容量；若收到 capacity_ 开头的拒收原因，必须按提示减少本章职责或把可延期职责交给后续章，不能改用更大的字数预算。",
     "purpose 用一句话说明本章到底要推进什么，不要写成摘要复述。",
     "exclusiveEvent / endingState / nextChapterEntryState 等字段不可缺失，它们是章节的硬边界合同。",
     "taskSheet 是给正文写作器的简洁执行指令，sceneCards 是 3-8 个场景卡的执行拆解。",
@@ -487,7 +491,7 @@ export const volumeChapterExecutionContractPrompt: PromptAsset<
   unknown
 > = {
   id: "novel.volume.chapter_execution_contract",
-  version: "v14",
+  version: "v15",
   taskType: "planner",
   mode: "structured",
   language: "zh",

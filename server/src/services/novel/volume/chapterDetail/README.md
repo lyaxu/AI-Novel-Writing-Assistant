@@ -32,3 +32,16 @@
 任务单细化仍必须通过完整生成语义门禁及提交时结构核验。目的/边界单字段编辑不冒充完整执行合同。相邻半成品的场景卡不参与目标章准入，也不获准写入其他 Chapter；不能用全局 `allowIncompleteExecutionContracts` 消除错误。
 
 提交前不能先持久化工作区、再读取 Chapter 反向 hydrate、最后尝试同步：中途失败会把新工作区与旧执行行混合。普通全卷显式同步也必须由同步事务统一保存。slim 单章成功后客户端仅刷新，不重复 PUT 全卷；并发修改导致来源失效时保留原结果，要求刷新重试。
+
+## 容量计划与写前门禁
+
+执行合同新增 `capacityPlan`（随 scenePlan JSON 持久化，不新增数据库列）：本章唯一主事件
+`coreEvent`、唯一明确转折 `keyTurn`、必须完成项三分类 `mustDeliver/deferable/seedOnly`
+与 `estimatedCoreWordCount`。新生成合同缺少该计划按输出无效退回；`requiredElements` 由
+`mustDeliver + seedOnly` 组成，`deferable` 不得出现在本章必做清单和场景 mustAdvance 中。
+
+`chapterCapacityGate.ts` 把候选适配成确定性容量评估：容量预算由目标字数推导（权重在
+`shared/types/chapterCapacity.ts` 的 `CHAPTER_CAPACITY_POLICY`，不按题材分支），检查主事件
+一致性、转折唯一性、三分类完整性、字数/场景容量与可延期泄漏。容量失败在语义复核之前返回
+结构化结果；分类问题走单章纠正，结构性超载走规划修复窗口。执行历史只写入未写章节的
+`repairHistory`，不触碰正文。完整规则见 [章节容量门禁](../../../../../../docs/wiki/workflows/chapter-capacity-gate.md)。

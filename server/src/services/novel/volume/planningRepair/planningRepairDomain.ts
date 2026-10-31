@@ -2,6 +2,12 @@ import { z } from "zod";
 import { preserveGeneratedContentConstraints } from "../../../../llm/generatedContentSchema";
 import type { VolumeChapterPlan, VolumePlanDocument } from "@ai-novel/shared/types/novel";
 import { normalizeChapterScenePlan, parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
+import {
+  chapterCapacityPlanSchema,
+  isRelatedCapacityText,
+  normalizeChapterCapacityPlan,
+  type ChapterCapacityPlan,
+} from "@ai-novel/shared/types/chapterCapacity";
 import { createChapterTaskSheetSchema, stateBoundSceneCardWireSchema } from "../chapterDetail/chapterDetailSchemas";
 import { requiredElementRevisionSchema, applyRequiredElementRevisions } from "./domain/requiredElementRevisions";
 import { chapterStateClaimsSchema, contextStateClaimsWireSchema } from "@ai-novel/shared/types/novel/sceneCausality";
@@ -44,6 +50,10 @@ export const planningRepairChangeSchema = z.object({
   stateClaims: chapterStateClaimsSchema.optional(),
   readerExperience: taskSheetShape.readerExperience,
   requiredElementRevisions: z.array(requiredElementRevisionSchema).max(8).optional(),
+  // Optional for legacy saved responses; new repairs are prompted to return it. Missing values are
+  // projected from the current candidate during apply so an old session cannot lose its capacity
+  // classification just by omitting the field.
+  capacityPlan: chapterCapacityPlanSchema.optional(),
 }).strict();
 
 export const planningRepairOutputSchema = preserveGeneratedContentConstraints(z.object({
@@ -218,6 +228,57 @@ export function projectPlanningRepairSceneBudgets(
   };
 }
 
+/**
+ * The flat writer-compatible list is a projection of the structured classification: only
+ * mustDeliver + seedOnly belong here. Deferred duties are therefore removed by construction and
+ * must be carried by a later chapter instead of silently disappearing.
+ */
+function projectRequiredElementsFromCapacityPlan(plan: ChapterCapacityPlan): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const item of [...plan.mustDeliver, ...plan.seedOnly]) {
+    const key = comparable(item);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+    if (result.length >= 8) break;
+  }
+  return result;
+}
+
+function assertRepairDeferableDestinations(
+  volume: VolumePlanDocument["volumes"][number],
+  chapters: readonly VolumeChapterPlan[],
+  allowed: ReadonlySet<string>,
+): void {
+  const orderById = new Map(volume.chapters.map((chapter) => [chapter.id, chapter.chapterOrder]));
+  const changed = chapters.filter((chapter) => allowed.has(chapter.id));
+  for (const chapter of changed) {
+    const plan = parseChapterScenePlan(chapter.sceneCards, { targetWordCount: chapter.targetWordCount })?.capacityPlan;
+    if (!plan?.deferable?.length) continue;
+    const chapterOrder = orderById.get(chapter.id) ?? 0;
+    const laterChapters = changed.filter((candidate) => (orderById.get(candidate.id) ?? 0) > chapterOrder);
+    for (const deferred of plan.deferable) {
+      const carried = laterChapters.some((laterChapter) => {
+        const laterPlan = parseChapterScenePlan(laterChapter.sceneCards, {
+          targetWordCount: laterChapter.targetWordCount,
+        });
+        return Boolean(laterPlan && (
+          (laterPlan.capacityPlan?.mustDeliver ?? []).some((item) => isRelatedCapacityText(item, deferred))
+          || laterPlan.requiredElements.some((item) => isRelatedCapacityText(item, deferred))
+          || laterPlan.scenes.some((scene) => scene.mustAdvance.some((item) => isRelatedCapacityText(item, deferred)))
+        ));
+      });
+      if (!carried) {
+        throw new Error(
+          `可延期职责「${deferred}」在允许窗口内没有后续未写章节承接：请把它写入后章 mustDeliver/requiredElements，`
+          + "或返回 requiresUserDecision=true 并说明需要进入卷规划修复；不能删除或静默丢失。",
+        );
+      }
+    }
+  }
+}
+
 /** Pure candidate construction only; aggregate review and persistence belong to the coordinator. */
 export function applyPlanningRepairCandidate(
   document: VolumePlanDocument,
@@ -302,13 +363,23 @@ export function applyPlanningRepairCandidate(
     if (existingPlan?.stateClaims !== undefined && change.stateClaims === undefined) {
       throw new Error(`Planning repair chapter ${chapter.id} must return its state claims together with the replaced scenes.`);
     }
+    const capacityPlan = change.capacityPlan
+      ? normalizeChapterCapacityPlan(change.capacityPlan)
+      : normalizeChapterCapacityPlan(existingPlan?.capacityPlan);
+    // Capacity-era repairs derive the flat writer list from the structured classification, so
+    // deferred duties are removed from this chapter by construction; legacy repairs keep using the
+    // explicit replacement ledger.
+    const requiredElements = change.capacityPlan && capacityPlan
+      ? projectRequiredElementsFromCapacityPlan(capacityPlan)
+      : applyRequiredElementRevisions({ chapterId: chapter.id,
+        elements: existingPlan?.requiredElements ?? [], sceneKeys: change.sceneCards.map(scene => scene.key),
+        revisions: change.requiredElementRevisions, previouslyApplied: previouslyAppliedRequiredElements });
     const scenePlan = normalizeChapterScenePlan({
       scenes: change.sceneCards,
       ...(change.stateClaims !== undefined ? { stateClaims: change.stateClaims } : {}),
       readerExperience: change.readerExperience,
-      requiredElements: applyRequiredElementRevisions({ chapterId: chapter.id,
-        elements: existingPlan?.requiredElements ?? [], sceneKeys: change.sceneCards.map(scene => scene.key),
-        revisions: change.requiredElementRevisions, previouslyApplied: previouslyAppliedRequiredElements }),
+      requiredElements,
+      ...(capacityPlan ? { capacityPlan } : {}),
     }, target);
     if (scenePlan.targetWordCount !== target
       || scenePlan.scenes.reduce((sum, scene) => sum + scene.targetWordCount, 0) !== target) {
@@ -337,6 +408,7 @@ export function applyPlanningRepairCandidate(
   const candidateChapters = allChapters.map((chapter) => (
     allowed.has(chapter.id) ? chapters.find((item) => item.id === chapter.id)! : chapter
   ));
+  assertRepairDeferableDestinations(volume, chapters, allowed);
   for (const chapter of chapters.filter((item) => allowed.has(item.id))) {
     const event = comparable(chapter.exclusiveEvent);
     if (candidateChapters.some((other) => other.id !== chapter.id && comparable(other.exclusiveEvent) === event)) {

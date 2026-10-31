@@ -39,10 +39,23 @@ export function createTaskSheetWireExample() {
     ...createSceneOwnershipExample(), neighborEventUse: [], mustAvoidConflicts: [] };
 }
 
+/** Chapter capacity classification. One main event, one explicit turn, everything else classified. */
+export function createCapacityPlanWireExample() {
+  return {
+    coreEvent: "<本章唯一主事件，必须与 exclusiveEvent 是同一件事>",
+    keyTurn: "<本章唯一明确转折，不能复述主事件>",
+    mustDeliver: ["<本章必须兑现的可见结果>"],
+    deferable: [],
+    seedOnly: ["<只埋设、本章不兑现的线索>"],
+    estimatedCoreWordCount: 2400,
+  };
+}
+
 export function createExecutionContractWireExample() {
   return { purpose: "<章节职责>", exclusiveEvent: "<本章独占事件>", endingState: "<章末稳定状态>",
     nextChapterEntryState: "<下一章承接入口>", conflictLevel: 30, revealLevel: 20, targetWordCount: 2400,
-    mustAvoid: "<当前禁止事项>", payoffRefs: [], ...createTaskSheetWireExample() };
+    mustAvoid: "<当前禁止事项>", payoffRefs: [], capacityPlan: createCapacityPlanWireExample(),
+    ...createTaskSheetWireExample() };
 }
 
 export const sceneOwnershipExampleNote = "这是字段与引用关系示例，不是剧情建议。必须替换全部占位文本、主体、事件、预算和实际模态；示例ID可按本章重新命名但须保持唯一及正确引用。已有前文需在stateClaims列出真实上下文声明并引用本次正文目录ID，不要机械套用示例的空前文。";

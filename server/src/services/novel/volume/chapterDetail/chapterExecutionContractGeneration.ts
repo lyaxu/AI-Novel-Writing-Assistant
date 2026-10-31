@@ -21,6 +21,8 @@ import {
   ChapterTaskSheetQualityGateService,
   ChapterTaskSheetQualityGateError,
 } from "../ChapterTaskSheetQualityGateService";
+import { evaluateCandidateCapacity, resolveCandidateCapacityPlan } from "./chapterCapacityGate";
+import { logChapterCapacityEvent, recordChapterCapacityAuditSafely } from "./chapterCapacityLog";
 import {
   findMissingForeshadowActions,
   formatForeshadowToken,
@@ -120,7 +122,7 @@ export function canReuseChapterExecutionContract(input: {
   volumeId: string;
   chapter: VolumePlan["chapters"][number];
 }): boolean {
-  return assessChapterExecutionContractShape({
+  const shape = assessChapterExecutionContractShape({
     novelId: input.novelId,
     volumeId: input.volumeId,
     chapterId: input.chapter.id,
@@ -138,7 +140,16 @@ export function canReuseChapterExecutionContract(input: {
     payoffRefs: input.chapter.payoffRefs,
     taskSheet: input.chapter.taskSheet,
     sceneCards: input.chapter.sceneCards,
-  }).canEnterExecution;
+  });
+  if (!shape.canEnterExecution) return false;
+  // Legacy contracts without a capacity plan stay reusable (readable); a contract that does carry
+  // one must still pass the deterministic capacity gate before it can reach the writer.
+  const capacity = evaluateCandidateCapacity({
+    targetWordCount: input.chapter.targetWordCount,
+    exclusiveEvent: input.chapter.exclusiveEvent,
+    sceneCards: input.chapter.sceneCards,
+  }, { allowDeferable: true });
+  return !(capacity.capacityPlanPresent && !capacity.passed);
 }
 
 export async function generateChapterTaskSheetDetail(params: {
@@ -265,12 +276,27 @@ export async function generateChapterTaskSheetDetail(params: {
       if (params.options.planningRepairManaged && promptInput.targetChapter.targetWordCount) {
         generated.output.targetWordCount = promptInput.targetChapter.targetWordCount;
       }
+      const capacityPlan = resolveCandidateCapacityPlan({
+        capacityPlan: (generated.output as { capacityPlan?: unknown }).capacityPlan,
+        targetWordCount: generated.output.targetWordCount ?? promptInput.targetChapter.targetWordCount,
+      });
+      if (!capacityPlan) {
+        throw Object.assign(
+          new Error("章节执行合同缺少容量计划（coreEvent/keyTurn/mustDeliver/deferable/seedOnly）。新合同必须同时给出容量计划后重新生成。"),
+          {
+            name: "ChapterCapacityPlanMissingError",
+            code: "PROMPT_POST_VALIDATION_FAILED",
+            promptQualityFailureKind: "post_validate_failed",
+          },
+        );
+      }
       const scenePlan = normalizeChapterScenePlan(
         {
           scenes: generated.output.sceneCards,
           stateClaims: generated.output.stateClaims,
           readerExperience: generated.output.readerExperience,
           requiredElements: generated.output.requiredElements,
+          capacityPlan,
         },
         generated.output.targetWordCount ?? promptInput.targetChapter.targetWordCount,
       );
@@ -293,6 +319,7 @@ export async function generateChapterTaskSheetDetail(params: {
         // Omit rather than set undefined: the candidate is JSON round-tripped through the repair
         // feedback, and an explicit undefined key would not survive that trip.
         ...(generated.output.requiredElements ? { requiredElements: generated.output.requiredElements } : {}),
+        capacityPlan,
         taskSheet: generated.output.taskSheet,
         sceneCards: serializeChapterScenePlan(scenePlan),
       };
@@ -331,6 +358,10 @@ export async function generateChapterTaskSheetDetail(params: {
         taskId: params.options.taskId,
         entrypoint: params.options.entrypoint,
         signal: params.options.signal,
+        // A freshly generated one-chapter contract must carry a capacity plan and may not push
+        // deferred duties into nowhere; redistribution is the planning repair's job.
+        requireCapacityPlan: true,
+        allowDeferable: false,
         reviewContextJson: JSON.stringify({ writtenEvidence: promptInput.writtenEvidence ?? null,
           selectedPlanningDirection: promptInput.novel.selectedPlanningDirection ?? null,
           ...projectPlanningHorizon(promptInput.workspace, promptInput.targetVolume.id, [promptInput.targetChapter.id]),
@@ -348,6 +379,23 @@ export async function generateChapterTaskSheetDetail(params: {
         declaredNeighborPreemptions: (generated.output.neighborEventUse ?? [])
           .filter((use) => use.consumesExclusiveEvent).length,
       }).catch(() => { /* Telemetry must never fail contract generation. */ });
+      // 可延期职责不是“本章不做就算了”：记录数量，方便用户在运行日志/章节历史里
+      // 看到这章被拆走了什么、由后续章节承接。
+      if (capacityPlan.deferable.length > 0) {
+        const detail = {
+          novelId: promptInput.workspace.novelId,
+          chapterOrder: promptInput.targetChapter.chapterOrder,
+          deferable: capacityPlan.deferable,
+        };
+        logChapterCapacityEvent("redistributed", detail);
+        await recordChapterCapacityAuditSafely({
+          novelId: promptInput.workspace.novelId,
+          chapterId: promptInput.targetChapter.chapterId ?? promptInput.targetChapter.id,
+          chapterOrder: promptInput.targetChapter.chapterOrder,
+          event: "deferred_duties",
+          summary: `本章可延期职责 ${capacityPlan.deferable.length} 条，交给后续未写章节承接：${capacityPlan.deferable.join("；")}`,
+        });
+      }
       return {
         purpose: generated.output.purpose.trim(),
         exclusiveEvent: generated.output.exclusiveEvent.trim(),
@@ -375,6 +423,30 @@ export async function generateChapterTaskSheetDetail(params: {
         reason: lastError.message,
         attempt: attempt + 1,
       }).catch(() => { /* Telemetry must never fail contract generation. */ });
+      const capacityResult = lastError instanceof ChapterTaskSheetQualityGateError
+        ? lastError.result.capacity
+        : undefined;
+      if (capacityResult && !capacityResult.passed) {
+        logChapterCapacityEvent("rejected", {
+          novelId: params.promptInput.workspace.novelId,
+          chapterOrder: params.promptInput.targetChapter.chapterOrder,
+          attempt: attempt + 1,
+          violations: capacityResult.violations.map((violation) => ({
+            code: violation.code,
+            items: violation.items,
+          })),
+          requiresWindowReplan: capacityResult.requiresWindowReplan,
+        });
+        await recordChapterCapacityAuditSafely({
+          novelId: params.promptInput.workspace.novelId,
+          chapterId: params.promptInput.targetChapter.chapterId ?? params.promptInput.targetChapter.id,
+          chapterOrder: params.promptInput.targetChapter.chapterOrder,
+          event: capacityResult.requiresWindowReplan ? "rejected_needs_redistribution" : "rejected",
+          summary: lastError.message,
+          decision: capacityResult,
+          extra: capacityResult.deferableItems.length ? `deferable=${capacityResult.deferableItems.join("；")}` : null,
+        });
+      }
       const completed = (error as { completedPromptResponse?: InitialRejectedContractResponse })?.completedPromptResponse;
       const rejectedResponse = completed ?? (receivedOutput === undefined ? undefined : {
         output: receivedOutput, validationError: lastError.message,

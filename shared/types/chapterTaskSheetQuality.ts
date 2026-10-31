@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ChapterCapacityDecision, ChapterCapacityPlan } from "./chapterCapacity.js";
 import { parseChapterScenePlan } from "./chapterLengthControl.js";
 import { planningIssueDecisionSchema, planningStateCheckSchema } from "./novel/planningReviewDecision.js";
 import type { PlanningIssueDecision, PlanningStateCheck } from "./novel/planningReviewDecision.js";
@@ -48,6 +49,8 @@ export interface ChapterExecutionContractQualityCandidate {
   requiredElements?: string[] | null;
   taskSheet?: string | null;
   sceneCards?: string | null;
+  /** Capacity plan; also mirrored inside the persisted scene plan. Legacy contracts omit it. */
+  capacityPlan?: ChapterCapacityPlan | null;
 }
 
 export interface ChapterTaskSheetQualityIssue {
@@ -77,6 +80,8 @@ export interface ChapterTaskSheetQualityGateResult {
   refinements?: string[];
   issueDecisions?: PlanningIssueDecision[];
   stateChecks?: PlanningStateCheck[];
+  /** Deterministic capacity gate conclusion; legacy contracts without a capacity plan omit it. */
+  capacity?: ChapterCapacityDecision;
 }
 
 export const chapterPlanningEvidenceQuoteSchema = z.object({

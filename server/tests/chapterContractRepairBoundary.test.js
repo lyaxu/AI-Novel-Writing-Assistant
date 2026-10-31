@@ -28,6 +28,7 @@ function harness(responses, validatePlanningStateSources=()=>{}) {
     "@ai-novel/shared/types/novel/planningPromises":{selectedPlanningPromiseIds:()=>[]},
     "../../../prompting/core/promptRunner":runner,
     "../../../prompting/prompts/novel/volume/chapterTaskSheetQuality.prompts":{chapterTaskSheetQualityPrompt:{id:"quality"},validatePlanningStateSources},
+    "./chapterDetail/chapterCapacityGate":{evaluateCandidateCapacity:()=>({passed:true,capacityPlanPresent:false,requiresWindowReplan:false,budget:null,violations:[],deferableItems:[],summary:"legacy"}),buildCapacityGateIssues:()=>({issues:[],repairGuidance:[]})},
     "../../settings/storyCraftContractContext":{loadStoryCraftContractBlock:async()=>null},
   });
   const generation=load("../src/services/novel/volume/chapterDetail/chapterExecutionContractGeneration.ts",{
@@ -42,6 +43,8 @@ function harness(responses, validatePlanningStateSources=()=>{}) {
     // The contract guard trace writes to the chapter row; these tests assert retry/routing
     // behaviour, not persistence, so it is stubbed out rather than hitting the database.
     "./chapterContractGuardTrace":{recordChapterContractGuardEvent:async()=>{}},
+    "./chapterCapacityGate":{evaluateCandidateCapacity:()=>({passed:true,capacityPlanPresent:false,requiresWindowReplan:false,budget:null,violations:[],deferableItems:[],summary:"legacy"}),resolveCandidateCapacityPlan:(candidate)=>candidate.capacityPlan??{coreEvent:"核对账目",keyTurn:"取得收据",mustDeliver:["取得收据"],deferable:[],seedOnly:[],estimatedCoreWordCount:2200}},
+    "./chapterCapacityLog":{logChapterCapacityEvent:()=>{},recordChapterCapacityAuditSafely:async()=>{}},
     "../../../settings/storyCraftContractContext":{appendStoryCraftContractBlock:async (blocks)=>blocks},
   });
   const chapter={id:"c",chapterOrder:2,title:"查账",summary:"账目有疑点",payoffRefs:[]};
@@ -186,6 +189,7 @@ test("repair feedback remains in the contract prompt even when the context budge
     "../../../core/renderContextBlocks":{renderSelectedContextBlocks:()=>""},
     "../../../../services/novel/volume/volumeGenerationSchemas":Object.fromEntries(["createChapterBoundarySchema","createChapterExecutionContractSchema","createChapterPurposeSchema","createChapterTaskSheetSchema","createChapterExecutionContractWireSchema","createChapterTaskSheetWireSchema"].map(k=>[k,()=>emptySchema])),
     "./evidence/stateClaimBinding":{},
+    "./evidence/primaryProseCitationCatalog":{buildPrimaryProseCitationCatalog:()=>({reviewContextDisplayJson:"",sources:[]})},
     "./contextBlocks":{},"../promptBudgetProfiles":{NOVEL_PROMPT_BUDGETS:{}},
   });
   const feedback=JSON.stringify({previousCandidate:{taskSheet:"保留有效设计"},qualityResult:{issues:[{id:"i",repairHint:"修正因果"}]}});

@@ -12,8 +12,12 @@ export const requiredElementRevisionSchema = z.object({
 const appliedRevisionSchema = requiredElementRevisionSchema.extend({ chapterId: z.string().trim().min(1) });
 type Revision = z.infer<typeof requiredElementRevisionSchema>;
 type AppliedRevision = z.infer<typeof appliedRevisionSchema>;
-interface Change { chapterId: string; requiredElementRevisions?: Revision[] }
-
+interface Change {
+  chapterId: string;
+  requiredElementRevisions?: Revision[];
+  /** Capacity-era repairs own their minimum event list through the structured classification. */
+  capacityPlan?: unknown;
+}
 function identity(revision: AppliedRevision): string {
   return JSON.stringify([revision.chapterId, revision.original, revision.replacement]);
 }
@@ -54,6 +58,10 @@ export function projectPlanningRepairRequiredElementRevisions<T extends { change
   return {
     ...output,
     changes: output.changes.map((change) => {
+      // A capacity plan already carries the authoritative mustDeliver/seedOnly classification;
+      // its minimum event list is projected from that plan, so legacy replacement ledgers would
+      // disagree with the saved duties and must not be carried forward for this chapter.
+      if (change.capacityPlan) return { ...change, requiredElementRevisions: [] };
       const byOriginal = new Map<string, Revision>();
       for (const revision of change.requiredElementRevisions ?? []) {
         // No-op echoes and already-saved sources are bookkeeping noise, not requested edits.

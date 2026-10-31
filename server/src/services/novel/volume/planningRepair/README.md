@@ -45,3 +45,14 @@
 ### 初始合同调用预算
 
 正常初始调用通过 `generateInitial(beforeModelCall, recoverySeed?)` 进入；每个模型调用前必须先执行 callback。新 session 用 `initialGenerationAttempts` 持久记录最多两次外层调用，历史未知次数不自动补零。专用初始拒收恢复提供完整 `output` 和 `validationError`，仅调用一次定向纠正；`initialContractCorrection` 在调用前消费该用户授权，不能重新赠送正常两次包。纠正次数不占用或增加候选语义修复轮次；付费后校验拒绝保存完整新响应并形成 settled 暂停，网络未知保留 pendingOperation。只有合法输出保存成真实候选后才能进入原语义和窗口复核。授权恢复证明及 source/job/lease 保护归 director/recovery/planningRepair 管理。
+
+## 容量拆分边界
+
+协调器复核第 0 轮允许旧合同没有容量计划，修复轮次起要求合同携带容量计划；结构性容量
+超载（必须兑现项/总字数超预算、场景不足、可延期无承接）会把修复范围扩到当前章及后续两个
+未写同卷章节，由规划修复把可延期职责写入后章任务单/场景。`applyPlanningRepairCandidate`
+用新的 `capacityPlan` 重建来源章 `requiredElements`，并确定性校验每条 `deferable` 在窗口内
+更晚章节确有承接；没有承接就拒绝保存，避免“拆分”变成静默删除职责。已写、锁定与跨卷章节
+不可进入窗口；窗口内没有后续可写章节时返回 `requiresUserDecision` 或拒绝保存并提示进入
+卷规划修复。容量修复结果写入运行日志与未写章节执行历史。完整规则见
+[章节容量门禁](../../../../../../docs/wiki/workflows/chapter-capacity-gate.md)。

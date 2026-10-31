@@ -2,6 +2,15 @@ import { createHash } from "node:crypto";
 import type { VolumeChapterPlan, VolumePlanDocument } from "@ai-novel/shared/types/novel";
 import type { ChapterTaskSheetQualityGateResult } from "@ai-novel/shared/types/chapterTaskSheetQuality";
 import { parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
+import {
+  evaluateCandidateCapacity,
+  resolveCandidateCapacityPlan,
+} from "../chapterDetail/chapterCapacityGate";
+import {
+  logChapterCapacityEvent,
+  recordChapterCapacityAuditSafely,
+} from "../chapterDetail/chapterCapacityLog";
+import { isRelatedCapacityText } from "@ai-novel/shared/types/chapterCapacity";
 import { runStructuredPrompt } from "../../../../prompting/core/promptRunner";
 import { planningRepairPrompt, planningRepairReviewPrompt } from "../../../../prompting/prompts/novel/volume/planningRepair.prompts";
 import { ChapterTaskSheetQualityGateService } from "../ChapterTaskSheetQualityGateService";
@@ -216,6 +225,7 @@ export class PlanningRepairCoordinator {
         if (passed) {
           await this.save(session, { phase: "ready", recoveryAction: undefined, summary: "规划复核通过，正在提交" });
           const document = await this.store.commit(session, session.candidate!);
+          await this.recordCapacityOutcome(input, session, document, reviews);
           committedDocuments.add(document);
           return document;
         }
@@ -272,6 +282,85 @@ export class PlanningRepairCoordinator {
         summary: "规划修正调用或保存失败，已保留候选与轮次。",
       }).catch(() => undefined);
       throw error;
+    }
+  }
+
+  /**
+   * Capacity audits are the user-visible explanation for “why was this chapter split/repaired”.
+   * They persist into repairHistory of still-unwritten chapters and the run log; nothing here may
+   * fail the committed repair.
+   */
+  private async recordCapacityOutcome(
+    input: PlanningRepairInput,
+    session: RepairSession,
+    document: VolumePlanDocument,
+    reviews: ReviewSet,
+  ): Promise<void> {
+    try {
+      const volume = document.volumes.find((item) => item.id === input.volumeId);
+      if (!volume) return;
+      const affected = session.state.affectedChapterIds ?? [input.chapterId];
+      const reallocations: Array<{ item: string; fromChapterOrder: number; toChapterOrder: number | null }> = [];
+      for (const chapter of volume.chapters.filter((item) => affected.includes(item.id))) {
+        const plan = resolveCandidateCapacityPlan({
+          targetWordCount: chapter.targetWordCount,
+          sceneCards: chapter.sceneCards,
+        });
+        if (!plan) continue;
+        const decision = evaluateCandidateCapacity({
+          targetWordCount: chapter.targetWordCount,
+          exclusiveEvent: chapter.exclusiveEvent,
+          sceneCards: chapter.sceneCards,
+        }, { allowDeferable: true });
+        for (const deferred of plan.deferable) {
+          const carrier = volume.chapters
+            .filter((candidate) => candidate.chapterOrder > chapter.chapterOrder)
+            .find((candidate) => {
+              const candidatePlan = parseChapterScenePlan(candidate.sceneCards, {
+                targetWordCount: candidate.targetWordCount,
+              });
+              return Boolean(candidatePlan && (
+                (candidatePlan.capacityPlan?.mustDeliver ?? []).some((item) => isRelatedCapacityText(item, deferred))
+                || candidatePlan.requiredElements.some((item) => isRelatedCapacityText(item, deferred))
+                || candidatePlan.scenes.some((scene) => scene.mustAdvance.some((item) => isRelatedCapacityText(item, deferred)))
+              ));
+            });
+          reallocations.push({
+            item: deferred,
+            fromChapterOrder: chapter.chapterOrder,
+            toChapterOrder: carrier ? carrier.chapterOrder : null,
+          });
+        }
+        await recordChapterCapacityAuditSafely({
+          novelId: input.document.novelId,
+          chapterId: chapter.chapterId ?? chapter.id,
+          chapterOrder: chapter.chapterOrder,
+          event: "repair_committed",
+          summary: decision.summary,
+          decision,
+        });
+      }
+      const capacityIssueCount = Object.values(reviews.chapters)
+        .reduce((count, review) => count + (review.capacity?.violations.length ?? 0), 0);
+      logChapterCapacityEvent("repair_committed", {
+        novelId: input.document.novelId,
+        volumeId: input.volumeId,
+        rounds: session.state.rounds,
+        affectedChapterIds: affected,
+        capacityIssueCount,
+        reallocations,
+      });
+      if (reallocations.length > 0) {
+        const unmapped = reallocations.filter((item) => item.toChapterOrder === null);
+        if (unmapped.length > 0) {
+          console.warn("[chapter.capacity] repair committed with unresolved deferable duties", { novelId: input.document.novelId, unmapped });
+        }
+      }
+    } catch (error) {
+      console.warn("[chapter.capacity] outcome audit failed", {
+        novelId: input.document.novelId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -346,9 +435,23 @@ export class PlanningRepairCoordinator {
         ...chapter, novelId: input.document.novelId, volumeId: input.volumeId,
         chapterId: id, chapterOrder: chapter.chapterOrder,
       }, { ...input.options, mode: "ai_copilot", temperature: 0.1,
+        // Round 0 may reuse a legacy contract without a capacity plan (readable compatibility);
+        // every repaired round must carry one, and the initial one-chapter contract may not push
+        // deferred duties into nowhere.
+        requireCapacityPlan: session.state.rounds > 0,
+        allowDeferable: session.state.rounds > 0,
         reviewContextJson: this.context(input, session, review),
         ...issueHistory,
       });
+      const capacity = review.chapters[id].capacity;
+      if (capacity && !capacity.passed) {
+        logChapterCapacityEvent("rejected", {
+          novelId: input.document.novelId, chapterOrder: chapter.chapterOrder,
+          round: session.state.rounds,
+          codes: capacity.violations.map((violation) => violation.code),
+          requiresWindowReplan: capacity.requiresWindowReplan,
+        });
+      }
       await this.save(session, { phase: "reviewing", pendingOperation: undefined, quality: review });
     }
     // A failed chapter already contains the structured repair direction; do not pay for a premature window review.
