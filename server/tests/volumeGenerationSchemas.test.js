@@ -70,6 +70,19 @@ function createValidStrategyPayload() {
   };
 }
 
+test("a truncated primary-prose evidence id is repaired only by unique catalog prefix", () => {
+  const { buildPrimaryProseCitationCatalog } = require("../dist/prompting/prompts/novel/volume/evidence/primaryProseCitationCatalog");
+  const { repairTruncatedProseEvidenceIds } = require("../dist/prompting/prompts/novel/volume/chapterDetail.prompts");
+  const writtenEvidence = { chapters: [{ chapterId: "chapter-1", order: 1, content: "第一章正文，用于生成可核对的正文证据编号。" }] };
+  const catalog = buildPrimaryProseCitationCatalog(JSON.stringify({ writtenEvidence }), 2);
+  const validId = catalog.sources.flatMap(source => source.excerpts).find(excerpt => excerpt.evidenceId)?.evidenceId;
+  assert.ok(validId?.startsWith("prose_"));
+  const truncated = validId.slice(0, -1);
+  const repaired = repairTruncatedProseEvidenceIds({ stateClaims: [{ source: { evidenceIds: [truncated] } }] },
+    { writtenEvidence, chapterOrder: 2 });
+  assert.equal(repaired.stateClaims[0].source.evidenceIds[0], validId);
+});
+
 test("volume strategy uses the generous planner output budget regardless of volume count", () => {
   for (const volumeCount of [2, 3, 9, 24, 100]) {
     assert.equal(resolveVolumeStrategyOutputTokenBudget(volumeCount), 32_768, String(volumeCount));

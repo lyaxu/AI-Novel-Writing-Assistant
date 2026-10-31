@@ -17,6 +17,7 @@ import { bindStateClaimContract } from "./evidence/stateClaimBinding";
 import { preserveGeneratedContentConstraints } from "../../../../llm/generatedContentSchema";
 import { sceneOwnershipRules, sceneOwnershipCorrectionRule, sceneOwnershipExampleNote,
   createTaskSheetWireExample, createExecutionContractWireExample } from "./contracts/sceneOwnershipProtocol";
+import { buildPrimaryProseCitationCatalog } from "./evidence/primaryProseCitationCatalog";
 
 const selectedDirectionRule = "selectedPlanningDirection是用户确认的创作承诺，writtenEvidence的实际已写事实高于计划。细化必须承接原选卖点、人物路径、openingChain的关系变化与earlyPayoff；可改编动作或调整拆章，但须保留同等关系/回报价值，在purpose、mustAdvance、readerExperience或继承钩子写明具体承接。不能把关系建立或可见回报静默换成重复追逃/受压，也不能因后来生成的摘要遗漏而认定用户放弃。全书长期承诺不要求本章全部兑现；开篇承诺延期须有明确落点。来源缺失时标明未知，不编造原始选择；若与已写事实或受保护边界冲突，交由现有规划审查修复，不擅改事实。";
 
@@ -24,6 +25,49 @@ const progressionRule = "先对照writtenEvidence已写正文：哪些事件已�
 
 function normalizeComparableText(value: string | null | undefined): string {
   return value?.replace(/\s+/g, " ").trim() || "";
+}
+
+/**
+ * Models occasionally copy a long primary-prose evidence ID with one hex character missing or
+ * duplicated. The ID is still an unambiguous prefix of exactly one ID offered by the current
+ * catalog. Repair only that deterministic typo; unknown or ambiguous IDs still fail the contract
+ * and must come back through review. The raw response is never treated as accepted evidence.
+ */
+export function repairTruncatedProseEvidenceIds<T>(output: T, input: {
+  writtenEvidence?: VolumeChapterDetailPromptInput["writtenEvidence"];
+  chapterOrder: number;
+}): T {
+  const catalog = buildPrimaryProseCitationCatalog(
+    JSON.stringify({ writtenEvidence: input.writtenEvidence ?? null }),
+    input.chapterOrder,
+  );
+  const validIds = new Set<string>();
+  for (const source of catalog.sources) {
+    for (const excerpt of source.excerpts) {
+      if (excerpt.evidenceId) validIds.add(excerpt.evidenceId);
+    }
+  }
+  if (!validIds.size) return output;
+  const repaired = (value: string): string => {
+    if (!value.startsWith("prose_")) return value;
+    const hex = value.slice("prose_".length).toLowerCase();
+    if (/^[a-f0-9]{64}$/.test(hex)) return value;
+    if (!/^[a-f0-9]{1,80}$/.test(hex)) return value;
+    const matches = [...validIds].filter(id => {
+      const validHex = id.slice("prose_".length);
+      return validHex.startsWith(hex) || hex.startsWith(validHex);
+    });
+    return matches.length === 1 ? matches[0] : value;
+  };
+  const walk = (value: unknown): unknown => {
+    if (typeof value === "string") return repaired(value);
+    if (Array.isArray(value)) return value.map(walk);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, walk(child)]));
+    }
+    return value;
+  };
+  return walk(output) as T;
 }
 
 function buildCurrentChapterContractText(input: VolumeChapterDetailPromptInput): string {
@@ -459,7 +503,11 @@ export const volumeChapterExecutionContractPrompt: PromptAsset<
     ].join("\n\n")),
   ],
   postValidate: (wire, input) => {
-    const output = createChapterExecutionContractSchema().parse(bindStateClaimContract(createChapterExecutionContractWireSchema().parse(wire),
+    const repairedWire = repairTruncatedProseEvidenceIds(wire, {
+      writtenEvidence: input.writtenEvidence,
+      chapterOrder: input.targetChapter.chapterOrder,
+    });
+    const output = createChapterExecutionContractSchema().parse(bindStateClaimContract(createChapterExecutionContractWireSchema().parse(repairedWire),
       JSON.stringify({ writtenEvidence: input.writtenEvidence }), input.targetChapter.chapterOrder));
     validateDeclaredNeighborAndConflictUsage(output, input);
     validateBoundaryContract(output, input);
