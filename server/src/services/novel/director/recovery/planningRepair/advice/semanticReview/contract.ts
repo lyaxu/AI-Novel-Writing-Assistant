@@ -7,7 +7,7 @@ export const planningRepairAdviceReviewOutputSchema = z.object({
     issueId: z.string().min(1), chapterId: z.string().min(1), scope: z.enum(["chapter", "window"]).optional(),
     affectedChapterIds: z.array(z.string().min(1)).min(1).optional(), status: issueStatus,
     rationale: z.string().min(1).max(1000),
-    evidence: z.array(z.object({ sourcePath: z.string().min(1), quote: z.string().min(1).max(600) }).strict()).max(8),
+    evidence: z.array(z.object({ sourcePath: z.string().min(1), quote: z.string().min(1).max(600) }).strict()).max(12),
   }).strict()).optional(),
   advice: planningRepairAdviceOutputSchema,
   checks: z.array(z.object({
@@ -28,7 +28,7 @@ export type PlanningRepairAdviceReviewOutput = z.infer<typeof planningRepairAdvi
 export const planningRepairAdviceReviewModelOutputSchema = z.object({
   issueAssessments: z.array(z.object({
     issueId: z.string().min(1), status: issueStatus,
-    evidenceIds: z.array(z.string().min(1)).max(8), rationale: z.string().min(1).max(1000),
+    evidenceIds: z.array(z.string().min(1)).max(12), rationale: z.string().min(1).max(1000),
   }).strict()),
   ...planningRepairAdviceOutputSchema.shape,
   // The final option owns its check: deleting a draft option cannot leave an

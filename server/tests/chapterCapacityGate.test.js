@@ -544,6 +544,17 @@ test("contract and repair prompts require the capacity classification", () => {
   assert.equal(repairPrompts.planningRepairPrompt.version, "v15");
 });
 
+test("compound deferable matches the later chapter's concrete action", () => {
+  assert.equal(capacity.isRelatedCapacityText(
+    "巢穴据点、麦种袋与领主徽记木牌由第2章发现",
+    "格鲁尔在巢穴深处发现原主藏的一小袋麦种和刻着领主徽记的木牌",
+  ), true);
+  assert.equal(capacity.isRelatedCapacityText(
+    "巡逻队与骑士的正式追查由后续章节承接",
+    "老莫德说出圣种是领主垄断的高产麦种、原主偷种是为流民",
+  ), false);
+});
+
 test("capacity failure is recorded on the chapter audit trail", async () => {
   const audit = require("../dist/services/novel/volume/chapterDetail/chapterCapacityAudit.js");
   assert.equal(typeof audit.recordChapterCapacityAudit, "function");

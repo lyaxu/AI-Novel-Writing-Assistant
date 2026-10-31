@@ -225,7 +225,22 @@ function isRelatedText(left: string, right: string): boolean {
   if (!a || !b) return false;
   if (a === b) return true;
   if (a.length < 4 || b.length < 4) return false;
-  return a.includes(b) || b.includes(a);
+  if (a.includes(b) || b.includes(a)) return true;
+  // Deferred duties are often compound phrases ("巢穴据点、麦种袋与领主徽记木牌") while the
+  // receiving chapter names the concrete action ("在巢穴深处发现麦种和木牌"). Use character
+  // bigram overlap as deterministic text similarity; this is not a topic keyword table.
+  if (a.length < 8 || b.length < 8) return false;
+  const grams = (text: string) => {
+    const set = new Set<string>();
+    for (let index = 0; index < text.length - 1; index += 1) set.add(text.slice(index, index + 2));
+    return set;
+  };
+  const leftGrams = grams(a);
+  const rightGrams = grams(b);
+  let shared = 0;
+  for (const gram of leftGrams) if (rightGrams.has(gram)) shared += 1;
+  const union = leftGrams.size + rightGrams.size - shared;
+  return shared >= 4 && union > 0 && shared / union >= 0.15;
 }
 
 /** 同一套结构化比较规则，供规划修复校验“可延期职责是否在后章有承接”。 */
