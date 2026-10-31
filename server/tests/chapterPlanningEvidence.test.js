@@ -252,6 +252,16 @@ test("a field carried by both the chapter and its scene plan is not ambiguous wh
   assert.equal(index.leaves.get("requiredElements[2]"), elements[2]);
 });
 
+test("numeric structured capacity fields can be cited as evidence", () => {
+  const candidate = {
+    targetWordCount: 2800,
+    sceneCards: JSON.stringify({ capacityPlan: { estimatedCoreWordCount: 2500 }, requiredElements: ["催生藤蔓"], scenes: [{ key: "scene_1", targetWordCount: 784 }] }),
+  };
+  const index = evidence.buildChapterEvidenceIndex(candidate);
+  assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: "capacityPlan.estimatedCoreWordCount", quote: "2500" }), true);
+  assert.equal(evidence.matchesChapterEvidence(index, { sourcePath: "scene_1.targetWordCount", quote: "784" }), true);
+});
+
 test("the same path with different text is still reported as ambiguous", () => {
   // Guarding this case is the point of the check: identical text resolves unambiguously, differing
   // text does not, and silently picking one would mis-attribute evidence.

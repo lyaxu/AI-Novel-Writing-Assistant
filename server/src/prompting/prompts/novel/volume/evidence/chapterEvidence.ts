@@ -23,7 +23,11 @@ export function buildChapterEvidenceIndex(candidate: unknown) {
     }
   };
   const add = (path: string, value: unknown): void => {
-    if (typeof value === "string") {
+    if (typeof value === "number" || typeof value === "boolean") {
+      // A structured review may legitimately cite a numeric capacity/limit field. Expose its exact
+      // serialized value as a leaf; this is not a field-name allowance or topic heuristic.
+      leaves.set(path, String(value));
+    } else if (typeof value === "string") {
       try {
         const parsed: unknown = JSON.parse(value);
         if (parsed && typeof parsed === "object") { containerText.set(path, value); add(path, parsed); return; }
