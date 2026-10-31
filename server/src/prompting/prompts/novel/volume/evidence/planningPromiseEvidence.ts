@@ -114,7 +114,12 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
     // may quote chapter 3 while naming the slot that now holds chapter 4. Only relocate between
     // writtenEvidence chapter-content slots; compressed facts and other source families are not
     // interchangeable evidence.
-    const structuralPath = (path: string) => path.replace(/\[\d+\]/g, "[]").replace(/^sceneCards\./, "");
+    // A repair-window chapter carries its fields both at the chapter root and inside the serialized
+    // sceneCards plan. Remove only this known structural container so the same logical leaf can be
+    // relocated; unrelated field names remain distinct.
+    const structuralPath = (path: string) => path
+      .replace(/\[\d+\]/g, "[]")
+      .replace(/(^|\.)sceneCards(?=\.|\[)/g, "$1");
     for (const evidence of check.contextEvidence) {
       if (matchesChapterEvidence(contextIndex, evidence)) continue;
       const target = structuralPath(evidence.sourcePath);
