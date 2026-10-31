@@ -70,6 +70,21 @@ function createValidStrategyPayload() {
   };
 }
 
+test("declared prior-context prerequisites are attached to the scene entry state", () => {
+  const { attachDeclaredPrerequisitesToEntry } = require("../dist/prompting/prompts/novel/volume/evidence/stateClaimBinding");
+  const base = (prerequisites) => ({
+    stateClaims: [{ id: "ctx1", source: { kind: "written_prose" } }],
+    sceneCards: [{ key: "scene_1", causality: {
+      prerequisites: prerequisites.map(claimIds => ({ claimIds })),
+      stateTransition: { beforeClaimIds: [], entryClaims: [], actionClaims: [{ id: "action_1" }], afterClaims: [{ id: "exit_1" }] },
+    } }],
+  });
+  const contextBound = attachDeclaredPrerequisitesToEntry(base([["ctx1"]]));
+  assert.deepEqual(contextBound.sceneCards[0].causality.stateTransition.beforeClaimIds, ["ctx1"]);
+  const futureOrUnknown = attachDeclaredPrerequisitesToEntry(base([["action_1", "missing"]]));
+  assert.deepEqual(futureOrUnknown.sceneCards[0].causality.stateTransition.beforeClaimIds, []);
+});
+
 test("a truncated primary-prose evidence id is repaired only by unique catalog prefix", () => {
   const { buildPrimaryProseCitationCatalog } = require("../dist/prompting/prompts/novel/volume/evidence/primaryProseCitationCatalog");
   const { repairTruncatedProseEvidenceIds } = require("../dist/prompting/prompts/novel/volume/chapterDetail.prompts");

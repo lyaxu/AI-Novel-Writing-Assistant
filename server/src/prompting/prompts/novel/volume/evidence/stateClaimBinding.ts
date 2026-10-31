@@ -130,10 +130,65 @@ interface BoundSceneInput {
   };
 }
 
+/**
+ * A prerequisite is by definition an entry condition. Models sometimes declare the condition in
+ * `causality.prerequisites` but forget to list the same claim in the scene's `beforeClaimIds`.
+ * That is a self-contradictory declaration, not a new story decision: add only existing context
+ * claims or claims established by an earlier scene. Unknown, future, and same-scene action claims
+ * are left untouched so genuine relationship errors still fail review.
+ */
+export function attachDeclaredPrerequisitesToEntry<T extends { stateClaims: unknown; sceneCards: BoundSceneInput[] }>(output: T): T {
+  if (!Array.isArray(output.sceneCards) || !output.sceneCards.length) return output;
+  const contextClaimIds = new Set<string>();
+  if (Array.isArray(output.stateClaims)) {
+    for (const claim of output.stateClaims) {
+      const row = claim && typeof claim === "object" ? claim as Record<string, unknown> : null;
+      if (typeof row?.id === "string") contextClaimIds.add(row.id);
+    }
+  }
+  const ownedClaimSceneIndex = new Map<string, number>();
+  output.sceneCards.forEach((scene, index) => {
+    const transition = scene.causality?.stateTransition;
+    if (!transition) return;
+    for (const field of ["entryClaims", "actionClaims", "afterClaims"] as const) {
+      const claims = transition[field];
+      if (!Array.isArray(claims)) continue;
+      for (const claim of claims) {
+        const id = claim && typeof claim === "object" ? (claim as { id?: unknown }).id : undefined;
+        if (typeof id === "string" && !ownedClaimSceneIndex.has(id)) ownedClaimSceneIndex.set(id, index);
+      }
+    }
+  });
+  let changed = false;
+  const sceneCards = output.sceneCards.map((scene, index) => {
+    const transition = scene.causality?.stateTransition;
+    const prerequisites = scene.causality?.prerequisites;
+    if (!transition || !Array.isArray(prerequisites)) return scene;
+    const beforeClaimIds = Array.isArray(transition.beforeClaimIds) ? transition.beforeClaimIds : [];
+    const additions: string[] = [];
+    for (const item of prerequisites) {
+      const claimIds = item && typeof item === "object" ? (item as { claimIds?: unknown }).claimIds : undefined;
+      if (!Array.isArray(claimIds)) continue;
+      for (const id of claimIds) {
+        if (typeof id !== "string" || beforeClaimIds.includes(id) || additions.includes(id)) continue;
+        const context = contextClaimIds.has(id);
+        const earlierScene = ownedClaimSceneIndex.get(id);
+        if (context || (earlierScene !== undefined && earlierScene < index)) additions.push(id);
+      }
+    }
+    if (!additions.length || beforeClaimIds.length + additions.length > 6) return scene;
+    changed = true;
+    return { ...scene, causality: { ...scene.causality,
+      stateTransition: { ...transition, beforeClaimIds: [...beforeClaimIds, ...additions] } } };
+  });
+  return changed ? { ...output, sceneCards } : output;
+}
+
 /** Scene ownership is written once on the wire. Canonical references and readable states are projections. */
 export function bindStateClaimContract<T extends { stateClaims: unknown; sceneCards: BoundSceneInput[] }>(
   output: T, reviewContextJson: string | undefined, chapterOrder: number,
 ) {
+  output = attachDeclaredPrerequisitesToEntry(output);
   const issues: ContractRelationshipIssue[] = [];
   const stateClaims: ChapterStateClaim[] = [];
   const byId = new Map<string, ChapterStateClaim>();
