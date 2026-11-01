@@ -130,6 +130,17 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
         evidence.sourcePath = candidates[0];
         continue;
       }
+      // Prefer a leaf under the same source root (for example readonlyNext.*) when the model used
+      // a plausibly-named container for the same chapter. This avoids moving the citation to a
+      // different chapter's similar sentence.
+      const sourceRoot = evidence.sourcePath.split(/[.\[]/, 1)[0];
+      const sameRootPaths = [...contextIndex.leaves.keys()].filter(path =>
+        (path === sourceRoot || path.startsWith(`${sourceRoot}.`) || path.startsWith(`${sourceRoot}[`))
+        && matchesChapterEvidence(contextIndex, { ...evidence, sourcePath: path }));
+      if (sameRootPaths.length === 1) {
+        evidence.sourcePath = sameRootPaths[0];
+        continue;
+      }
       // A newly extended carry-over chapter may expose the same sentence only through a compact
       // summary/next-entry projection. If the exact quote occurs at exactly one context leaf, cite
       // that real leaf instead of rejecting the review for a guessed container name.
