@@ -308,3 +308,36 @@ export async function appendStoryCraftContractBlock(
   const block = await loadStoryCraftContractBlock(scope);
   return block ? [...blocks, block] : blocks;
 }
+
+/**
+ * The writer gets a short creative bottom line, not the full rule matrix. Old books that produced
+ * natural prose had no "follow every rule" block; detailed checks remain in planning/review and in
+ * the chapter acceptance gate.
+ */
+export async function appendWriterStoryCraftBrief(
+  blocks: PromptContextBlock[],
+): Promise<PromptContextBlock[]> {
+  try {
+    const settings = await getStoryCraftDefaults();
+    if (!hasEnabledStoryCraftRules(settings)) return blocks;
+    const content = [
+      "【正文写作底线】",
+      "- 按本书已有设定、人物处境和已写正文写，不新增未登记的核心角色。",
+      "- 能力、功法、势力、特殊物品或称号第一次出现时，先由人物、他人或正文里的信息渠道带出名称；未建立名称前只写功能或代称。",
+      "- 把篇幅放在具体行动、选择和后果上，不要逐条复述规划清单。",
+    ].join("\n");
+    return [...blocks, createContextBlock({
+      id: "writer_story_craft_brief",
+      group: "story_craft_contract",
+      priority: 90,
+      required: true,
+      allowSummary: false,
+      content,
+    })];
+  } catch (error) {
+    console.warn("[story-craft] writer brief unavailable; writing continues without it.", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return blocks;
+  }
+}

@@ -155,7 +155,9 @@ export function buildWriterStyleContractText(contract: StyleContract | null | un
   // "must" bullet plus a pre-write self-check makes the model write to a checklist and flattens the
   // prose into detector-visible formula. Keep the sections (their summaries carry the actual voice)
   // and leave detailed self-checking to the review/repair stages.
-  return buildFullStyleContractText(contract, ["narrative", "language", "rhythm", "character", "antiAi"]);
+  return buildFullStyleContractText(contract, hasStyleRuleContent(contract)
+    ? ["narrative", "language", "rhythm", "character"]
+    : ["antiAi"]);
 }
 
 export function inferStyleViolationSource(
