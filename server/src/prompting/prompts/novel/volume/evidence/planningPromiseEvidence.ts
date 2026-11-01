@@ -126,7 +126,16 @@ export function validatePlanningPromiseEvidence(checks: ChapterPlanningPromiseCh
       const candidates = [...contextIndex.leaves.keys()].filter(path =>
         structuralPath(path) === target
         && matchesChapterEvidence(contextIndex, { ...evidence, sourcePath: path }));
-      if (candidates.length === 1) evidence.sourcePath = candidates[0];
+      if (candidates.length === 1) {
+        evidence.sourcePath = candidates[0];
+        continue;
+      }
+      // A newly extended carry-over chapter may expose the same sentence only through a compact
+      // summary/next-entry projection. If the exact quote occurs at exactly one context leaf, cite
+      // that real leaf instead of rejecting the review for a guessed container name.
+      const exactQuotePaths = [...contextIndex.leaves.keys()].filter(path =>
+        matchesChapterEvidence(contextIndex, { ...evidence, sourcePath: path }));
+      if (exactQuotePaths.length === 1) evidence.sourcePath = exactQuotePaths[0];
     }
     // Candidate scene-card arrays can also be cited with an off-by-one index. Only repair a
     // path that does not exist at all and whose quote resolves uniquely in the candidate; a
