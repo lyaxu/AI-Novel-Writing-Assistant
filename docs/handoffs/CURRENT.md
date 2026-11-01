@@ -13,3 +13,10 @@
 下一位先只读核对并复述，再按用户目标进行一项有界通用工作。用户可从新书“节奏 / 拆章→章节规划修复→勾选确认→纠正初始规划并继续”接续1—3；不得代点旧书或扩大十章。start-local.bat固定正确库但默认打开旧书，新书精确链接见完整包。用户已删极寒旧稿，不再索要7—8章旧稿。
 
 三个Structured组件、台账历史964行和全部本地资料保留；完整台账/dirty补丁/提交历史有本机副本.codex-run/harness-handoff-20261018，非DB备份。沿同checkout单写入者交接，不stash/清理/切分支/改新版，不自动调用模型。Codex额度重置2—3次为用户自述，不能用书内token账替代。
+
+## 2026-11-01 工程补充：同卷扩章承接
+
+- 新增能力：规划修复轮次耗尽、剩余只有可延期职责/容量债、窗口内无后续未写章时，系统在同卷章节预算内自动追加一章承接（确定性章纲/任务单/场景/容量计划，债务逐条落地；来源章保留 deferable 并把入口指向新章），复核当前章通过后提交，并同步任务执行范围。
+- 边界：一次触发最多扩一章，同一任务累计最多 2 章；同卷预算或全书目标章数用完则记债暂停，不无限扩、不删债、不假通过；已写/锁定/跨卷章节不动；未知外部调用/正文指纹/租约冲突仍暂停。
+- 入口与验证：服务重载后由用户在来源页面触发继续/重试；真实案例《杂役管事在黑市商城》task cmvxpw1px0002osw0kuoi43p2 第3章容量债应在提交时补出第4章承接。工程侧看 `server/src/services/novel/volume/planningRepair/capacityCarryOver.ts`、`PlanningRepairStore.appendCapacityCarryOverChapter`、`PlanningRepairCoordinator.tryCapacityAutoExtension`；测试 `server/tests/capacityCarryOver.test.js` 与 `planningRepairCoordinator.test.js`。
+- 文档：`docs/wiki/workflows/chapter-capacity-gate.md` 与 `server/src/services/novel/volume/planningRepair/README.md` 已写清规则与失败模式。

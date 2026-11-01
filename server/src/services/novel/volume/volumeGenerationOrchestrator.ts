@@ -635,6 +635,13 @@ async function generateChapterDetail(params: {
       document, volumeId: targetVolume.id, chapterId: targetChapter.id,
       options: { ...options, taskId: options.taskId },
       context: { novel, storyMacroPlan }, writtenEvidence,
+      capacityAutoExtension: {
+        enabled: true,
+        targetChapterCount: novel.completionProfile?.targetChapterCount
+          ?? novel.estimatedChapterCount
+          ?? null,
+        volumeOrder: targetVolume.sortOrder,
+      },
         generateInitial: (beforeModelCall, recoverySeed) => generateChapterTaskSheetDetail({
           onBeforeModelCall: beforeModelCall,
           initialRejectedResponse: recoverySeed,

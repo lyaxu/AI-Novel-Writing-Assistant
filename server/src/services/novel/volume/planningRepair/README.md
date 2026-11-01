@@ -57,6 +57,15 @@
 来源章 `capacityPlan.deferable`，生成规划容量质量债（来源章、职责原文、原因、最早后继章），
 随 session 持久化并写入未写章节 `repairHistory`，来源章可继续进入写前流程，不再整本停在
 规划确认。已写、锁定与跨卷章节不可进入窗口；正文指纹变化、活跃执行租约和未知调用仍按原
-保护边界暂停。已保存候选的恢复/复核路径会先执行同一兜底，再进入复核。容量修复结果写入
-运行日志与未写章节执行历史。完整规则见
+保护边界暂停。已保存候选的恢复/复核路径会先执行同一兜底，再进入复核。
+
+## 同卷扩章承接
+
+修复轮次耗尽、剩余只有容量债、且当前窗口内没有后续未写章时，协调器在 `pause_budget` 前
+调用 `PlanningRepairStore.appendCapacityCarryOverChapter`：按同卷章节预算追加恰好一章
+（`capacityCarryOver.ts` 的确定性承接计划，债务逐条写入 `mustDeliver/requiredElements/场景
+mustAdvance`），来源章只更新 `nextChapterEntryState`，新章以候选子章节形式进入复核；复核
+通过后提交并在同一事务内把任务 `autoExecution` 范围扩到新章。一次触发最多一章，同一任务
+累计上限 2，达到上限或同卷预算用完时记债暂停；不扩章时不会改任务范围。扩章计划在正式
+写正文前仍走正常写前复核/质量门禁。完整规则见
 [章节容量门禁](../../../../../../docs/wiki/workflows/chapter-capacity-gate.md)。

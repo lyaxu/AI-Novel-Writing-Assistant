@@ -18,6 +18,11 @@ import { buildVolumeWorkspaceDocument } from "../volumeWorkspaceDocument";
 import type { VolumeGenerateOptions } from "../volumeModels";
 import { PlanningRepairStore, type RepairSession } from "./PlanningRepairStore";
 import { applyPlanningRepairCandidate, getPlanningRepairCapacityDebt, mergeAppliedPlanningRepairObligations, mergeAppliedPlanningRepairRequiredElements, planningRepairOutputSchema, projectPlanningRepairEstablishedStrengths, projectPlanningRepairSceneBudgets, resolvePlanningCandidateCapacityDebt, type PlanningCapacityDebt } from "./planningRepairDomain";
+import {
+  buildCapacityCarryOverChapterPlan,
+  resolveMaxCapacityAutoExtensions,
+  type CapacityCarryOverExtensionConfig,
+} from "./capacityCarryOver";
 import { projectPlanningRepairRequiredElementRevisions } from "./domain/requiredElementRevisions";
 import { projectPlanningHorizon } from "../planningPromises";
 import { buildReviewIssueHistory } from "./domain/reviewIssueHistory";
@@ -57,6 +62,8 @@ export interface PlanningRepairInput {
   chapterId: string;
   options: VolumeGenerateOptions & { taskId: string };
   context: unknown;
+  /** Bounded automatic carry-over extension when capacity debt has no writable carrier chapter. */
+  capacityAutoExtension?: CapacityCarryOverExtensionConfig & { enabled?: boolean };
   generateInitial: (beforeModelCall: () => Promise<void>, recoverySeed?: { output: unknown; validationError: string }) => Promise<Partial<VolumeChapterPlan>>;
 }
 
@@ -274,6 +281,9 @@ export class PlanningRepairCoordinator {
           return this.pause(session, reviews.window?.summary ?? "当前规划需要确认创作方向。");
         }
         if (nextAction === "pause_budget") {
+          const extensionResult = await this.tryCapacityAutoExtension(input, session, reviews);
+          if (extensionResult === "extended") continue;
+          if (extensionResult) return this.pause(session, extensionResult);
           return this.pause(session, `已完成${session.state.rounds}轮修正，规划仍未通过复核。${reviews.window?.summary ?? ""}`);
         }
         const useWindow = Object.values(reviews.chapters).some(r => r.recommendedHandling === "replan_window")
@@ -541,6 +551,75 @@ export class PlanningRepairCoordinator {
     return review;
   }
 
+  /**
+   * When the repair budget is exhausted and the only remaining problems are deferred duties/
+   * capacity debt with no writable carrier chapter, append exactly one carry-over chapter inside
+   * the current volume budget. Returns a pause message when no extension is possible; otherwise
+   * returns null and the loop re-reviews the extended candidate.
+   */
+  private async tryCapacityAutoExtension(
+    input: PlanningRepairInput,
+    session: RepairSession,
+    reviews: ReviewSet,
+  ): Promise<"extended" | string | null> {
+    const config = input.capacityAutoExtension;
+    if (config?.enabled === false) return null;
+    const debt = session.state.capacityDebt ?? [];
+    if (debt.length === 0 || debt.some((entry) => entry.suggestedChapterId != null)) return null;
+    const allowedIssueIds = new Set(["capacity_deferable_requires_redistribution", "selected_direction_drift"]);
+    const chapterReviews = Object.values(reviews.chapters);
+    if (chapterReviews.length === 0) return null;
+    if (chapterReviews.some((review) => review.issues.some((issue) => !allowedIssueIds.has(issue.id)))) {
+      // Only deferral/capacity debt may buy an extension; other review defects stay paused.
+      return null;
+    }
+    if (!session.candidate) return null;
+    const append = (this.store as unknown as {
+      appendCapacityCarryOverChapter?: (session: RepairSession, input: {
+        sourceChapterId: string; sourceChapterPatch: { nextChapterEntryState: string };
+        newChapter: VolumeChapterPlan; maxExtensions: number; targetChapterCount?: number | null;
+      }) => Promise<VolumePlanDocument>;
+    }).appendCapacityCarryOverChapter;
+    if (typeof append !== "function") return null;
+    const volume = session.candidate.volumes.find((item) => item.id === input.volumeId);
+    if (!volume || volume.chapters.length === 0) return null;
+    const lastChapter = volume.chapters.slice().sort((left, right) => left.chapterOrder - right.chapterOrder).at(-1)!;
+    const debtItems = debt.map((entry) => entry.item).filter(Boolean);
+    if (debtItems.length === 0) return null;
+    const targetWordCount = lastChapter.targetWordCount ?? session.effectiveDefaultChapterLength ?? 2800;
+    const newChapter = buildCapacityCarryOverChapterPlan({
+      novelId: input.document.novelId,
+      volumeId: input.volumeId,
+      chapterOrder: lastChapter.chapterOrder + 1,
+      targetWordCount,
+      debtItems,
+      beatKey: lastChapter.beatKey ?? null,
+      sourceChapter: lastChapter,
+    });
+    const maxExtensions = resolveMaxCapacityAutoExtensions(config?.maxExtensions);
+    try {
+      await append.call(this.store, session, {
+        sourceChapterId: lastChapter.id,
+        sourceChapterPatch: {
+          nextChapterEntryState: `第${lastChapter.chapterOrder + 1}章将承接本章延期职责：${debtItems.join("；")}。`,
+        },
+        newChapter,
+        maxExtensions,
+        targetChapterCount: config?.targetChapterCount ?? null,
+      });
+      logChapterCapacityEvent("redistributed", {
+        novelId: input.document.novelId,
+        chapterOrder: newChapter.chapterOrder,
+        reason: "capacity_debt_auto_extension",
+        debtItems,
+        maxExtensions,
+      });
+      return "extended";
+    } catch (error) {
+      return `自动扩章承接失败：${error instanceof Error ? error.message : String(error)}。容量质量债已保留。`;
+    }
+  }
+
   private context(input: PlanningRepairInput, session: RepairSession, review: ReviewSet): string {
     const ids = session.state.affectedChapterIds ?? [input.chapterId];
     const baseline = session.baselineDocument ?? input.document;
@@ -558,6 +637,9 @@ export class PlanningRepairCoordinator {
       beatSheet: input.document.beatSheets.find(b => b.volumeId === input.volumeId),
       allowedChapterIds: ids, originalChapters: original.chapters.filter(c => ids.includes(c.id)),
       candidateChapters: chaptersOf(session.candidate!, input.volumeId).filter(c => ids.includes(c.id)),
+      capacityCarryOverChapterId: session.state.capacityCarryOverChapterId ?? null,
+      capacityCarryOverChapters: chaptersOf(session.candidate!, input.volumeId)
+        .filter(c => c.id === session.state.capacityCarryOverChapterId),
       readonlyPrevious: all.find(c => c.chapterOrder === target.chapterOrder - 1) ?? null,
       readonlyNext: all.find(c => c.chapterOrder === last.chapterOrder + 1) ?? null,
       currentObligationReferences: chaptersOf(session.candidate!, input.volumeId).filter(c => ids.includes(c.id))

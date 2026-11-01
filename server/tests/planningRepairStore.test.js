@@ -194,6 +194,9 @@ function fixture({ active = true, materialized = true, realPersistence = false }
   const imports = {
     "node:crypto": require("node:crypto"),
     "@ai-novel/shared/types/chapterTaskSheetQuality": { assessChapterExecutionContractShape: () => ({ canEnterExecution: !invalidShape }) },
+    "@ai-novel/shared/types/chapterCapacity": require("@ai-novel/shared/types/chapterCapacity"),
+    "@ai-novel/shared/types/chapterLengthControl": require("@ai-novel/shared/types/chapterLengthControl"),
+    "./capacityCarryOver": require("../dist/services/novel/volume/planningRepair/capacityCarryOver.js"),
     "../../../../db/prisma": { prisma },
     "../../../../db/sqliteRetry": { withSqliteRetry: (runner) => runner() },
     "../../../../events/EventBus": { novelEventBus: { emit: async (event) => events.push(event) } },

@@ -19,6 +19,7 @@ const imports = {
   "../volumeWorkspaceDocument": require("../dist/services/novel/volume/volumeWorkspaceDocument.js"),
   "./PlanningRepairStore": { PlanningRepairStore: class { constructor() { throw new Error("Unexpected DB store"); } } },
   "./planningRepairDomain": require("../dist/services/novel/volume/planningRepair/planningRepairDomain.js"),
+  "./capacityCarryOver": require("../dist/services/novel/volume/planningRepair/capacityCarryOver.js"),
   "./domain/requiredElementRevisions": require("../dist/services/novel/volume/planningRepair/domain/requiredElementRevisions.js"),
   "./domain/reviewIssueHistory": require("../dist/services/novel/volume/planningRepair/domain/reviewIssueHistory.js"),
   "@ai-novel/shared/types/chapterCapacity": require("@ai-novel/shared/types/chapterCapacity"),
@@ -401,6 +402,76 @@ test("resume keeps an unplaceable deferable as planning debt and continues to co
   assert.equal(h.session.state.phase, "committed");
   assert.equal((h.session.state.capacityDebt ?? []).length, 1);
   assert.equal(h.calls.includes("novel.volume.planning_repair_review"), false);
+});
+
+test("exhausted repair with capacity debt and no carrier auto-extends one chapter and commits", async () => {
+  const h = harness({ local: true });
+  h.session.candidate = document();
+  // The current volume ends at chapter 3; the debt has no writable carrier inside the window.
+  h.session.candidate.volumes[0].chapters = [h.session.candidate.volumes[0].chapters[0]];
+  const debtItem = "用批条去城外药铺提货";
+  Object.assign(h.session.state, {
+    phase: "reviewing", rounds: 2, maxRounds: 2, affectedChapterIds: ["c3"],
+    capacityDebt: [{
+      fromChapterId: "c3", fromChapterOrder: 3, item: debtItem,
+      reason: "no_later_writable_chapter", suggestedChapterId: null, suggestedChapterOrder: null,
+    }],
+  });
+  let extended = false;
+  const appended = [];
+  h.store.appendCapacityCarryOverChapter = async (session, input) => {
+    appended.push(input);
+    extended = true;
+    const volume = session.candidate.volumes[0];
+    session.candidate = { ...session.candidate, volumes: [{
+      ...volume, chapters: [...volume.chapters, { ...input.newChapter, id: "c4-new", volumeId: "v" }],
+    }] };
+    session.eligibleChapterIds = [...session.eligibleChapterIds, "c4-new"];
+    Object.assign(session.state, {
+      capacityDebt: [], capacityCarryOverChapterId: "c4-new", quality: { chapters: {} },
+    });
+    return session.candidate;
+  };
+  h.gate.evaluate = async () => {
+    h.calls.push("chapter_review");
+    if (!extended) {
+      return {
+        ...pass, status: "needs_confirmation", verdict: "repairable", safeToSync: false,
+        recommendedHandling: "repair_contract",
+        issues: [{ id: "capacity_deferable_requires_redistribution", severity: "high", target: "semantic", summary: "deferred duty has no carrier" }],
+      };
+    }
+    return pass;
+  };
+  await h.coordinator.run(h.input);
+  assert.equal(appended.length, 1);
+  assert.match(appended[0].sourceChapterPatch.nextChapterEntryState, /第4章/);
+  assert.ok(appended[0].newChapter.sceneCards.includes(debtItem));
+  assert.equal(h.commits, 1);
+  assert.equal(h.session.state.phase, "committed");
+  assert.equal(h.session.state.capacityDebt.length, 0);
+  assert.equal(h.session.state.capacityCarryOverChapterId, "c4-new");
+});
+
+test("an exhausted repair with any non-capacity review defect does not auto-extend", async () => {
+  const h = harness({ local: true });
+  h.session.candidate = document();
+  Object.assign(h.session.state, {
+    phase: "reviewing", rounds: 2, maxRounds: 2, affectedChapterIds: ["c3"],
+    capacityDebt: [{ fromChapterId: "c3", fromChapterOrder: 3, item: "承接职责", reason: "no_later_writable_chapter", suggestedChapterId: null, suggestedChapterOrder: null }],
+  });
+  let appendCalled = false;
+  h.store.appendCapacityCarryOverChapter = async () => { appendCalled = true; return h.session.candidate; };
+  h.gate.evaluate = async () => {
+    h.calls.push("chapter_review");
+    return {
+      ...pass, status: "needs_confirmation", verdict: "repairable", safeToSync: false, recommendedHandling: "repair_contract",
+      issues: [{ id: "unknown_external_problem", severity: "high", target: "content", summary: "not capacity debt" }],
+    };
+  };
+  await assert.rejects(h.coordinator.run(h.input), { code: "PLANNING_REPAIR_CONFIRMATION_REQUIRED" });
+  assert.equal(appendCalled, false);
+  assert.equal(h.commits, 0);
 });
 
 test("chapter re-review receives book constraints, current candidate and preceding issue ids", async () => {
