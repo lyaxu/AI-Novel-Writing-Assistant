@@ -23,7 +23,7 @@ export const CHAPTER_CAPACITY_POLICY = {
   /** 每个“本章必须兑现”动作至少要分到的正文篇幅。 */
   minWordsPerMustDeliver: 560,
   /** 每个“只埋不兑现”线索至少要分到的正文篇幅。 */
-  minWordsPerSeedOnly: 240,
+  minWordsPerSeedOnly: 140,
   /** 单个场景至少要有这么多字才不算被切碎。 */
   minWordsPerScene: 320,
   /** 单章绝对上限：再多就不属于“一个主事件”。 */
@@ -179,9 +179,12 @@ export function resolveChapterCapacityBudget(
   const seedOnlyCount = options.plan?.seedOnly.length ?? 0;
   const seedOnlyOverhead = seedOnlyCount * policy.minWordsPerSeedOnly;
   const discretionary = Math.max(0, target - narrativeOverheadWords - seedOnlyOverhead);
+  // A 2400+ character chapter needs room for at least two visible outcomes. Seed clues must not
+  // starve the chapter down to one deliverable; seed-only budget is adjusted below instead.
+  const minimumMustDeliver = target >= 2400 ? 2 : 1;
   const mustDeliverLimit = clamp(
-    Math.floor(discretionary / policy.minWordsPerMustDeliver),
-    1,
+    Math.max(minimumMustDeliver, Math.floor(discretionary / policy.minWordsPerMustDeliver)),
+    minimumMustDeliver,
     policy.maxMustDeliverItems,
   );
   const seedOnlyLimit = clamp(
