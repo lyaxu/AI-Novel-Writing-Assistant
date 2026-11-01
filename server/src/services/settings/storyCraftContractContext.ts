@@ -267,7 +267,7 @@ export function renderStoryCraftContractText(
     SCOPE_HEADERS[scope],
     SCOPE_INSTANTIATION_LINES[scope],
     ...body.map((lines) => lines.join("\n")),
-    "本轮输出必须逐条体现上述规则；如果某条与本书题材确实不兼容，写明替代实现，不能直接忽略。",
+    "以上规则用于校准方向；按本书情境自然取舍，不要把规则写成清单，也不要为了逐条体现而牺牲正文的自然节奏。",
   ].join("\n\n");
 }
 

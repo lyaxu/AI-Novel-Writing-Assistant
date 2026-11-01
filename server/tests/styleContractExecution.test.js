@@ -123,7 +123,6 @@ test("金庸/天下霸唱/细腻三个写法都能编译出可执行的正文风
 
   const jinyongText = compileText(jinyong).text;
   for (const marker of [
-    "【写法合同速览】",
     "【叙事写法合同】",
     "【语言写法合同】",
     "【节奏写法合同】",
@@ -132,8 +131,6 @@ test("金庸/天下霸唱/细腻三个写法都能编译出可执行的正文风
     "中快节奏",
     "张弛分明",
     "对白文白相间",
-    "【正文完成前自查】",
-    "执行顺序",
   ]) {
     assert.ok(jinyongText.includes(marker), `金庸合同缺少可执行规则：${marker}`);
   }
@@ -168,7 +165,7 @@ test("金庸/天下霸唱/细腻三个写法都能编译出可执行的正文风
   }
 });
 
-test("写法合同进入 writer context：核心段完整、顺序靠前且保留速览", () => {
+test("写法合同进入 writer context：核心段完整、顺序靠前且不堆自查清单", () => {
   const jinyong = findTemplate("jinyong-wuxia-classic");
   const { compiled, text } = compileText(jinyong);
   const blocks = buildChapterWriterContextBlocks(buildWriteContext(compiled.contract));
@@ -179,7 +176,8 @@ test("写法合同进入 writer context：核心段完整、顺序靠前且保�
   assert.ok(styleBlock.content.includes("文白相间、不掉书袋"));
   assert.ok(styleBlock.content.includes("中快节奏"));
   assert.ok(styleBlock.content.includes("对白文白相间"));
-  assert.ok(styleBlock.content.includes("【写法合同速览】"));
+  assert.equal(styleBlock.content.includes("【正文完成前自查】"), false);
+  assert.equal(styleBlock.content.includes("执行顺序"), false);
   // 裁剪时优先保留：叙事 → 语言 → 节奏 → 人物。
   const narrativeIndex = styleBlock.content.indexOf("【叙事写法合同】");
   const languageIndex = styleBlock.content.indexOf("【语言写法合同】");
@@ -246,11 +244,10 @@ test("写法上下文被预算压缩时优先保留速览与语言/节奏方向"
     [filler, styleBlock],
     { maxTokensBudget: filler.estimatedTokens + remainingForStyle },
   );
-  assert.ok(result.summarizedBlockIds.includes("style_contract"), "style_contract 应在预算不足时进入摘要路径");
   const selected = result.selectedBlocks.find((block) => block.id === "style_contract");
   assert.ok(selected, "required 的写法块不能被直接丢弃");
-  assert.ok(selected.content.includes("【写法合同速览】"), "摘要后仍应保留速览");
-  assert.ok(selected.content.includes("叙事写法："), "摘要后仍应保留叙事方向速览");
+  assert.ok(selected.content.includes("【叙事写法合同】"), "预算压缩后仍应保留叙事方向");
+  assert.ok(selected.content.includes("【语言写法合同】"), "预算压缩后仍应保留语言方向");
 });
 
 function buildProfileRow(id, name, narrativeSummary, antiAiRules = []) {

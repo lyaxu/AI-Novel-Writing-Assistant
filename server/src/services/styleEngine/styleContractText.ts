@@ -151,15 +151,11 @@ export function buildWriterStyleContractText(contract: StyleContract | null | un
   if (!contract) {
     return "";
   }
-  const body = buildFullStyleContractText(contract);
-  if (!body) {
-    return "";
-  }
-  // 有真正写法规则时先给一段速览：即使上下文预算把合同裁短，核心风格方向也会保留。
-  const overview = hasStyleRuleContent(contract) ? buildStyleContractOverview(contract) : "";
-  return [overview, body, hasStyleRuleContent(contract) ? STYLE_CONTRACT_EXECUTION_LINE : ""]
-    .filter(Boolean)
-    .join("\n\n");
+  // The writer gets the style direction, not the full editing rubric. Duplicating every field as a
+  // "must" bullet plus a pre-write self-check makes the model write to a checklist and flattens the
+  // prose into detector-visible formula. Keep the sections (their summaries carry the actual voice)
+  // and leave detailed self-checking to the review/repair stages.
+  return buildFullStyleContractText(contract, ["narrative", "language", "rhythm", "character", "antiAi"]);
 }
 
 export function inferStyleViolationSource(
