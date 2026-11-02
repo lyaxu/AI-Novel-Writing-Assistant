@@ -80,8 +80,9 @@
 - task `cmvxpw1px0002osw0kuoi43p2`，市井见微·细腻推进。
 - 第 1 章《盐袋夹层》完成 3104 字；朱雀：`AI特征 43.72% / 疑似AI 56.28% / 人工特征 0%`（比明显 100% AI 好，仍偏机器，但用户认为可用于阶段性验证）。
 - 第 2 章《铜钱补账》完成 4383 字。
-- 第 3 章《烧酒换批条》仍是空稿；规划修复 latest session：rounds=2/2（新会话）、`capacityDebt` 1 条（批条提货交付）、自动扩章 count=2/max=2（pending 第 5 章未提交）；最后一次 quality 复核响应因证据路径格式被拒后停在 `waiting_confirmation`。第 1/2 章正文与任务范围 1–3 未变。
-- B 策略实现后：重载后从来源页恢复/继续，预期第 3 章按规划质量债接受候选并进入 writer；两条容量债（提货过程、三成利首次实际抽成）继续保留给后续章节承接。
+- 第 3 章《烧酒换批条》最终按 B 策略接受规划质量债并完成：4934 字；任务 `succeeded`，第 1–3 章正文全部 completed。任务范围保持 1–3，未改写第 1/2 章。
+- B 接受记录：`planningRepair.planningQualityDebt`，`acceptedByPolicy=true`，保留 `zhao_son_qualification_bridge_missing`、`zhao_batch_authority_unestablished` 两条复核发现的可见债务；`capacityDebt` 仍保留“批条去城外药铺提货交付”等职责，留给后续章节承接。
+- 自动扩章 count=2/max=2，pending 第 5 章未提交；后续继续写第 4 章起时按正常规划/复核路径处理，不自动把第 5 章并入本轮。
 
 ### 其他书
 
