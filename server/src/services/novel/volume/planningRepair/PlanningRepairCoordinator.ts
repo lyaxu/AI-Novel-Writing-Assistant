@@ -23,6 +23,10 @@ import {
   resolveMaxCapacityAutoExtensions,
   type CapacityCarryOverExtensionConfig,
 } from "./capacityCarryOver";
+import {
+  buildPlanningQualityDebtRecord,
+  classifyPlanningQualityDebtAcceptance,
+} from "./planningQualityDebt";
 import { projectPlanningRepairRequiredElementRevisions } from "./domain/requiredElementRevisions";
 import { projectPlanningHorizon } from "../planningPromises";
 import { buildReviewIssueHistory } from "./domain/reviewIssueHistory";
@@ -64,6 +68,8 @@ export interface PlanningRepairInput {
   context: unknown;
   /** Bounded automatic carry-over extension when capacity debt has no writable carrier chapter. */
   capacityAutoExtension?: CapacityCarryOverExtensionConfig & { enabled?: boolean };
+  /** B-strategy: accept last candidate as visible planning quality debt when repairs are exhausted. */
+  planningQualityDebtAcceptance?: { enabled?: boolean; targetChapterCount?: number | null };
   generateInitial: (beforeModelCall: () => Promise<void>, recoverySeed?: { output: unknown; validationError: string }) => Promise<Partial<VolumeChapterPlan>>;
 }
 
@@ -136,6 +142,12 @@ export class PlanningRepairCoordinator {
       return this.pause(session, "当前章已有正文或受保护，不能自动调整规划。");
     }
     try {
+      if (session.candidate && session.state.recoveryAction && !session.state.pendingOperation && !session.state.repairOutputPending) {
+        // B-strategy: resume/continue with exhausted repair + extension budget accepts the last
+        // candidate as visible planning debt instead of buying another review/repair round.
+        const acceptedDebt = await this.tryAcceptPlanningQualityDebt(input, session);
+        if (acceptedDebt) return acceptedDebt;
+      }
       const pendingOutput = session.state.repairOutputPending;
       const canReplayPendingOutput = pendingOutput?.inputFingerprint === session.inputFingerprint
         && pendingOutput?.round === session.state.rounds;
@@ -283,6 +295,14 @@ export class PlanningRepairCoordinator {
         if (nextAction === "pause_budget") {
           const extensionResult = await this.tryCapacityAutoExtension(input, session, reviews);
           if (extensionResult === "extended") continue;
+          // B-strategy: after repair rounds AND auto-extension are exhausted, accept the last
+          // candidate with a visible planning quality debt instead of pausing forever.
+          const debtAccepted = await this.tryAcceptPlanningQualityDebt(input, session, {
+            reviewInvalid: false,
+            issues: Object.values(reviews.chapters).flatMap((review) => review.issues),
+            windowRequiresUserDecision: reviews.window?.requiresUserDecision === true,
+          });
+          if (debtAccepted) return debtAccepted;
           if (extensionResult) return this.pause(session, extensionResult);
           return this.pause(session, `已完成${session.state.rounds}轮修正，规划仍未通过复核。${reviews.window?.summary ?? ""}`);
         }
@@ -312,11 +332,29 @@ export class PlanningRepairCoordinator {
       const completed = (error as { completedPromptResponse?: { promptId: string; output: unknown } })?.completedPromptResponse;
       if (completed && session.state.pendingOperation) {
         // A received but rejected response is evidence, never an approved candidate or a lost request.
+        const isReviewResponse = typeof completed.promptId === "string"
+          && completed.promptId.includes("chapter_task_sheet_quality");
         await this.save(session, {
-          phase: "waiting_confirmation", pendingOperation: undefined,
+          phase: "reviewing", pendingOperation: undefined,
           technicalError: error instanceof Error ? error.message : String(error),
           summary: "模型已返回，但规划响应未通过格式或合同校验；已保留响应与轮次，请修复后复核。",
           history: [...session.state.history, { kind: "rejected_response", round: session.state.rounds, ...completed }],
+        });
+        if (isReviewResponse && session.candidate) {
+          // An invalid review response is not a finding against the chapter. When the repair and
+          // extension budgets are exhausted, the saved candidate may continue under planning debt.
+          const output = completed.output && typeof completed.output === "object"
+            ? completed.output as { issues?: unknown } : null;
+          const acceptedDebt = await this.tryAcceptPlanningQualityDebt(input, session, {
+            reviewInvalid: true,
+            issues: Array.isArray(output?.issues) ? output.issues : [],
+            windowRequiresUserDecision: false,
+          });
+          if (acceptedDebt) return acceptedDebt;
+        }
+        await this.save(session, {
+          phase: "waiting_confirmation",
+          summary: "模型已返回，但规划响应未通过格式或合同校验；已保留响应与轮次，请修复后复核。",
         });
         throw planningPauseError(session, session.state.summary!);
       }
@@ -617,6 +655,98 @@ export class PlanningRepairCoordinator {
       return "extended";
     } catch (error) {
       return `自动扩章承接失败：${error instanceof Error ? error.message : String(error)}。容量质量债已保留。`;
+    }
+  }
+
+  /**
+   * Evidence for B-strategy debt acceptance: the latest review/assessment findings (or an invalid
+   * review response). This is only evidence classification; the store still enforces budget,
+   * extension exhaustion and safety boundaries.
+   */
+  private qualityDebtEvidence(
+    session: RepairSession,
+    chapterId: string,
+  ): { reviewInvalid: boolean; issues: unknown[]; windowRequiresUserDecision: boolean } | null {
+    const history = session.state.history;
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      const entry = history[index];
+      if (!entry || typeof entry !== "object") continue;
+      const item = entry as {
+        kind?: string; promptId?: string; output?: unknown;
+        result?: { chapters?: Record<string, { issues?: unknown[] }>; window?: { requiresUserDecision?: boolean } };
+      };
+      if (item.kind === "rejected_response" && typeof item.promptId === "string"
+        && item.promptId.includes("chapter_task_sheet_quality")) {
+        const output = item.output && typeof item.output === "object" ? item.output as { issues?: unknown } : null;
+        return { reviewInvalid: true, issues: Array.isArray(output?.issues) ? output.issues : [], windowRequiresUserDecision: false };
+      }
+      if (item.kind === "assessment" && item.result) {
+        const chapterReview = item.result.chapters?.[chapterId];
+        if (!chapterReview) continue;
+        return {
+          reviewInvalid: false,
+          issues: Array.isArray(chapterReview.issues) ? chapterReview.issues : [],
+          windowRequiresUserDecision: item.result.window?.requiresUserDecision === true,
+        };
+      }
+    }
+    return null;
+  }
+
+  private async tryAcceptPlanningQualityDebt(
+    input: PlanningRepairInput,
+    session: RepairSession,
+    override?: { reviewInvalid: boolean; issues: unknown[]; windowRequiresUserDecision?: boolean },
+  ): Promise<VolumePlanDocument | null> {
+    if (input.planningQualityDebtAcceptance?.enabled === false) return null;
+    const accept = (this.store as unknown as {
+      acceptPlanningQualityDebt?: (session: RepairSession, input: {
+        record: ReturnType<typeof buildPlanningQualityDebtRecord>;
+        targetChapterCount?: number | null;
+      }) => Promise<VolumePlanDocument>;
+    }).acceptPlanningQualityDebt;
+    if (typeof accept !== "function" || !session.candidate) return null;
+    const evidence = override ?? this.qualityDebtEvidence(session, input.chapterId);
+    if (!evidence) return null;
+    const classification = classifyPlanningQualityDebtAcceptance({
+      rounds: session.state.rounds,
+      maxRounds: session.state.maxRounds,
+      // The store enforces whether an auto extension is actually still available.
+      autoExtensionExhausted: true,
+      reviewInvalid: evidence.reviewInvalid,
+      issues: evidence.issues,
+      windowRequiresUserDecision: evidence.windowRequiresUserDecision === true,
+    });
+    if (!classification.allowed) return null;
+    const record = buildPlanningQualityDebtRecord({
+      repairKey: session.state.key,
+      candidateVersionId: session.state.candidateVersionId,
+      chapterId: input.chapterId,
+      chapterOrder: session.state.chapterOrder,
+      classification,
+      capacityDebt: session.state.capacityDebt ?? [],
+    });
+    try {
+      const document = await accept.call(this.store, session, {
+        record,
+        targetChapterCount: input.planningQualityDebtAcceptance?.targetChapterCount ?? null,
+      });
+      try {
+        const audit = await import("./planningQualityDebtAudit");
+        audit.logPlanningQualityDebtAccepted({ novelId: input.document.novelId, record });
+        await audit.recordPlanningQualityDebtAudit({ novelId: input.document.novelId, record });
+      } catch {
+        // Observability must never fail an accepted planning debt.
+      }
+      committedDocuments.add(document);
+      return document;
+    } catch (error) {
+      console.warn("[planning.quality_debt] accept_rejected", {
+        novelId: input.document.novelId,
+        chapterOrder: session.state.chapterOrder,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
     }
   }
 

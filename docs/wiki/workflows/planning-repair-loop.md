@@ -324,3 +324,36 @@ A terminal post-validation failure carries a non-enumerable completed response f
 - 任务因章节审查失败暂停但正文已保存时，源页恢复入口提示“从最近检查点恢复”；恢复会复用已保存正文并重跑审查，不重新写正文。
 
 相关实现：`services/novel/volume/planningRepair/planningRepairDomain.ts`、`PlanningRepairCoordinator.ts`；回归 `tests/planningRepairDomain.test.js`。
+
+## 规划修复耗尽后的质量债继续（B 策略）
+
+### 背景与决策
+
+规划从开始到成书不可能一条直线。用户在 2026-11-01 明确接受：当规划修复轮次和同卷自动扩章空间都耗尽后，允许把最后一份候选按**可见的规划质量债**接受并继续写当前章，而不是永远停在 planning 确认。质量债必须可追踪，不能把“未通过复核”伪装成“复核通过”。
+
+### 当前规则
+
+触发（全部满足）：
+- 规划修复 rounds 已耗尽；
+- 自动扩章没有剩余空间（同任务上限或同卷章节预算/全书目标章数已到）；
+- 剩余复核缺陷全部属于可继续类别：容量/延期职责、`selected_direction_drift`、场景证据/叙述合同类非致命问题；复核响应格式错误也视为“不是对章节的判定”，可继续；
+- 已保存候选仍通过确定性合同结构检查（可进入 writer）。
+
+拒绝（继续保持暂停）：
+- 未知外部调用、正文指纹变化、活跃执行租约、已写/锁定章节修改、所有权冲突、跨卷硬边界；
+- 窗口复核要求作者决策（`requiresUserDecision`）；
+- 候选结构不完整、没有已保存候选、会话仍有未结算调用。
+
+执行：
+- 由 `PlanningRepairStore.acceptPlanningQualityDebt` 在事务内提交最后候选，跳过“复核通过”要求，但保留 source token/正文指纹/锁定检查；
+- 记录 `planningQualityDebt`：`repairKey`、`candidateVersionId`、`chapterId/chapterOrder`、`reasons`、`issues`、`capacityDebt`、`acceptedAt`、`source`、`acceptedByPolicy=true`；写入任务 seed 顶层、规划修复 state/history、未写章节 `repairHistory`、运行日志，并在 `autoExecution.qualityDebtSummaries` 留下可投影的摘要；
+- 已有的 `capacityDebt` 不删除，继续作为后续章节/卷规划的承接债；
+- 提交后任务继续进入 writer 写当前章；恢复入口在预算/扩章耗尽时直接走该路径，不再消耗一轮复核/修复。
+
+### 失败模式
+
+- **把质量债当复核通过。** 复核 findings、原因和候选版本必须全部留下，UI/日志/seed 都能看到，不能只打一条“已通过”。
+- **在任何一次失败上放行。** 必须先耗尽修复轮次并确认扩章不可用；有剩余轮次或扩章空间时仍走原修复/扩章路径。
+- **用正文质量债字段冒充规划债。** 规划债是写前债，写入 `planningQualityDebt`/未写章节历史/`qualityDebtSummaries(source=replan_loop)`，不能写 `autoExecution.qualityDebt*` 之外的正文失败状态。
+- **把硬边界债务化。** 正文变化、租约、未知调用、所有权、跨卷硬边界永远暂停，不能靠 B 策略绕过。
+- **无条件无限继续。** 每次接受都记录债务；后续章节规划/卷规划必须能看到并承接。

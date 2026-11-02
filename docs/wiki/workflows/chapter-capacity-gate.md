@@ -118,6 +118,12 @@
 来源章 `capacityPlan.deferable` + 运行日志。已写正文、锁定章节和跨卷章节永远不进入兜底；
 出现正文指纹变化、活跃执行租约或真正未知调用时仍按原保护边界暂停，不接受兜底。
 
+规划修复轮次和自动扩章上限都耗尽时，系统还会按“规划质量债继续（B 策略）”接受最后候选并
+继续写当前章：债务记录 `planningQualityDebt`（含复核 findings 与 `capacityDebt`）写入任务
+seed、未写章节 `repairHistory`、运行日志和任务投影；容量债保留给后续章节承接，不因继续写作
+被删除。B 策略同样不越过正文/租约/所有权/跨卷硬边界。规则见
+[写前规划自动修正与复核](planning-repair-loop.md) 的“规划修复耗尽后的质量债继续”。
+
 ### 可观测
 
 - 运行日志：`[chapter.capacity] event=rejected|redistributed|repair_committed`，含章节、

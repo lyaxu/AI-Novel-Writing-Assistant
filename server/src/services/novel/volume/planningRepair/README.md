@@ -69,3 +69,14 @@ mustAdvance`），来源章只更新 `nextChapterEntryState`，新章以候选�
 累计上限 2，达到上限或同卷预算用完时记债暂停；不扩章时不会改任务范围。扩章计划在正式
 写正文前仍走正常写前复核/质量门禁。完整规则见
 [章节容量门禁](../../../../../../docs/wiki/workflows/chapter-capacity-gate.md)。
+
+## 规划质量债继续（B 策略）
+
+修复轮次和自动扩章空间都耗尽后，协调器在 `pause_budget`（以及复核响应格式被拒的恢复路径）
+调用 `PlanningRepairStore.acceptPlanningQualityDebt`：按 `planningQualityDebt.ts` 的分类接受
+最后一份已保存候选并继续写当前章。分类只允许容量/延期职责、`selected_direction_drift`、
+非致命场景/叙述合同问题和复核响应格式错误；未知外部调用、正文指纹变化、活跃执行租约、
+已写/锁定冲突、跨卷硬边界和 `requiresUserDecision` 仍暂停。接受不是“复核通过”：
+`planningQualityDebt` 记录 findings/reasons/候选版本/容量债，写入任务 seed、规划修复
+state/history、未写章节 `repairHistory`、运行日志和 `autoExecution.qualityDebtSummaries`；
+容量债保留给后续章节承接。恢复入口在预算/扩章耗尽时直接走该路径，不再买额外复核或修复轮。

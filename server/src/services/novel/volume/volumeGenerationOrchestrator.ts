@@ -642,6 +642,12 @@ async function generateChapterDetail(params: {
           ?? null,
         volumeOrder: targetVolume.sortOrder,
       },
+      planningQualityDebtAcceptance: {
+        enabled: true,
+        targetChapterCount: novel.completionProfile?.targetChapterCount
+          ?? novel.estimatedChapterCount
+          ?? null,
+      },
         generateInitial: (beforeModelCall, recoverySeed) => generateChapterTaskSheetDetail({
           onBeforeModelCall: beforeModelCall,
           initialRejectedResponse: recoverySeed,

@@ -18,6 +18,7 @@ import { isVolumeChapterListPartiallyPersisted, resolveOriginalVolumeStatus } fr
 import { evaluateChapterCapacity, isRelatedCapacityText } from "@ai-novel/shared/types/chapterCapacity";
 import { parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
 import { buildCapacityExtensionSeedPatch, decideCapacityExtensionBudget } from "./capacityCarryOver";
+import type { PlanningQualityDebtRecord } from "./planningQualityDebt";
 import {
   persistActiveVolumeWorkspace,
   VOLUME_WORKSPACE_TRANSACTION_TIMEOUT_MS,
@@ -48,6 +49,8 @@ export interface PlanningRepairState {
   capacityDebt?: import("./planningRepairDomain").PlanningCapacityDebt[];
   /** Appended carry-over chapter that is part of the candidate but reviewed when it is written. */
   capacityCarryOverChapterId?: string;
+  /** B-strategy: last candidate accepted as visible planning quality debt so writing can continue. */
+  planningQualityDebt?: PlanningQualityDebtRecord;
   history: unknown[];
   obligationMoves?: unknown[];
   /** Only mappings saved atomically with the repaired candidate; proposed output is history only. */
@@ -1255,6 +1258,162 @@ export class PlanningRepairStore {
     this.seeds.set(session, result.raw);
     batchContextCache.invalidate(result.state.novelId);
     return result.candidate;
+  }
+
+  /**
+   * B-strategy: accept the last saved candidate as visible planning quality debt and continue
+   * writing. This is not a fake review pass — the failed review findings are persisted in the task
+   * seed, the unwritten chapter history, the run log and the task projection. It is only allowed
+   * after the repair round budget AND automatic carry-over extension are exhausted, and still
+   * refuses changed prose, locked/written chapters and structurally unusable contracts.
+   */
+  async acceptPlanningQualityDebt(
+    session: RepairSession,
+    input: { record: PlanningQualityDebtRecord; targetChapterCount?: number | null },
+  ): Promise<VolumePlanDocument> {
+    const result = await transaction(async (tx) => {
+      const { task, seed, previous, snapshot } = await this.current(tx, session);
+      if (snapshot.committed) return conflict("Planning repair is already committed; reload the active workspace.");
+      if (!["reviewing", "repairing"].includes(previous.phase)
+        || previous.pendingOperation || previous.repairOutputPending) {
+        return conflict("只有已结算的规划修复会话可以接受质量债。");
+      }
+      const source = await readSource(tx, previous.novelId, task);
+      if (![source.token, source.legacyToken].includes(snapshot.snapshotToken)) {
+        return conflict("规划来源已变化，不能接受质量债；请重新核对来源。");
+      }
+      if (snapshot.writtenSourceFingerprint
+        && writtenSourceFingerprint(source.chapters, previous.chapterOrder) !== snapshot.writtenSourceFingerprint) {
+        return conflict("已写正文指纹已变化，不能按质量债接受候选。");
+      }
+      const candidate = await this.loadCandidate(tx, previous, snapshot);
+      if (!candidate || !session.candidate || hash(candidate) !== hash(session.candidate)) {
+        return conflict("质量债必须接受已保存且未变化的候选。");
+      }
+      const volume = candidate.volumes.find((item) => item.id === previous.volumeId);
+      if (!volume || volume.chapters.length === 0) return conflict("当前规划卷缺失，不能接受质量债。");
+      const lastOrder = Math.max(...volume.chapters.map((chapter) => chapter.chapterOrder));
+      const extensionRecord = record(seed.capacityAutoExtension) ? seed.capacityAutoExtension as Record<string, unknown> : null;
+      const extensionCount = typeof extensionRecord?.count === "number" && Number.isFinite(extensionRecord.count)
+        ? Math.max(0, Math.trunc(extensionRecord.count))
+        : 0;
+      const extensionMax = typeof extensionRecord?.maxExtensions === "number" && Number.isFinite(extensionRecord.maxExtensions)
+        ? Math.max(1, Math.trunc(extensionRecord.maxExtensions))
+        : 2;
+      const extensionBudget = decideCapacityExtensionBudget({
+        volumeOrder: volume.sortOrder,
+        currentLastOrder: lastOrder,
+        targetChapterCount: input.targetChapterCount,
+      });
+      if (extensionCount < extensionMax && extensionBudget.allowed) {
+        return conflict("自动扩章仍可用，应先扩章承接；只有扩章上限/预算耗尽后才允许接受规划质量债。");
+      }
+      const affected = [...new Set([previous.chapterId, ...validateCandidate(snapshot, candidate)])];
+      const mapping = materializedMapping(snapshot.baselineDocument, source.chapters);
+      for (const id of affected) {
+        const chapter = candidate.volumes.flatMap((item) => item.chapters).find((item) => item.id === id);
+        if (!chapter) return conflict(`质量债章节 ${id} 不在候选中。`);
+        const row = mapping.get(id);
+        if (row && (isLocked(row) || row.content?.trim())) {
+          return conflict(`第${chapter.chapterOrder}章已有正文或被锁定，不能接受规划质量债。`);
+        }
+        const shape = assessChapterExecutionContractShape({ ...chapter, novelId: previous.novelId, chapterId: id });
+        if (!shape.canEnterExecution) {
+          return conflict(`第${chapter.chapterOrder}章候选合同结构不完整，不能带债进入写作。`);
+        }
+      }
+      const versionId = previous.candidateVersionId;
+      if (!versionId) return conflict("质量债需要已保存的候选版本。");
+      await this.ensureActiveBaseline(tx, task, snapshot, source);
+      const derived = buildVolumeWorkspaceDocument(candidate);
+      const document: VolumePlanDocument = {
+        ...candidate,
+        derivedOutline: derived.derivedOutline,
+        derivedStructuredOutline: derived.derivedStructuredOutline,
+        readiness: derived.readiness,
+        source: "volume",
+        activeVersionId: versionId,
+      };
+      await tx.volumePlanVersion.updateMany({
+        where: { novelId: previous.novelId, status: "active" }, data: { status: "frozen" },
+      });
+      const activated = await tx.volumePlanVersion.updateMany({
+        where: { id: versionId, novelId: previous.novelId, status: "draft" },
+        data: { status: "active", contentJson: serializeVolumeWorkspaceDocument(document) },
+      });
+      if (activated.count !== 1) return conflict("候选版本已变化，不能接受质量债。");
+      await persistActiveVolumeWorkspace(tx, previous.novelId, document, versionId);
+      const materializedIds: string[] = [];
+      for (const chapter of document.volumes.flatMap((item) => item.chapters)) {
+        if (!affected.includes(chapter.id)) continue;
+        const row = mapping.get(chapter.id);
+        if (!row) continue;
+        const changed = await tx.chapter.updateMany({
+          where: {
+            id: row.id, novelId: previous.novelId, order: row.order, updatedAt: row.updatedAt,
+            content: row.content, generationState: row.generationState, chapterStatus: row.chapterStatus,
+          },
+          data: this.chapterContract(chapter),
+        });
+        if (changed.count !== 1) return conflict("Chapter changed while accepting planning quality debt.");
+        materializedIds.push(row.id);
+      }
+      if (materializedIds.length) {
+        await tx.storyPlan.updateMany({
+          where: { novelId: previous.novelId, level: "chapter", chapterId: { in: materializedIds } },
+          data: { status: "stale" },
+        });
+      }
+      const state: PlanningRepairState = {
+        ...previous,
+        phase: "committed",
+        candidateVersionId: versionId,
+        affectedChapterIds: affected,
+        technicalError: undefined,
+        pendingOperation: undefined,
+        repairOutputPending: undefined,
+        planningQualityDebt: input.record,
+        summary: `已按规划质量债接受第${previous.chapterOrder}章候选并继续写作（${input.record.reasons.join("、")}）`,
+        history: [...previous.history, {
+          kind: "planning_quality_debt_accepted",
+          round: previous.rounds,
+          record: input.record,
+        }],
+      };
+      snapshot.candidateHash = hash(document);
+      snapshot.committed = true;
+      const committedSource = await readSource(tx, previous.novelId, task);
+      snapshot.snapshotToken = committedSource.token;
+      snapshot.committedPlanHash = committedPlanHash(document);
+      snapshot.committedSourceHash = committedSourceHash(committedSource);
+      snapshot.writtenSourceFingerprint = writtenSourceFingerprint(committedSource.chapters, previous.chapterOrder);
+      snapshot.selectedCandidateFingerprint = hash(seed.candidate ?? null);
+      const existingDebt = Array.isArray(seed.planningQualityDebt) ? seed.planningQualityDebt as unknown[] : [];
+      const seedPatch: Record<string, unknown> = {
+        planningRepair: state,
+        planningQualityDebt: [...existingDebt, input.record].slice(-20),
+        [SNAPSHOT_KEY]: snapshot,
+      };
+      const autoExecution = record(seed.autoExecution) ? { ...seed.autoExecution as Record<string, unknown> } : null;
+      if (autoExecution) {
+        const summaries = Array.isArray(autoExecution.qualityDebtSummaries) ? autoExecution.qualityDebtSummaries : [];
+        autoExecution.qualityDebtSummaries = [...summaries, {
+          chapterId: input.record.chapterId,
+          chapterOrder: input.record.chapterOrder,
+          reason: `规划质量债：${input.record.reasons.join("、")}（${input.record.issues.map((issue) => issue.id).join("；") || "复核格式异常"}）`,
+          source: "replan_loop",
+          deferredAt: input.record.acceptedAt,
+        }].slice(-40);
+        seedPatch.autoExecution = autoExecution;
+      }
+      const raw = await casSeed(tx, task, { ...seed, ...seedPatch });
+      return { state, snapshot, document, raw };
+    });
+    Object.assign(session, this.session(result.state, result.snapshot, result.document));
+    this.seeds.set(session, result.raw);
+    batchContextCache.invalidate(result.state.novelId);
+    await novelEventBus.emit({ type: "volume:updated", payload: { novelId: result.state.novelId, reason: "chapter_sync" } });
+    return result.document;
   }
 
   async commit(session: RepairSession, candidate: VolumePlanDocument): Promise<VolumePlanDocument> {

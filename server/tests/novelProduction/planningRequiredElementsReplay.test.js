@@ -28,6 +28,7 @@ const { PlanningRepairCoordinator } = loadRuntimeSource('../volume/planningRepai
   './PlanningRepairStore': { PlanningRepairStore: class { constructor() { assert.fail('No database'); } } },
   './planningRepairDomain': domain,
   './capacityCarryOver': require('../../dist/services/novel/volume/planningRepair/capacityCarryOver.js'),
+  './planningQualityDebt': require('../../dist/services/novel/volume/planningRepair/planningQualityDebt.js'),
   '../planningPromises': { projectPlanningHorizon: () => ({}) },
   './domain/reviewIssueHistory': require('../../dist/services/novel/volume/planningRepair/domain/reviewIssueHistory.js'),
   './domain/requiredElementRevisions': revisions,

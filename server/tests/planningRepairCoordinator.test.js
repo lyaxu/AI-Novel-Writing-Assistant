@@ -20,6 +20,7 @@ const imports = {
   "./PlanningRepairStore": { PlanningRepairStore: class { constructor() { throw new Error("Unexpected DB store"); } } },
   "./planningRepairDomain": require("../dist/services/novel/volume/planningRepair/planningRepairDomain.js"),
   "./capacityCarryOver": require("../dist/services/novel/volume/planningRepair/capacityCarryOver.js"),
+  "./planningQualityDebt": require("../dist/services/novel/volume/planningRepair/planningQualityDebt.js"),
   "./domain/requiredElementRevisions": require("../dist/services/novel/volume/planningRepair/domain/requiredElementRevisions.js"),
   "./domain/reviewIssueHistory": require("../dist/services/novel/volume/planningRepair/domain/reviewIssueHistory.js"),
   "@ai-novel/shared/types/chapterCapacity": require("@ai-novel/shared/types/chapterCapacity"),
@@ -404,8 +405,73 @@ test("resume keeps an unplaceable deferable as planning debt and continues to co
   assert.equal(h.calls.includes("novel.volume.planning_repair_review"), false);
 });
 
-test("exhausted repair with capacity debt and no carrier auto-extends one chapter and commits", async () => {
+test("B strategy accepts the saved candidate as planning debt on resume without another review", async () => {
   const h = harness({ local: true });
+  h.session.candidate = capacityCandidateDocument();
+  Object.assign(h.session.state, {
+    phase: "reviewing", rounds: 2, maxRounds: 2, affectedChapterIds: ["c3"],
+    recoveryAction: { requestId: "continue", mode: "review_existing" },
+    history: [{
+      kind: "assessment", round: 1,
+      result: {
+        chapters: { c3: { issues: [{ id: "selected_direction_drift", severity: "medium", target: "semantic", summary: "延期职责未落地" }] } },
+        window: { requiresUserDecision: false },
+      },
+    }],
+  });
+  let acceptedRecord = null;
+  h.store.acceptPlanningQualityDebt = async (session, input) => {
+    acceptedRecord = input.record;
+    Object.assign(session.state, { phase: "committed", planningQualityDebt: input.record });
+    return session.candidate;
+  };
+  const document = await h.coordinator.run(h.input);
+  assert.ok(document);
+  assert.equal(acceptedRecord.kind, "planning_quality_debt");
+  assert.equal(acceptedRecord.chapterOrder, 3);
+  assert.equal(acceptedRecord.issues.length, 1);
+  assert.equal(h.calls.length, 0, "accepting debt must not buy another review/repair call");
+  assert.equal(h.commits, 0);
+});
+
+test("B strategy rejects a hard defect even when the repair budget is exhausted", async () => {
+  const h = harness({ local: true });
+  h.session.candidate = capacityCandidateDocument();
+  Object.assign(h.session.state, {
+    phase: "reviewing", rounds: 2, maxRounds: 2, affectedChapterIds: ["c3"],
+    recoveryAction: { requestId: "continue", mode: "review_existing" },
+    history: [{
+      kind: "assessment", round: 1,
+      result: {
+        chapters: { c3: { issues: [{ id: "lease_conflict", severity: "high", target: "runtime", summary: "执行租约仍在" }] } },
+        window: { requiresUserDecision: false },
+      },
+    }],
+  });
+  let acceptCalls = 0;
+  h.store.acceptPlanningQualityDebt = async () => { acceptCalls++; return h.session.candidate; };
+  await h.coordinator.run(h.input);
+  assert.equal(acceptCalls, 0);
+});
+
+test("B strategy does not accept debt while repair rounds remain", async () => {
+  const h = harness({ local: true });
+  h.session.candidate = capacityCandidateDocument();
+  Object.assign(h.session.state, {
+    phase: "reviewing", rounds: 1, maxRounds: 2, affectedChapterIds: ["c3"],
+    recoveryAction: { requestId: "continue", mode: "review_existing" },
+    history: [{
+      kind: "assessment", round: 1,
+      result: { chapters: { c3: { issues: [{ id: "selected_direction_drift", severity: "medium", target: "semantic" }] } }, window: { requiresUserDecision: false } },
+    }],
+  });
+  let acceptCalls = 0;
+  h.store.acceptPlanningQualityDebt = async () => { acceptCalls++; return h.session.candidate; };
+  await h.coordinator.run(h.input);
+  assert.equal(acceptCalls, 0);
+});
+
+test("exhausted repair with capacity debt and no carrier auto-extends one chapter and commits", async () => {  const h = harness({ local: true });
   h.session.candidate = document();
   // The current volume ends at chapter 3; the debt has no writable carrier inside the window.
   h.session.candidate.volumes[0].chapters = [h.session.candidate.volumes[0].chapters[0]];
