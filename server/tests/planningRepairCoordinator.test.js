@@ -15,6 +15,7 @@ const imports = {
   "../planningPromises": { projectPlanningHorizon: () => ({ readonlyOpeningRoutes: [], readonlyPlanningHorizon: {} }) },
   "../../../../prompting/core/promptRunner": { runStructuredPrompt: () => { throw new Error("Unexpected live model call"); } },
   "../../../../prompting/prompts/novel/volume/planningRepair.prompts": require("../dist/prompting/prompts/novel/volume/planningRepair.prompts.js"),
+  "../../../../prompting/prompts/novel/promptBudgetProfiles": require("../dist/prompting/prompts/novel/promptBudgetProfiles.js"),
   "../ChapterTaskSheetQualityGateService": { ChapterTaskSheetQualityGateService: class { constructor() { throw new Error("Unexpected live gate"); } } },
   "../volumeWorkspaceDocument": require("../dist/services/novel/volume/volumeWorkspaceDocument.js"),
   "./PlanningRepairStore": { PlanningRepairStore: class { constructor() { throw new Error("Unexpected DB store"); } } },
@@ -414,7 +415,7 @@ test("B strategy accepts the saved candidate as planning debt on resume without 
     history: [{
       kind: "assessment", round: 1,
       result: {
-        chapters: { c3: { issues: [{ id: "selected_direction_drift", severity: "medium", target: "semantic", summary: "延期职责未落地" }] } },
+        chapters: { c3: { issues: [{ id: "prior_debt_and_herbs_unverified", severity: "high", target: "semantic", summary: "后章引用了当前候选尚未写入正文的事实" }] } },
         window: { requiresUserDecision: false },
       },
     }],
@@ -432,6 +433,42 @@ test("B strategy accepts the saved candidate as planning debt on resume without 
   assert.equal(acceptedRecord.issues.length, 1);
   assert.equal(h.calls.length, 0, "accepting debt must not buy another review/repair call");
   assert.equal(h.commits, 0);
+});
+
+test("review-only pause path accepts debt after a precheck rejection instead of returning pause", async () => {
+  const h = harness({ local: true });
+  h.session.candidate = capacityCandidateDocument();
+  Object.assign(h.session.state, {
+    phase: "reviewing", rounds: 2, maxRounds: 2, affectedChapterIds: ["c3"],
+    recoveryAction: { requestId: "continue", mode: "review_existing" },
+    capacityDebt: [{ fromChapterId: "c3", fromChapterOrder: 3, item: "后章承接", reason: "later_chapters_over_capacity", suggestedChapterId: "c4", suggestedChapterOrder: 4 }],
+    history: [{
+      kind: "assessment", round: 1,
+      result: {
+        chapters: { c3: { issues: [{ id: "prior_debt_and_herbs_unverified", severity: "high", target: "semantic" }] } },
+        window: { requiresUserDecision: false },
+      },
+    }],
+  });
+  let acceptCalls = 0;
+  h.store.acceptPlanningQualityDebt = async (session, input) => {
+    acceptCalls += 1;
+    if (acceptCalls === 1) throw new Error("容量债仍可通过自动扩章承接");
+    Object.assign(session.state, { phase: "committed", planningQualityDebt: input.record });
+    return session.candidate;
+  };
+  h.gate.evaluate = async () => {
+    h.calls.push("chapter_review");
+    return {
+      ...pass, status: "needs_confirmation", verdict: "repairable", safeToSync: false,
+      recommendedHandling: "repair_contract",
+      issues: [{ id: "prior_debt_and_herbs_unverified", severity: "high", target: "semantic" }],
+    };
+  };
+  const document = await h.coordinator.run(h.input);
+  assert.ok(document);
+  assert.equal(acceptCalls, 2);
+  assert.equal(h.session.state.phase, "committed");
 });
 
 test("B strategy rejects a hard defect even when the repair budget is exhausted", async () => {

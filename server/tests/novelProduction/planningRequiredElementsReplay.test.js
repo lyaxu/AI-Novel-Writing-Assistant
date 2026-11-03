@@ -23,6 +23,7 @@ const { PlanningRepairCoordinator } = loadRuntimeSource('../volume/planningRepai
     planningRepairPrompt: { id: 'novel.volume.planning_repair' },
     planningRepairReviewPrompt: { id: 'novel.volume.planning_repair_review' },
   },
+  '../../../../prompting/prompts/novel/promptBudgetProfiles': require('../../dist/prompting/prompts/novel/promptBudgetProfiles.js'),
   '../ChapterTaskSheetQualityGateService': { ChapterTaskSheetQualityGateService: class { constructor() { assert.fail('No live gate'); } } },
   '../volumeWorkspaceDocument': { buildVolumeWorkspaceDocument: doc => doc },
   './PlanningRepairStore': { PlanningRepairStore: class { constructor() { assert.fail('No database'); } } },

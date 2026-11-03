@@ -279,6 +279,7 @@ test("composition: saved initial rejection grants once, reconnects original job,
  const {PlanningRepairCoordinator}=loadRuntimeSource("../volume/planningRepair/PlanningRepairCoordinator.ts",{
   "node:crypto":require("node:crypto"),"@ai-novel/shared/types/chapterLengthControl":length,"@ai-novel/shared/types/planningRepair/recovery":policy,
   "../../../../prompting/core/promptRunner":runner,"../../../../prompting/prompts/novel/volume/planningRepair.prompts":assets,
+  "../../../../prompting/prompts/novel/promptBudgetProfiles":require("../../dist/prompting/prompts/novel/promptBudgetProfiles.js"),
   "../ChapterTaskSheetQualityGateService":gateModule,"../volumeWorkspaceDocument":workspace,"./PlanningRepairStore":{},
   "./planningRepairDomain":require("../../dist/services/novel/volume/planningRepair/planningRepairDomain.js"),"../planningPromises":promises,
   "./capacityCarryOver":require("../../dist/services/novel/volume/planningRepair/capacityCarryOver.js"),

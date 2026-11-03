@@ -212,7 +212,13 @@ export class PlanningRepairCoordinator {
         if (session.state.recoveryAction.paidRound !== undefined) {
           return this.pause(session, "已授权修复的保存响应无法确认，请检查保存结果后继续，避免重复调用。");
         }
-        if (session.state.rounds >= session.state.maxRounds) return this.pause(session, "修复预算不足，请确认修复方向后继续。");
+        if (session.state.rounds >= session.state.maxRounds) {
+          // B-strategy: a granted repair that can no longer buy a round may still accept the
+          // saved candidate as planning debt when only continuable findings remain.
+          const acceptedDebt = await this.tryAcceptPlanningQualityDebt(input, session);
+          if (acceptedDebt) return acceptedDebt;
+          return this.pause(session, "修复预算不足，请确认修复方向后继续。");
+        }
         const ids = session.state.recoveryAction.affectedChapterIds ?? session.state.affectedChapterIds ?? [input.chapterId];
         if (!ids.includes(input.chapterId) || ids.some(id => !session.eligibleChapterIds.includes(id))) {
           return this.pause(session, "已确认方向的可修改窗口已变化，请重新确认方案。");
@@ -287,6 +293,15 @@ export class PlanningRepairCoordinator {
           rounds: session.state.rounds, maxRounds: session.state.maxRounds,
           requiresUserDecision: reviews.window?.requiresUserDecision === true });
         if (nextAction === "pause_review_only") {
+          // B-strategy: review_existing used to stop here forever even when the candidate only has
+          // continuable planning findings. Accept the saved candidate as visible planning debt and
+          // hand control back to the chapter runtime/writer instead of asking for another direction.
+          const debtAccepted = await this.tryAcceptPlanningQualityDebt(input, session, {
+            reviewInvalid: false,
+            issues: Object.values(reviews.chapters).flatMap((review) => review.issues),
+            windowRequiresUserDecision: reviews.window?.requiresUserDecision === true,
+          });
+          if (debtAccepted) return debtAccepted;
           await this.save(session, { recoveryAction: undefined });
           return this.pause(session, "原候选复核仍未通过，请选择具体修复方向或确认规划来源。");
         }
@@ -351,6 +366,11 @@ export class PlanningRepairCoordinator {
             issues: Array.isArray(output?.issues) ? output.issues : [],
             windowRequiresUserDecision: false,
           });
+          if (acceptedDebt) return acceptedDebt;
+        } else if (session.candidate) {
+          // A rejected repair response leaves the previous saved candidate intact. If only
+          // continuable findings remain and all budgets are exhausted, accept it as planning debt.
+          const acceptedDebt = await this.tryAcceptPlanningQualityDebt(input, session);
           if (acceptedDebt) return acceptedDebt;
         }
         await this.save(session, {

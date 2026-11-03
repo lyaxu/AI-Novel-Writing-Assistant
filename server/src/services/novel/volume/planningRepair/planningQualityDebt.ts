@@ -36,7 +36,7 @@ export interface PlanningQualityDebtRecord {
   acceptedByPolicy: true;
 }
 
-const HARD_ISSUE_PATTERN = /unknown|external|lease|fingerprint|ownership|data_integrity|written_prose|prose_changed|正文|租约|指纹|所有权|外部调用|调用未知/i;
+const HARD_ISSUE_PATTERN = /unknown|external|lease|fingerprint|ownership|data_integrity|written_prose|prose_changed|租约|指纹|所有权|外部调用|调用未知/i;
 
 function normalizedIssue(raw: unknown): PlanningQualityDebtIssue | null {
   if (!raw || typeof raw !== "object") return null;
@@ -56,11 +56,28 @@ function issueIsContinuable(issue: PlanningQualityDebtIssue): boolean {
   const id = issue.id.toLowerCase();
   if (id.startsWith("capacity_") || id === "selected_direction_drift") return true;
   const severity = (issue.severity ?? "").toLowerCase();
-  if (severity === "critical" || severity === "blocker") return false;
-  // Medium/low narrative, scene-evidence or reader-contract gaps are non-fatal planning debt.
-  if (severity === "high") return false;
+  if (severity === "critical") return false;
   const target = (issue.target ?? "").toLowerCase();
+  // Medium/high narrative, scene-evidence or reader-contract gaps are non-fatal planning debt.
+  // Hard boundaries above (prose/lease/ownership/unknown calls/data integrity) never qualify.
   return ["semantic", "scene_cards", "reader_experience", "content", "consistency"].includes(target);
+}
+
+/**
+ * Automatic carry-over extension can only resolve debt whose source chapter is at the writable
+ * window's end (`suggestedChapterId` null). When a debt already names a later chapter as carrier,
+ * the window has later chapters that are merely over capacity; appending another chapter is not the
+ * remedy, and B-strategy debt acceptance is allowed once repair rounds are exhausted.
+ */
+export function capacityExtensionCouldResolveDebt(input: {
+  capacityDebt: readonly unknown[];
+  extensionCount: number;
+  maxExtensions: number;
+  budgetAllowed: boolean;
+}): boolean {
+  const items = input.capacityDebt.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object");
+  if (items.length === 0 || !input.budgetAllowed || input.extensionCount >= input.maxExtensions) return false;
+  return items.every((item) => item.suggestedChapterId == null);
 }
 
 export interface PlanningQualityDebtClassificationInput {

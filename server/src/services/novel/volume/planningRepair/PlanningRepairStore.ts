@@ -18,7 +18,7 @@ import { isVolumeChapterListPartiallyPersisted, resolveOriginalVolumeStatus } fr
 import { evaluateChapterCapacity, isRelatedCapacityText } from "@ai-novel/shared/types/chapterCapacity";
 import { parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthControl";
 import { buildCapacityExtensionSeedPatch, decideCapacityExtensionBudget } from "./capacityCarryOver";
-import type { PlanningQualityDebtRecord } from "./planningQualityDebt";
+import { capacityExtensionCouldResolveDebt, type PlanningQualityDebtRecord } from "./planningQualityDebt";
 import {
   persistActiveVolumeWorkspace,
   VOLUME_WORKSPACE_TRANSACTION_TIMEOUT_MS,
@@ -1305,8 +1305,15 @@ export class PlanningRepairStore {
         currentLastOrder: lastOrder,
         targetChapterCount: input.targetChapterCount,
       });
-      if (extensionCount < extensionMax && extensionBudget.allowed) {
-        return conflict("自动扩章仍可用，应先扩章承接；只有扩章上限/预算耗尽后才允许接受规划质量债。");
+      const capacityDebtItems = Array.isArray(previous.capacityDebt) ? previous.capacityDebt : [];
+      const extensionCouldResolve = capacityExtensionCouldResolveDebt({
+        capacityDebt: capacityDebtItems,
+        extensionCount,
+        maxExtensions: extensionMax,
+        budgetAllowed: extensionBudget.allowed,
+      });
+      if (extensionCouldResolve) {
+        return conflict("容量债仍可通过自动扩章承接，应先扩章；只有扩章不适用或上限/预算耗尽后才允许接受规划质量债。");
       }
       const affected = [...new Set([previous.chapterId, ...validateCandidate(snapshot, candidate)])];
       const mapping = materializedMapping(snapshot.baselineDocument, source.chapters);

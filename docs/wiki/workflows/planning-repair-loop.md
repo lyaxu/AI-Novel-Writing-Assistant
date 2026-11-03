@@ -335,8 +335,8 @@ A terminal post-validation failure carries a non-enumerable completed response f
 
 触发（全部满足）：
 - 规划修复 rounds 已耗尽；
-- 自动扩章没有剩余空间（同任务上限或同卷章节预算/全书目标章数已到）；
-- 剩余复核缺陷全部属于可继续类别：容量/延期职责、`selected_direction_drift`、场景证据/叙述合同类非致命问题；复核响应格式错误也视为“不是对章节的判定”，可继续；
+- 自动扩章不能解决当前债：同任务上限/同卷章节预算/全书目标章数已到，或容量债已经指向窗口内后章（`suggestedChapterId` 非空，后章只是超容量），追加新章不是补救；
+- 剩余复核缺陷全部属于可继续类别：容量/延期职责、`selected_direction_drift`、场景证据/叙述合同类非致命问题（含高严重度的“后章引用了当前候选尚未写入正文的事实”这类时序/证据缺口）；复核响应格式错误也视为“不是对章节的判定”，可继续；
 - 已保存候选仍通过确定性合同结构检查（可进入 writer）。
 
 拒绝（继续保持暂停）：
@@ -349,6 +349,12 @@ A terminal post-validation failure carries a non-enumerable completed response f
 - 记录 `planningQualityDebt`：`repairKey`、`candidateVersionId`、`chapterId/chapterOrder`、`reasons`、`issues`、`capacityDebt`、`acceptedAt`、`source`、`acceptedByPolicy=true`；写入任务 seed 顶层、规划修复 state/history、未写章节 `repairHistory`、运行日志，并在 `autoExecution.qualityDebtSummaries` 留下可投影的摘要；
 - 已有的 `capacityDebt` 不删除，继续作为后续章节/卷规划的承接债；
 - 提交后任务继续进入 writer 写当前章；恢复入口在预算/扩章耗尽时直接走该路径，不再消耗一轮复核/修复。
+
+入口覆盖（都必须命中同一条判定，而不是只覆盖 `pause_budget`）：
+- `PlanningRepairCoordinator` 的 `pause_budget`、`pause_review_only`、“修复预算不足”、复核响应格式被拒的 catch、恢复/继续预检查；
+- `PlanningRepairReviewExistingService`（review_existing / resume_existing_policy）：grant 写入 `recoveryAction` 后由协调器预检查直接接受，不再进入“原候选复核仍未通过”；
+- JIT 章节合同生成/复核失败后转规划修复的入口：同一协调器会话，所有等待确认分支走 B 判定；
+- continue/recovery-candidate 恢复入口：携带 `recoveryAction` 的恢复先执行 B 预检查。
 
 ### 失败模式
 

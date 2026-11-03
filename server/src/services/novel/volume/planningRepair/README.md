@@ -80,3 +80,10 @@ mustAdvance`），来源章只更新 `nextChapterEntryState`，新章以候选�
 `planningQualityDebt` 记录 findings/reasons/候选版本/容量债，写入任务 seed、规划修复
 state/history、未写章节 `repairHistory`、运行日志和 `autoExecution.qualityDebtSummaries`；
 容量债保留给后续章节承接。恢复入口在预算/扩章耗尽时直接走该路径，不再买额外复核或修复轮。
+
+入口覆盖：`pause_budget`、`pause_review_only`、“修复预算不足”、复核响应格式被拒的 catch、
+恢复/继续预检查，以及 review_existing/resume_existing_policy、JIT 合同复核失败转规划修复、
+continue/recovery-candidate 恢复入口。扩章判定只在容量债全部没有后继承接章
+（`suggestedChapterId` 为空）且上限/预算未到时才算“扩章仍可解决”；若后章已存在只是超容量，
+追加新章不是补救，B 可以接受。高严重度的语义/场景/时序证据缺口属于可继续债，但正文/租约/
+未知调用/所有权/跨卷/requiresUserDecision 仍拒绝。

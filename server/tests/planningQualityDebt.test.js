@@ -24,6 +24,33 @@ test("an invalid review response is continuable once budget and extension are ex
   assert.equal(decision.source, "review_response_invalid");
 });
 
+test("high-severity semantic/horizon findings are continuable when no hard boundary is involved", () => {
+  const decision = debt.classifyPlanningQualityDebtAcceptance({
+    rounds: 2, maxRounds: 2, autoExtensionExhausted: true, reviewInvalid: false,
+    issues: [
+      { id: "prior_debt_and_herbs_unverified", severity: "high", target: "semantic", summary: "第5章引用了第4章候选合同未写入正文的事实" },
+      { id: "capacity_must_deliver_over_budget", severity: "high", target: "semantic" },
+    ],
+  });
+  assert.equal(decision.allowed, true);
+});
+
+test("auto extension can only resolve debt when the source chapter has no later carrier", () => {
+  assert.equal(debt.capacityExtensionCouldResolveDebt({
+    capacityDebt: [{ suggestedChapterId: null }], extensionCount: 0, maxExtensions: 2, budgetAllowed: true,
+  }), true);
+  assert.equal(debt.capacityExtensionCouldResolveDebt({
+    capacityDebt: [{ suggestedChapterId: null }, { suggestedChapterId: "chapter-5" }],
+    extensionCount: 0, maxExtensions: 2, budgetAllowed: true,
+  }), false);
+  assert.equal(debt.capacityExtensionCouldResolveDebt({
+    capacityDebt: [{ suggestedChapterId: null }], extensionCount: 2, maxExtensions: 2, budgetAllowed: true,
+  }), false);
+  assert.equal(debt.capacityExtensionCouldResolveDebt({
+    capacityDebt: [], extensionCount: 0, maxExtensions: 2, budgetAllowed: true,
+  }), false);
+});
+
 test("budget or extension still available is never accepted as debt", () => {
   assert.equal(debt.classifyPlanningQualityDebtAcceptance({
     rounds: 1, maxRounds: 2, autoExtensionExhausted: true, reviewInvalid: true, issues: [],

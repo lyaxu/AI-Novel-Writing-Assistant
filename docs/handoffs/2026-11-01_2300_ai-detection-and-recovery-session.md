@@ -127,6 +127,14 @@
 - 当前第4章仍未开写：任务在规划修复确认处，rounds=3/3，候选有 4 条容量债但复核仍失败；B 质量债路径在这次 JIT/review-existing 入口未触发，任务摘要“原候选复核仍未通过，请选择具体修复方向或确认规划来源”。下一步需要让 B/扩章覆盖 JIT 合同复核入口，或接受当前候选的可见质量债后直接写第4章。
 - 本轮未改 WORK_LEDGER；新增记录均在本文件与代码提交。
 
+## 2026-11-04 续：B 质量债接入 JIT/复核入口
+
+- 根因：B 只在 `pause_budget`/复核响应格式错误/恢复预检查尝试；当前书走 review_existing 后复核失败进入 `pause_review_only`，该分支直接返回“原候选复核仍未通过”，B 从未执行。另外 `acceptPlanningQualityDebt` 的扩章门槛把“容量债已指向窗口内后章（后章只是超容量）”误判成“扩章仍可用”，对第4章任务的 4 条容量债直接拒绝；复核中的高严重度时序/证据缺口也被一刀切当成硬缺陷。
+- 修复：统一 B 判定接入协调器所有等待确认分支（`pause_budget`、`pause_review_only`、`修复预算不足`、复核响应格式被拒的 catch、恢复/继续预检查）和 review_existing/resume_existing_policy、JIT 合同生成/复核转规划修复、continue/recovery-candidate 恢复；扩章判定改为“只有容量债全部没有后继承接章（`suggestedChapterId` 为空）且上限/预算未到才算扩章可解决”，高严重度语义/场景/时序证据类缺陷可计入质量债，正文/租约/未知调用/所有权/跨卷/requiresUserDecision 仍拒绝。
+- 当前书（只读核对）：task `cmvz3d625003b50w0heed4zqm`，range 4-6；planning phase `waiting_confirmation`、rounds=3/3、候选已保存（第4章 mustDeliver 3 / 3 场、第5/6章合同结构完整）、`capacityDebt` 4 条（前 3 条指向第5/6章、最后一条 no_later_writable）；第 4 章仍 0 字、unplanned，第 1-3 章未变。
+- 重载后建议：在来源页触发一次「重新复核已保存候选（review_existing）」或「继续自动导演/恢复候选」；协调器预检查命中 B 后应直接事务接受候选、写入 `planningQualityDebt`（含 4 条 capacityDebt 与复核 findings）并返回 chapter runtime/writer，第4章开写，不再新增模型复核轮；若 UI 仍提示“原候选复核仍未通过”，说明恢复入口没带 `recoveryAction` 或 store 安全边界拒绝，需看日志 `[planning.quality_debt]`（accept_rejected 原因）而不是继续手点修复。
+- 本轮验证：新增 classifier 高严重度语义可继续/扩章适用性单测、coordinator review-only 分支 B 接受（预检查被拒后第二次接受）用例；planningRepairStore 133、coordinator 66 单测通过；宽批次剩余 2 项为 `planningPromiseContinuity`/`planningStateReview` 既有旧期望/harness 漂移，与 B 无关。未调用真实模型、未重载、未改正文、未动 WORK_LEDGER。
+
 ## 关键命令
 
 ```powershell
