@@ -44,7 +44,9 @@ function evidence(overrides = {}) {
       payloadWorkflowTaskId: TASK_ID,
       leaseActive: false,
       cancelRequestedAt: null,
+      staleWithoutAnchor: false,
     },
+    rangeHasProse: false,
     targetChapter: { id: CHAPTER_ID, order: 1, hasProse: false, hasPlan: false },
     candidate: {
       versionId: VERSION_ID,
@@ -54,17 +56,61 @@ function evidence(overrides = {}) {
       chapterExists: true,
       chapterOrder: 1,
       contractUsable: true,
+      capacityPassed: true,
     },
     journal: {
       status: "paused",
       hasUncertainStep: false,
       hasWorkBeyondPreparation: false,
       belongsToPreviousJob: true,
+      definitiveNoOutputCode: null,
     },
     writtenSourceUnchanged: true,
+    capacityDebtDocumented: false,
     ...overrides,
   };
 }
+
+test("a documented capacity debt keeps an otherwise usable candidate adoptable", () => {
+  assert.equal(planPlanningRepairCandidateAdoption(evidence({
+    candidate: { ...evidence().candidate, capacityPassed: false },
+    capacityDebtDocumented: true,
+  })).action, "adopt");
+});
+
+test("a capacity classification failure without documented debt must stay in planning", () => {
+  assert.deepEqual(planPlanningRepairCandidateAdoption(evidence({
+    candidate: { ...evidence().candidate, capacityPassed: false },
+    capacityDebtDocumented: false,
+  })), { action: "none", reason: "candidate_capacity_unusable" });
+});
+
+test("a stale queued shell with a saved draft candidate is adopted for the pending chapter", () => {
+  assert.deepEqual(planPlanningRepairCandidateAdoption(evidence({
+    job: {
+      ...evidence().job,
+      status: "queued",
+      pendingManualRecovery: true,
+      staleWithoutAnchor: true,
+    },
+  })), {
+    action: "adopt",
+    versionId: VERSION_ID,
+    volumeChapterId: VOLUME_CHAPTER_ID,
+    chapterId: CHAPTER_ID,
+    chapterOrder: 1,
+  });
+});
+
+test("a definitive no-output unknown preparation journal does not block candidate adoption", () => {
+  assert.equal(planPlanningRepairCandidateAdoption(evidence({
+    journal: {
+      ...evidence().journal,
+      hasUncertainStep: true,
+      definitiveNoOutputCode: "STRUCTURED_OUTPUT:output_limit",
+    },
+  })).action, "adopt");
+});
 
 test("a saved draft candidate of a terminal repair is adopted from the existing plan", () => {
   assert.deepEqual(planPlanningRepairCandidateAdoption(evidence()), {
@@ -88,6 +134,8 @@ for (const [reason, patch] of Object.entries({
   "a job owned by another task": { job: { ...evidence().job, payloadWorkflowTaskId: "other-task" } },
   "a job that still has an anchor": { job: { ...evidence().job, currentItemKey: CHAPTER_ID } },
   "a job that is not failed": { job: { ...evidence().job, status: "queued" } },
+  "a queued job that is not proven stale": { job: { ...evidence().job, status: "queued", pendingManualRecovery: true, staleWithoutAnchor: false } },
+  "saved prose elsewhere in the saved range": { rangeHasProse: true },
   "an active job lease": { job: { ...evidence().job, leaseActive: true } },
   "a cancelled job": { job: { ...evidence().job, cancelRequestedAt: new Date(1) } },
   "changed written source": { writtenSourceUnchanged: false },
@@ -287,6 +335,67 @@ for (const [reason, plan] of Object.entries({
     assert.equal(result.retire, false);
   });
 }
+
+const OUTPUT_LIMIT = "[STRUCTURED_OUTPUT:output_limit] [novel.volume.planning_repair@v16] 模型输出达到额度上限（12000 tokens），结果被截断。";
+
+test("a definitive output-limit unknown preparation step may be superseded", () => {
+  const result = planPreparationJournalRetirement({
+    journal: journal({
+      error: OUTPUT_LIMIT,
+      steps: {
+        prepare: { status: "failed", error: OUTPUT_LIMIT },
+        "prepare.execution_contract": { status: "unknown", external: true, error: OUTPUT_LIMIT },
+      },
+    }),
+    expectedOperationId: `pipeline:${JOB_ID}:${CHAPTER_ID}`,
+    taskId: TASK_ID,
+    now: 1000,
+    expectedChapterFingerprint: "chapter-fingerprint",
+    allowDefinitiveNoOutput: { code: "STRUCTURED_OUTPUT:output_limit" },
+  });
+  assert.deepEqual(result, { retire: true });
+});
+
+test("the definitive no-output allowance still refuses a mismatched or running unknown call", () => {
+  const mismatchedRoot = planPreparationJournalRetirement({
+    journal: journal({
+      error: "外部调用结果未确认。",
+      steps: { "prepare.execution_contract": { status: "unknown", external: true, error: OUTPUT_LIMIT } },
+    }),
+    expectedOperationId: `pipeline:${JOB_ID}:${CHAPTER_ID}`,
+    taskId: TASK_ID,
+    now: 1000,
+    expectedChapterFingerprint: "chapter-fingerprint",
+    allowDefinitiveNoOutput: { code: "STRUCTURED_OUTPUT:output_limit" },
+  });
+  assert.equal(mismatchedRoot.retire, false);
+
+  const mismatchedStep = planPreparationJournalRetirement({
+    journal: journal({
+      error: OUTPUT_LIMIT,
+      steps: { "prepare.execution_contract": { status: "unknown", external: true, error: "网络中断，结果未知。" } },
+    }),
+    expectedOperationId: `pipeline:${JOB_ID}:${CHAPTER_ID}`,
+    taskId: TASK_ID,
+    now: 1000,
+    expectedChapterFingerprint: "chapter-fingerprint",
+    allowDefinitiveNoOutput: { code: "STRUCTURED_OUTPUT:output_limit" },
+  });
+  assert.equal(mismatchedStep.retire, false);
+
+  const runningStep = planPreparationJournalRetirement({
+    journal: journal({
+      error: OUTPUT_LIMIT,
+      steps: { "prepare.execution_contract": { status: "running", external: true, error: OUTPUT_LIMIT } },
+    }),
+    expectedOperationId: `pipeline:${JOB_ID}:${CHAPTER_ID}`,
+    taskId: TASK_ID,
+    now: 1000,
+    expectedChapterFingerprint: "chapter-fingerprint",
+    allowDefinitiveNoOutput: { code: "STRUCTURED_OUTPUT:output_limit" },
+  });
+  assert.deepEqual(runningStep, { retire: false, reason: "running_step" });
+});
 
 function fakeTransaction(row) {
   const calls = { upserts: [], deletes: [] };

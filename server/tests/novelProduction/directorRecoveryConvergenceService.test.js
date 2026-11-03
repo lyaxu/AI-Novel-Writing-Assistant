@@ -7,7 +7,7 @@ const sharedRecovery = require("@ai-novel/shared/types/planningRepair/recovery")
 // Wiring-level test for the explicit-continue convergence: a stale repair session is ended, the
 // saved candidate is adopted, and only then is the lost-anchor execution binding rebuilt. Every
 // write is a stubbed factory here; the individual services keep their own transactional tests.
-function fixture({ activeCommand = false, preserve = false } = {}) {
+function fixture({ activeCommand = false, preserve = false, seedPhase = "reviewing" } = {}) {
   const calls = [];
   const task = {
     id: "director",
@@ -19,7 +19,7 @@ function fixture({ activeCommand = false, preserve = false } = {}) {
     updatedAt: new Date(1000),
     seedPayloadJson: JSON.stringify({
       autoExecution: { enabled: true, mode: "chapter_range", startOrder: 1, endOrder: 3, pipelineJobId: "old-job", nextChapterId: "chapter-1", nextChapterOrder: 1 },
-      planningRepair: { version: 1, key: "repair", phase: "reviewing", candidateVersionId: "candidate", history: [], rounds: 0, maxRounds: 2 },
+      planningRepair: { version: 1, key: "repair", phase: seedPhase, candidateVersionId: "candidate", history: [], rounds: 0, maxRounds: 2 },
     }),
   };
   const prisma = {
@@ -96,6 +96,13 @@ test("an explicit repair authorization preserves the session and never adopts it
   assert.equal(result.changed, false);
   assert.equal(f.calls.some(entry => entry === "abandon" || (Array.isArray(entry) && entry[0] === "adopt")), false);
   assert.equal(f.calls.some(entry => Array.isArray(entry) && entry[0] === "rebuild"), true);
+});
+
+test("a stale recovery key from a terminal repair still adopts its saved candidate", async () => {
+  const f = fixture({ preserve: true, seedPhase: "abandoned" });
+  const result = await f.run();
+  assert.ok(result.actions.includes("adopted_planning_repair_candidate"));
+  assert.equal(f.calls.some(entry => entry === "abandon"), false, "an already terminal session is not abandoned again");
 });
 
 test("an active command blocks the stale-repair conversion and candidate adoption", async () => {

@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { PREPARATION_JOURNAL_STEP_KEYS } from "./PlanningRepairCandidateAdoptionPlan";
+import { readDefinitiveNoOutputCode } from "./StaleRangeJobActivity";
 
 /**
  * Retiring a superseded preparation journal.
@@ -28,14 +29,25 @@ export interface PreparationJournalRecordLike {
   expectedChapter?: { content?: string | null } | null;
   expectedFingerprint?: string | null;
   partialText?: string | null;
-  steps?: Record<string, { status?: string; planningPause?: { outcome?: string } } | null> | null;
+  steps?: Record<string, { status?: string; planningPause?: { outcome?: string }; error?: string } | null> | null;
   values?: Record<string, unknown> | null;
   recoveryDecision?: { kind?: string } | null;
+  error?: string | null;
 }
 
 export type PreparationJournalRetirementPlan =
   | { retire: true }
   | { retire: false; reason: string };
+
+/**
+ * A `STRUCTURED_OUTPUT:output_limit` (or equivalent definitive no-output) failure is a *known*
+ * failure: the provider truncated the call and no usable result exists. Such an `unknown` marker can
+ * be archived as superseded, but only when the whole journal root error and the unknown step error
+ * carry the same definitive structured code. A genuinely unresolved/unknown call still blocks.
+ */
+export interface DefinitiveNoOutputRetirement {
+  code: string;
+}
 
 export function planPreparationJournalRetirement(input: {
   journal: PreparationJournalRecordLike;
@@ -44,6 +56,7 @@ export function planPreparationJournalRetirement(input: {
   now: number;
   /** Chapter fingerprint the journal was opened for; adoption runs it before changing the chapter. */
   expectedChapterFingerprint?: string | null;
+  allowDefinitiveNoOutput?: DefinitiveNoOutputRetirement | null;
 }): PreparationJournalRetirementPlan {
   const { journal } = input;
   if (journal.operationId !== input.expectedOperationId) return { retire: false, reason: "operation_mismatch" };
@@ -58,14 +71,30 @@ export function planPreparationJournalRetirement(input: {
     && journal.expectedFingerprint !== input.expectedChapterFingerprint) {
     return { retire: false, reason: "chapter_contract_changed" };
   }
+  const definitiveCode = input.allowDefinitiveNoOutput?.code ?? null;
+  if (definitiveCode !== null) {
+    const rootCode = readDefinitiveNoOutputCode([journal.error]);
+    if (rootCode !== definitiveCode) return { retire: false, reason: "journal_root_failure_not_definitive" };
+  }
   const steps = journal.steps && typeof journal.steps === "object" ? journal.steps : {};
   const entries = Object.entries(steps);
   if (entries.length === 0) return { retire: false, reason: "no_preparation_steps" };
   for (const [key, step] of entries) {
     if (!PREPARATION_KEYS.has(key)) return { retire: false, reason: `non_preparation_step:${key}` };
     const status = step?.status;
-    if (status === "unknown" || status === "running") return { retire: false, reason: "uncertain_step" };
-    if (step?.planningPause?.outcome === "unknown") return { retire: false, reason: "uncertain_planning_pause" };
+    if (status === "running") return { retire: false, reason: "running_step" };
+    if (status === "unknown") {
+      const stepCode = readDefinitiveNoOutputCode([step?.error]);
+      if (definitiveCode === null || stepCode !== definitiveCode) {
+        return { retire: false, reason: "uncertain_step" };
+      }
+    }
+    if (step?.planningPause?.outcome === "unknown") {
+      const pauseCode = readDefinitiveNoOutputCode([step?.error]);
+      if (definitiveCode === null || pauseCode !== definitiveCode) {
+        return { retire: false, reason: "uncertain_planning_pause" };
+      }
+    }
   }
   const values = journal.values && typeof journal.values === "object" ? journal.values : {};
   if (values["stream.started"] && !(steps["stream.normalize"]?.status === "done")) {
@@ -103,6 +132,7 @@ export async function retirePreparationJournalIfSafe(
     taskId: string;
     now: number;
     expectedChapterFingerprint?: string | null;
+    allowDefinitiveNoOutput?: DefinitiveNoOutputRetirement | null;
   },
 ): Promise<PreparationJournalRetirementResult> {
   const row = await tx.chapterArtifactSyncCheckpoint.findUnique({
@@ -122,6 +152,7 @@ export async function retirePreparationJournalIfSafe(
     taskId: input.taskId,
     now: input.now,
     expectedChapterFingerprint: input.expectedChapterFingerprint,
+    allowDefinitiveNoOutput: input.allowDefinitiveNoOutput ?? null,
   });
   if (!plan.retire) return { status: "blocked", reason: plan.reason };
   const archiveContentHash = `${input.expectedOperationId}:superseded`;

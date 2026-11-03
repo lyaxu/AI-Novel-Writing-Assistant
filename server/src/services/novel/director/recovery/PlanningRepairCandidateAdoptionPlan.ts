@@ -27,6 +27,13 @@ export interface AdoptionJobEvidence {
   payloadWorkflowTaskId: string | null;
   leaseActive: boolean;
   cancelRequestedAt: unknown | null;
+  /** Queued/running row proven to have no owner/lease/fresh heartbeat, no anchor and no output. */
+  staleWithoutAnchor: boolean;
+  /** Raw activity timestamps let the transactional writer re-check the stale classification. */
+  updatedAtMs?: number | null;
+  heartbeatAtMs?: number | null;
+  startedAtMs?: number | null;
+  completedCount?: number;
 }
 
 export interface AdoptionJournalEvidence {
@@ -35,6 +42,8 @@ export interface AdoptionJournalEvidence {
   /** A preparation pause may only be superseded; saved prose or post-preparation work must not. */
   hasWorkBeyondPreparation: boolean;
   belongsToPreviousJob: boolean;
+  /** Shared definitive no-output code for every failed/unknown preparation step, else null. */
+  definitiveNoOutputCode: string | null;
 }
 
 export interface AdoptionCandidateEvidence {
@@ -44,8 +53,10 @@ export interface AdoptionCandidateEvidence {
   volumeChapterId: string | null;
   chapterExists: boolean;
   chapterOrder: number | null;
-  /** taskSheet + sceneCards present and pass the shared execution-contract/capacity shape. */
+  /** taskSheet + sceneCards present and pass the shared execution-contract shape. */
   contractUsable: boolean;
+  /** Deterministic capacity gate result for the candidate's scene plan. */
+  capacityPassed: boolean;
 }
 
 export interface AdoptionTargetChapterEvidence {
@@ -69,10 +80,19 @@ export interface PlanningRepairCandidateAdoptionEvidence {
   executionRange: { startOrder: number; endOrder: number } | null;
   pipelineJobId: string | null;
   job: AdoptionJobEvidence | null;
+  /** Any chapter inside the execution range already has prose; adoption never overwrites it. */
+  rangeHasProse: boolean;
   targetChapter: AdoptionTargetChapterEvidence | null;
   candidate: AdoptionCandidateEvidence | null;
   journal: AdoptionJournalEvidence | null;
   writtenSourceUnchanged: boolean;
+  /**
+   * The repair session already persisted bounded capacity debt for this chapter (deferred duties
+   * handed to later unwritten chapters). A deterministic capacity-plan classification violation is
+   * then quality debt the policy already accepted, not a reason to lose the candidate; the debt
+   * stays visible in the adoption receipt. Shape/contract violations still block.
+   */
+  capacityDebtDocumented: boolean;
 }
 
 export type PlanningRepairCandidateAdoptionPlan =
@@ -95,7 +115,7 @@ function isTerminalOrExhaustedRepair(phase: string | null, pendingWork: boolean)
 
 function journalBlocksAdoption(journal: AdoptionJournalEvidence | null): string | null {
   if (!journal) return null;
-  if (journal.hasUncertainStep) return "journal_unknown_call";
+  if (journal.hasUncertainStep && !journal.definitiveNoOutputCode) return "journal_unknown_call";
   if (journal.status !== "paused") return "journal_not_paused";
   if (journal.hasWorkBeyondPreparation) return "journal_has_unfinished_work";
   if (!journal.belongsToPreviousJob) return "journal_owned_by_other_execution";
@@ -126,10 +146,12 @@ export function planPlanningRepairCandidateAdoption(
     return { action: "none", reason: "job_owned_by_other_task" };
   }
   if (job.cancelRequestedAt) return { action: "none", reason: "job_cancelled" };
-  if (job.status !== "failed") return { action: "none", reason: "job_not_failed" };
+  const staleLiveWithoutAnchor = (job.status === "queued" || job.status === "running") && job.staleWithoutAnchor;
+  if (job.status !== "failed" && !staleLiveWithoutAnchor) return { action: "none", reason: "job_not_retirable" };
   // A job that still carries an anchor has an ordinary recovery route; never adopt around it.
   if (job.currentItemKey) return { action: "none", reason: "job_has_anchor" };
   if (job.leaseActive) return { action: "none", reason: "job_lease_active" };
+  if (evidence.rangeHasProse) return { action: "none", reason: "range_has_prose" };
   if (!evidence.writtenSourceUnchanged) return { action: "none", reason: "written_source_changed" };
   if (!evidence.candidateVersionId) return { action: "none", reason: "no_candidate_version" };
   const candidate = evidence.candidate;
@@ -145,6 +167,11 @@ export function planPlanningRepairCandidateAdoption(
     return { action: "none", reason: "candidate_chapter_order_mismatch" };
   }
   if (!candidate.contractUsable) return { action: "none", reason: "candidate_contract_unusable" };
+  // A deterministic capacity classification violation is only adoptable when the repair session
+  // already recorded a bounded capacity debt for this chapter; otherwise keep planning in charge.
+  if (!candidate.capacityPassed && !evidence.capacityDebtDocumented) {
+    return { action: "none", reason: "candidate_capacity_unusable" };
+  }
   if (evidence.executionRange
     && (target.order < evidence.executionRange.startOrder || target.order > evidence.executionRange.endOrder)) {
     return { action: "none", reason: "target_chapter_out_of_range" };

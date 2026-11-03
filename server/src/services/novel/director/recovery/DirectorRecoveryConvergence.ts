@@ -153,6 +153,12 @@ export interface StalePlanRepairExecutionJobEvidence {
   cancelRequestedAt: unknown | null;
   startOrder: number;
   endOrder: number;
+  /**
+   * Queued/running row with no owner/lease/heartbeat, old update, no anchor and a definitive
+   * no-output failure: it is a paused shell, not a live worker. `pendingManualRecovery` alone is
+   * not enough to tell those apart.
+   */
+  staleWithoutAnchor: boolean;
 }
 
 export interface StalePlanRepairExecutionChapterEvidence {
@@ -170,6 +176,11 @@ export interface StalePlanRepairExecutionJournalEvidence {
   hasWorkBeyondPreparation: boolean;
   /** The journal operation must belong to the range job that is about to be superseded. */
   belongsToPreviousJob: boolean;
+  /**
+   * Shared structured code when every failed/unknown preparation step is a definitive no-output
+   * failure (truncated/incomplete output). Null keeps the strict `unknown` pause.
+   */
+  definitiveNoOutputCode: string | null;
 }
 
 export interface StalePlanRepairExecutionEvidence {
@@ -185,6 +196,8 @@ export interface StalePlanRepairExecutionEvidence {
   executionRange: { startOrder: number; endOrder: number } | null;
   pipelineJobId: string | null;
   job: StalePlanRepairExecutionJobEvidence | null;
+  /** Any chapter inside the saved execution range already has prose; rebuild never overwrites it. */
+  rangeHasProse: boolean;
   /** The chapter the director is about to write, resolved from the saved execution state. */
   nextChapter: StalePlanRepairExecutionChapterEvidence | null;
   /** The paused production journal for `nextChapter`; unknown external calls block any rebuild. */
@@ -240,12 +253,24 @@ export function planStalePlanRepairExecutionRebuild(
   // A failed job that lost its chapter anchor is already terminal bookkeeping: its pending flag may
   // legitimately be false (nothing is waiting to resume), so it must not be read as "still live".
   const failedWithoutAnchor = job.status === "failed" && lostAnchor;
-  if (!job.pendingManualRecovery && !failedWithoutAnchor) return { action: "none", reason: "job_not_paused" };
+  // A queued/running row may be a paused shell left by a definitive planning failure. It is only
+  // accepted when the caller proved it has no owner/lease/fresh heartbeat and a no-output error.
+  const staleLiveWithoutAnchor = (job.status === "queued" || job.status === "running")
+    && job.staleWithoutAnchor;
+  if (!job.pendingManualRecovery && !failedWithoutAnchor && !staleLiveWithoutAnchor) {
+    return { action: "none", reason: "job_not_paused" };
+  }
   if (job.leaseActive) return { action: "none", reason: "job_lease_active" };
   if (!["queued", "running", "failed"].includes(job.status)) return { action: "none", reason: "job_status_terminal" };
+  if ((job.status === "queued" || job.status === "running") && !staleLiveWithoutAnchor) {
+    return { action: "none", reason: "job_live" };
+  }
   // The old job is only unrecoverable when it lost its anchor or points outside the saved scope.
   if (!lostAnchor && !outsideSavedScope) return { action: "none", reason: "job_still_recoverable" };
-  if (evidence.journal?.hasUncertainStep) return { action: "none", reason: "journal_unknown_call" };
+  if (evidence.rangeHasProse) return { action: "none", reason: "range_has_prose" };
+  if (evidence.journal?.hasUncertainStep && !evidence.journal.definitiveNoOutputCode) {
+    return { action: "none", reason: "journal_unknown_call" };
+  }
   if (evidence.journal && evidence.journal.status !== "paused") {
     return { action: "none", reason: "journal_not_paused" };
   }

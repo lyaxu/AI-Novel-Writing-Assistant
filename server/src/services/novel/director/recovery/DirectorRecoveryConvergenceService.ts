@@ -283,8 +283,12 @@ export class DirectorRecoveryConvergenceService {
     // 5. A terminal repair may have saved its repaired chapter contract only as a draft
     //    `VolumePlanVersion` (volume rows still empty). Adopt that candidate before the execution
     //    rebuild so the recovered chapter starts from the reviewed plan instead of regenerating it.
-    //    An explicit repair authorization means the caller wants the repair session, so skip this.
-    if (!input.preservePlanningRepairSession && !activeCommand) {
+    //    An explicit repair authorization only preserves the session while it is still actionable;
+    //    a terminal (abandoned/committed) repair has nothing left to preserve, so its saved
+    //    candidate is adopted even when a stale recovery key is supplied.
+    const currentRepairPhase = readRepair(seed)?.phase ?? null;
+    const repairIsTerminal = Boolean(currentRepairPhase && isTerminalPlanningRepairPhase(currentRepairPhase));
+    if ((!input.preservePlanningRepairSession || repairIsTerminal) && !activeCommand) {
       const freshTask = await prisma.novelWorkflowTask.findUnique({ where: { id: input.taskId } });
       if (freshTask) {
         try {

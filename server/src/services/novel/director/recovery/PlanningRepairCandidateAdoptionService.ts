@@ -14,6 +14,12 @@ import {
   type PlanningRepairCandidateAdoptionEvidence,
 } from "./PlanningRepairCandidateAdoptionPlan";
 import { retirePreparationJournalIfSafe } from "./PreparationJournalRetirement";
+import {
+  hasEffectiveRangeJobActivity,
+  isStaleRangeJobWithoutAnchor,
+  readDefinitiveNoOutputCode,
+  type RangeJobLike,
+} from "./StaleRangeJobActivity";
 
 const ACTIVE_COMMAND_STATUSES = ["queued", "leased", "running"] as const;
 const PREPARATION_KEYS = new Set<string>(PREPARATION_JOURNAL_STEP_KEYS);
@@ -110,6 +116,7 @@ function readRepair(seed: Seed): {
   volumeId: string | null;
   chapterOrder: number | null;
   pendingWork: boolean;
+  capacityDebtCount: number;
 } | null {
   const repair = seed.planningRepair;
   if (!record(repair) || repair.version !== 1 || typeof repair.key !== "string"
@@ -123,6 +130,7 @@ function readRepair(seed: Seed): {
     volumeId: typeof repair.volumeId === "string" ? repair.volumeId : null,
     chapterOrder: typeof repair.chapterOrder === "number" ? repair.chapterOrder : null,
     pendingWork: Boolean(repair.pendingOperation || repair.repairOutputPending || recoveryAction || recovery?.pendingGrant),
+    capacityDebtCount: Array.isArray(repair.capacityDebt) ? repair.capacityDebt.length : 0,
   };
 }
 
@@ -160,6 +168,57 @@ function hasWorkBeyondPreparation(journal: JournalRecord): boolean {
   return Object.keys(steps).some(key => !PREPARATION_KEYS.has(key));
 }
 
+type JobRowLike = {
+  id: string;
+  novelId: string;
+  status: string;
+  pendingManualRecovery: boolean;
+  currentItemKey: string | null;
+  executionOwner: string | null;
+  executionLeaseExpiresAt: Date | null;
+  heartbeatAt: Date | null;
+  updatedAt: Date;
+  startedAt: Date | null;
+  payload: string | null;
+  completedCount: number;
+  error: string | null;
+};
+
+function jobLikeFromRow(row: JobRowLike): RangeJobLike {
+  return {
+    id: row.id,
+    novelId: row.novelId,
+    status: row.status,
+    pendingManualRecovery: row.pendingManualRecovery,
+    currentItemKey: row.currentItemKey,
+    executionOwner: row.executionOwner,
+    executionLeaseExpiresAt: row.executionLeaseExpiresAt,
+    heartbeatAt: row.heartbeatAt,
+    updatedAt: row.updatedAt,
+    startedAt: row.startedAt,
+    payloadWorkflowTaskId: readPayloadWorkflowTaskId(row.payload),
+    completedCount: row.completedCount,
+    error: row.error,
+  };
+}
+
+/**
+ * The journal may carry `unknown` preparation steps. They are only converted into a definitive
+ * failure when the journal root error and every step error share the same structured no-output
+ * code (truncated/incomplete output). Any other failure text keeps the strict unknown pause.
+ */
+function journalDefinitiveNoOutputCode(journal: JournalRecord, jobError: string | null): string | null {
+  const steps = record(journal.steps) ? journal.steps : {};
+  const stepErrors: Array<string | null | undefined> = [];
+  for (const step of Object.values(steps)) {
+    if (!record(step)) continue;
+    if (step.status === "running") return null;
+    if (typeof step.error === "string") stepErrors.push(step.error);
+  }
+  const rootError = typeof journal.error === "string" ? journal.error : null;
+  return readDefinitiveNoOutputCode([jobError, rootError, ...stepErrors]);
+}
+
 function readCandidateChapter(
   document: VolumePlanDocument,
   volumeId: string,
@@ -171,8 +230,17 @@ function readCandidateChapter(
   return chapter ? { volume, chapter } : null;
 }
 
-function candidateContractUsable(novelId: string, volumeId: string, chapter: VolumeChapterPlan): boolean {
-  if (!chapter.taskSheet?.trim() || !chapter.sceneCards?.trim()) return false;
+interface CandidateContractCheck {
+  /** Shape-only: taskSheet/sceneCards present and structurally enterable. */
+  contractUsable: boolean;
+  /** Deterministic capacity plan classification result (deferred-duties debt may fail this). */
+  capacityPassed: boolean;
+}
+
+function checkCandidateContract(novelId: string, volumeId: string, chapter: VolumeChapterPlan): CandidateContractCheck {
+  if (!chapter.taskSheet?.trim() || !chapter.sceneCards?.trim()) {
+    return { contractUsable: false, capacityPassed: false };
+  }
   const shape = assessChapterExecutionContractShape({
     novelId,
     volumeId,
@@ -192,13 +260,15 @@ function candidateContractUsable(novelId: string, volumeId: string, chapter: Vol
     taskSheet: chapter.taskSheet,
     sceneCards: chapter.sceneCards,
   });
-  if (!shape.canEnterExecution) return false;
   const capacity = evaluateCandidateCapacity({
     targetWordCount: chapter.targetWordCount,
     exclusiveEvent: chapter.exclusiveEvent,
     sceneCards: chapter.sceneCards,
   }, { allowDeferable: true });
-  return !(capacity.capacityPlanPresent && !capacity.passed);
+  return {
+    contractUsable: shape.canEnterExecution,
+    capacityPassed: !(capacity.capacityPlanPresent && !capacity.passed),
+  };
 }
 
 const CHAPTER_SNAPSHOT_SELECT = {
@@ -248,6 +318,8 @@ export class PlanningRepairCandidateAdoptionService {
         chapterId: plan.chapterId,
         chapterOrder: plan.chapterOrder,
         oldJobId: inspection.evidence.pipelineJobId,
+        capacityDebtAccepted: !inspection.evidence.candidate?.capacityPassed
+          && inspection.evidence.capacityDebtDocumented,
       });
       return {
         changed: true,
@@ -280,20 +352,41 @@ async function inspectDefault(input: { task: CandidateAdoptionTaskRow; trigger: 
     ? autoExecution.pipelineJobId.trim()
     : null;
   const now = Date.now();
-  const [job, activeJobCount, activeCommandCount] = await Promise.all([
+  const executionRange = readExecutionRange(autoExecution);
+  const jobSelect = {
+    id: true, novelId: true, status: true, pendingManualRecovery: true, currentItemKey: true,
+    payload: true, cancelRequestedAt: true, executionOwner: true, executionLeaseExpiresAt: true,
+    heartbeatAt: true, updatedAt: true, startedAt: true, completedCount: true, error: true,
+    startOrder: true, endOrder: true,
+  } as const;
+  const [job, queuedAndRunningJobs, activeCommandCount] = await Promise.all([
     pipelineJobId
-      ? prisma.generationJob.findUnique({
-        where: { id: pipelineJobId },
-        select: {
-          id: true, novelId: true, status: true, pendingManualRecovery: true, currentItemKey: true,
-          payload: true, cancelRequestedAt: true, executionOwner: true, executionLeaseExpiresAt: true,
-        },
-      })
+      ? prisma.generationJob.findUnique({ where: { id: pipelineJobId }, select: jobSelect })
       : Promise.resolve(null),
-    prisma.generationJob.count({ where: { novelId: task.novelId, status: { in: ["queued", "running"] } } }),
+    prisma.generationJob.findMany({
+      where: { novelId: task.novelId, status: { in: ["queued", "running"] } },
+      select: jobSelect,
+    }),
     prisma.directorRunCommand.count({ where: { taskId: task.id, status: { in: [...ACTIVE_COMMAND_STATUSES] } } }),
   ]);
-  const executionRange = readExecutionRange(autoExecution);
+  const otherQueuedJobs = queuedAndRunningJobs.filter(row => row.id !== pipelineJobId);
+  const targetJobActive = job && (job.status === "queued" || job.status === "running")
+    ? hasEffectiveRangeJobActivity(jobLikeFromRow(job), { now })
+    : false;
+  const activeJobInNovel = otherQueuedJobs.length > 0 || targetJobActive;
+  const rangeStart = executionRange?.startOrder ?? (typeof job?.startOrder === "number" ? job.startOrder : null);
+  const rangeEnd = executionRange?.endOrder ?? (typeof job?.endOrder === "number" ? job.endOrder : null);
+  const rangeProseCount = rangeStart !== null && rangeEnd !== null && rangeEnd >= rangeStart
+    ? await prisma.chapter.count({
+      where: {
+        novelId: task.novelId,
+        order: { gte: rangeStart, lte: rangeEnd },
+        content: { not: null },
+        NOT: { content: "" },
+      },
+    })
+    : 0;
+  const rangeHasProse = rangeProseCount > 0;
   const volumeChapter = repair.chapterId
     ? await prisma.volumeChapterPlan.findUnique({
       where: { id: repair.chapterId },
@@ -368,6 +461,7 @@ async function inspectDefault(input: { task: CandidateAdoptionTaskRow; trigger: 
     hasWorkBeyondPreparation: hasWorkBeyondPreparation(journal),
     belongsToPreviousJob: Boolean(job && typeof journal.operationId === "string"
       && journal.operationId === `pipeline:${job.id}:${chapter.id}`),
+    definitiveNoOutputCode: journalDefinitiveNoOutputCode(journal, job?.error ?? null),
   } : null;
   const jobEvidence = job ? {
     id: job.id,
@@ -378,7 +472,19 @@ async function inspectDefault(input: { task: CandidateAdoptionTaskRow; trigger: 
     payloadWorkflowTaskId: readPayloadWorkflowTaskId(job.payload),
     leaseActive: liveLease(job.executionOwner, job.executionLeaseExpiresAt, now),
     cancelRequestedAt: job.cancelRequestedAt,
+    staleWithoutAnchor: isStaleRangeJobWithoutAnchor(jobLikeFromRow(job), {
+      novelId: task.novelId,
+      taskId: task.id,
+      now,
+    }),
+    updatedAtMs: job.updatedAt.getTime(),
+    heartbeatAtMs: job.heartbeatAt?.getTime() ?? null,
+    startedAtMs: job.startedAt?.getTime() ?? null,
+    completedCount: job.completedCount,
   } : null;
+  const candidateCheck = candidateChapter && repair.volumeId
+    ? checkCandidateContract(task.novelId, repair.volumeId, candidateChapter)
+    : null;
   const candidateEvidence = version ? {
     versionId: version.id,
     status: version.status,
@@ -387,7 +493,8 @@ async function inspectDefault(input: { task: CandidateAdoptionTaskRow; trigger: 
     volumeChapterId: candidateChapter?.id ?? null,
     chapterExists: Boolean(candidateChapter),
     chapterOrder: candidateChapter?.chapterOrder ?? null,
-    contractUsable: Boolean(candidateChapter && candidateContractUsable(task.novelId, repair.volumeId!, candidateChapter)),
+    contractUsable: Boolean(candidateCheck?.contractUsable),
+    capacityPassed: Boolean(candidateCheck?.capacityPassed),
   } : null;
   const evidence: PlanningRepairCandidateAdoptionEvidence = {
     taskId: task.id,
@@ -396,13 +503,14 @@ async function inspectDefault(input: { task: CandidateAdoptionTaskRow; trigger: 
       || task.status === "running",
     cancelRequested: Boolean(task.cancelRequestedAt) || task.status === "cancelled",
     activeCommand: activeCommandCount > 0,
-    activeJobInNovel: activeJobCount > 0,
+    activeJobInNovel,
     repairPhase: repair.phase,
     repairPendingWork: repair.pendingWork,
     candidateVersionId,
     executionRange,
     pipelineJobId,
     job: jobEvidence,
+    rangeHasProse,
     targetChapter: {
       id: chapter.id,
       order: chapter.order,
@@ -412,6 +520,7 @@ async function inspectDefault(input: { task: CandidateAdoptionTaskRow; trigger: 
     candidate: candidateEvidence,
     journal: journalEvidence,
     writtenSourceUnchanged,
+    capacityDebtDocumented: repair.capacityDebtCount > 0,
   };
   if (!candidateDocument || !candidateChapter) {
     // Still return the inspection so the pure planner can report the precise reason.
@@ -480,7 +589,11 @@ async function applyDefault(input: {
       return { changed: false as const, reason: "candidate_unreadable" };
     }
     const candidateChapter = readCandidateChapter(candidateDocument, repair.volumeId ?? "", plan.volumeChapterId)?.chapter;
-    if (!candidateChapter || !candidateContractUsable(task.novelId!, repair.volumeId ?? "", candidateChapter)) {
+    const candidateCheck = candidateChapter && repair.volumeId
+      ? checkCandidateContract(task.novelId!, repair.volumeId, candidateChapter)
+      : null;
+    if (!candidateChapter || !candidateCheck?.contractUsable
+      || (!candidateCheck.capacityPassed && repair.capacityDebtCount === 0)) {
       return { changed: false as const, reason: "candidate_contract_unusable" };
     }
     const chapter = await tx.chapter.findFirst({
@@ -503,16 +616,38 @@ async function applyDefault(input: {
       select: {
         id: true, novelId: true, status: true, pendingManualRecovery: true, currentItemKey: true, payload: true,
         cancelRequestedAt: true, executionOwner: true, executionLeaseExpiresAt: true,
+        heartbeatAt: true, updatedAt: true, startedAt: true, completedCount: true, error: true,
+        startOrder: true, endOrder: true,
       },
     });
-    if (!job || job.novelId !== task.novelId || job.status !== "failed" || job.currentItemKey
+    const expectedJob = inspection.evidence.job;
+    if (!job || job.novelId !== task.novelId || job.currentItemKey
       || job.cancelRequestedAt || liveLease(job.executionOwner, job.executionLeaseExpiresAt, inspection.now)
-      || readPayloadWorkflowTaskId(job.payload) !== task.id) {
+      || readPayloadWorkflowTaskId(job.payload) !== task.id
+      || (expectedJob?.updatedAtMs != null && job.updatedAt.getTime() !== expectedJob.updatedAtMs)) {
       return { changed: false as const, reason: "job_changed" };
     }
-    if ((await tx.generationJob.count({
-      where: { novelId: task.novelId!, status: { in: ["queued", "running"] } },
-    })) > 0) return { changed: false as const, reason: "active_job" };
+    const jobLike = jobLikeFromRow(job);
+    const jobStaleLive = (job.status === "queued" || job.status === "running")
+      && isStaleRangeJobWithoutAnchor(jobLike, { novelId: task.novelId!, taskId: task.id, now: inspection.now });
+    if (job.status !== "failed" && !jobStaleLive) {
+      return { changed: false as const, reason: "job_changed" };
+    }
+    const otherActiveJobs = await tx.generationJob.count({
+      where: { novelId: task.novelId!, status: { in: ["queued", "running"] }, id: { not: job.id } },
+    });
+    if (otherActiveJobs > 0) return { changed: false as const, reason: "active_job" };
+    const rangeStart = inspection.evidence.executionRange?.startOrder ?? job.startOrder;
+    const rangeEnd = inspection.evidence.executionRange?.endOrder ?? job.endOrder;
+    const rangeProse = await tx.chapter.count({
+      where: {
+        novelId: task.novelId!,
+        order: { gte: rangeStart, lte: rangeEnd },
+        content: { not: null },
+        NOT: { content: "" },
+      },
+    });
+    if (rangeProse > 0) return { changed: false as const, reason: "range_has_prose" };
     if ((await tx.directorRunCommand.count({
       where: { taskId: task.id, status: { in: [...ACTIVE_COMMAND_STATUSES] } },
     })) > 0) return { changed: false as const, reason: "active_command" };
@@ -528,6 +663,9 @@ async function applyDefault(input: {
         targetWordCount: chapter.targetWordCount, mustAvoid: chapter.mustAvoid,
         conflictLevel: chapter.conflictLevel, revealLevel: chapter.revealLevel, hook: chapter.hook,
       }),
+      allowDefinitiveNoOutput: inspection.evidence.journal?.definitiveNoOutputCode
+        ? { code: inspection.evidence.journal.definitiveNoOutputCode }
+        : null,
     });
     if (journalRetirement.status === "blocked") {
       return { changed: false as const, reason: `journal_${journalRetirement.reason}` };
@@ -582,6 +720,10 @@ async function applyDefault(input: {
         adoptedAt: now.toISOString(),
         trigger,
         source: "terminal_planning_repair_candidate",
+        capacityDebtAccepted: !inspection.evidence.candidate?.capacityPassed && inspection.evidence.capacityDebtDocumented,
+        capacityDebt: record(freshSeed.planningRepair) && Array.isArray(freshSeed.planningRepair.capacityDebt)
+          ? freshSeed.planningRepair.capacityDebt
+          : [],
         writtenSourceFingerprint: record(freshSeed.planningRepairSnapshot)
           ? (freshSeed.planningRepairSnapshot as Seed).writtenSourceFingerprint ?? null
           : null,

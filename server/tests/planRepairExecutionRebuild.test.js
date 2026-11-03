@@ -36,13 +36,16 @@ function evidence(overrides = {}) {
       cancelRequestedAt: null,
       startOrder: 3,
       endOrder: 3,
+      staleWithoutAnchor: true,
     },
+    rangeHasProse: false,
     nextChapter: { id: CHAPTER_ID, order: 3, hasProse: false, hasUsablePlan: true },
     journal: {
       status: "paused",
       hasUncertainStep: false,
       hasWorkBeyondPreparation: false,
       belongsToPreviousJob: true,
+      definitiveNoOutputCode: null,
     },
     ...overrides,
   };
@@ -82,7 +85,7 @@ test("plan rebuild: active planning repair blocks convergence", () => {
 
 test("plan rebuild: unknown external call, live lease, active job or command all block", () => {
   assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({
-    journal: { status: "paused", hasUncertainStep: true },
+    journal: { ...evidence().journal, hasUncertainStep: true },
   })), { action: "none", reason: "journal_unknown_call" });
   assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({
     job: { ...evidence().job, leaseActive: true },
@@ -100,6 +103,48 @@ test("plan rebuild: unknown external call, live lease, active job or command all
   assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({
     job: { ...evidence().job, payloadWorkflowTaskId: "another-task" },
   })), { action: "none", reason: "job_owned_by_other_task" });
+});
+
+test("plan rebuild: a queued job without lease/heartbeat is only retired when proven stale", () => {
+  // The recorded real shape: status=queued, pendingManualRecovery=true, currentItemKey=null, no
+  // owner/lease/heartbeat, two-day-old update, error from a planning-repair output limit.
+  assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({
+    job: { ...evidence().job, pendingManualRecovery: true, staleWithoutAnchor: true },
+  })), {
+    action: "rebuild_execution",
+    previousJobId: JOB_ID,
+    targetChapterId: CHAPTER_ID,
+    targetChapterOrder: 3,
+  });
+  // A queued row that is not proven stale is live work, never a recovery target.
+  assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({
+    job: { ...evidence().job, pendingManualRecovery: false, staleWithoutAnchor: false },
+  })), { action: "none", reason: "job_not_paused" });
+  assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({
+    job: { ...evidence().job, pendingManualRecovery: true, staleWithoutAnchor: false },
+  })), { action: "none", reason: "job_live" });
+});
+
+test("plan rebuild: saved prose anywhere in the saved range blocks the rebuild", () => {
+  assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({ rangeHasProse: true })), {
+    action: "none",
+    reason: "range_has_prose",
+  });
+});
+
+test("plan rebuild: a definitive no-output unknown preparation call may be superseded", () => {
+  assert.deepEqual(planStalePlanRepairExecutionRebuild(evidence({
+    journal: {
+      ...evidence().journal,
+      hasUncertainStep: true,
+      definitiveNoOutputCode: "STRUCTURED_OUTPUT:output_limit",
+    },
+  })), {
+    action: "rebuild_execution",
+    previousJobId: JOB_ID,
+    targetChapterId: CHAPTER_ID,
+    targetChapterOrder: 3,
+  });
 });
 
 test("plan rebuild: a failed job with no chapter anchor and no pending flag still rebuilds", () => {
@@ -175,8 +220,11 @@ function createHarness(overrides = {}) {
     cancelRequestedAt: null,
     executionOwner: null,
     executionLeaseExpiresAt: null,
+    heartbeatAt: null,
+    startedAt: new Date("2026-10-30T08:00:00.000Z"),
+    completedCount: 0,
     updatedAt: new Date("2026-10-30T09:00:00.000Z"),
-    error: "[STRUCTURED_OUTPUT:schema_mismatch] 规划修复候选未通过复核",
+    error: "[STRUCTURED_OUTPUT:output_limit] 规划修复调用达到输出上限，已停止自动重试。",
   };
   const defaultChapter = {
     id: CHAPTER_ID,
@@ -207,6 +255,7 @@ function createHarness(overrides = {}) {
       calls.retirePreparationJournal.push(input);
       return overrides.retirePreparationJournal ?? { status: "retired", archiveContentHash: "archive" };
     },
+    rangeHasProse: async () => overrides.rangeHasProse ?? false,
     countActiveJobs: async () => overrides.activeJobCount ?? 0,
     updateTaskSeed: async (input) => {
       calls.updateTaskSeed.push(input);
@@ -244,7 +293,120 @@ test("rebuild service clears the dead binding and retires the old job while keep
   assert.equal(nextSeed.planningRepairExecutionRebuild.action, "rebuild_execution");
   assert.equal(nextSeed.planningRepairExecutionRebuild.previousJobId, JOB_ID);
   assert.match(calls.retireJob[0].supersedeMessage, /新的章节执行任务/);
-  assert.match(calls.retireJob[0].supersedeMessage, /schema_mismatch/);
+  assert.match(calls.retireJob[0].supersedeMessage, /输出上限/);
+});
+
+const OUTPUT_LIMIT_ERROR = "[STRUCTURED_OUTPUT:output_limit] [novel.volume.planning_repair@v16] 模型输出达到额度上限（12000 tokens），结果被截断。";
+const STALE_QUEUED_JOB = {
+  id: JOB_ID, novelId: NOVEL_ID, status: "queued", pendingManualRecovery: true,
+  currentItemKey: null, payload: JSON.stringify({ workflowTaskId: TASK_ID }),
+  startOrder: 3, endOrder: 3, cancelRequestedAt: null, executionOwner: null,
+  executionLeaseExpiresAt: null, heartbeatAt: null, startedAt: new Date("2026-10-30T08:00:00.000Z"),
+  completedCount: 0, updatedAt: new Date("2026-10-30T09:00:00.000Z"), error: OUTPUT_LIMIT_ERROR,
+};
+
+function definitiveOutputLimitJournal() {
+  return JSON.stringify({
+    operationId: `pipeline:${JOB_ID}:${CHAPTER_ID}`,
+    status: "paused",
+    expiresAt: 0,
+    request: { entry: "pipeline", workflowTaskId: TASK_ID },
+    expectedChapter: { id: CHAPTER_ID, content: "" },
+    expectedFingerprint: "fingerprint",
+    steps: {
+      prepare: { status: "failed", error: OUTPUT_LIMIT_ERROR },
+      "prepare.contract": { status: "failed", error: OUTPUT_LIMIT_ERROR },
+      "prepare.execution_contract": { status: "unknown", external: true, error: OUTPUT_LIMIT_ERROR },
+    },
+    error: OUTPUT_LIMIT_ERROR,
+    values: {},
+  });
+}
+
+test("rebuild service retires a stale queued shell with a definitive output-limit unknown journal", async () => {
+  const { service, task, calls } = createHarness({
+    job: STALE_QUEUED_JOB,
+    journalMetadata: definitiveOutputLimitJournal(),
+  });
+  const result = await service.converge({
+    task,
+    seed: JSON.parse(task.seedPayloadJson),
+    repairPhase: "abandoned",
+    activeCommand: false,
+    trigger: "director_command:continue",
+  });
+  assert.equal(result.changed, true);
+  assert.equal(result.action.action, "rebuild_execution");
+  assert.equal(calls.updateTaskSeed.length, 1);
+  assert.equal(calls.retirePreparationJournal.length, 1);
+  assert.deepEqual(calls.retirePreparationJournal[0].allowDefinitiveNoOutput, {
+    code: "STRUCTURED_OUTPUT:output_limit",
+  });
+  assert.equal(calls.retirePreparationJournal[0].jobId, JOB_ID);
+  assert.equal(calls.retireJob.length, 1);
+  assert.equal(calls.retireJob[0].job.status, "queued");
+  const nextSeed = JSON.parse(calls.updateTaskSeed[0].nextSeedPayloadJson);
+  assert.equal(nextSeed.autoExecution.pipelineJobId, null);
+  assert.equal(nextSeed.autoExecution.nextChapterId, CHAPTER_ID);
+  assert.equal(nextSeed.autoExecution.startOrder, 1, "the saved execution scope is unchanged");
+  assert.equal(nextSeed.autoExecution.endOrder, 3);
+  assert.equal(nextSeed.planningRepairExecutionRebuild.journalSuperseded, true);
+});
+
+test("rebuild service keeps the pause for an unknown call without the definitive no-output code", async () => {
+  const journal = JSON.parse(definitiveOutputLimitJournal());
+  journal.steps["prepare.execution_contract"] = {
+    status: "unknown", external: true, error: "外部调用结果未确认：网络中断。",
+  };
+  journal.error = "外部调用结果未确认：网络中断。";
+  const { service, task, calls } = createHarness({
+    job: STALE_QUEUED_JOB,
+    journalMetadata: JSON.stringify(journal),
+  });
+  const result = await service.converge({
+    task,
+    seed: JSON.parse(task.seedPayloadJson),
+    repairPhase: "abandoned",
+    activeCommand: false,
+    trigger: "director_command:continue",
+  });
+  assert.equal(result.changed, false);
+  assert.equal(result.reason, "journal_unknown_call");
+  assert.equal(calls.updateTaskSeed.length, 0);
+  assert.equal(calls.retirePreparationJournal.length, 0);
+});
+
+test("rebuild service keeps a real active lease or saved range prose paused", async () => {
+  const leased = await createHarness({
+    job: { ...STALE_QUEUED_JOB, executionOwner: "worker", executionLeaseExpiresAt: new Date("2026-10-30T10:10:00.000Z") },
+    journalMetadata: definitiveOutputLimitJournal(),
+  });
+  const leaseResult = await leased.service.converge({
+    task: leased.task,
+    seed: JSON.parse(leased.task.seedPayloadJson),
+    repairPhase: "abandoned",
+    activeCommand: false,
+    trigger: "director_command:continue",
+  });
+  assert.equal(leaseResult.changed, false);
+  assert.equal(leaseResult.reason, "job_lease_active");
+  assert.equal(leased.calls.updateTaskSeed.length + leased.calls.retireJob.length, 0);
+
+  const prose = await createHarness({
+    job: STALE_QUEUED_JOB,
+    journalMetadata: definitiveOutputLimitJournal(),
+    rangeHasProse: true,
+  });
+  const proseResult = await prose.service.converge({
+    task: prose.task,
+    seed: JSON.parse(prose.task.seedPayloadJson),
+    repairPhase: "abandoned",
+    activeCommand: false,
+    trigger: "director_command:continue",
+  });
+  assert.equal(proseResult.changed, false);
+  assert.equal(proseResult.reason, "range_has_prose");
+  assert.equal(prose.calls.updateTaskSeed.length + prose.calls.retireJob.length, 0);
 });
 
 test("rebuild service rebuilds a failed job that lost its anchor even without a pending flag", async () => {
@@ -252,7 +414,8 @@ test("rebuild service rebuilds a failed job that lost its anchor even without a 
     id: JOB_ID, novelId: NOVEL_ID, status: "failed", pendingManualRecovery: false,
     currentItemKey: null, payload: JSON.stringify({ workflowTaskId: TASK_ID }),
     startOrder: 3, endOrder: 3, cancelRequestedAt: null, executionOwner: null,
-    executionLeaseExpiresAt: null, updatedAt: new Date("2026-10-30T09:00:00.000Z"),
+    executionLeaseExpiresAt: null, heartbeatAt: null, startedAt: null, completedCount: 0,
+    updatedAt: new Date("2026-10-30T09:00:00.000Z"),
     error: "[STRUCTURED_OUTPUT:schema_mismatch] 旧的执行任务失败",
   };
   const { service, task, calls } = createHarness({ job: failedJob });
@@ -271,6 +434,7 @@ test("rebuild service rebuilds a failed job that lost its anchor even without a 
   assert.deepEqual(calls.retirePreparationJournal[0], {
     novelId: NOVEL_ID, chapterId: CHAPTER_ID, jobId: JOB_ID, taskId: TASK_ID,
     now: Date.parse("2026-10-30T10:00:10.000Z"),
+    allowDefinitiveNoOutput: null,
   });
   assert.equal(calls.retireJob.length, 1);
   const nextSeed = JSON.parse(calls.updateTaskSeed[0].nextSeedPayloadJson);
@@ -354,8 +518,11 @@ test("rebuild service refuses to rebuild over saved prose or an active job", asy
       cancelRequestedAt: null,
       executionOwner: null,
       executionLeaseExpiresAt: null,
+      heartbeatAt: null,
+      startedAt: new Date("2026-10-30T08:00:00.000Z"),
+      completedCount: 0,
       updatedAt: new Date("2026-10-30T09:00:00.000Z"),
-      error: "failed",
+      error: OUTPUT_LIMIT_ERROR,
     }),
     findChapter: async () => ({
       id: CHAPTER_ID,
@@ -367,6 +534,7 @@ test("rebuild service refuses to rebuild over saved prose or an active job", asy
     findFirstPendingChapter: async () => null,
     hasChapterLevelPlan: async () => true,
     findActiveJournalMetadata: async () => null,
+    rangeHasProse: async () => false,
     countActiveJobs: async () => 0,
     updateTaskSeed: async () => {
       throw new Error("must not write");

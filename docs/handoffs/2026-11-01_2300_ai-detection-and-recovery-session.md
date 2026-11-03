@@ -110,6 +110,15 @@
    - 旧测试 harness 漂移清理（不阻塞真实链路）。
 4. 不重载、不切分支、不清理未提交资料；再次改写作提示时先用同文风旧提示做差异对比，再提交。
 
+## 恢复链补口：queued 无租约陈旧范围任务（2026-11-04 接续）
+
+- 真实案例：《杂役管事在黑市商城》`cmvxpy883000eosw0hadfpe7c`，range task `cmvz3d625003b50w0heed4zqm`（第 4-6 章）。第 4 章 planning repair 因 12000 输出上限失败后，job `cmvz3ecac00te50w0cts7crrx` 停在 `queued`、`currentItemKey=null`、无 owner/lease/heartbeat，却仍被恢复链当成活跃任务；随后 lead 手动放弃修复（`abandoned`，候选版本 `cmvz3f4x800tj50w0fqdt29f5`，v26 draft），继续仍报「原章节任务的范围或执行权已变化 / 缺少可核对的恢复位置」。
+- 根因：上一轮补口只处理 `failed + 丢锚点`；queued/running 无租约/心跳的空壳仍算活跃作业，adoption/rebuild 被 `active_job`/`job_not_retried` 挡住；旧准备 journal 的 `prepare.execution_contract` 因输出上限记成 `unknown`，journal 归档与重建也拒绝。
+- 已修（见本轮 commit）：新增 `StaleRangeJobActivity` 严格判定（queued/running + 无当前章 + 无 owner/lease + 心跳缺失或过旧 + 更新/开始超过空闲窗口 + 父任务/小说匹配 + 结构化无输出错误 + `completedCount=0`）；`DirectorRecoveryConvergence`、`PlanRepairExecutionRebuildService`、`PlanningRepairCandidateAdoptionService` 都接受这种陈旧空壳；journal 归档新增“确定无输出 unknown”窄例外（job/journal 根/每个步骤同一结构化代码时才允许，running 或普通未知仍拒绝）；候选合同形状必须通过，容量门禁失败只有在修复会话已持久化有界 `capacityDebt` 时才带债采纳，并把 `capacityDebt` 写进 `planningRepairCandidateAdoption` 回执。
+- 当前书 dry-run（只读）：`isStaleRangeJobWithoutAnchor=true`、journal definitive code=`STRUCTURED_OUTPUT:output_limit`、journalRetirement `{retire:true}`、候选 shape `canEnterExecution=true`、`capacityPassed=false` 但有 2 条 `capacityDebt`、adoption plan=`adopt`、rebuild plan=`rebuild_execution`（旧 job `cmvz3ecac…`、目标章 4）。
+- 重载后建议：对 task `cmvz3d625003b50w0heed4zqm` 触发一次「继续自动导演」（`POST /api/novel-workflows/<task>/continue` body `{"continuationMode":"resume"}`）或 recovery-candidate resume；预期日志「采纳保存的候选规划」→「旧任务不可恢复，已按现有章纲重建章节执行绑定」→ 任务 queued/running，新 job 从第 4 章开写；第 1-3 章正文不动。若仍停，应是最新章合同/复核的真实失败，不再报缺锚点；候选与 journal 证据保留。
+- 本轮测试：`staleRangeJobActivity`、`planRepairExecutionRebuild`（queued stale/active lease/正文/journal 未知）、`planningRepairCandidateAdoption`（含容量债与 definitive unknown）、`directorRecoveryConvergenceService` 等定向通过；server `tsc --noEmit` 0 错误。未调用模型、不重载服务、未动 WORK_LEDGER。
+
 ## 关键命令
 
 ```powershell
