@@ -119,6 +119,14 @@
 - 重载后建议：对 task `cmvz3d625003b50w0heed4zqm` 触发一次「继续自动导演」（`POST /api/novel-workflows/<task>/continue` body `{"continuationMode":"resume"}`）或 recovery-candidate resume；预期日志「采纳保存的候选规划」→「旧任务不可恢复，已按现有章纲重建章节执行绑定」→ 任务 queued/running，新 job 从第 4 章开写；第 1-3 章正文不动。若仍停，应是最新章合同/复核的真实失败，不再报缺锚点；候选与 journal 证据保留。
 - 本轮测试：`staleRangeJobActivity`、`planRepairExecutionRebuild`（queued stale/active lease/正文/journal 未知）、`planningRepairCandidateAdoption`（含容量债与 definitive unknown）、`directorRecoveryConvergenceService` 等定向通过；server `tsc --noEmit` 0 错误。未调用模型、不重载服务、未动 WORK_LEDGER。
 
+## 2026-11-04 续：第4章 JIT 合同复核
+
+- `b23664b9`：规划修复调用预算 12000→32K，解决 `planning_repair@v16` output_limit。
+- `902a2457`：queued + 无租约 + 无当前章锚点的陈旧范围 job 可恢复；第4章候选与容量债已采纳，旧 job 结束保留错误；第 1-3 章未改写。
+- `aa0159dd`：非冲突问题的无效 premiseEvidence 不再整份退回。
+- 当前第4章仍未开写：任务在规划修复确认处，rounds=3/3，候选有 4 条容量债但复核仍失败；B 质量债路径在这次 JIT/review-existing 入口未触发，任务摘要“原候选复核仍未通过，请选择具体修复方向或确认规划来源”。下一步需要让 B/扩章覆盖 JIT 合同复核入口，或接受当前候选的可见质量债后直接写第4章。
+- 本轮未改 WORK_LEDGER；新增记录均在本文件与代码提交。
+
 ## 关键命令
 
 ```powershell
