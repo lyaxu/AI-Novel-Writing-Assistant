@@ -12,6 +12,7 @@ import {
 } from "../chapterDetail/chapterCapacityLog";
 import { isRelatedCapacityText } from "@ai-novel/shared/types/chapterCapacity";
 import { runStructuredPrompt } from "../../../../prompting/core/promptRunner";
+import { PLANNING_OUTPUT_TOKEN_BUDGET } from "../../../../prompting/prompts/novel/promptBudgetProfiles";
 import { planningRepairPrompt, planningRepairReviewPrompt } from "../../../../prompting/prompts/novel/volume/planningRepair.prompts";
 import { ChapterTaskSheetQualityGateService } from "../ChapterTaskSheetQualityGateService";
 import { buildVolumeWorkspaceDocument } from "../volumeWorkspaceDocument";
@@ -223,7 +224,7 @@ export class PlanningRepairCoordinator {
         await this.beforeCall(session, "repair", "正在按已确认方向修改候选，完成后复核");
         const repaired = await this.invoke({ asset: planningRepairPrompt,
           promptInput: { contextJson: this.context(input, session, (session.state.quality ?? { chapters: {} }) as ReviewSet) },
-          options: this.modelOptions(input, "planning_repair", 12000) });
+          options: this.modelOptions(input, "planning_repair", PLANNING_OUTPUT_TOKEN_BUDGET) });
         await this.save(session, { pendingOperation: undefined,
           repairOutputPending: { inputFingerprint: session.inputFingerprint, round: session.state.rounds },
           history: [...session.state.history, { round: session.state.rounds, kind: "repair", output: repaired.output,
@@ -318,7 +319,7 @@ export class PlanningRepairCoordinator {
         const repaired = await this.invoke({
           asset: planningRepairPrompt,
           promptInput: { contextJson: this.context(input, session, reviews) },
-          options: this.modelOptions(input, "planning_repair", 12000),
+          options: this.modelOptions(input, "planning_repair", PLANNING_OUTPUT_TOKEN_BUDGET),
         });
         await this.save(session, {
           pendingOperation: undefined,
