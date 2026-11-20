@@ -115,12 +115,13 @@ export function projectPlanningStateReview(
       assertCurrent(decision.transitionEvidence, decision.issueId);
     }
     // Premise evidence is optional for a missing-requirement/precondition repair. A model may
-    // attach a paraphrase that resolves to no real leaf; drop only those extras, while a factual
-    // contradiction still must bind at least one real premise.
-    if (decision.relation !== "contradiction") {
-      decision.repair.premiseEvidence = decision.repair.premiseEvidence.filter(quote =>
-        matchesChapterEvidence(current, quote) || matchesChapterEvidence(context, quote)
-        || matchesChapterEvidence(prose, quote));
+    // attach one valid premise plus a paraphrase that resolves to no real leaf; drop only the
+    // unresolvable extras. A factual contradiction still must bind at least one real premise.
+    decision.repair.premiseEvidence = decision.repair.premiseEvidence.filter(quote =>
+      matchesChapterEvidence(current, quote) || matchesChapterEvidence(context, quote)
+      || matchesChapterEvidence(prose, quote));
+    if (decision.relation === "contradiction" && decision.repair.premiseEvidence.length === 0) {
+      throw new Error(`Decision ${decision.issueId} contradiction has no verifiable premise evidence.`);
     }
     assertEither(decision.repair.premiseEvidence, decision.issueId);
     const left = decision.candidateAssertion, right = decision.referenceAssertion;
