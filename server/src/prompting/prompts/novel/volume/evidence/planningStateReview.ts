@@ -93,6 +93,17 @@ export function projectPlanningStateReview(
     assertCurrent(decision.candidateAssertion.evidence, decision.issueId);
     // A reference may be another candidate clause or supplied context. Written prose must be earlier primary prose.
     if (decision.referenceAssertion) {
+      decision.referenceAssertion.evidence = decision.referenceAssertion.evidence.filter(quote =>
+        matchesChapterEvidence(current, quote) || matchesChapterEvidence(context, quote)
+        || matchesChapterEvidence(prose, quote));
+      if (decision.referenceAssertion.evidence.length === 0) {
+        if (decision.relation === "contradiction") {
+          throw new Error(`Decision ${decision.issueId} contradiction has no verifiable reference evidence.`);
+        }
+        decision.referenceAssertion = null;
+      }
+    }
+    if (decision.referenceAssertion) {
       assertEither(decision.referenceAssertion.evidence, decision.issueId);
       if (decision.referenceAssertion.temporalScope === "prior" && ["fact", "outcome"].includes(decision.referenceAssertion.modality)
         && decision.referenceAssertion.evidence.some(quote => !isHistoricalOrRule(quote))) {
