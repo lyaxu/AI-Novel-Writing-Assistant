@@ -198,6 +198,7 @@ function fixture({ active = true, materialized = true, realPersistence = false }
     "@ai-novel/shared/types/chapterLengthControl": require("@ai-novel/shared/types/chapterLengthControl"),
     "./capacityCarryOver": require("../dist/services/novel/volume/planningRepair/capacityCarryOver.js"),
     "./planningQualityDebt": require("../dist/services/novel/volume/planningRepair/planningQualityDebt.js"),
+    "./committedWindowReviewRecovery": load("planningRepair/committedWindowReviewRecovery.ts", {}),
     "../../../../db/prisma": { prisma },
     "../../../../db/sqliteRetry": { withSqliteRetry: (runner) => runner() },
     "../../../../events/EventBus": { novelEventBus: { emit: async (event) => events.push(event) } },
@@ -1504,4 +1505,155 @@ test("a given-up session cannot be revived by rebasing it", async () => {
   const after = h.state();
   assert.equal(after.phase, "abandoned", "the session stays given up");
   assert.equal(after.abandonedAt, abandonedAt, "and the record of when is unchanged");
+});
+
+// --- 2026-11-21: committed-window review evidence recovery (general, no book-specific branch) ---
+
+function passedWindow() {
+  return { usable: true, safeToSync: true, requiresUserDecision: false, issues: [] };
+}
+
+/**
+ * Real observation: chapter 4 of a range task was written and saved, but its planning repair
+ * window had been committed through the planning-quality-debt policy. That commit retains the
+ * failed findings in history and intentionally has no passing review. Preparing chapter 5's JIT
+ * contract reused the committed window and demanded a passing review that could never exist.
+ */
+async function committedQualityDebtFixture({
+  prose = "第4章已保存正文",
+  chapterStatus = "completed",
+  generationState = "approved",
+} = {}) {
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  await h.ready(session);
+  await h.store.commit(session, session.candidate);
+  const seed = JSON.parse(h.db.task.seedPayloadJson);
+  delete seed.planningRepair.quality;
+  seed.planningRepair.affectedChapterIds = ["p2", "p3", "p4"];
+  seed.planningRepair.planningQualityDebt = {
+    version: 1, kind: "planning_quality_debt", repairKey: seed.planningRepair.key,
+    candidateVersionId: seed.planningRepair.candidateVersionId, chapterId: "p2", chapterOrder: 2,
+    reasons: ["planning_repair_rounds_exhausted", "auto_extension_exhausted"],
+    issues: [{ id: "prior_debt_and_herbs_unverified", severity: "medium", target: "consistency", summary: "第5章承接第4章赊账的证据仍待正文落实。" }],
+    capacityDebt: [], acceptedAt: "2026-11-03T19:20:44.150Z", source: "planning_repair_exhausted", acceptedByPolicy: true,
+  };
+  seed.planningRepair.history = [...seed.planningRepair.history, {
+    kind: "assessment", round: 0,
+    result: { chapters: { p3: { status: "needs_confirmation", verdict: "repairable", safeToSync: false, canEnterExecution: false,
+      issues: [{ id: "prior_debt_and_herbs_unverified", severity: "medium", target: "consistency", summary: "第5章承接第4章赊账的证据仍待正文落实。" }] } } },
+  }];
+  seed.autoExecution = { qualityDebtSummaries: [] };
+  h.db.task.seedPayloadJson = JSON.stringify(seed);
+  const row = h.db.chapters.find((chapter) => chapter.id === "c2");
+  row.content = prose;
+  row.chapterStatus = chapterStatus;
+  row.generationState = generationState;
+  return h;
+}
+
+test("committed window with no saved review continues on saved prose with chapter-level planning debt", async () => {
+  const h = await committedQualityDebtFixture();
+  const writesBefore = h.chapterWrites.length;
+  const chaptersBefore = copy(h.db.chapters);
+
+  const resumed = await h.store.begin({ ...h.input, chapterId: "p3" });
+
+  assert.equal(resumed.state.phase, "committed", "the committed plan is reused instead of stalling");
+  assert.equal(resumed.state.planningQualityDebt.source, "committed_window_review_unavailable");
+  assert.ok(resumed.candidate, "the next chapter's JIT contract can be built from the committed plan");
+  assert.equal(resumed.candidate.volumes[0].chapters[1].taskSheet, "Repaired contract");
+  assert.equal(h.chapterWrites.length, writesBefore, "continuing never rewrites saved prose");
+  assert.deepEqual(h.db.chapters, chaptersBefore);
+  const seed = JSON.parse(h.db.task.seedPayloadJson);
+  assert.equal(seed.planningQualityDebt.length, 1);
+  assert.equal(seed.planningQualityDebt[0].source, "committed_window_review_unavailable");
+  assert.equal(seed.planningQualityDebt[0].chapterId, "p3");
+  assert.equal(seed.planningQualityDebt[0].issues[0].id, "prior_debt_and_herbs_unverified", "the recorded failed findings stay as evidence");
+  assert.equal(seed.autoExecution.qualityDebtSummaries[0].source, "committed_window_review_recovery");
+  const history = h.state().history;
+  assert.equal(history.at(-1).kind, "planning_quality_debt_recovery");
+
+  const again = await h.store.begin({ ...h.input, chapterId: "p3" });
+  assert.equal(again.state.phase, "committed");
+  assert.equal(JSON.parse(h.db.task.seedPayloadJson).planningQualityDebt.length, 1, "repeat preparation appends no duplicate debt");
+});
+
+test("the same committed window without saved prose still requires the joint-window review", async () => {
+  const h = await committedQualityDebtFixture({ prose: "", chapterStatus: "unplanned", generationState: "planned" });
+  const writesBefore = h.chapterWrites.length;
+  await assert.rejects(h.store.begin({ ...h.input, chapterId: "p3" }), /joint-window review/);
+  const seed = JSON.parse(h.db.task.seedPayloadJson);
+  assert.equal(seed.planningQualityDebt, undefined, "no debt was fabricated for a chapter that never got prose");
+  assert.equal(h.chapterWrites.length, writesBefore);
+});
+
+test("an unconfirmed model call at the committed window still stops instead of becoming debt", async () => {
+  const h = await committedQualityDebtFixture();
+  const seed = JSON.parse(h.db.task.seedPayloadJson);
+  seed.planningRepair.pendingOperation = { kind: "review", startedAt: epoch };
+  h.db.task.seedPayloadJson = JSON.stringify(seed);
+  await assert.rejects(h.store.begin({ ...h.input, chapterId: "p3" }), /未确认的模型调用/);
+  assert.equal(JSON.parse(h.db.task.seedPayloadJson).planningQualityDebt, undefined);
+});
+
+test("a concurrent task ownership change still rejects the debt-continuation write", async () => {
+  const h = await committedQualityDebtFixture();
+  h.failCAS();
+  await assert.rejects(h.store.begin({ ...h.input, chapterId: "p3" }), /changed concurrently/);
+  assert.equal(JSON.parse(h.db.task.seedPayloadJson).planningQualityDebt, undefined);
+});
+
+test("commit re-links a saved passing review that was never associated with the session", async () => {
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  await h.store.save(session, { ...session.state, phase: "ready",
+    history: [...session.state.history, { kind: "review", round: 0, result: passedQuality() }] });
+  assert.ok(!h.state().quality, "the saved review is not linked into the session yet");
+
+  const result = await h.store.commit(session, h.input.document);
+
+  assert.equal(result.activeVersionId, session.state.candidateVersionId);
+  assert.equal(h.state().phase, "committed");
+  assert.equal(h.state().quality.chapters.p2.status, "passed");
+  assert.ok(h.state().history.some((entry) => entry.kind === "review_evidence_relinked"));
+});
+
+test("commit re-links a missing per-chapter review from history plus the saved window review", async () => {
+  const h = fixture();
+  const session = await h.store.begin(h.input);
+  await h.store.save(session, { ...session.state, phase: "ready", history: [
+    ...session.state.history,
+    { kind: "review", round: 0, result: { chapters: {}, window: passedWindow() } },
+    { kind: "assessment", round: 0, result: { chapters: { p2: { status: "passed", verdict: "usable", safeToSync: true } } } },
+  ] });
+
+  await h.store.commit(session, h.input.document);
+
+  assert.equal(h.state().phase, "committed");
+  assert.equal(h.state().quality.window.usable, true);
+  assert.equal(h.state().quality.chapters.p2.verdict, "usable");
+});
+
+test("commit never mixes review rounds or failed findings into a passing association", async () => {
+  const mixedRounds = fixture();
+  const mixedSession = await mixedRounds.store.begin(mixedRounds.input);
+  await mixedRounds.store.save(mixedSession, { ...mixedSession.state, phase: "ready", history: [
+    ...mixedSession.state.history,
+    { kind: "review", round: 0, result: { chapters: {}, window: passedWindow() } },
+    { kind: "assessment", round: 1, result: { chapters: { p2: { status: "passed", verdict: "usable", safeToSync: true } } } },
+  ] });
+  await assert.rejects(mixedRounds.store.commit(mixedSession, mixedRounds.input.document), /joint-window review/);
+
+  const failed = fixture();
+  const failedSession = await failed.store.begin(failed.input);
+  await failed.store.save(failedSession, { ...failedSession.state, phase: "ready", history: [
+    ...failedSession.state.history,
+    { kind: "review", round: 0, result: {
+      chapters: { p2: { status: "needs_confirmation", verdict: "repairable", safeToSync: false } },
+      window: passedWindow(),
+    } },
+  ] });
+  await assert.rejects(failed.store.commit(failedSession, failed.input.document), /joint-window review|chapter review/);
+  assert.equal(failed.state().phase, "ready", "a refused commit does not fake a pass");
 });

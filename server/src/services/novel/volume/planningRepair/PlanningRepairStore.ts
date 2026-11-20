@@ -20,6 +20,12 @@ import { parseChapterScenePlan } from "@ai-novel/shared/types/chapterLengthContr
 import { buildCapacityExtensionSeedPatch, decideCapacityExtensionBudget } from "./capacityCarryOver";
 import { capacityExtensionCouldResolveDebt, type PlanningQualityDebtRecord } from "./planningQualityDebt";
 import {
+  buildCommittedWindowReviewDebtRecord,
+  isCommittedWindowReviewDebt,
+  recoverRecordedReviewEvidence,
+  type RecordedReviewEvidence,
+} from "./committedWindowReviewRecovery";
+import {
   persistActiveVolumeWorkspace,
   VOLUME_WORKSPACE_TRANSACTION_TIMEOUT_MS,
 } from "../volumeWorkspacePersistence";
@@ -882,12 +888,6 @@ export class PlanningRepairStore {
         const upgradeBudget = snapshot.effectiveDefaultChapterLength === undefined && snapshot.snapshotToken === source.token;
         if (upgradeBudget) snapshot.effectiveDefaultChapterLength = source.effectiveDefaultChapterLength;
         const committed = previous.phase === "committed" && snapshot.committed;
-        if (reviewedWindowChapter && !sameChapter) {
-          if (!snapshot.committedPlanHash || !snapshot.committedSourceHash) {
-            conflict("The committed window requires verified snapshot migration before reuse.");
-          }
-          this.assertReviewedContracts(previous, source.document, [requestedPlan.id]);
-        }
         if (committed && snapshot.committedPlanHash && snapshot.committedSourceHash) {
           if (source.document.activeVersionId !== previous.candidateVersionId
             || !source.versions.some((v) => v.id === previous.candidateVersionId && v.status === "active")
@@ -906,6 +906,24 @@ export class PlanningRepairStore {
           // the attempt, and leaving the in-flight marker behind blocks every later commit.
           state = { ...previous, phase: "waiting_confirmation", pendingOperation: undefined, summary: "Planning source changed; explicit confirmation is required." };
         }
+        if (reviewedWindowChapter && !sameChapter) {
+          if (!snapshot.committedPlanHash || !snapshot.committedSourceHash) {
+            conflict("The committed window requires verified snapshot migration before reuse.");
+          }
+          if (!committed) {
+            this.assertReviewedContracts(previous, source.document, [requestedPlan.id]);
+          } else {
+            // A committed window is reused by the next chapter's JIT contract. Its saved review may
+            // be unlinked, missing, or intentionally failed (planning-quality-debt commit). Only a
+            // genuinely saved passing review is re-linked; otherwise the saved prose lets the book
+            // continue with visible chapter-level planning debt instead of stalling forever.
+            const reused = await this.prepareCommittedWindowReuse(
+              tx, task, seed, state, snapshot, source, requestedPlan,
+            );
+            if ("session" in reused) return reused;
+            state = reused.state;
+          }
+        }
         if (committed && requestedPlan && ((input.expectedWrittenSourceFingerprint !== undefined
           && snapshot.writtenSourceFingerprint !== writtenFingerprint) || (input.selectedPlanningDirection
           && snapshot.selectedCandidateFingerprint !== selectedCandidateFingerprint))) {
@@ -915,8 +933,8 @@ export class PlanningRepairStore {
           if (!eligible.includes(chapter.id)) conflict("The chapter requiring factual re-review is protected.");
           const candidate = clone(source.document);
           const version = await this.createDraft(tx, input.novelId, candidate, "已写事实更新，复核现有章节合同");
-          const next: PlanningRepairState = { ...previous, key: `${input.novelId}:${input.volumeId}:${chapter.id}`,
-            history: [...previous.history, { kind: "evidence_refresh", chapterId: chapter.id,
+          const next: PlanningRepairState = { ...state, key: `${input.novelId}:${input.volumeId}:${chapter.id}`,
+            history: [...state.history, { kind: "evidence_refresh", chapterId: chapter.id,
               writtenSourceFingerprint: writtenFingerprint, selectedCandidateFingerprint }],
             chapterId: chapter.id, chapterOrder: chapter.chapterOrder, phase: "reviewing", candidateVersionId: version.id,
             affectedChapterIds: [chapter.id], quality: { chapters: {} }, pendingOperation: undefined,
@@ -1442,7 +1460,10 @@ export class PlanningRepairStore {
       }
       const affected = [...new Set([previous.chapterId, ...validateCandidate(snapshot, requested)])];
       if (!snapshot.eligibleChapterIds.includes(previous.chapterId)) conflict("The target chapter is protected.");
-      this.assertReviewedContracts(previous, requested, affected);
+      // A review that was saved in the append-only history but never copied into `quality` is
+      // re-linked here (and persisted by this commit). Missing/failed reviews are never fabricated;
+      // the strict contract error below still stops the commit in that case.
+      const reviewed = this.resolveReviewedContracts(previous, requested, affected);
       const mapping = materializedMapping(snapshot.baselineDocument, source.chapters);
       if (affected.some((id) => isLocked(mapping.get(id)))) conflict("A repair chapter is no longer empty and unlocked.");
       const saved = await this.loadCandidate(tx, previous, snapshot);
@@ -1488,7 +1509,7 @@ export class PlanningRepairStore {
       }
       // A successful commit ends the repair attempt. Clear stale failure bookkeeping so the status
       // projection does not keep showing a rejected response next to the saved-plan summary.
-      const state: PlanningRepairState = { ...previous, phase: "committed", candidateVersionId: versionId,
+      const state: PlanningRepairState = { ...reviewed, phase: "committed", candidateVersionId: versionId,
         affectedChapterIds: affected, technicalError: undefined, pendingOperation: undefined,
         repairOutputPending: undefined,
         summary: `第${previous.chapterOrder}章起的规划已通过复核并保存（${affected.length}章）。` };
@@ -1596,6 +1617,124 @@ export class PlanningRepairStore {
       revealLevel: chapter.revealLevel ?? null, mustAvoid: chapter.mustAvoid ?? null,
       taskSheet: chapter.taskSheet?.trim() || null, sceneCards: chapter.sceneCards ?? null,
     };
+  }
+
+  /** True when the strict saved-review contract is not satisfied; programming errors still propagate. */
+  private blockedByReviewContracts(state: PlanningRepairState, document: VolumePlanDocument, affected: string[]): boolean {
+    try {
+      this.assertReviewedContracts(state, document, affected);
+      return false;
+    } catch (error) {
+      if (error instanceof PlanningRepairConflictError) return true;
+      throw error;
+    }
+  }
+
+  /** Passing review payloads recorded in history but missing from `quality`; never synthesizes a pass. */
+  private recoverReviewQuality(state: PlanningRepairState, document: VolumePlanDocument, affected: string[]): RecordedReviewEvidence | null {
+    const recovered = recoverRecordedReviewEvidence(state, affected);
+    if (!recovered) return null;
+    for (const id of affected) {
+      const chapter = document.volumes.flatMap((volume) => volume.chapters).find((item) => item.id === id);
+      if (!chapter) return null;
+      if (!assessChapterExecutionContractShape({ ...chapter, novelId: state.novelId, chapterId: id }).canEnterExecution) return null;
+    }
+    return recovered;
+  }
+
+  /** Commit keeps its safety boundary; the only tolerated difference is re-using a recorded pass. */
+  private resolveReviewedContracts(state: PlanningRepairState, document: VolumePlanDocument, affected: string[]): PlanningRepairState {
+    if (!this.blockedByReviewContracts(state, document, affected)) return state;
+    const recovered = this.recoverReviewQuality(state, document, affected);
+    if (!recovered) {
+      this.assertReviewedContracts(state, document, affected);
+      return conflict("Commit requires a saved, successful joint-window review.");
+    }
+    return { ...state, quality: recovered.quality, history: [...state.history, {
+      kind: "review_evidence_relinked", round: recovered.round, affected: [...affected],
+      source: recovered.source, relinkedAt: new Date().toISOString(),
+    }] };
+  }
+
+  /** The committed window can only be continued when its repair chapter already has saved prose. */
+  private committedWindowProseSaved(state: PlanningRepairState, source: Source): boolean {
+    const mapping = materializedMapping(source.document, source.chapters);
+    const row = mapping.get(state.chapterId);
+    if (!row || !row.content?.trim()) return false;
+    return row.chapterStatus === "completed" || row.generationState === "approved";
+  }
+
+  /**
+   * Reuse gate for the next chapter's JIT contract when the window was already committed.
+   *
+   * Order matters: re-use recorded passing reviews first; otherwise only a window whose prose is
+   * already saved may continue, and it continues under a visible chapter-level planning debt.
+   * Unknown calls, leases, changed source/prose and invalid contract shapes never become debt.
+   */
+  private async prepareCommittedWindowReuse(
+    tx: Prisma.TransactionClient,
+    task: NovelWorkflowTask,
+    seed: Seed,
+    state: PlanningRepairState,
+    snapshot: StoredSnapshot,
+    source: Source,
+    requestedPlan: VolumeChapterPlan,
+  ): Promise<{ session: RepairSession; raw: string | null; owner: string } | { state: PlanningRepairState }> {
+    const affected = [requestedPlan.id];
+    if (!this.blockedByReviewContracts(state, source.document, affected)) return { state };
+    if (state.pendingOperation || state.repairOutputPending) {
+      // Unknown external call: a debt record must never hide it.
+      conflict("已提交窗口存在未确认的模型调用，不能按质量债继续；请先确认调用结果。");
+    }
+    const recovered = this.recoverReviewQuality(state, source.document, affected);
+    if (recovered) {
+      // The review was already saved in history; persist the association. Ordinary forward prose
+      // progress still goes through the existing factual re-review below.
+      return { state: { ...state, quality: recovered.quality, technicalError: undefined,
+        history: [...state.history, {
+          kind: "review_evidence_relinked", round: recovered.round, chapterId: requestedPlan.id,
+          source: recovered.source, relinkedAt: new Date().toISOString(),
+        }] } };
+    }
+    if (!this.committedWindowProseSaved(state, source)) {
+      conflict("Commit requires a saved, successful joint-window review; the committed window has no saved prose to continue from.");
+    }
+    const shape = assessChapterExecutionContractShape({
+      ...requestedPlan, novelId: state.novelId, chapterId: requestedPlan.id,
+    });
+    if (!shape.canEnterExecution) conflict(`Chapter ${requestedPlan.id} has an invalid execution contract.`);
+    const debtRecord = buildCommittedWindowReviewDebtRecord({
+      state, chapterId: requestedPlan.id, chapterOrder: requestedPlan.chapterOrder,
+    });
+    const existingDebt: unknown[] = Array.isArray(seed.planningQualityDebt) ? seed.planningQualityDebt : [];
+    const alreadyRecorded = existingDebt.some((entry) => isCommittedWindowReviewDebt(entry) && entry.chapterId === debtRecord.chapterId);
+    if (alreadyRecorded) {
+      // Repeated JIT preparation of the same chapter must not append duplicate debt/history.
+      const candidate = await this.loadCandidate(tx, state, snapshot);
+      return { session: this.session(state, snapshot, candidate), raw: task.seedPayloadJson, owner: hash(executionIdentity(task)) };
+    }
+    const next: PlanningRepairState = { ...state, planningQualityDebt: debtRecord, technicalError: undefined,
+      summary: `第${requestedPlan.chapterOrder}章起按已提交窗口的规划质量债继续（联合/逐章复核证据缺失，未伪造复核通过）`,
+      history: [...state.history, { kind: "planning_quality_debt_recovery", round: state.rounds,
+        chapterId: requestedPlan.id, chapterOrder: requestedPlan.chapterOrder, source: debtRecord.source,
+        issues: debtRecord.issues.map((issue) => issue.id), recordedAt: debtRecord.acceptedAt }] };
+    const seedPatch: Seed = { planningRepair: next, [SNAPSHOT_KEY]: snapshot };
+    seedPatch.planningQualityDebt = [...existingDebt, debtRecord].slice(-20);
+    const autoExecution = record(seed.autoExecution) ? { ...seed.autoExecution } : null;
+    if (autoExecution) {
+      const summaries = Array.isArray(autoExecution.qualityDebtSummaries) ? autoExecution.qualityDebtSummaries : [];
+      autoExecution.qualityDebtSummaries = [...summaries, {
+        chapterId: requestedPlan.id,
+        chapterOrder: requestedPlan.chapterOrder,
+        reason: `规划质量债：已提交窗口的联合/逐章复核证据缺失，按章级质量债继续第${requestedPlan.chapterOrder}章；不伪造复核通过。`,
+        source: "committed_window_review_recovery",
+        deferredAt: debtRecord.acceptedAt,
+      }].slice(-40);
+      seedPatch.autoExecution = autoExecution;
+    }
+    const candidate = await this.loadCandidate(tx, next, snapshot);
+    const raw = await casSeed(tx, task, { ...seed, ...seedPatch });
+    return { session: this.session(next, snapshot, candidate), raw, owner: hash(executionIdentity(task)) };
   }
 
   private assertReviewedContracts(state: PlanningRepairState, document: VolumePlanDocument, affected: string[]) {

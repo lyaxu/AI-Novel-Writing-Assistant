@@ -18,7 +18,7 @@ export interface PlanningQualityDebtIssue {
   summary?: string;
 }
 
-export type PlanningQualityDebtSource = "planning_repair_exhausted" | "review_response_invalid";
+export type PlanningQualityDebtSource = "planning_repair_exhausted" | "review_response_invalid" | "committed_window_review_unavailable";
 
 export interface PlanningQualityDebtRecord {
   version: 1;

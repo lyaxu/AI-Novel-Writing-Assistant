@@ -27,3 +27,11 @@
 - 正文 writer 增加有界 transport 重试（C 口径）：本次调用零输出且为明确网络中断时自动重试一次；有 partialText 时只有来源页显式 acknowledge 未知调用后的继续才允许从零重试一次，旧 partial 归档保留、永不写入正文；无确认或非 transport 不重发。
 - 真实书《杂役管事在黑市商城》第4章已写出 4238 字并 completed，第1–3章未改写；任务随后因 “Commit requires a saved, successful joint-window review.” 暂停在联合窗口复核提交边界，第5章 pending_generation。下一步是修复该联合窗口复核提交/恢复路径，而不是回退正文。
 - 关键提交：`ab366127`（B 入口覆盖）、`5d54e886`（writer 传输重试）；服务已加载 `5d54e886`，`stale=false`。
+
+## 2026-11-21 工程补充：已提交规划窗口的复核证据恢复
+
+- 根因：真实书第 4 章已写出 4238 字并 completed，但其规划修复窗口是按 B 策略的质量债接受的（`phase=committed`、失败发现留在 history、没有通过复核）。第 5 章 JIT 合同准备复用已提交窗口时，`PlanningRepairStore.begin` 再次要求“已保存且通过的联合窗口/逐章复核”，于是报 `Commit requires a saved, successful joint-window review.` 并永久暂停；错误文案来自被复用的守卫，不是正文/传输/容量问题。
+- 修复（通用，无书级分支）：`committedWindowReviewRecovery.ts` + `PlanningRepairStore.begin/commit`。先尝试从只追加 history 补关联同轮完整通过的复核（`commit` 也支持）；无法补关联时，仅当已提交窗口来源/提交哈希匹配、修复章正文已保存且 completed/approved、候选合同可执行，才记录 `source=committed_window_review_unavailable` 的章节级规划质量债（历史失败发现原样保留、写 seed 债务与 `autoExecution.qualityDebtSummaries`、幂等），随后复用已提交规划继续下一章，不重写正文、不伪造复核通过。未确认外部调用、正文未保存、来源/哈希变化、无效合同、租约/所有权/CAS 冲突仍拒绝。
+- 验证：`server/tests/planningRepairStore.test.js` 新增 7 项（140 通过），相关 planning 批次 75 通过；`tsc -p server/tsconfig.json` 通过。真实书用 SQLite 在线备份的数据库副本回放第 5 章 JIT `store.begin`：修复前同一状态报错，修复后 phase=committed、第 5 章合同可进入执行、质量债落库、第 1–4 章正文与任务行未变；副本已清理，结果存 `.codex-run/planning-recovery/real-book-replay-result.json`。全程 0 模型调用、未重载服务、未改原库。
+- 下一步：待 Lead/用户受控重载新代码后，从《杂役管事在黑市商城》来源页点一次“继续自动导演”；任务应从第 5 章 JIT 继续，第 4 章保持 completed、第 1–4 章不改写。本次未重载、未代点。
+- 提交见 Git；文档同时更新 release notes 2026-11-21、README 最新更新、`docs/wiki/workflows/chapter-review-resume.md` 与本模块 README。

@@ -87,3 +87,24 @@ continue/recovery-candidate 恢复入口。扩章判定只在容量债全部没�
 （`suggestedChapterId` 为空）且上限/预算未到时才算“扩章仍可解决”；若后章已存在只是超容量，
 追加新章不是补救，B 可以接受。高严重度的语义/场景/时序证据缺口属于可继续债，但正文/租约/
 未知调用/所有权/跨卷/requiresUserDecision 仍拒绝。
+
+## 已提交窗口的复核证据恢复
+
+规划修复提交后，同一窗口的后续章节会通过 JIT 再次进入 `begin`。旧实现会在这里重新要求
+“已保存且通过的联合窗口/逐章复核”；按 B 策略提交的窗口本来只有失败发现、没有通过结论，
+于是下一章被永久挡住（真实案例：第 4 章正文已保存并 completed，第 5 章 JIT 合同准备失败）。
+
+`committedWindowReviewRecovery.ts` 定义两条确定性路径，二者都不伪造通过：
+
+1. 先尝试“补关联”：从只追加的 `history` 里取完整 `review` 结果，或同轮的 `review.window` +
+   各章 `assessment` 合成质量状态；只有结构完整通过、轮次一致才写回 `quality`，混轮次、
+   失败结论、`rejected_response` 一律拒绝。`commit` 与已提交窗口复用都使用该路径。
+2. 无法补关联时，仅当“已提交窗口来源/提交哈希仍匹配 + 修复章正文已保存且
+   completed/approved + 候选合同结构可进执行”才记为章节级规划质量债
+   （`source=committed_window_review_unavailable`）：历史 findings 原样写入债务，写
+   `planning_quality_debt_recovery` 历史、seed 债务和 `autoExecution.qualityDebtSummaries`，
+   任务随后复用已提交规划继续下一章，不重写正文、不再买复核。重复准备同一章幂等。
+
+未确认外部调用、未保存正文、来源/提交哈希变化、无效候选合同、租约/所有权/CAS 冲突仍按原
+错误暂停；这份债务是“继续写作”的可见质量债，不是复核通过。用户从来源页继续一次即可恢复。
+完整工作流说明见[章节审查恢复](../../../../../../docs/wiki/workflows/chapter-review-resume.md)。

@@ -205,6 +205,21 @@ AI 必须显式提供同章必达事项原句、替换句、事实理由、保�
 外层prepare.execution_contract包含规划子调用，不代表每个退出都是网络中断。规划所有者只在无pending调用/待应用响应且状态明确时签发settled回执；unknown回执不能被旧历史覆盖。历史兼容恢复需要完整结算证据，并保留迁移前日志；其他未知步骤仍阻止执行。防丢稿的“新执行不能覆盖暂停执行”规则继续保留。
 
 此次整链验证见[原规划授权接续生产恢复](../../evals/2026-10-14-planning-original-pipeline-recovery.md)。
+
+## 已提交规划窗口的复核证据恢复
+
+背景：规划修复窗口提交后，后续章节的 JIT 合同会复用同一已提交窗口。复用入口以前会再次要求“已保存且通过的联合窗口/逐章复核”。按章节级规划质量债接受的提交（B 策略）本来就把失败发现留在 history、没有通过结论，于是同一窗口的下一章会永远停住，并把错误显示成 “Commit requires a saved, successful joint-window review.”；此时正文其实已经保存且章节 completed。
+
+当前规则：
+
+- 复核证据优先“补关联”。历史是只追加的，`review`/`assessment` 载荷若完整通过、且轮次一致，会先写回会话质量状态再继续；不完整的逐章复核可由同轮“窗口复核 + 各章 assessment”合成。混轮次、失败结论、被拒响应永不合成通过。
+- 只有真正无法补关联时才进入质量债通道，且必须同时满足：已提交窗口的规划来源/提交哈希仍匹配、修复章正文已保存且 completed/approved、候选合同结构可进入执行。记录 `source=committed_window_review_unavailable` 的章节级规划质量债，把历史里的原始失败发现原样带入，并写一条 `planning_quality_debt_recovery` 历史；任务随后从已提交窗口继续下一章，不重写已保存正文。
+- 该通道幂等：同一章重复准备 JIT 合同不重复记债或追加历史。
+- 硬边界不转成债务：未知外部调用（`pendingOperation`/`repairOutputPending`）、正文未保存、规划来源或提交哈希变化、候选合同结构无效、租约/所有权/CAS 变化、未确认调用仍按原错误暂停。
+- 复核确实失败的窗口可以继续写后续章，但“继续”不等于复核通过：任务仍保留质量债、失败发现和审计历史，后续可以按质量债入口处理。
+
+用户可见结果：正文已保存、只差规划复核的暂停不再需要用户猜测或反复点击；从来源页继续一次即可完成第 5 章的 JIT 准备并恢复写作。工程入口：`PlanningRepairStore.begin`（已提交窗口复用）、`PlanningRepairStore.commit`（补关联后提交）、`committedWindowReviewRecovery.ts`；测试 `server/tests/planningRepairStore.test.js` 的「committed window … recovery / re-links …」用例。真实案例（《杂役管事在黑市商城》第 4 章已保存、窗口按质量债提交）用数据库副本回放验证：继续入口从暂停变为 phase=committed、第 5 章合同可进入执行、债务落库且原库未写入。
+
 ## 本轮完成与后续范围
 
 完成显示以经过范围核对的任务终态为准，不以进度100%或仪表盘动画为准。源页统一派生running、completed、waiting、action_required与failed；缺章恢复、人工暂停和失败不能被完成投影盖住。completed使用静止进度、完成说明和查看/收起动作，不能继续显示接管中或实时推进。收起只归档提醒，不删除书稿，不授权续写。
