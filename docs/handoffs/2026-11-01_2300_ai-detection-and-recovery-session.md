@@ -135,6 +135,19 @@
 - 重载后建议：在来源页触发一次「重新复核已保存候选（review_existing）」或「继续自动导演/恢复候选」；协调器预检查命中 B 后应直接事务接受候选、写入 `planningQualityDebt`（含 4 条 capacityDebt 与复核 findings）并返回 chapter runtime/writer，第4章开写，不再新增模型复核轮；若 UI 仍提示“原候选复核仍未通过”，说明恢复入口没带 `recoveryAction` 或 store 安全边界拒绝，需看日志 `[planning.quality_debt]`（accept_rejected 原因）而不是继续手点修复。
 - 本轮验证：新增 classifier 高严重度语义可继续/扩章适用性单测、coordinator review-only 分支 B 接受（预检查被拒后第二次接受）用例；planningRepairStore 133、coordinator 66 单测通过；宽批次剩余 2 项为 `planningPromiseContinuity`/`planningStateReview` 既有旧期望/harness 漂移，与 B 无关。未调用真实模型、未重载、未改正文、未动 WORK_LEDGER。
 
+## 2026-11-21 续：正文 writer 传输中断有界重试（C 口径）
+
+- 真实案例：《杂役管事在黑市商城》`cmvxpy883000eosw0hadfpe7c`，range task `cmvz3d625003b50w0heed4zqm`（第 4-6 章）。B 质量债已接受（`planningQualityDebt` 已记录、capacityDebt 4 条），第 4 章进入 writer 后连续两次在 `pipeline.draft` 外部步骤报 `terminated` 暂停；Chapter 第 4 章仍 0 字，job `cmw10s12w006mhkw0v1185q2h` failed、pipelineStatus failed，恢复页文案“外部调用中断，已保留已有输出，不能自动重新发送”。
+- journal 实证：active journal `pipeline.draft` status=unknown/external、error=`terminated`，`partialText` 3636 字（真实正文片段，末句截断）；同章 archive decision 里第一次 acknowledge 前的 partialText 3344 字。即：两个 attempt 都在收到 partial 后 terminated，Chapter 未写库。
+- 根因：`ChapterProductionJournal.runStep(external)` 对非 definitive 错误一律记 unknown 并暂停，writer 传输中断即使 0 输出也没有自动重试；而 partial 存在时“不能自动重新发送”的保守边界让当前书每次都要人工确认且无法自动从零重写。
+- 修复（C 口径，见 commit）：正文 writer 在 `ChapterStreamGenerationOrchestrator.generateDraftFromWriter` 同一 `pipeline.draft` 外部步骤内增加严格分类的 transport 重试：
+  ① 零输出自动重试：仅当错误是明确 transport/连接中断（`[STRUCTURED_OUTPUT:transport_error]`、`terminated`、ECONNRESET/ETIMEDOUT/UND_ERR_*、socket hang up、fetch failed 等）且本次调用一个文字片段都没收到时，用同章/同任务/同提示自动重试一次；重试仍失败按原 unknown/暂停边界保留两次证据。
+  ② 确认后重试（C）：来源页 `acknowledgeUnknown` 现在会把 `recoveryDecision` 持久化到 resumed operation；用户明确确认后的继续，若 writer 再次 transport 中断且尚未形成完整输出，可从零重试一次；旧 partialText/整条 journal 先归档为 `<operationId>:transport-retry:<uuid>`，永不写入正文；重试失败保留新旧两份证据并照旧暂停。同一确认只授权一次重试。
+  ③ 一律不重发：已有 partial/完整输出（无确认时）、非 transport 错误、审核/规划/正文指纹/租约/所有权错误、AbortError/取消、空正文；不改变 journal 对外部调用未知结果的通用保护。
+- 证据写入：journal values `writer.transportRetry`（reason/error/producedTextLength/archiveId/outcome）与 `writer.transportRetryAcknowledged`（acknowledgedAt/usedAt）；来源页确认由 session `recoveryDecision` 证明，不是全局开关；日志 `[chapter-writer] transient transport interruption; retrying the writer once`。
+- 当前书重载后验证：先在第 4 章来源页 acknowledge 当前 unknown 调用（确认可能重复执行），再点一次继续；预期 writer 若仍“partial+terminated”会在确认上下文内自动从零重试并落正文；若模型健康则直接成功。第 1-3 章不参与写入（range 4-6 且正文非空检查）。若仍停，看 journal `writer.transportRetry.outcome=failed` 与 `<operationId>:transport-retry:*` 归档，确认重试已发生且属于真实模型/网络失败，而不是缺重试路径。
+- 本轮测试：`writerTransportRetry.test.js`（transport 分类、零输出重试、无确认 partial 不重试、确认后 partial 重试、二次失败保留两份证据、session acknowledge 标记与 archiveEvidence）、`chapterProductionStream`/`completedPromptFailure` harness 补新依赖；定向 chapter runtime/recovery 回归通过（1 个既有旧期望 `explicit review failure...` 为自动重审提交后的陈旧断言，与本轮无关）。未调用真实模型、不重载、不改已有正文、未动 WORK_LEDGER。
+
 ## 关键命令
 
 ```powershell

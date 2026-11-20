@@ -68,6 +68,11 @@ function harness({ failureAt, failure, reject = true, journalFailure = false, fi
     './ChapterRuntimeReadinessService': {}, '../production/reliability': execution,
     '../../planner/plannerPersistence': { buildChapterExecutionContractHash: () => 'contract' },
     './chapterEmptyContentError': {}, './ChapterContentFinalizationService': {},
+    './writerTransportRetry': { runWriterAttemptWithTransportRetry: async ({ runAttempt }) => {
+      const outcome = await runAttempt(0);
+      if (outcome.ok) return { value: outcome.value, transportRetries: 0 };
+      throw outcome.error;
+    } },
   });
   const orchestrator = new ChapterStreamGenerationOrchestrator({
     validateRequest: input => input, ensureNovelCharacters: async () => {},

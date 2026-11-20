@@ -19,6 +19,10 @@ import {
   ChapterContentFinalizationService,
   type FinalizeChapterContentResult,
 } from "./ChapterContentFinalizationService";
+import {
+  runWriterAttemptWithTransportRetry,
+  type WriterAttemptOutcome,
+} from "./writerTransportRetry";
 
 export interface ChapterStreamGenerationAgentRuntime {
   createChapterGenRun: (novelId: string, chapterId: string, chapterOrder: number) => Promise<string>;
@@ -189,34 +193,150 @@ export class ChapterStreamGenerationOrchestrator {
     artifactsAlreadySynced?: boolean;
     backgroundSyncDeferred?: boolean;
   }> {
-    const writerResult = await this.deps.chapterWritingGraph.createChapterStream({
-      novelId: input.novelId,
-      novelTitle: input.assembled.novel.title,
-      chapter: input.assembled.chapter,
-      contextPackage: input.assembled.contextPackage,
-      options: {
-        ...input.request,
-        deferArtifactBackgroundSync: true,
-      },
-    });
+    const session = currentProductionSession();
+    const recoveryDecision = session?.getRecoveryDecision?.();
+    const acknowledgedAt = recoveryDecision?.kind === "acknowledge_unknown"
+      ? recoveryDecision.acknowledgedAt
+      : null;
+    const acknowledgedRetryUsed = session?.get<{ acknowledgedAt?: number }>("writer.transportRetryAcknowledged");
+    // The acknowledgement marker only authorizes one retry per user confirmation; a later unknown
+    // call must be acknowledged again before partial output can be retried.
+    const acknowledgedUnknownRecovery = typeof acknowledgedAt === "number"
+      && acknowledgedRetryUsed?.acknowledgedAt !== acknowledgedAt;
+    const retryState: {
+      evidence: {
+        reason: string;
+        error: unknown;
+        archiveId: string | null;
+        producedTextLength: number;
+      } | null;
+    } = { evidence: null };
+    try {
+      const outcome = await runWriterAttemptWithTransportRetry({
+        acknowledgedUnknownRecovery,
+        runAttempt: (attempt) => this.generateDraftFromWriterAttempt(input, attempt),
+        onRetry: async (info) => {
+          retryState.evidence = {
+            reason: info.decision.reason,
+            error: info.error,
+            archiveId: null,
+            producedTextLength: info.producedTextLength,
+          };
+          console.warn("[chapter-writer] transient transport interruption; retrying the writer once", {
+            novelId: input.novelId,
+            chapterId: input.chapterId,
+            chapterOrder: input.assembled.chapter.order,
+            reason: info.decision.reason,
+            producedTextLength: info.producedTextLength,
+            acknowledgedUnknownRecovery,
+          });
+          if (!session) return;
+          // C path: the user already accepted the unknown outcome. Archive the exact retained
+          // partial/record as evidence before the retry can overwrite the stream checkpoint.
+          if (info.producedTextLength > 0) {
+            retryState.evidence.archiveId = (await session.archiveEvidence("transport-retry")).archiveId;
+          }
+          await session.put("writer.transportRetry", {
+            version: 1,
+            attempt: 1,
+            at: new Date().toISOString(),
+            reason: info.decision.reason,
+            error: info.error instanceof Error ? info.error.message : String(info.error ?? ""),
+            producedTextLength: info.producedTextLength,
+            archiveId: retryState.evidence.archiveId,
+            acknowledgedUnknownRecovery,
+          });
+          if (typeof acknowledgedAt === "number") {
+            await session.put("writer.transportRetryAcknowledged", {
+              acknowledgedAt,
+              usedAt: Date.now(),
+              reason: info.decision.reason,
+            });
+          }
+        },
+      });
+      if (outcome.transportRetries > 0) {
+        const evidence = retryState.evidence;
+        await session?.put("writer.transportRetry", {
+          ...(evidence ?? {}),
+          version: 1,
+          attempts: outcome.transportRetries,
+          outcome: "completed",
+        });
+      }
+      return outcome.value;
+    } catch (error) {
+      const evidence = retryState.evidence;
+      if (evidence) {
+        await session?.put("writer.transportRetry", {
+          version: 1,
+          attempts: 1,
+          outcome: "failed",
+          reason: evidence.reason,
+          error: evidence.error instanceof Error ? evidence.error.message : String(evidence.error ?? ""),
+          producedTextLength: evidence.producedTextLength,
+          archiveId: evidence.archiveId,
+          acknowledgedUnknownRecovery,
+        }).catch(() => undefined);
+      }
+      throw error;
+    }
+  }
+
+  private async generateDraftFromWriterAttempt(
+    input: {
+      novelId: string;
+      chapterId: string;
+      request: ChapterRuntimeRequestInput;
+      assembled: AssembledRuntimeChapter;
+    },
+    _attempt: number,
+  ): Promise<WriterAttemptOutcome<{
+    content: string;
+    lengthControl?: ChapterRuntimePackage["lengthControl"];
+    artifactsAlreadySynced?: boolean;
+    backgroundSyncDeferred?: boolean;
+  }>> {
+    let writerResult: Awaited<ReturnType<ChapterWritingGraph["createChapterStream"]>>;
+    try {
+      writerResult = await this.deps.chapterWritingGraph.createChapterStream({
+        novelId: input.novelId,
+        novelTitle: input.assembled.novel.title,
+        chapter: input.assembled.chapter,
+        contextPackage: input.assembled.contextPackage,
+        options: {
+          ...input.request,
+          deferArtifactBackgroundSync: true,
+        },
+      });
+    } catch (error) {
+      return { ok: false, error, producedText: "" };
+    }
 
     let fullContent = "";
-    for await (const chunk of captureProductionStream(writerResult.stream)) {
-      fullContent += toText(chunk.content);
+    try {
+      for await (const chunk of captureProductionStream(writerResult.stream)) {
+        fullContent += toText(chunk.content);
+      }
+      const normalized = await writerResult.onDone(fullContent);
+      const content = assertChapterContentNotEmpty(normalized?.finalContent ?? fullContent, {
+        novelId: input.novelId,
+        chapterId: input.chapterId,
+        chapterOrder: input.assembled.chapter.order,
+        source: "chapter_runtime_writer",
+      });
+      return {
+        ok: true,
+        value: {
+          content,
+          lengthControl: normalized?.lengthControl,
+          artifactsAlreadySynced: Boolean(normalized?.artifactsAlreadySynced),
+          backgroundSyncDeferred: Boolean(normalized?.backgroundSyncDeferred),
+        },
+      };
+    } catch (error) {
+      return { ok: false, error, producedText: fullContent };
     }
-    const normalized = await writerResult.onDone(fullContent);
-    const content = assertChapterContentNotEmpty(normalized?.finalContent ?? fullContent, {
-      novelId: input.novelId,
-      chapterId: input.chapterId,
-      chapterOrder: input.assembled.chapter.order,
-      source: "chapter_runtime_writer",
-    });
-    return {
-      content,
-      lengthControl: normalized?.lengthControl,
-      artifactsAlreadySynced: Boolean(normalized?.artifactsAlreadySynced),
-      backgroundSyncDeferred: Boolean(normalized?.backgroundSyncDeferred),
-    };
   }
 
   finalizeChapterContent(input: Parameters<ChapterContentFinalizationService["finalizeChapterContent"]>[0]): Promise<FinalizeChapterContentResult> {

@@ -265,3 +265,27 @@
 推导，超出容量时先在规划修复窗口内拆到后续未写章节，不允许压进一章或静默丢职责；
 容量不合格的合同不能进入正文写作。完整规则、预算公式、修复边界和失败模式见
 [章节容量门禁](chapter-capacity-gate.md)。
+
+## 正文 writer 传输中断的有界重试
+
+正文调用被明确的连接/传输错误中断时，chapter journal 默认把外部步骤记为 `unknown` 并暂停
+（“外部调用中断，已保留已有输出，不能自动重新发送”），因为无法证明模型没有在服务端完成。
+该安全边界不放宽为通用自动重发；只增加一个有界、可证明的例外：
+
+- **自动重试（零输出）**：错误必须是明确的 transport/连接中断（`[STRUCTURED_OUTPUT:transport_error]`、
+  `terminated`、ECONNRESET/ETIMEDOUT/UND_ERR_*、socket hang up、fetch failed 等），且这次 writer
+  调用**一个文字片段都没有收到**。此时用同一章、同一任务、同一提示自动重试一次；重试仍失败则
+  按原 `unknown`/暂停边界保留两次失败证据，不再重试。取消（AbortError）、结构化输出校验失败、
+  空正文、审核/租约/正文指纹/所有权错误、以及收到任何文字后中断都不自动重发。
+- **确认后重试（C 口径）**：用户在章节源页显式 `acknowledge` 未知调用（接受“可能已重复执行”的风险）
+  后的继续，允许在 transport 中断且 writer 尚未形成完整输出时**从零重试一次**；来源页确认会写入
+  journal 的 `recoveryDecision` 标记，同一确认只授权一次。旧的 partialText/整条 journal 会先按
+  `<operationId>:transport-retry:<uuid>` 归档保留，永不写入正文；重试失败仍暂停并保留新旧两份证据。
+- **绝不重发**：没有来源页确认时，已有 partialText 或完整 writer 输出、非 transport 错误、审核/
+  规划/指纹/租约/所有权边界一律不自动重发。自动重试只针对本次调用没有可用输出（或用户已明确
+  确认未知调用）的窄情况，不改变 journal 对外部调用未知结果的通用保护。
+
+实现边界：`ChapterStreamGenerationOrchestrator.generateDraftFromWriter`（流水线/正文生成入口）在
+同一次 `pipeline.draft` 外部步骤内完成重试，journal 仍只看到一次外部步骤；重试与证据写入
+`writer.transportRetry`（含 reason/archiveId/outcome）与 `writer.transportRetryAcknowledged`，
+来源页确认标记由 `acknowledgeUnknown` 写入 `recoveryDecision`。真实 UI 验收由用户执行。

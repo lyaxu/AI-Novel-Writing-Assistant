@@ -77,6 +77,17 @@
 - 允许过期 owner 续租：失主会在尚未接管时复活，破坏租约到期即失权的合同。
 - 只按 owner 和租约写成功终态：最后一次取消检查之后到达的取消请求可能被成功状态覆盖。
 - 显式关联作业失踪后按普通 stale 重试：无法证明原作业状态，可能重复生成正文或消耗模型额度。
+- 把“连接中断”直接当成可无限重发：只有本次调用零输出、或用户已在来源页确认未知调用时才允许一次有界重试；有 partial/完整输出或非连接错误仍必须停在 unknown。
+
+## 正文 writer 传输中断
+
+writer 的传输/连接中断（如流 `terminated`、ECONNRESET/ETIMEDOUT、socket hang up、`transport_error`）
+属于外部调用边界，默认仍按 journal 的 `unknown` 暂停。仅在两种窄情况下自动重试一次：
+① 本次 writer 调用没有收到任何文字（可证明没有可用输出）；② 用户已在章节源页显式确认过未知调用
+（`acknowledgeUnknown` 写入 `recoveryDecision` 标记）后继续，且 writer 尚未形成完整输出。第二种情况旧的
+partialText/整条 journal 会先归档保留、永不写入正文；重试再失败仍暂停并保留两份证据。取消、审核/
+规划/正文指纹/租约/所有权错误、已产生 partial 或完整输出而无确认，一律不重发。实现与更细的边界见
+[章节生产链路 - 正文 writer 传输中断的有界重试](chapter-production-chain.md#正文-writer-传输中断的有界重试)。
 
 ## 调用计量边界
 

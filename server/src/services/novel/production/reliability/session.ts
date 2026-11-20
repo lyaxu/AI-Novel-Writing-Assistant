@@ -9,6 +9,9 @@ export interface ChapterProductionSession {
   runStep<T>(key: string, fn: () => Promise<T>, options?: { external?: boolean }): Promise<T>;
   get<T>(key: string): T | undefined;
   getStepOutput<T>(key: string): T | undefined;
+  /** Durable marker set when the user explicitly acknowledged an unknown call for this operation. */
+  getRecoveryDecision(): ChapterProductionJournalRecord["recoveryDecision"];
+  archiveEvidence(label: string): Promise<{ archiveId: string }>;
   put(key: string, value: unknown): Promise<void>;
   checkpoint(partialText: string): Promise<void>;
   assertCurrent(): Promise<void>;
@@ -96,15 +99,25 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
         const affectedSteps = Object.entries(record.steps).filter(([, step]) => step.status === "unknown" || (step.status === "running" && step.external)).map(([key]) => key);
         if (record.values["stream.started"] && record.steps["stream.normalize"]?.status !== "done") affectedSteps.push("stream.started");
         if (record.values["manual_repair.started"] && !record.values["manual_repair.content"]) affectedSteps.push("manual_repair.started");
+        const recoveryDecision = {
+          kind: "acknowledge_unknown" as const,
+          originalOperationId: record.operationId,
+          acknowledgedAt: now(),
+          affectedSteps,
+        };
         await tx.archiveJournal(input.novelId, input.chapterId, {
           ...record, operationId: `${record.operationId}:decision:${randomUUID()}`,
-          recoveryDecision: { kind: "acknowledge_unknown", originalOperationId: record.operationId, acknowledgedAt: now(), affectedSteps },
+          recoveryDecision,
         });
         for (const step of Object.values(record.steps)) {
           if (step.status === "unknown" || step.status === "running") step.status = "failed";
         }
         if (record.steps["stream.normalize"]?.status !== "done") delete record.values["stream.started"];
         if (!record.values["manual_repair.content"]) delete record.values["manual_repair.started"];
+        // Keep the explicit acknowledgement on the resumed operation as durable evidence. A later
+        // writer transport retry may only treat partial output as retryable when the user already
+        // accepted the unknown outcome for this exact operation.
+        record.recoveryDecision = recoveryDecision;
         record.status = "paused"; record.expiresAt = 0; delete record.error;
         await tx.writeJournal(input.novelId, input.chapterId, row!.metadataJson, JSON.stringify(record));
       });
@@ -186,6 +199,25 @@ export function createChapterProductionJournal(options: ChapterProductionJournal
         operationId: record.operationId,
         get<T>(key: string) { return record.values[key] as T | undefined; },
         getStepOutput<T>(key: string) { return record.steps[key]?.status === "done" ? record.steps[key].output as T : undefined; },
+        getRecoveryDecision() { return record.recoveryDecision; },
+        /**
+         * Preserve the current journal record verbatim under a fresh archive slot. Used before an
+         * explicit-acknowledgement transport retry overwrites the partial stream evidence.
+         */
+        archiveEvidence(label: string) {
+          const pending = tail.then(async () => transaction(async (tx) => {
+            if (closed) conflict();
+            const row = await tx.readJournal(novelId, chapterId);
+            if (!row) conflict();
+            const current = parseRecord(row.metadataJson);
+            if (current.token !== token) conflict();
+            const archiveId = `${current.operationId}:${label}:${randomUUID()}`;
+            await tx.archiveJournal(novelId, chapterId, { ...current, operationId: archiveId });
+            return { archiveId };
+          }));
+          tail = pending.catch(() => undefined);
+          return pending;
+        },
         put: (key, value) => mutate((current) => { current.values[key] = value; }),
         checkpoint: (partialText) => mutate((current) => { current.partialText = partialText; }),
         assertCurrent: () => mutate(() => undefined),

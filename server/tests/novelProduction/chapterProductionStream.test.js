@@ -10,6 +10,11 @@ function fixture({ disconnect = false, outputLimit = false, failReview = false, 
     "../../planner/plannerPersistence": { buildChapterExecutionContractHash: () => { throw new Error("This stream fixture supplies no effective contract to compare"); } },
     "../novelP0Utils": { toText: value => typeof value === "string" ? value : "" },
     "./chapterEmptyContentError": { assertChapterContentNotEmpty: value => value, isChapterEmptyContentError: () => false },
+    "./writerTransportRetry": { runWriterAttemptWithTransportRetry: async ({ runAttempt }) => {
+      const outcome = await runAttempt(0);
+      if (outcome.ok) return { value: outcome.value, transportRetries: 0 };
+      throw outcome.error;
+    } },
   });
   const steps = new Map(savedNormalize ? [["stream.normalize", { status: "done", output: savedNormalize }]] : []);
   const values = new Map(savedNormalize ? [["stream.started", true]] : []);
