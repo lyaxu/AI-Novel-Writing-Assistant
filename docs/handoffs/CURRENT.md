@@ -20,3 +20,10 @@
 - 边界：一次触发最多扩一章，同一任务累计最多 2 章；同卷预算或全书目标章数用完则记债暂停，不无限扩、不删债、不假通过；已写/锁定/跨卷章节不动；未知外部调用/正文指纹/租约冲突仍暂停。
 - 入口与验证：服务重载后由用户在来源页面触发继续/重试；真实案例《杂役管事在黑市商城》task cmvxpw1px0002osw0kuoi43p2 第3章容量债应在提交时补出第4章承接。工程侧看 `server/src/services/novel/volume/planningRepair/capacityCarryOver.ts`、`PlanningRepairStore.appendCapacityCarryOverChapter`、`PlanningRepairCoordinator.tryCapacityAutoExtension`；测试 `server/tests/capacityCarryOver.test.js` 与 `planningRepairCoordinator.test.js`。
 - 文档：`docs/wiki/workflows/chapter-capacity-gate.md` 与 `server/src/services/novel/volume/planningRepair/README.md` 已写清规则与失败模式。
+
+## 2026-11-21 工程补充：规划质量债入口覆盖与正文 writer 传输重试
+
+- 规划质量债接受（B 策略）已覆盖复核/JIT/恢复的所有等待确认入口；扩章适用性改为“容量债确实没有后继承接章且上限/预算未到”才先扩章，后章已存在只是超容量时允许带债继续。硬边界（正文/租约/未知外部调用/所有权/跨卷/requiresUserDecision）仍拒绝，不伪造复核通过。
+- 正文 writer 增加有界 transport 重试（C 口径）：本次调用零输出且为明确网络中断时自动重试一次；有 partialText 时只有来源页显式 acknowledge 未知调用后的继续才允许从零重试一次，旧 partial 归档保留、永不写入正文；无确认或非 transport 不重发。
+- 真实书《杂役管事在黑市商城》第4章已写出 4238 字并 completed，第1–3章未改写；任务随后因 “Commit requires a saved, successful joint-window review.” 暂停在联合窗口复核提交边界，第5章 pending_generation。下一步是修复该联合窗口复核提交/恢复路径，而不是回退正文。
+- 关键提交：`ab366127`（B 入口覆盖）、`5d54e886`（writer 传输重试）；服务已加载 `5d54e886`，`stale=false`。
