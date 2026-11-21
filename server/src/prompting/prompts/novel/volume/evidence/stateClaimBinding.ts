@@ -200,15 +200,37 @@ export function bindStateClaimContract<T extends { stateClaims: unknown; sceneCa
     else { byId.set(claim.id, claim); claimPaths.set(claim.id, path); }
     stateClaims.push(claim);
   };
+  const droppedContextClaimIds = new Set<string>();
   contextStateClaimsWireSchema.parse(output.stateClaims).forEach((claim, index) => {
     const path = `stateClaims[${index}]`;
     try { add(resolveChapterStateClaims([claim], reviewContextJson, chapterOrder)[0], path); }
-    catch (error) {
-      issues.push({ path: `${path}.source`, claimId: claim.id, expected: "Current eligible earlier prose evidence",
-        actual: error instanceof Error ? error.message : String(error) });
-      add(claim, path);
+    catch {
+      // A plan repaired after newer chapters were written can cite an earlier-prose evidence ID that
+      // is no longer in the current catalog. Drop that stale context claim and its references rather
+      // than blocking the whole contract; scene-owned claims and current context claims still bind.
+      droppedContextClaimIds.add(claim.id);
     }
   });
+  if (droppedContextClaimIds.size > 0) {
+    output = {
+      ...output,
+      sceneCards: output.sceneCards.map(scene => ({
+        ...scene,
+        causality: {
+          ...scene.causality,
+          prerequisites: scene.causality.prerequisites.map(item => ({
+            ...item,
+            claimIds: item.claimIds.filter(id => !droppedContextClaimIds.has(id)),
+          })),
+          stateTransition: {
+            ...scene.causality.stateTransition,
+            beforeClaimIds: scene.causality.stateTransition.beforeClaimIds
+              .filter(id => !droppedContextClaimIds.has(id)),
+          },
+        },
+      })),
+    };
+  }
   output.sceneCards.forEach((scene, index) => {
     const path = `sceneCards[${index}]`;
     if (sceneOrder.has(scene.key)) issues.push({ path: `${path}.key`, expected: "A unique scene key", actual: scene.key });
