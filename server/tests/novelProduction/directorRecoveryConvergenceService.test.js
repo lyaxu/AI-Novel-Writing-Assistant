@@ -7,19 +7,22 @@ const sharedRecovery = require("@ai-novel/shared/types/planningRepair/recovery")
 // Wiring-level test for the explicit-continue convergence: a stale repair session is ended, the
 // saved candidate is adopted, and only then is the lost-anchor execution binding rebuilt. Every
 // write is a stubbed factory here; the individual services keep their own transactional tests.
-function fixture({ activeCommand = false, preserve = false, seedPhase = "reviewing" } = {}) {
+function fixture({ activeCommand = false, preserve = false, seedPhase = "reviewing", finalizeChanged = false, withRepair = true, taskStatus = "running", pendingManualRecovery = true, pipelineStatus } = {}) {
   const calls = [];
   const task = {
     id: "director",
     novelId: "novel",
     lane: "auto_director",
-    status: "running",
-    pendingManualRecovery: true,
+    status: taskStatus,
+    pendingManualRecovery,
     cancelRequestedAt: null,
     updatedAt: new Date(1000),
     seedPayloadJson: JSON.stringify({
-      autoExecution: { enabled: true, mode: "chapter_range", startOrder: 1, endOrder: 3, pipelineJobId: "old-job", nextChapterId: "chapter-1", nextChapterOrder: 1 },
-      planningRepair: { version: 1, key: "repair", phase: seedPhase, candidateVersionId: "candidate", history: [], rounds: 0, maxRounds: 2 },
+      autoExecution: {
+        enabled: true, mode: "chapter_range", startOrder: 1, endOrder: 3, pipelineJobId: "old-job", nextChapterId: "chapter-1", nextChapterOrder: 1,
+        ...(pipelineStatus ? { pipelineStatus } : {}),
+      },
+      ...(withRepair ? { planningRepair: { version: 1, key: "repair", phase: seedPhase, candidateVersionId: "candidate", history: [], rounds: 0, maxRounds: 2 } } : {}),
     }),
   };
   const prisma = {
@@ -31,6 +34,14 @@ function fixture({ activeCommand = false, preserve = false, seedPhase = "reviewi
     "../../../../db/prisma": { prisma },
     "../../production/recovery": {
       createChapterPipelineRecoveryService: () => ({ reconcileStaleCompletedChapterJob: async () => null }),
+      createAcceptanceUnavailableFinalizationService: () => ({
+        finalize: async (input) => {
+          calls.push(["finalize", input]);
+          return finalizeChanged
+            ? { changed: true, action: "completed_saved_prose_with_acceptance_unavailable_debt", reason: null, chapterId: "chapter-1", chapterOrder: 1, jobId: "old-job" }
+            : { changed: false, action: null, reason: "not_applicable" };
+        },
+      }),
     },
     "../../production/reliability": { chapterFingerprint: () => "fingerprint" },
     "../../volume/planningRepair/PlanningRepairStore": {
@@ -86,7 +97,7 @@ test("plain continue converges the stale repair, then adopts the candidate, then
   const f = fixture();
   const result = await f.run();
   assert.equal(result.changed, true);
-  const ordered = f.calls.filter(entry => entry === "abandon" || Array.isArray(entry)).map(entry => (Array.isArray(entry) ? entry[0] : entry));
+  const ordered = f.calls.filter(entry => entry === "abandon" || (Array.isArray(entry) && ["adopt", "rebuild"].includes(entry[0]))).map(entry => (Array.isArray(entry) ? entry[0] : entry));
   assert.deepEqual(ordered, ["abandon", "adopt", "rebuild"]);
   const rebuild = f.calls.find(entry => Array.isArray(entry) && entry[0] === "rebuild");
   assert.equal(rebuild[1].planningRepair.phase, "abandoned", "the rebuild runs against the converged terminal repair");
@@ -114,4 +125,35 @@ test("an active command blocks the stale-repair conversion and candidate adoptio
   const f = fixture({ activeCommand: true });
   await f.run();
   assert.equal(f.calls.some(entry => entry === "abandon" || (Array.isArray(entry) && entry[0] === "adopt")), false);
+});
+
+test("saved prose lost only at the acceptance parse boundary is completed by the strict finalizer", async () => {
+  const f = fixture({ finalizeChanged: true, withRepair: false });
+  const result = await f.run();
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.actions, ["finalized_saved_prose_with_acceptance_unavailable_debt"]);
+  const finalizeCalls = f.calls.filter(entry => Array.isArray(entry) && entry[0] === "finalize");
+  assert.equal(finalizeCalls.length, 1);
+  assert.equal(finalizeCalls[0][1].taskId, "director");
+  assert.equal(f.calls.some(entry => Array.isArray(entry) && entry[0] === "rebuild"), false,
+    "degraded completion returns before any replan/rebuild work");
+});
+
+test("a retry-requeued task still points at its failed range job and is eligible for degraded completion", async () => {
+  const queued = fixture({ taskStatus: "queued", pendingManualRecovery: false, pipelineStatus: "failed", finalizeChanged: true, withRepair: false });
+  const result = await queued.run();
+  assert.equal(result.changed, true);
+  assert.ok(result.actions.includes("finalized_saved_prose_with_acceptance_unavailable_debt"));
+
+  const live = fixture({ taskStatus: "queued", pendingManualRecovery: false, finalizeChanged: true, withRepair: false });
+  const liveResult = await live.run();
+  assert.equal(liveResult.changed, false, "a live queued range task is not converged");
+  assert.equal(live.calls.some(entry => Array.isArray(entry) && entry[0] === "finalize"), false);
+});
+
+test("a failed task without a manual-recovery flag is still eligible for degraded completion", async () => {
+  const f = fixture({ taskStatus: "failed", pendingManualRecovery: false, finalizeChanged: true, withRepair: false });
+  const result = await f.run();
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.actions, ["finalized_saved_prose_with_acceptance_unavailable_debt"]);
 });

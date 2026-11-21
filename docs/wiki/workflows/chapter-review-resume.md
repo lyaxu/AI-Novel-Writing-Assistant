@@ -220,6 +220,20 @@ AI 必须显式提供同章必达事项原句、替换句、事实理由、保�
 
 用户可见结果：正文已保存、只差规划复核的暂停不再需要用户猜测或反复点击；从来源页继续一次即可完成第 5 章的 JIT 准备并恢复写作。工程入口：`PlanningRepairStore.begin`（已提交窗口复用）、`PlanningRepairStore.commit`（补关联后提交）、`committedWindowReviewRecovery.ts`；测试 `server/tests/planningRepairStore.test.js` 的「committed window … recovery / re-links …」用例。真实案例（《杂役管事在黑市商城》第 4 章已保存、窗口按质量债提交）用数据库副本回放验证：继续入口从暂停变为 phase=committed、第 5 章合同可进入执行、债务落库且原库未写入。
 
+## 验收评估格式失败与已保存正文的降级完成
+
+背景：章节正文已经写入并保存，但 `novel.chapter.acceptance_assessment` 的结构化回答被截断/无法解析（`[STRUCTURED_OUTPUT:malformed_json]`）。流水线已有“首次审查 JSON 截断自动重审一次”的上限；重审仍失败时范围 job 可能以非人工恢复的 failed 收尾，任务随后在“原章节任务不能恢复，请检查原任务状态，不能新建任务替代保留稿”上永久失败。正文并没有问题，失败的是审查回答的格式。
+
+当前规则（`AcceptanceUnavailableFinalizationService`，由命令接受时的 `DirectorRecoveryConvergenceService` 调用，覆盖 continue/retry/recovery-candidate/approve_gate）：
+
+- 只对“已保存正文 + 验收格式失败”这一类收口：任务必须仍指向该失败范围 job；目标章属于 job 范围、正文非空且尚未 completed；章节日志必须证明 `pipeline.draft`/`pipeline.save_draft` 已 done，失败步骤只有验收 review 及其 evaluation 镜像，且错误属于验收提示的 JSON 解析类失败。
+- 不可越过的边界：正文为空、正文指纹与日志不一致、日志属于其它 job/task、`running` 或未知的外部调用、活跃租约/执行所有权、非验收步骤失败、验收失败不是格式类，全部保持原暂停。
+- 满足时在同一事务里 CAS 写入：章节 `generationState=approved`、`chapterStatus=completed`，`repairHistory` 追加 `acceptance_unavailable` 记录，`riskFlags` 追加 `acceptance:acceptance_unavailable`；job 收敛为 succeeded 且把失败提示/promptId/失败步骤写入 payload 的 `acceptanceUnavailableEvidence`；章节日志标记 completed 并新增 `pipeline.acceptance_unavailable` 步骤，原 `pipeline.review:N` 失败步骤原样保留；任务 seed 的 `autoExecution` 标记 pipelineStatus=succeeded、完成计数、清空剩余章，并写入 `qualityDebtChapterIds/Orders/Summaries`。
+- 这是“可用稿 + 可见质量债”，不是验收通过：审查失败证据在日志、章节历史、payload 与质量债中都可追溯；下一章继续按正常质量循环处理，不重写本章正文。
+- 完成任务：这是重新打开暂停的降级完成，后续继续命令仍走既有完成收口；范围 job succeeded、范围已完成时由 `recordCompletedCheckpoint(workflow_completed)` 把任务标记 succeeded，不需要新建任务替代保留稿。
+
+工程与回归：`server/src/services/novel/production/recovery/AcceptanceUnavailableFinalizationService.ts`；测试 `server/tests/novelProduction/acceptanceUnavailableFinalization.test.js`、`directorRecoveryConvergenceService.test.js`。真实案例（《杂役管事在黑市商城》第 10 章 3640 字已保存、`generating`、job failed）用数据库副本回放：降级完成把该章标为 completed、job succeeded、日志保留原失败、债务落库；`prepareDirectorContinuation` 返回 completed 且范围计算为完成，原库与模型调用均未变。
+
 ## 本轮完成与后续范围
 
 完成显示以经过范围核对的任务终态为准，不以进度100%或仪表盘动画为准。源页统一派生running、completed、waiting、action_required与failed；缺章恢复、人工暂停和失败不能被完成投影盖住。completed使用静止进度、完成说明和查看/收起动作，不能继续显示接管中或实时推进。收起只归档提醒，不删除书稿，不授权续写。

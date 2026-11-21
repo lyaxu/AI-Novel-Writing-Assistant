@@ -17,3 +17,13 @@ GET 只读取，返回 `pipelineJobId / pipelineRange / canResumePipeline`。外
 继续命令清除导演暂停后，原 job/journal 的暂停仍须由执行入口重新核验，并优先于未来规划缺口恢复。fullContinueRecovery 从源页 HTTP 进入真实命令与恢复选择；维护脚本 reconcile-paused-director-binding 只在明确指定的新旧身份、安全预检和事务比较成功时纠正指针，不执行章节、不重置预算，先备份并演练后使用。
 
 `pipelineSourceRecovery.test.js` 使用明确替身覆盖投影、范围归属、未知与过期本地步骤、取消竞争和薄路由；默认数据库、模型及网络不可访问。
+
+## 验收评估格式失败与已保存正文的降级完成
+
+背景：正文已写入并保存，但 `novel.chapter.acceptance_assessment` 的结构化回答无法解析（截断/`malformed_json`）。画布重审一次仍失败时 job 以非人工恢复的 failed 收尾，随后 continue/retry 在“原章节任务不能恢复，不能新建任务替代保留稿”上永久失败。
+
+`AcceptanceUnavailableFinalizationService` 只收口这一类“保存正文 + 验收格式失败”边界，由命令接受时的 `DirectorRecoveryConvergenceService`（`finalized_saved_prose_with_acceptance_unavailable_debt`）调用，覆盖 continue/retry/recovery-candidate/approve_gate。前置：任务指向失败范围 job、目标章在 job 范围内、正文非空且未 completed、journal 证明 draft/save 已 done 且失败步骤只有验收 review 及 evaluation 镜像、错误属于验收提示的 JSON 解析类；journal 指纹匹配、无 running/unknown 外部调用、无活跃租约/执行所有权、无其它步骤失败。
+
+满足时单事务 CAS：章节 approved/completed、`repairHistory` 追加 `acceptance_unavailable`、`riskFlags` 追加 `acceptance:acceptance_unavailable`；job 收敛 succeeded 并写 `acceptanceUnavailableEvidence`；journal 标 completed 且新增 `pipeline.acceptance_unavailable`（原失败 review 步骤保留）；任务 seed 写完成计数、剩余章清空与章节级规划质量债。它是“可用稿 + 可见质量债”，不是验收通过；范围 job succeeded 且范围完成后由既有 `recordCompletedCheckpoint(workflow_completed)` 收口任务，无需新建替代任务。
+
+回归：`server/tests/novelProduction/acceptanceUnavailableFinalization.test.js`（正例与正文为空/租约/未知调用/指纹/非格式失败/非验收步骤拒绝）与 `directorRecoveryConvergenceService.test.js`（continue/retry 入口接线）。真实案例（第10章 3640 字已保存、generating、job failed）用数据库副本回放验证；原库、第1–9章和模型调用均未变。

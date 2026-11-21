@@ -1,7 +1,7 @@
 import { isTerminalPlanningRepairPhase } from "@ai-novel/shared/types/planningRepair/recovery";
 import type { NovelWorkflowTaskStatus } from "@prisma/client";
 import { prisma } from "../../../../db/prisma";
-import { createChapterPipelineRecoveryService } from "../../production/recovery";
+import { createChapterPipelineRecoveryService, createAcceptanceUnavailableFinalizationService } from "../../production/recovery";
 import { chapterFingerprint, type JournalChapter } from "../../production/reliability";
 import { planningRepairStore } from "../../volume/planningRepair/PlanningRepairStore";
 import { logPipelineInfo, logPipelineWarn } from "../../novelCoreShared";
@@ -182,8 +182,15 @@ export class DirectorRecoveryConvergenceService {
     let task = await prisma.novelWorkflowTask.findUnique({ where: { id: input.taskId } });
     if (!task || task.lane !== "auto_director" || task.cancelRequestedAt) return { changed: false, actions };
     // Only a paused boundary is eligible. A live queued/running task must keep its own execution.
+    // `retryTask` re-queues a failed task before its command is enqueued; that queued projection
+    // still points at the failed range job, so it is a re-opened pause, not live work.
     if (!task.pendingManualRecovery && !["waiting_approval", "failed"].includes(task.status)) {
-      return { changed: false, actions };
+      const queuedSeed = parseSeed(task.seedPayloadJson);
+      const queuedAuto = record(queuedSeed?.autoExecution) ? queuedSeed.autoExecution : null;
+      const reopenedFailedPipeline = task.status === "queued"
+        && typeof queuedAuto?.pipelineJobId === "string"
+        && queuedAuto.pipelineStatus === "failed";
+      if (!reopenedFailedPipeline) return { changed: false, actions };
     }
     let seed = parseSeed(task.seedPayloadJson);
     if (!seed) return { changed: false, actions };
@@ -238,6 +245,32 @@ export class DirectorRecoveryConvergenceService {
 
     const autoExecution = record(seed.autoExecution) ? seed.autoExecution : null;
     const pipelineJobId = typeof autoExecution?.pipelineJobId === "string" ? autoExecution.pipelineJobId : null;
+
+    // 2b. The saved range job may have died only because the acceptance review could not be parsed
+    //     (structured-output format failure) while the chapter prose is saved and complete. The
+    //     strict preflight cannot resume such a job and the source page would otherwise stay failed
+    //     forever. Complete the chapter as a usable draft with visible acceptance debt; unknown
+    //     calls, live leases, changed prose, other step failures and mixed ranges keep the pause.
+    if (pipelineJobId && task.novelId && !activeCommand) {
+      try {
+        const finalized = await createAcceptanceUnavailableFinalizationService().finalize({
+          taskId: task.id, trigger: input.trigger,
+        });
+        if (finalized.changed) {
+          actions.push("finalized_saved_prose_with_acceptance_unavailable_debt");
+          logPipelineInfo("已保存正文只因验收评估格式失败：按可用稿完成章节并记录质量债，继续自动导演。", {
+            taskId: task.id, trigger: input.trigger, jobId: finalized.jobId,
+            chapterId: finalized.chapterId, chapterOrder: finalized.chapterOrder, action: finalized.action,
+          });
+          return { changed: true, actions };
+        }
+      } catch (error) {
+        logPipelineWarn("已保存正文的降级完成未应用，保留原有恢复核对。", {
+          taskId: task.id, trigger: input.trigger, jobId: pipelineJobId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     // 3. The saved range job is stale because its target chapter already finished: complete the
     //    technical job row through the strict chapter preflight, then let the normal path continue
