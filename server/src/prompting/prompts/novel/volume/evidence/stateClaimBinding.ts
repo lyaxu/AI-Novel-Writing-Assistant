@@ -254,7 +254,7 @@ export function bindStateClaimContract<T extends { stateClaims: unknown; sceneCa
     const beforeClaimIds = [...owned.beforeClaimIds, ...owned.entryClaims.map(claim => claim.id)];
     const actionClaimIds = owned.actionClaims.map(claim => claim.id);
     const afterClaimIds = owned.afterClaims.map(claim => claim.id);
-    if (!beforeClaimIds.length || beforeClaimIds.length > 6 || new Set(beforeClaimIds).size !== beforeClaimIds.length) {
+    if (beforeClaimIds.length > 6 || new Set(beforeClaimIds).size !== beforeClaimIds.length) {
       issues.push({ path: `${path}.stateTransition`, expected: "One to six unique entrance claims: earlier references plus local entry declarations", actual: beforeClaimIds });
     }
     owned.beforeClaimIds.forEach((id, refIndex) => {
@@ -283,11 +283,10 @@ export function bindStateClaimContract<T extends { stateClaims: unknown; sceneCa
     });
     const project = (ids: string[], field: string) => {
       const text = ids.flatMap(id => { const claim = byId.get(id); return claim ? [describe(claim)] : []; }).join("；");
-      if (!text) {
-        issues.push({ path: `sceneCards[${index}].${field}`,
-          expected: "Projected subject:predicate text must contain 1–240 characters without truncation", actual: { claimIds: ids, length: 0 } });
-        return text;
-      }
+      // A scene may legitimately have no surviving entry/exit context after stale earlier-prose
+      // claims are dropped. The chapter task sheet still carries its concrete action; an empty
+      // projected display state is allowed so one stale claim cannot block the whole contract.
+      if (!text) return text;
       // The claim IDs remain the authoritative state links; this projected text is a display summary
       // for the writer. A dense six-claim scene can legitimately exceed the 240-char display limit,
       // so compact it at clause boundaries instead of rejecting the whole contract.
