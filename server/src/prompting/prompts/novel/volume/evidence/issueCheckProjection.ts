@@ -52,9 +52,15 @@ export function projectValidatedIssueChecks(
   for (const check of checks) {
     if (check.candidateEvidence.some(quote => !found(quote))) {
       const failed = check.candidateEvidence.filter(quote => !found(quote));
-      throw new Error(`issueChecks ${check.issueId} contains evidence absent from the current candidate. `
-        + `candidateEvidence 共 ${check.candidateEvidence.length} 条，其中 ${failed.length} 条找不到：`
-        + JSON.stringify(failed.map(describeEvidence)));
+      // Unresolved/uncertain checks use evidence only as supporting detail; a model may attach an
+      // empty-array literal or paraphrase that resolves to no leaf. Drop those extras instead of
+      // rejecting the whole review. A resolved check still needs at least one real citation below.
+      if (check.status === "resolved") {
+        throw new Error(`issueChecks ${check.issueId} contains evidence absent from the current candidate. `
+          + `candidateEvidence 共 ${check.candidateEvidence.length} 条，其中 ${failed.length} 条找不到：`
+          + JSON.stringify(failed.map(describeEvidence)));
+      }
+      check.candidateEvidence = check.candidateEvidence.filter(found);
     }
     if (check.status === "resolved" && (!check.candidateEvidence.length || output.issues.some(issue => issue.id === check.issueId))) {
       throw new Error(`Resolved issue ${check.issueId} requires evidence and must not remain in issues. `
