@@ -33,45 +33,40 @@ export function validateNewIssueEvidence(
   const fresh = output.issues.filter(issue => !previousIds.has(issue.id));
   const source = buildChapterEvidenceIndex(candidate);
   const contextSource = newIssueContextEvidenceIndex(reviewContextJson);
+  const rejected = new Set<string>();
   for (const issue of fresh) {
+    const reject = () => { rejected.add(issue.id); };
     const basis = issue.basis;
-    if (!basis || !basis.candidateEvidence.length || !basis.executionImpact.trim()
-      || !basis.whyExistingConstraintsInsufficient.trim()) {
-      throw new Error(`New issue ${issue.id} requires an execution-impact basis and current candidate evidence.`);
+    if (!basis || !basis.executionImpact.trim() || !basis.whyExistingConstraintsInsufficient.trim()) {
+      // An unsupported finding is not a reason to reject the whole plan. Without a usable basis it
+      // cannot be acted on; drop the finding and let the plan continue instead of fabricating support.
+      reject();
+      continue;
     }
-    for (const quote of [...basis.candidateEvidence, ...basis.counterEvidence]) {
-      if (!matchesChapterEvidence(source, quote)) {
-        const path = quote.sourcePath ?? "(no sourcePath)";
-        throw new Error(
-          `New issue ${issue.id} cites evidence absent from the current candidate.`
-          + ` Source: ${path}${source.leaves.has(path) ? " (this source is in the candidate, but the quoted text is not found in it — likely paraphrased or stitched from separate places)" : " (this source is not part of the candidate at all)"}.`
-          + ` Quote: ${JSON.stringify((quote.quote ?? "").slice(0, 120))}`,
-        );
-      }
-    }
-    for (const quote of basis.contextEvidence ?? []) {
-      if (!matchesChapterEvidence(contextSource, quote)) {
-        // Name the quote and where it claimed to come from. Without them the message says only that
-        // something did not match, which is unactionable: the two cases below need opposite responses
-        // — one is the reviewer misquoting, the other is context this validator never indexed.
-        const path = quote.sourcePath ?? "(no sourcePath)";
-        const known = contextSource.leaves.has(path);
-        throw new Error(
-          `New issue ${issue.id} cites evidence absent from the supplied read-only context.`
-          + ` Source: ${path}${known ? " (this source is in the context, but the quoted text is not found in it — likely paraphrased or stitched from separate places)" : " (this source is not part of the read-only context at all)"}.`
-          + ` Quote: ${JSON.stringify((quote.quote ?? "").slice(0, 120))}`,
-        );
-      }
+    basis.candidateEvidence = basis.candidateEvidence.filter(quote => matchesChapterEvidence(source, quote));
+    basis.counterEvidence = (basis.counterEvidence ?? []).filter(quote => matchesChapterEvidence(source, quote));
+    basis.contextEvidence = (basis.contextEvidence ?? []).filter(quote => matchesChapterEvidence(contextSource, quote));
+    if (!basis.candidateEvidence.length && !basis.contextEvidence.length) {
+      // The reviewer named a problem but none of its quotes exist in the current candidate/context.
+      // Keeping the issue would force an unverifiable contract failure; drop it and keep the plan.
+      reject();
+      continue;
     }
     const citedLeaves = new Set([
       ...basis.candidateEvidence.map(quote => `candidate:${source.aliases.get(quote.sourcePath) ?? quote.sourcePath}`),
       ...(basis.contextEvidence ?? []).map(quote => `context:${contextSource.aliases.get(quote.sourcePath) ?? quote.sourcePath}`),
     ]);
-    if (basis.kind === "conflicting_requirements" && citedLeaves.size < 2) {
-      throw new Error(`New conflict ${issue.id} must cite at least two distinct requirements from the candidate and supplied context.`);
+    if (basis.kind === "conflicting_requirements" && citedLeaves.size < 2) reject();
+  }
+  if (rejected.size > 0) {
+    const kept = output.issues.filter(issue => !rejected.has(issue.id));
+    output.issues.splice(0, output.issues.length, ...kept);
+    if (output.issueDecisions) {
+      output.issueDecisions = output.issueDecisions.filter(decision => !rejected.has(decision.issueId));
     }
   }
-  if (fresh.length && (output.verdict === "usable" || output.safeToSync || output.recommendedHandling === "use_as_is")) {
+  const freshAfter = output.issues.filter(issue => !previousIds.has(issue.id));
+  if (freshAfter.length && (output.verdict === "usable" || output.safeToSync || output.recommendedHandling === "use_as_is")) {
     throw new Error("New blocking issues cannot accompany usable, safeToSync, or use_as_is decisions.");
   }
 }
