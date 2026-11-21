@@ -261,8 +261,24 @@ export function bindStateClaimContract<T extends { stateClaims: unknown; sceneCa
     });
     const project = (ids: string[], field: string) => {
       const text = ids.flatMap(id => { const claim = byId.get(id); return claim ? [describe(claim)] : []; }).join("；");
-      if (!text || text.length > 240) issues.push({ path: `sceneCards[${index}].${field}`,
-        expected: "Projected subject:predicate text must contain 1–240 characters without truncation", actual: { claimIds: ids, length: text.length } });
+      if (!text) {
+        issues.push({ path: `sceneCards[${index}].${field}`,
+          expected: "Projected subject:predicate text must contain 1–240 characters without truncation", actual: { claimIds: ids, length: 0 } });
+        return text;
+      }
+      // The claim IDs remain the authoritative state links; this projected text is a display summary
+      // for the writer. A dense six-claim scene can legitimately exceed the 240-char display limit,
+      // so compact it at clause boundaries instead of rejecting the whole contract.
+      if (text.length > 240) {
+        const parts = text.split("；");
+        let compact = "";
+        for (const part of parts) {
+          const next = compact ? `${compact}；${part}` : part;
+          if (next.length > 240) break;
+          compact = next;
+        }
+        return compact ? `${compact}…` : `${parts[0]!.slice(0, 239)}…`;
+      }
       return text;
     };
     return { ...scene, entryState: project(beforeClaimIds, "entryState"), exitState: project(afterClaimIds, "exitState"),
