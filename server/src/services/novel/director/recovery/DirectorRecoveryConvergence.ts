@@ -298,3 +298,137 @@ export function planStalePlanRepairExecutionRebuild(
   }
   return { action: "requires_planning", previousJobId: job.id, targetChapterOrder: chapter.order };
 }
+
+export interface SupersededJournalOwnershipJobEvidence {
+  id: string;
+  novelId: string;
+  status: string;
+  pendingManualRecovery: boolean;
+  currentItemKey: string | null;
+  payloadWorkflowTaskId: string | null;
+  leaseActive: boolean;
+  cancelRequestedAt: Date | null;
+  error: string | null;
+  llmCallCount: number;
+  completedCount: number;
+}
+
+export interface SupersededJournalOwnershipJournalEvidence {
+  operationId: string;
+  status: string;
+  workflowTaskId: string | null;
+  leaseActive: boolean;
+  partialTextLength: number;
+  expectedContentLength: number;
+  /** The journal's saved expected prose still equals the current chapter prose (both empty here). */
+  expectedContentMatchesChapter: boolean;
+  hasUnknownOrRunningStep: boolean;
+  /** The journal operation id is owned by `oldJob.id`; a different owner must not be archived. */
+  belongsToOldJob: boolean;
+}
+
+export interface SupersededJournalOwnershipEvidence {
+  taskId: string;
+  novelId: string;
+  taskPaused: boolean;
+  cancelRequested: boolean;
+  activeCommand: boolean;
+  /** Another queued/running job for the novel still owns execution. */
+  activeJobInNovel: boolean;
+  targetChapter: { id: string; order: number; hasProse: boolean } | null;
+  newJob: SupersededJournalOwnershipJobEvidence | null;
+  /** The new task's failed job carries exactly the chapter-production ownership conflict. */
+  newJobOwnershipConflict: boolean;
+  /** The new job actually owns the active journal; then there is nothing to hand over. */
+  newJobOwnsJournal: boolean;
+  oldTask: {
+    id: string;
+    status: string;
+    cancelledOrSuperseded: boolean;
+    hasActiveCommand: boolean;
+    hasActiveJob: boolean;
+  } | null;
+  oldJob: SupersededJournalOwnershipJobEvidence | null;
+  journal: SupersededJournalOwnershipJournalEvidence | null;
+}
+
+export type SupersededJournalOwnershipPlan =
+  | {
+    action: "handoff";
+    oldJournalOperationId: string;
+    oldTaskId: string;
+    oldJobId: string;
+    newJobId: string;
+    targetChapterId: string;
+    targetChapterOrder: number;
+  }
+  | { action: "none"; reason: string };
+
+/**
+ * Convergence for "a cancelled/superseded range task still owns the chapter journal".
+ *
+ * A takeover task can be created for an unwritten chapter while the cancelled task's paused
+ * preparation journal still occupies the chapter's execution ownership slot. Every new attempt
+ * then fails with "章节正文、执行约定或执行所有权已变化" (or "章节执行所有权已变化") and the
+ * chapter recovery endpoint refuses because the journal belongs to a range task. The safe handoff
+ * is narrow: only an unwritten chapter (no prose, no partial), a failed new job that did no work
+ * and carries exactly the ownership conflict, a paused preparation-only journal owned by a
+ * cancelled task/job with no active lease/command and no unknown/running external call may move
+ * the journal to its archive slot and rebuild the task binding.
+ *
+ * Saved prose, partial text, unknown calls, live leases, a still-active old task or a job that
+ * actually owns the journal keep the strict pause.
+ */
+export function planSupersededJournalOwnershipHandoff(
+  evidence: SupersededJournalOwnershipEvidence,
+): SupersededJournalOwnershipPlan {
+  if (evidence.cancelRequested) return { action: "none", reason: "task_cancelled" };
+  if (!evidence.taskPaused) return { action: "none", reason: "task_not_paused" };
+  if (evidence.activeCommand) return { action: "none", reason: "active_command" };
+  if (evidence.activeJobInNovel) return { action: "none", reason: "active_job" };
+  const chapter = evidence.targetChapter;
+  if (!chapter) return { action: "none", reason: "no_target_chapter" };
+  if (chapter.hasProse) return { action: "none", reason: "target_chapter_has_prose" };
+  const newJob = evidence.newJob;
+  if (!newJob) return { action: "none", reason: "no_saved_job" };
+  if (newJob.payloadWorkflowTaskId !== evidence.taskId) return { action: "none", reason: "job_owned_by_other_task" };
+  if (newJob.novelId !== evidence.novelId) return { action: "none", reason: "job_novel_mismatch" };
+  if (newJob.cancelRequestedAt) return { action: "none", reason: "job_cancelled" };
+  if (newJob.leaseActive) return { action: "none", reason: "job_lease_active" };
+  if (newJob.status !== "failed") return { action: "none", reason: "new_job_not_failed" };
+  if (!newJob.pendingManualRecovery) return { action: "none", reason: "new_job_not_paused" };
+  if (newJob.currentItemKey !== chapter.id) return { action: "none", reason: "job_anchor_mismatch" };
+  if (!evidence.newJobOwnershipConflict) return { action: "none", reason: "not_ownership_conflict" };
+  if (newJob.llmCallCount > 0 || newJob.completedCount > 0) return { action: "none", reason: "new_job_has_work" };
+  if (evidence.newJobOwnsJournal) return { action: "none", reason: "new_job_owns_journal" };
+  const journal = evidence.journal;
+  if (!journal) return { action: "none", reason: "no_active_journal" };
+  if (journal.status !== "paused") return { action: "none", reason: "journal_not_paused" };
+  if (journal.leaseActive) return { action: "none", reason: "journal_lease_active" };
+  if (!journal.expectedContentMatchesChapter) return { action: "none", reason: "journal_manuscript_changed" };
+  if (journal.expectedContentLength > 0) return { action: "none", reason: "journal_expected_prose" };
+  if (journal.partialTextLength > 0) return { action: "none", reason: "journal_partial_output" };
+  if (journal.hasUnknownOrRunningStep) return { action: "none", reason: "journal_unknown_call" };
+  const oldTask = evidence.oldTask;
+  if (!journal.workflowTaskId || !oldTask || oldTask.id !== journal.workflowTaskId) {
+    return { action: "none", reason: "no_owner_task" };
+  }
+  if (!oldTask.cancelledOrSuperseded) return { action: "none", reason: "old_task_active" };
+  if (oldTask.hasActiveCommand) return { action: "none", reason: "old_task_active_command" };
+  if (oldTask.hasActiveJob) return { action: "none", reason: "old_task_active_job" };
+  const oldJob = evidence.oldJob;
+  if (!oldJob) return { action: "none", reason: "no_owner_job" };
+  if (oldJob.novelId !== evidence.novelId) return { action: "none", reason: "owner_job_novel_mismatch" };
+  if (!["failed", "cancelled"].includes(oldJob.status)) return { action: "none", reason: "old_job_active" };
+  if (oldJob.leaseActive) return { action: "none", reason: "old_job_lease_active" };
+  if (!journal.belongsToOldJob) return { action: "none", reason: "journal_owned_by_other_execution" };
+  return {
+    action: "handoff",
+    oldJournalOperationId: journal.operationId,
+    oldTaskId: oldTask.id,
+    oldJobId: oldJob.id,
+    newJobId: newJob.id,
+    targetChapterId: chapter.id,
+    targetChapterOrder: chapter.order,
+  };
+}

@@ -78,6 +78,35 @@
 - 只按 owner 和租约写成功终态：最后一次取消检查之后到达的取消请求可能被成功状态覆盖。
 - 显式关联作业失踪后按普通 stale 重试：无法证明原作业状态，可能重复生成正文或消耗模型额度。
 - 把“连接中断”直接当成可无限重发：只有本次调用零输出、或用户已在来源页确认未知调用时才允许一次有界重试；有 partial/完整输出或非连接错误仍必须停在 unknown。
+- 新任务重新开写时直接覆盖一个仍属于旧任务的 active journal：会绕过 ownership 记录；只有证明旧任务已取消、旧 journal 是 paused 准备记录且目标章无正文时才允许归档移交。
+- 把“新任务 job failed”当成可恢复正文：必须同时满足错误是章节所有权冲突、该 job 没有产生任何调用/完成项，否则可能是真实生成失败，不能移交。
+
+## 被取消/替代任务的章节日志所有权移交
+
+接管任务常见阻塞：旧范围任务已 `cancelled`，但它的 `ChapterArtifactSyncCheckpoint` active journal
+仍占用未写章节的执行所有权，新任务 job 在 `pipeline.open` 立刻失败为
+“章节正文、执行约定或执行所有权已变化，已停止写入”；chapter recovery 同时返回
+“本章属于范围任务，请回到原任务的源工作区恢复”，continue/retry/recovery-candidate 全部被同一
+ownership preflight 拒绝。
+
+`DirectorRecoveryConvergenceService` 在严格 preflight 前执行 `ChapterJournalOwnershipHandoffService`，
+只在以下全部成立时移交：
+
+- 新任务处于人工恢复暂停，无 active command；小说内没有其它 queued/running job；
+- 新任务绑定的 job 是 `failed`、pending、`currentItemKey` 正好是目标章、属于本任务、无 owner/lease，
+  并且 `llmCallCount`/`completedCount` 都是 0、错误正是章节所有权冲突；
+- 目标章正文为空、journal 的 `expectedChapter.content` 与 partialText 都为空、journal 没有
+  unknown/running 步骤、没有未完成 stream/manual repair；
+- active journal 是 `paused`、`entry=pipeline`、`request.workflowTaskId` 指向旧任务，
+  operationId 解析出的 owner job 是旧 job；旧任务 `cancelled`、旧 job `failed/cancelled`，
+  两者都没有 active command/lease，旧任务也没有 queued/running job。
+
+事务内先把旧 journal 原样归档到 `<oldOperationId>:superseded`（完整保留 steps/errors/response 证据），
+再删除 active 槽位；把新任务零调用 shell job 标记 `cancelled` 并保留原失败记录；清空
+`autoExecution.pipelineJobId/pipelineStatus`、保持 start/end/nextChapter 指向目标章，写
+`chapterJournalOwnershipHandoff` 回执。随后普通 continue 会创建全新执行并重新准备该章，旧任务行与
+证据不删。任一条不满足（正文/partial/unknown 调用/真实 lease/旧任务仍活跃/新 job 非所有权冲突）
+都不移交，保留原暂停让用户核对。
 
 ## 正文 writer 传输中断
 
@@ -100,3 +129,5 @@ partialText/整条 journal 会先归档保留、永不写入正文；重试再�
 - `server/src/services/novel/production/NovelPipelineExecutor.ts`
 - `server/src/services/novel/director/commands/leases/DirectorCommandLeaseService.ts`
 - `server/src/services/novel/NovelPipelineRuntimeService.ts`
+- `server/src/services/novel/director/recovery/ChapterJournalOwnershipHandoffService.ts`
+- `server/src/services/novel/director/recovery/PreparationJournalRetirement.ts`

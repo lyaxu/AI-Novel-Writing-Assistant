@@ -65,6 +65,11 @@ function fixture({ activeCommand = false, preserve = false, seedPhase = "reviewi
         },
       }),
     },
+    "./ChapterJournalOwnershipHandoffService": {
+      createChapterJournalOwnershipHandoffService: () => ({
+        handoff: async () => ({ changed: false, action: null, reason: "no_active_journal" }),
+      }),
+    },
   });
   const service = new convergence.DirectorRecoveryConvergenceService();
   return {

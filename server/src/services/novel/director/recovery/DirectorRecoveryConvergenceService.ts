@@ -15,6 +15,7 @@ import {
 } from "./DirectorRecoveryConvergence";
 import { createPlanRepairExecutionRebuildService } from "./PlanRepairExecutionRebuildService";
 import { createPlanningRepairCandidateAdoptionService } from "./PlanningRepairCandidateAdoptionService";
+import { createChapterJournalOwnershipHandoffService } from "./ChapterJournalOwnershipHandoffService";
 
 const ACTIVE_COMMAND_STATUSES = ["queued", "leased", "running"] as const;
 const TERMINAL_REPAIR_AUTO_ABANDON_REASON =
@@ -157,7 +158,10 @@ const BINDING_JOB_SELECT = {
  *  4. a displaced failed job pointer whose journal is still owned by the original range job;
  *  5. a terminal planning-repair pause whose saved range job lost its resumable chapter anchor —
  *     a new execution binding is rebuilt for the pending chapter when it already has a usable
- *     plan, otherwise the task is routed to normal planning (never blind prose).
+ *     plan, otherwise the task is routed to normal planning (never blind prose);
+ *  6. a cancelled/superseded range task whose paused preparation journal still blocks a newer
+ *     takeover task for an unwritten chapter — the journal is archived and the new binding rebuilt
+ *     only after proving no prose/partial, no unknown call, no live lease and a zero-work new job.
  *
  * Unknown external calls, active leases, changed manuscripts, incomplete prose and live commands
  * are all left untouched so the strict recovery preflight keeps blocking with its source-page
@@ -255,6 +259,36 @@ export class DirectorRecoveryConvergenceService {
           taskId: task.id, trigger: input.trigger, jobId: pipelineJobId,
           error: error instanceof Error ? error.message : String(error),
         });
+      }
+    }
+
+    // 3b. A cancelled/superseded range task can leave its paused preparation journal on a chapter
+    //     that a newer takeover task is about to write. The new job fails the chapter ownership
+    //     preflight and the chapter recovery endpoint refuses because the journal belongs to the
+    //     old range task. Archive that exact preparation-only journal and rebuild the new binding
+    //     only when every strict condition holds; prose/partial/unknown call/live lease/active old
+    //     task keep the pause. This runs before the displaced-pointer step so the new task is never
+    //     re-pointed at the cancelled task's job.
+    {
+      const freshTask = await prisma.novelWorkflowTask.findUnique({ where: { id: input.taskId } });
+      if (freshTask && !activeCommand) {
+        try {
+          const handoff = await createChapterJournalOwnershipHandoffService().handoff({
+            task: freshTask,
+            seed: parseSeed(freshTask.seedPayloadJson) ?? seed,
+            activeCommand,
+            trigger: input.trigger,
+          });
+          if (handoff.changed) {
+            actions.push("handed_over_superseded_chapter_journal");
+            return { changed: true, actions };
+          }
+        } catch (error) {
+          logPipelineWarn("被取消旧任务的章节日志所有权移交未应用，保留原有恢复核对。", {
+            taskId: input.taskId, trigger: input.trigger,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
     }
 
