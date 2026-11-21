@@ -237,6 +237,9 @@ export function bindStateClaimContract<T extends { stateClaims: unknown; sceneCa
     else sceneOrder.set(scene.key, index);
     const transition = sceneOwnedStateTransitionWireSchema.parse(scene.causality.stateTransition);
     for (const [field, phase] of [["entryClaims", "entry"], ["actionClaims", "action"], ["afterClaims", "exit"]] as const) {
+      // A repair response can repeat a context claim as a local scene claim. The existing context
+      // claim already owns that ID, so keep it for references and drop only the duplicate local copy.
+      transition[field] = transition[field].filter(claim => !byId.has(claim.id));
       transition[field].forEach((claim, claimIndex) => add({ ...claim, temporalScope: "planned",
         source: { kind: "planned_scene", sceneKey: scene.key, phase } }, `${path}.causality.stateTransition.${field}[${claimIndex}]`));
     }
