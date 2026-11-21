@@ -28,6 +28,14 @@
 - 真实书《杂役管事在黑市商城》第4章已写出 4238 字并 completed，第1–3章未改写；任务随后因 “Commit requires a saved, successful joint-window review.” 暂停在联合窗口复核提交边界，第5章 pending_generation。下一步是修复该联合窗口复核提交/恢复路径，而不是回退正文。
 - 关键提交：`ab366127`（B 入口覆盖）、`5d54e886`（writer 传输重试）；服务已加载 `5d54e886`，`stale=false`。
 
+## 2026-11-21 续跑：第1-8章完成，第9章卡在任务所有权
+
+- 《杂役管事在黑市商城》第 1-8 章正文全部 completed：3104 / 4383 / 4934 / 4238 / 3471 / 4235 / 4200 / 2945 字；第 9、10 章尚未写成。
+- 第 7、8 章通过单章接管任务跑通并 succeed；第 9 章先后遇到规划复核证据格式错误和范围任务/章节 journal 所有权冲突。
+- 已加通用修复：`1e8cf982` 丢弃无源参考引文、`a33c2952` 未解决复核项的无源附带证据不再整份退回。
+- 当前阻塞：第 9 章 chapter journal 指向旧任务 `cmwpdzuxx...`，新范围任务 `cmwptwtf...` 继续时报“章节正文、执行约定或执行所有权已变化”；chapter recovery 无 acknowledge，task retry/resume 被源页所有权检查拒绝。需要补一个“被取代范围任务的章节 journal 所有权移交/归档”通用恢复，再继续第 9、10 章。
+- 本轮未改已有正文，未删除数据；第 1-8 章和候选/质量债均保留。
+
 ## 2026-11-21 工程补充：已提交规划窗口的复核证据恢复
 
 - 根因：真实书第 4 章已写出 4238 字并 completed，但其规划修复窗口是按 B 策略的质量债接受的（`phase=committed`、失败发现留在 history、没有通过复核）。第 5 章 JIT 合同准备复用已提交窗口时，`PlanningRepairStore.begin` 再次要求“已保存且通过的联合窗口/逐章复核”，于是报 `Commit requires a saved, successful joint-window review.` 并永久暂停；错误文案来自被复用的守卫，不是正文/传输/容量问题。
