@@ -284,9 +284,9 @@ export function bindStateClaimContract<T extends { stateClaims: unknown; sceneCa
     const project = (ids: string[], field: string) => {
       const text = ids.flatMap(id => { const claim = byId.get(id); return claim ? [describe(claim)] : []; }).join("；");
       // A scene may legitimately have no surviving entry/exit context after stale earlier-prose
-      // claims are dropped. The chapter task sheet still carries its concrete action; an empty
-      // projected display state is allowed so one stale claim cannot block the whole contract.
-      if (!text) return text;
+      // claims are dropped. The chapter task sheet still carries its concrete action; use a
+      // neutral display fallback so the schema keeps a non-empty readable state.
+      if (!text) return "沿用已写前文继续本章";
       // The claim IDs remain the authoritative state links; this projected text is a display summary
       // for the writer. A dense six-claim scene can legitimately exceed the 240-char display limit,
       // so compact it at clause boundaries instead of rejecting the whole contract.
